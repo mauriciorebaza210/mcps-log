@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MCPS Log App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        :root {
+            --primary: #0ea5e9;
+            --primary-hover: #0284c7;
+            --bg-color: #f0fdf4;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #e0f2fe 0%, #dcfce7 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding-top: 1rem;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+            letter-spacing: -0.03em;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            display: none;
+            /* revealed when loaded */
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 1.25rem;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            color: var(--text-main);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-main);
+        }
+
+        .help-text {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+            margin-top: -0.2rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+            background: #f8fafc;
+            color: var(--text-main);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        /* Loader */
+        .loader {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(14, 165, 233, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            margin: 4rem auto;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .center-content {
+            text-align: center;
+        }
+
+        /* Dynamic Target Calc Area */
+        .calc-box {
+            background: #e0f2fe;
+            border: 1px dashed var(--primary);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+
+        .calc-list {
+            margin-top: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .calc-item {
+            background: #fff;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--warning);
+            font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .calc-item.good {
+            border-left-color: var(--success);
+        }
+
+        .calc-item.bad {
+            border-left-color: var(--error);
+        }
+
+        .calc-amount {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 1.25rem;
+            background: var(--text-main);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.15rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 1rem;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .btn-submit:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Custom Pool Gallons Inject */
+        #gallons-wrapper {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <img src="https://missioncustompools.com/wp-content/uploads/2024/07/mission-custom-pools-logo.webp"
+                alt="Mission Custom Pool Solutions Logo" style="max-height: 90px; margin-bottom: 0.75rem;">
+            <h1>Mission Custom Pool Solutions</h1>
+        </header>
+
+        <div id="loader-area" class="center-content">
+            <div class="loader"></div>
+            <p style="color:var(--text-muted); font-weight:500;">Loading live routes...</p>
+        </div>
+
+        <!-- The dynamic form content goes here -->
+        <div id="form-container"></div>
+
+    </div>
+
+    <script>
+        let _formItems = [];
+
+        // Test titles to intercept
+        const TEST_FIELDS = {
+            FC: "Chlorine (Cl)",
+            PH: "pH",
+            TA: "Total Alkalinity (TA)",
+            CH: "Calcium Hardness (CH)"
+        };
+
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
+
+        window.onload = () => {
+          fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'get_metadata' })
+          })
+            .then(r => r.json())
+            .then(res => {
+              if (res.ok) renderForm(res.data);
+              else alert("Error loading form: " + res.error);
+            })
+            .catch(err => alert("Network error: " + err));
+        };
+
+        function renderForm(metadata) {
+            document.getElementById('loader-area').style.display = 'none';
+            _formItems = metadata;
+
+            const container = document.getElementById('form-container');
+
+            let currentCard = null;
+
+            // We will loop through the form. Every PAGE_BREAK starts a new Card.
+            // If the very first item is not a PAGE_BREAK, we create a default card.
+            const createCard = (title) => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.style.display = 'block';
+                if (title) {
+                    const h2 = document.createElement('h2');
+                    h2.className = 'section-title';
+                    h2.innerText = title;
+                    div.appendChild(h2);
+                }
+                return div;
+            };
+
+            currentCard = createCard("Visit Details");
+            container.appendChild(currentCard);
+
+            metadata.forEach(item => {
+                if (item.isSectionBreak) {
+                    currentCard = createCard(item.title || "Chemical Summary");
+                    container.appendChild(currentCard);
+
+                    // If the section is "Used", this implies chemical entries.
+                    // Let's insert the Calculator Output box RIGHT BEFORE we start logging chemicals!
+                    if (item.title && item.title.trim().toLowerCase() === "used") {
+                        const calcDiv = document.createElement('div');
+                        calcDiv.id = "live-calc-box";
+                        calcDiv.className = "calc-box";
+                        calcDiv.innerHTML = `
+              <div style="font-weight:700; color:var(--primary); margin-bottom: 0.5rem; display:flex; justify-content:space-between; align-items:center;">
+                <span>💡 Calculated Additions</span>
+                <span id="calc-vol-display" style="font-size:0.8rem; background:rgba(255,255,255,0.7); padding:2px 8px; border-radius:10px;">Vol: 10K Gal</span>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">Based on 10k gallons default (adjust via Volume field above).</div>
+              <div id="calc-items" class="calc-list"></div>
+            `;
+                        currentCard.appendChild(calcDiv);
+                    }
+                    return;
+                }
+
+                const group = document.createElement('div');
+                group.className = 'form-group';
+
+                let labelStr = item.title;
+                if (item.isRequired) labelStr += " <span style='color:red;'>*</span>";
+
+                group.innerHTML = `<label>${labelStr}</label>`;
+                if (item.helpText) {
+                    group.innerHTML += `<div class="help-text">${item.helpText}</div>`;
+                }
+
+                const titleEscaped = item.title.replace(/"/g, '&quot;');
+                let inputHtml = '';
+
+                if (item.type === 'LIST' || item.type === 'MULTIPLE_CHOICE') {
+                    inputHtml = `<select name="${titleEscaped}" ${item.isRequired ? 'required' : ''}>
+            <option value="">Select option...</option>
+            ${item.choices.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('')}
+          </select>`;
+                } else if (item.type === 'CHECKBOX') {
+                    inputHtml = item.choices.map(c => `
+            <label class="checkbox-group">
+              <input type="checkbox" name="${titleEscaped}" value="${c.replace(/"/g, '&quot;')}">
+              <span style="font-weight:400;">${c}</span>
+            </label>
+          `).join('');
+                } else if (item.type === 'PARAGRAPH_TEXT') {
+                    inputHtml = `<textarea name="${titleEscaped}" ${item.isRequired ? 'required' : ''}></textarea>`;
+                } else {
+                    // Normal Text/Number
+                    const isNumber = Object.values(TEST_FIELDS).includes(item.title) || (item.helpText && item.helpText.toLowerCase().includes('quantity'));
+                    inputHtml = `<input type="${isNumber ? 'number' : 'text'}" step="any" name="${titleEscaped}" ${item.isRequired ? 'required' : ''} oninput="runRecs()">`;
+                }
+
+                group.innerHTML += inputHtml;
+                currentCard.appendChild(group);
+
+                // Inject custom Pool Volume field right after the pool_id list.
+                if (item.title && item.title.trim().toLowerCase() === "pool_id") {
+                    const volGroup = document.createElement('div');
+                    volGroup.className = 'form-group';
+                    volGroup.innerHTML = `
+            <label>Estimated Pool Volume (Gallons)</label>
+            <div class="help-text">Used solely for calculating exact dosages below.</div>
+            <input type="number" id="custom_vol" value="10000" oninput="runRecs()">
+          `;
+                    currentCard.appendChild(volGroup);
+                }
+            });
+
+            // Submit Button
+            const btnWrapper = document.createElement('div');
+            btnWrapper.className = 'card';
+            btnWrapper.style.display = 'block';
+            btnWrapper.style.background = 'transparent';
+            btnWrapper.style.boxShadow = 'none';
+            btnWrapper.style.border = 'none';
+            btnWrapper.style.padding = '0';
+            btnWrapper.innerHTML = `<button type="button" class="btn-submit" id="btn-submit" onclick="submitForm()">Submit Log to MCPS</button>`;
+            container.appendChild(btnWrapper);
+        }
+
+        // Calculator Logic
+        function getValByTitle(title) {
+            const el = document.querySelector(`[name="${title}"]`);
+            if (!el || !el.value) return null;
+            const v = parseFloat(el.value);
+            return isNaN(v) ? null : v;
+        }
+
+        function runRecs() {
+            const fc = getValByTitle(TEST_FIELDS.FC);
+            const ph = getValByTitle(TEST_FIELDS.PH);
+            const ta = getValByTitle(TEST_FIELDS.TA);
+            const ch = getValByTitle(TEST_FIELDS.CH);
+
+            const volEl = document.getElementById('custom_vol');
+            let gallons = 10000;
+            if (volEl && volEl.value) gallons = parseFloat(volEl.value) || 10000;
+
+            const calcBox = document.getElementById('live-calc-box');
+            const calcList = document.getElementById('calc-items');
+            const volDisplay = document.getElementById('calc-vol-display');
+
+            if (!calcBox || !calcList) return;
+
+            const results = [];
+            volDisplay.innerText = `Vol: ${gallons} Gal`;
+
+            let poolSize = "small";
+            if (gallons > 15000 && gallons <= 20000) poolSize = "medium";
+            else if (gallons > 20000) poolSize = "large";
+
+            // 1. CHLORINE (FC)
+            if (fc !== null) {
+              if (poolSize === "small" || poolSize === "medium") {
+                if (fc <= 2) results.push({ name: 'Chlorine', status: 'bad', amt: '2 gal', reason: 'FC low' });
+                else if (fc <= 4) results.push({ name: 'Chlorine', status: 'warning', amt: '1 gal', reason: 'FC maintaining' });
+              } else {
+                if (fc <= 2) results.push({ name: 'Chlorine', status: 'bad', amt: '3 gal', reason: 'FC low' });
+                else if (fc <= 4) results.push({ name: 'Chlorine', status: 'warning', amt: '2 gal', reason: 'FC maintaining' });
+              }
+            }
+
+            // 2. PH (Muriatic Acid 31.45%)
+            if (ph !== null) {
+              if (ph >= 7.6) {
+                let drop_needed = ph - 7.4;
+                
+                // Base formula: 32 oz (0.25 gal) of 31.45% acid per 10k gal drops pH by ~0.15
+                let dropRate = 0.15;
+                if (ta !== null) {
+                   if (ta < 90) dropRate = 0.20; // Low TA = faster pH drop
+                   else if (ta > 120) dropRate = 0.10; // High TA = resistance to pH drop
+                }
+                
+                let quartsNeeded = (drop_needed / dropRate) * (gallons / 10000);
+                let galNeeded = quartsNeeded / 4;
+                
+                // Safety Cap: Max 1 quart (0.25 gal) per 10,000 gallons at one time
+                let maxGal = 0.25 * (gallons / 10000);
+                let reasonStr = 'Lower pH to 7.4 (factoring TA)';
+                
+                if (galNeeded > maxGal) {
+                   galNeeded = maxGal;
+                   reasonStr = 'Max safe dose applied to avoid crash';
+                }
+                
+                // Format to nearest quarter gallon (0.25, 0.50, 0.75) for practical bottle pouring
+                let flooredQuarters = Math.round(galNeeded * 4) / 4;
+                if (flooredQuarters < 0.25) flooredQuarters = 0.25; 
+                
+                let severity = ph >= 8.0 ? 'bad' : 'warning';
+                results.push({ name: 'Muriatic Acid', status: severity, amt: flooredQuarters.toFixed(2) + ' gal', reason: reasonStr });
+                
+              } else if (ph <= 7.0) {
+                results.push({ name: 'Soda Ash', status: 'bad', amt: 'As needed', reason: 'pH low' });
+              }
+            }
+
+            // 3. ALKALINITY (TA)
+            if (ta !== null && ta < 90) {
+                let ppm_inc = 100 - ta;
+                let lbs = 1.4 * (gallons / 10000) * (ppm_inc / 10);
+                results.push({ name: 'Baking Soda', status: 'warning', amt: lbs.toFixed(1) + ' lbs', reason: 'Raise TA to 100ppm' });
+            }
+
+            // 4. CALCIUM (CH)
+            if (ch !== null && ch < 200) {
+                let ppm_inc = 200 - ch;
+                let lbs = 1.2 * (gallons / 10000) * (ppm_inc / 10);
+                results.push({ name: 'Calcium Chloride', status: 'warning', amt: lbs.toFixed(1) + ' lbs', reason: 'Raise CH to 200ppm' });
+            }
+
+            if (results.length === 0) {
+                calcBox.style.display = 'none';
+                return;
+            }
+
+            calcBox.style.display = 'block';
+            calcList.innerHTML = results.map(r => `
+        <div class="calc-item ${r.status}">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:600">${r.name}</span>
+            <span class="calc-amount">${r.amt}</span>
+          </div>
+          ${r.reason ? `<div style="font-size:0.75rem; color:var(--text-muted);">↳ ${r.reason}</div>` : ''}
+        </div>
+      `).join('');
+        }
+
+        // Extract and Submit
+        function submitForm() {
+            const btn = document.getElementById('btn-submit');
+            const payload = {};
+            let hasError = false;
+
+            _formItems.forEach(item => {
+                if (!item.title) return;
+
+                let val;
+                if (item.type === 'CHECKBOX') {
+                    const boxes = document.querySelectorAll(`input[name="${item.title.replace(/"/g, '&quot;')}"]:checked`);
+                    val = Array.from(boxes).map(b => b.value);
+                    if (val.length === 0) val = null;
+                } else {
+                    const el = document.querySelector(`[name="${item.title.replace(/"/g, '&quot;')}"]`);
+                    if (el) val = el.value.trim();
+                }
+
+                if (item.isRequired && (!val || (Array.isArray(val) && val.length === 0))) {
+                    hasError = true;
+                }
+
+                if (val) payload[item.title] = val;
+            });
+
+            if (hasError) {
+                alert("Please fill out all required fields marked with *");
+                return;
+            }
+
+            // Remove the google.script.run block and replace with:
+            btn.disabled = true;
+            btn.innerText = "Submitting securely...";
+
+            fetch(APPS_SCRIPT_URL, {
+              method: 'POST',
+              body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'submit_form', data: payload })
+            })
+              .then(r => r.json())
+              .then(res => {
+                if (res.ok) {
+                  document.body.innerHTML = `
+                    <div style="text-align:center; padding: 4rem 1rem;">
+                      <div style="font-size: 4rem; margin-bottom: 1rem;">✅</div>
+                      <h1 style="color:var(--success); margin-bottom: 0.5rem;">Submitted!</h1>
+                      <p style="color:var(--text-muted); font-size:1.1rem; margin-bottom: 2rem;">Log written, inventory deducted, and email blasted.</p>
+                      <button onclick="window.location.reload()" style="padding:1rem 2rem; background:var(--primary); color:white; border:none; border-radius:12px; font-size:1.1rem; font-weight:600; cursor:pointer;">Log Another Pool</button>
+                    </div>`;
+                } else {
+                  alert("Error: " + res.error);
+                  btn.disabled = false;
+                  btn.innerText = "Submit Log to MCPS";
+                }
+              })
+              .catch(err => {
+                alert("Network error: " + err);
+                btn.disabled = false;
+                btn.innerText = "Submit Log to MCPS";
+              });
+        }
+    </script>
+</body>
+
+</html>
