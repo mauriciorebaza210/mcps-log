@@ -348,40 +348,110 @@ table.ut tr:last-child td{border-bottom:none}
       <div id="svc-root" style="display:none"></div>
     </div>
 
-    <!-- Admin -->
-    <div class="pf" id="page-admin">
-      <div class="adm-card">
-        <div class="adm-title">All Users</div>
-        <table class="ut"><thead><tr><th>Name</th><th>Username</th><th>Roles</th><th>Operator Name</th><th>Status</th></tr></thead>
-        <tbody id="utbody"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr></tbody></table>
-      </div>
-      <div class="adm-card">
-        <div class="adm-title">Add New User</div>
-        <div class="au-grid">
-          <div class="fg"><label>Full Name</label><input class="si" type="text" id="new-name" placeholder="Tony Garcia"></div>
-          <div class="fg"><label>Username</label><input class="si" type="text" id="new-uname" placeholder="tony" autocapitalize="none"></div>
-          <div class="fg"><label>Password</label><input class="si" type="password" id="new-pass" placeholder="temporary"></div>
-          <div class="fg"><label>Roles (comma-separated)</label><input class="si" type="text" id="new-roles" placeholder="technician" value="technician"></div>
-          <div class="fg"><label>Operator Name (matches Routes sheet)</label><input class="si" type="text" id="new-opname" placeholder="Tony Siller"></div>
-        </div>
-        <button class="au-btn" onclick="createUser()">Create User</button>
-        <div class="im" id="create-msg"></div>
-      </div>
-      <div class="adm-card">
-        <div class="adm-title">Update User</div>
-        <div class="au-grid">
-          <div class="fg"><label>Username</label><input class="si" type="text" id="edit-uname" placeholder="tony" autocapitalize="none"></div>
-          <div class="fg"><label>New Roles (optional)</label><input class="si" type="text" id="edit-roles" placeholder="e.g. admin,technician"></div>
-          <div class="fg"><label>Operator Name (optional)</label><input class="si" type="text" id="edit-opname" placeholder="Tony Siller"></div>
-          <div class="fg"><label>New Password (optional)</label><input class="si" type="password" id="edit-pass" placeholder="leave blank to keep"></div>
-          <div class="fg"><label>Active</label>
-            <select class="si" id="edit-active"><option value="">— no change —</option><option value="true">Active</option><option value="false">Deactivated</option></select>
-          </div>
-        </div>
-        <button class="au-btn" onclick="updateUser()">Update User</button>
-        <div class="im" id="update-msg"></div>
-      </div>
+<!-- ── REPLACE the entire id="page-admin" div with this ── -->
+ 
+<div class="pf" id="page-admin">
+ 
+  <!-- User table -->
+  <div class="adm-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>All Users</span>
+      <button class="adm-new-btn" onclick="openUserDrawer(null)">+ Add User</button>
     </div>
+    <div style="overflow-x:auto">
+      <table class="ut">
+        <thead><tr>
+          <th>Name</th><th>Username</th><th>Roles</th>
+          <th>Operator Name</th><th>Available Days</th><th>Status</th>
+        </tr></thead>
+        <tbody id="utbody">
+          <tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+ 
+</div>
+ 
+<!-- ── User edit/create drawer ── -->
+<div class="drawer-backdrop" id="user-backdrop" onclick="closeUserDrawer()"></div>
+<div class="drawer" id="user-drawer">
+  <div class="drawer-inner">
+    <div class="drawer-hdr">
+      <div>
+        <div class="drawer-title" id="drawer-title">Add User</div>
+        <div class="drawer-sub" id="drawer-sub">Fill in the details below</div>
+      </div>
+      <button class="drawer-close" onclick="closeUserDrawer()">✕</button>
+    </div>
+ 
+    <div class="drawer-body">
+ 
+      <div class="dfg">
+        <label>Full Name</label>
+        <input class="si" type="text" id="d-name" placeholder="Eduardo García">
+      </div>
+ 
+      <div class="dfg">
+        <label>Username</label>
+        <input class="si" type="text" id="d-uname" placeholder="eduardo" autocapitalize="none">
+        <span class="dfg-hint" id="uname-hint">Cannot be changed after creation.</span>
+      </div>
+ 
+      <div class="dfg" id="d-pass-wrap">
+        <label>Password <span id="d-pass-optional" style="font-weight:400;color:var(--muted)">(leave blank to keep current)</span></label>
+        <input class="si" type="password" id="d-pass" placeholder="••••••••">
+      </div>
+ 
+      <div class="dfg">
+        <label>Roles</label>
+        <div class="role-checkboxes" id="role-checkboxes">
+          <label class="rcb"><input type="checkbox" value="technician"> Technician</label>
+          <label class="rcb"><input type="checkbox" value="lead"> Lead Tech</label>
+          <label class="rcb"><input type="checkbox" value="office"> Office</label>
+          <label class="rcb"><input type="checkbox" value="manager"> Manager</label>
+          <label class="rcb"><input type="checkbox" value="admin"> Admin</label>
+        </div>
+      </div>
+ 
+      <div class="dfg">
+        <label>Operator Name</label>
+        <input class="si" type="text" id="d-opname" placeholder="Eduardo García">
+        <span class="dfg-hint">Must match exactly what's in the Routes sheet Operator column.</span>
+      </div>
+ 
+      <div class="dfg">
+        <label>Available Days</label>
+        <div class="day-checkboxes" id="day-checkboxes">
+          <label class="dcb"><input type="checkbox" value="Monday"> Mon</label>
+          <label class="dcb"><input type="checkbox" value="Tuesday"> Tue</label>
+          <label class="dcb"><input type="checkbox" value="Wednesday"> Wed</label>
+          <label class="dcb"><input type="checkbox" value="Thursday"> Thu</label>
+          <label class="dcb"><input type="checkbox" value="Friday"> Fri</label>
+        </div>
+        <span class="dfg-hint">Which days this technician works. Used for route planning.</span>
+      </div>
+ 
+      <div class="dfg" id="d-active-wrap">
+        <label>Account Status</label>
+        <div class="status-toggle">
+          <label class="rcb"><input type="radio" name="d-active" value="true" checked> Active</label>
+          <label class="rcb"><input type="radio" name="d-active" value="false"> Deactivated</label>
+        </div>
+      </div>
+ 
+      <div class="im" id="drawer-msg"></div>
+ 
+    </div><!-- /drawer-body -->
+ 
+    <div class="drawer-footer">
+      <button class="drawer-cancel-btn" onclick="closeUserDrawer()">Cancel</button>
+      <button class="drawer-save-btn" id="drawer-save-btn" onclick="saveUser()">Save User</button>
+    </div>
+ 
+  </div>
+</div>
+ 
 
   </div><!-- /page-wrap -->
   <nav class="bottom-nav" id="bnav"></nav>
@@ -407,6 +477,11 @@ const ROLE_PAGES = {
   manager:['home','live_map','service_log','inventory','quotes'],
   admin:['home','live_map','service_log','inventory','quotes','admin'],
 };
+
+const ALL_ROLES = ['technician','lead','office','manager','admin'];
+const ALL_DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+let _editingUsername = null;
+let _usersCache = [];
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SESSION
@@ -897,49 +972,300 @@ function resetSvc(){
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN
 // ══════════════════════════════════════════════════════════════════════════════
-function loadUsers(){
-  api({secret:SEC,action:'list_users',token:_s.token}).then(res=>{
-    if(!res.ok)return;
-    const tb=document.getElementById('utbody');
-    if(!res.users.length){tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';return;}
-    tb.innerHTML=res.users.map(u=>`<tr>
-      <td style="font-weight:600">${u.name||'—'}</td>
-      <td style="color:var(--muted);font-size:.82rem">${u.username}</td>
-      <td>${(u.roles||[u.role||'—']).join(', ')}</td>
-      <td style="font-size:.82rem;color:var(--muted)">${u.operator_name||'—'}</td>
-      <td><span class="dot ${(u.active===true||u.active==='TRUE')?'on':'off'}"></span>${(u.active===true||u.active==='TRUE')?'Active':'Inactive'}</td>
-    </tr>`).join('');
+function loadUsers() {
+  api({ secret:SEC, action:'list_users', token:_s.token }).then(res => {
+    if (!res.ok) return;
+    _usersCache = res.users || [];
+    renderUserTable(_usersCache);
   });
 }
-
-function createUser(){
-  const name=document.getElementById('new-name').value.trim();
-  const uname=document.getElementById('new-uname').value.trim().toLowerCase();
-  const pw=document.getElementById('new-pass').value.trim();
-  const roles=document.getElementById('new-roles').value.trim()||'technician';
-  const opName=document.getElementById('new-opname').value.trim();
-  const msgEl=document.getElementById('create-msg');
-  if(!name||!uname||!pw){showMsg(msgEl,'All fields required.',false);return;}
-  api({secret:SEC,action:'create_user',token:_s.token,username:uname,password:pw,name,roles,operator_name:opName})
-    .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok){document.getElementById('new-name').value='';document.getElementById('new-uname').value='';document.getElementById('new-pass').value='';document.getElementById('new-opname').value='';loadUsers();}});
+ 
+function renderUserTable(users) {
+  const tb = document.getElementById('utbody');
+  if (!users.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet. Click + Add User to create one.</td></tr>';
+    return;
+  }
+  tb.innerHTML = users.map(u => {
+    const roles = Array.isArray(u.roles) ? u.roles : [u.role||'—'];
+    const days  = u.available_days
+      ? String(u.available_days).split(',').map(d=>d.trim().slice(0,3)).join(', ')
+      : '<span class="no-days">Not set</span>';
+    const active = u.active === true || String(u.active).toUpperCase() === 'TRUE';
+    return `<tr onclick="openUserDrawer('${u.username}')">
+      <td style="font-weight:600">${u.name||'—'}</td>
+      <td style="color:var(--muted);font-size:.82rem">${u.username}</td>
+      <td class="roles-cell">${roles.join(', ')}</td>
+      <td style="font-size:.82rem;color:var(--muted)">${u.operator_name||'—'}</td>
+      <td class="days-cell">${days}</td>
+      <td><span class="dot ${active?'on':'off'}"></span>${active?'Active':'Inactive'}</td>
+    </tr>`;
+  }).join('');
+}
+ 
+// ─── Open drawer ──────────────────────────────────────────────────────────────
+function openUserDrawer(username) {
+  _editingUsername = username;
+  const isNew = username === null;
+ 
+  // Reset form
+  document.getElementById('d-name').value    = '';
+  document.getElementById('d-uname').value   = '';
+  document.getElementById('d-pass').value    = '';
+  document.getElementById('d-opname').value  = '';
+  document.getElementById('drawer-msg').style.display = 'none';
+ 
+  // Uncheck all roles and days
+  document.querySelectorAll('#role-checkboxes input').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#day-checkboxes input').forEach(cb => cb.checked = false);
+  document.querySelector('input[name="d-active"][value="true"]').checked = true;
+ 
+  if (isNew) {
+    document.getElementById('drawer-title').textContent = 'Add New User';
+    document.getElementById('drawer-sub').textContent   = 'Fill in the details to create an account.';
+    document.getElementById('d-uname').disabled         = false;
+    document.getElementById('uname-hint').style.display = 'none';
+    document.getElementById('d-pass-optional').style.display = 'none';
+    // Default: technician + all days
+    document.querySelector('#role-checkboxes input[value="technician"]').checked = true;
+    ALL_DAYS.forEach(day => {
+      const cb = document.querySelector(`#day-checkboxes input[value="${day}"]`);
+      if (cb) cb.checked = true;
+    });
+  } else {
+    // Load existing user data
+    const user = _usersCache.find(u => u.username === username);
+    if (!user) return;
+ 
+    document.getElementById('drawer-title').textContent = 'Edit User';
+    document.getElementById('drawer-sub').textContent   = '@' + username;
+    document.getElementById('d-name').value             = user.name || '';
+    document.getElementById('d-uname').value            = username;
+    document.getElementById('d-uname').disabled         = true; // username immutable
+    document.getElementById('uname-hint').style.display = 'block';
+    document.getElementById('d-pass-optional').style.display = 'inline';
+    document.getElementById('d-opname').value           = user.operator_name || '';
+ 
+    // Set roles
+    const roles = Array.isArray(user.roles) ? user.roles : String(user.roles||'').split(',').map(r=>r.trim());
+    roles.forEach(role => {
+      const cb = document.querySelector(`#role-checkboxes input[value="${role}"]`);
+      if (cb) cb.checked = true;
+    });
+ 
+    // Set available days
+    if (user.available_days) {
+      const days = String(user.available_days).split(',').map(d=>d.trim());
+      days.forEach(day => {
+        const cb = document.querySelector(`#day-checkboxes input[value="${day}"]`);
+        if (cb) cb.checked = true;
+      });
+    }
+ 
+    // Set active status
+    const active = user.active === true || String(user.active).toUpperCase() === 'TRUE';
+    document.querySelector(`input[name="d-active"][value="${active}"]`).checked = true;
+  }
+ 
+  document.getElementById('user-backdrop').classList.add('open');
+  document.getElementById('user-drawer').classList.add('open');
+}
+ 
+function closeUserDrawer() {
+  document.getElementById('user-backdrop').classList.remove('open');
+  document.getElementById('user-drawer').classList.remove('open');
+  _editingUsername = null;
+}
+ 
+// ─── Save (create or update) ──────────────────────────────────────────────────
+function saveUser() {
+  const btn      = document.getElementById('drawer-save-btn');
+  const msgEl    = document.getElementById('drawer-msg');
+  const isNew    = _editingUsername === null;
+ 
+  const name     = document.getElementById('d-name').value.trim();
+  const username = isNew
+    ? document.getElementById('d-uname').value.trim().toLowerCase()
+    : _editingUsername;
+  const password = document.getElementById('d-pass').value.trim();
+  const opName   = document.getElementById('d-opname').value.trim();
+ 
+  // Collect roles
+  const roles = Array.from(document.querySelectorAll('#role-checkboxes input:checked'))
+    .map(cb => cb.value);
+ 
+  // Collect available days
+  const days = Array.from(document.querySelectorAll('#day-checkboxes input:checked'))
+    .map(cb => cb.value);
+ 
+  // Active status
+  const activeVal = document.querySelector('input[name="d-active"]:checked').value;
+  const active    = activeVal === 'true';
+ 
+  // Validation
+  if (!name) { showDrawerMsg('Full name is required.', false); return; }
+  if (isNew && !username) { showDrawerMsg('Username is required.', false); return; }
+  if (isNew && !password) { showDrawerMsg('Password is required for new users.', false); return; }
+  if (!roles.length) { showDrawerMsg('Select at least one role.', false); return; }
+ 
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+ 
+  if (isNew) {
+    api({
+      secret  : SEC,
+      action  : 'create_user',
+      token   : _s.token,
+      username,
+      password,
+      name,
+      roles   : roles.join(','),
+      operator_name  : opName,
+      available_days : days.join(','),
+    }).then(res => {
+      btn.disabled = false; btn.textContent = 'Save User';
+      if (res.ok) {
+        showDrawerMsg('User created!', true);
+        loadUsers();
+        setTimeout(closeUserDrawer, 1200);
+      } else {
+        showDrawerMsg(res.error || 'Failed to create user.', false);
+      }
+    }).catch(() => { btn.disabled=false; btn.textContent='Save User'; showDrawerMsg('Network error.',false); });
+ 
+  } else {
+    const fields = {
+      name,
+      roles          : roles.join(','),
+      operator_name  : opName,
+      available_days : days.join(','),
+      active,
+    };
+    if (password) fields.password = password;
+ 
+    api({
+      secret  : SEC,
+      action  : 'update_user',
+      token   : _s.token,
+      username,
+      fields,
+    }).then(res => {
+      btn.disabled = false; btn.textContent = 'Save User';
+      if (res.ok) {
+        showDrawerMsg('Saved!', true);
+        loadUsers();
+        setTimeout(closeUserDrawer, 1200);
+      } else {
+        showDrawerMsg(res.error || 'Failed to save.', false);
+      }
+    }).catch(() => { btn.disabled=false; btn.textContent='Save User'; showDrawerMsg('Network error.',false); });
+  }
+}
+ 
+function showDrawerMsg(text, ok) {
+  const el = document.getElementById('drawer-msg');
+  el.textContent  = text;
+  el.className    = 'im ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+}
+ 
+// Keep the generic showMsg for other uses
+function showMsg(el, text, ok) {
+  el.textContent = text;
+  el.className   = 'im ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 
-function updateUser(){
-  const uname=document.getElementById('edit-uname').value.trim().toLowerCase();
-  const roles=document.getElementById('edit-roles').value.trim();
-  const opName=document.getElementById('edit-opname').value.trim();
-  const pw=document.getElementById('edit-pass').value.trim();
-  const active=document.getElementById('edit-active').value;
-  const msgEl=document.getElementById('update-msg');
-  if(!uname){showMsg(msgEl,'Username required.',false);return;}
-  const fields={};
-  if(roles)fields.roles=roles;if(opName)fields.operator_name=opName;if(pw)fields.password=pw;if(active)fields.active=(active==='true');
-  if(!Object.keys(fields).length){showMsg(msgEl,'No changes specified.',false);return;}
-  api({secret:SEC,action:'update_user',token:_s.token,username:uname,fields})
-    .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok)loadUsers();});
-}
-
-function showMsg(el,text,ok){el.textContent=text;el.className='im '+(ok?'ok':'err');el.style.display='block';setTimeout(()=>{el.style.display='none';},4000);}
 </script>
+  <!-- ════════════════════════════════════════════════════════
+     ADD THESE STYLES to the <style> block in index.html
+     (add before the closing </style> tag)
+════════════════════════════════════════════════════════ -->
+<style>
+.adm-new-btn {
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
+  letter-spacing:.06em;padding:.3rem .85rem;border-radius:8px;
+  background:var(--teal-mid);color:#fff;border:none;cursor:pointer;
+  transition:background .15s;
+}
+.adm-new-btn:hover { background:var(--teal); }
+ 
+.ut tbody tr { cursor:pointer;transition:background .12s; }
+.ut tbody tr:hover { background:var(--surface); }
+.ut .roles-cell { font-size:.78rem; color:var(--muted); }
+.ut .days-cell { font-size:.75rem; color:var(--muted); }
+.no-days { color:#cbd5e1;font-style:italic; }
+ 
+/* Drawer */
+.drawer-backdrop {
+  position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;
+  display:none;animation:fadein .2s;
+}
+.drawer-backdrop.open { display:block; }
+@keyframes fadein { from{opacity:0}to{opacity:1} }
+ 
+.drawer {
+  position:fixed;right:0;top:0;bottom:0;
+  width:min(460px,100vw);background:var(--card);
+  border-left:1px solid var(--border);z-index:301;
+  transform:translateX(100%);
+  transition:transform .3s cubic-bezier(.16,1,.3,1);
+  display:flex;flex-direction:column;
+}
+.drawer.open { transform:translateX(0); }
+ 
+.drawer-inner { display:flex;flex-direction:column;height:100%; }
+ 
+.drawer-hdr {
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:1.25rem 1.25rem 1rem;border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.drawer-title { font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:600;letter-spacing:.04em; }
+.drawer-sub { font-size:.8rem;color:var(--muted);margin-top:.15rem; }
+.drawer-close {
+  width:30px;height:30px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:.9rem;
+  flex-shrink:0;transition:all .15s;
+}
+.drawer-close:hover { color:var(--text);border-color:var(--teal-light); }
+ 
+.drawer-body { flex:1;overflow-y:auto;padding:1.25rem; }
+ 
+.dfg { margin-bottom:1.1rem; }
+.dfg label { display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem; }
+.dfg-hint { display:block;font-size:.73rem;color:var(--muted);margin-top:.25rem; }
+ 
+.role-checkboxes, .day-checkboxes {
+  display:flex;flex-wrap:wrap;gap:.4rem .75rem;margin-top:.25rem;
+}
+.rcb, .dcb {
+  display:flex;align-items:center;gap:.4rem;
+  font-size:.875rem;font-weight:400;cursor:pointer;
+}
+.rcb input, .dcb input { cursor:pointer;accent-color:var(--teal-mid); }
+.status-toggle { display:flex;gap:1.25rem;margin-top:.25rem; }
+ 
+.drawer-footer {
+  padding:1rem 1.25rem;border-top:1px solid var(--border);
+  display:flex;gap:.75rem;flex-shrink:0;background:var(--card);
+}
+.drawer-cancel-btn {
+  flex:1;padding:.75rem;border:1.5px solid var(--border);border-radius:10px;
+  background:transparent;color:var(--muted);font-family:'Barlow',sans-serif;
+  font-size:.9rem;font-weight:600;cursor:pointer;transition:all .15s;
+}
+.drawer-cancel-btn:hover { background:var(--surface);color:var(--text); }
+.drawer-save-btn {
+  flex:2;padding:.75rem;background:var(--teal);color:#fff;border:none;
+  border-radius:10px;font-family:'Oswald',sans-serif;font-size:1rem;
+  font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;transition:background .15s;
+}
+.drawer-save-btn:hover { background:var(--teal-mid); }
+.drawer-save-btn:disabled { background:#cbd5e1;cursor:not-allowed; }
+</style>
 </body>
 </html>
