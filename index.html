@@ -2,577 +2,1042 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MCPS Log App</title>
+<title>MCPS Portal</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
-:root {
-  --teal-dark: #0d4d44;
-  --teal-mid: #1a7a6e;
-  --teal-light: #2aa89a;
-  --gold: #c8a84b;
-  --text-main: #0f172a;
-  --text-muted: #64748b;
-  --border-color: #e2e8f0;
-  --success: #16a34a;
-  --error: #ef4444;
-  --warning: #d97706;
-}
-*, *::before, *::after { box-sizing: border-box; }
-body {
-  margin: 0; padding: 0;
-  font-family: 'Inter', sans-serif;
-  background: linear-gradient(160deg, #e0f2f0 0%, #d1ece8 40%, #dcfce7 100%);
-  color: var(--text-main);
-  min-height: 100vh;
-  display: flex; flex-direction: column; align-items: center;
-  padding: 1rem;
-}
-.container { width: 100%; max-width: 600px; margin-bottom: 2rem; }
-header { text-align: center; margin-bottom: 1.5rem; padding-top: 1rem; }
-.header-logo { max-height: 100px; margin-bottom: 0.5rem; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.15)); }
-.header-mission { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 2rem; color: var(--teal-dark); letter-spacing: 0.12em; text-transform: uppercase; line-height: 1; }
-.header-sub { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 0.95rem; color: var(--teal-mid); letter-spacing: 0.28em; text-transform: uppercase; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-.card {
-  background: rgba(255,255,255,0.97);
-  border: 1px solid rgba(255,255,255,0.6);
-  border-radius: 20px;
-  box-shadow: 0 10px 40px -10px rgba(13,77,68,0.12);
-  padding: 1.5rem; margin-bottom: 1.5rem;
-  display: none; animation: slideUp 0.5s ease;
+:root{
+  --teal:#0d4d44;--teal-mid:#1a7a6e;--teal-light:#2aa89a;
+  --gold:#c8a84b;--text:#0f172a;--muted:#64748b;
+  --border:#e2e8f0;--success:#16a34a;--error:#ef4444;--warn:#d97706;
+  --bg:#f0faf9;--card:#ffffff;--surface:#f8fafc;
+  --nav-h:60px;--topbar-h:56px;
 }
-@keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
 
-.section-title {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.1rem; font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  margin-top: 0; margin-bottom: 1.25rem;
-  border-bottom: 2px solid var(--border-color);
-  padding-bottom: 0.5rem; color: var(--teal-dark);
-}
-.form-group { margin-bottom: 1.25rem; }
-label { display: block; margin-bottom: 0.4rem; font-weight: 600; font-size: 0.95rem; }
-.help-text { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; margin-top: -0.2rem; }
+body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 
-input[type="text"], input[type="number"], select, textarea {
-  width: 100%; padding: 0.75rem 1rem;
-  border: 1px solid var(--border-color); border-radius: 12px;
-  font-size: 1rem; font-family: 'Inter', sans-serif;
-  box-sizing: border-box; transition: all 0.2s;
-  background: #f8fafc; color: var(--text-main);
+/* ── LOGIN ──────────────────────────────────────────────────────────────── */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:1.5rem;
+  background:linear-gradient(160deg,#e0f2f0 0%,#d1ece8 40%,#dcfce7 100%);
 }
-textarea { resize: vertical; min-height: 80px; }
-input:focus, select:focus, textarea:focus {
-  outline: none; border-color: var(--teal-mid);
-  background: #fff; box-shadow: 0 0 0 3px rgba(26,122,110,0.15);
+.login-card{
+  background:var(--card);border-radius:24px;
+  box-shadow:0 20px 60px -10px rgba(0,0,0,0.12);
+  padding:2.5rem 2rem;width:100%;max-width:400px;
+  animation:fadeUp .4s ease;
 }
-.checkbox-group { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
-.checkbox-group input { width: auto; }
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 
-.loader {
-  display: inline-block; width: 40px; height: 40px;
-  border: 4px solid rgba(26,122,110,0.2);
-  border-radius: 50%; border-top-color: var(--teal-mid);
-  animation: spin 1s ease-in-out infinite; margin: 4rem auto;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.center-content { text-align: center; }
+.login-logo{text-align:center;margin-bottom:1.75rem}
+.login-logo img{max-height:72px;margin-bottom:.75rem}
+.login-logo h1{font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.login-logo p{font-size:.85rem;color:var(--muted);margin-top:.2rem}
 
-/* Recommendation box */
-.rec-box {
-  background: #e8f5f3; border: 1px dashed var(--teal-mid);
-  border-radius: 14px; padding: 1rem 1.1rem;
-  margin-bottom: 1.5rem; display: none;
+.form-group{margin-bottom:1.1rem}
+.form-group label{display:block;font-size:.875rem;font-weight:600;margin-bottom:.4rem}
+.form-group input{
+  width:100%;padding:.8rem 1rem;border:1.5px solid var(--border);
+  border-radius:12px;font-size:1rem;font-family:'Barlow',sans-serif;
+  background:var(--surface);color:var(--text);transition:all .2s;
 }
-.rec-box-header {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 700; font-size: 0.82rem;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--teal-dark);
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 0.6rem;
-}
-.rec-vol-badge {
-  font-size: 0.72rem; background: rgba(255,255,255,0.8);
-  padding: 2px 9px; border-radius: 10px;
-  color: var(--teal-mid); font-weight: 600;
-}
-.rec-flags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
-.rec-flag {
-  font-size: 0.7rem; font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 2px 8px; border-radius: 5px;
-}
-.rec-flag.summer { background: rgba(217,119,6,0.15); color: var(--warning); }
-.rec-flag.green  { background: rgba(239,68,68,0.12); color: var(--error); }
-.rec-flag.fiber  { background: rgba(26,122,110,0.12); color: var(--teal-mid); }
-.rec-flag.plstr  { background: rgba(200,168,75,0.15); color: var(--gold); }
+.form-group input:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
 
-.rec-list { display: flex; flex-direction: column; gap: 0.55rem; }
-.rec-item {
-  background: #fff; padding: 0.75rem 0.9rem;
-  border-radius: 10px; display: flex; flex-direction: column; gap: 0.2rem;
+.btn-login{
+  width:100%;padding:1rem;background:var(--teal);color:#fff;border:none;
+  border-radius:12px;font-family:'Oswald',sans-serif;font-size:1.05rem;
+  font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  cursor:pointer;margin-top:.5rem;transition:all .15s;
+  box-shadow:0 4px 12px rgba(0,0,0,.12);
 }
-.rec-item.bad     { border-left: 4px solid var(--error); }
-.rec-item.warning { border-left: 4px solid var(--warning); }
-.rec-item.good    { border-left: 4px solid var(--success); }
-.rec-item-top { display: flex; justify-content: space-between; align-items: center; }
-.rec-item-name { font-weight: 600; font-size: 0.92rem; }
-.rec-item-amt  { font-family: 'Oswald', sans-serif; font-size: 1.05rem; font-weight: 600; color: var(--teal-dark); }
-.rec-item-reason { font-size: 0.75rem; color: var(--text-muted); }
+.btn-login:hover:not(:disabled){background:var(--teal-mid);transform:translateY(-1px)}
+.btn-login:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
+.error-msg{
+  background:#fef2f2;border:1px solid #fecaca;color:var(--error);
+  border-radius:10px;padding:.65rem 1rem;font-size:.875rem;font-weight:500;
+  margin-top:1rem;display:none;
+}
 
-.btn-submit {
-  width: 100%; padding: 1.25rem;
-  background: var(--teal-dark); color: white; border: none;
-  border-radius: 12px;
-  font-family: 'Oswald', sans-serif; font-weight: 600;
-  font-size: 1.2rem; letter-spacing: 0.1em; text-transform: uppercase;
-  cursor: pointer; transition: all 0.2s;
-  box-shadow: 0 4px 16px rgba(13,77,68,0.25); margin-top: 1rem;
-}
-.btn-submit:hover { background: var(--teal-mid); transform: translateY(-2px); }
-.btn-submit:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; box-shadow: none; }
+/* ── APP SHELL ───────────────────────────────────────────────────────────── */
+#app{display:none;flex-direction:column;min-height:100vh}
 
-/* Pool condition pills */
-.condition-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
-.condition-pill {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.82rem; font-weight: 600; letter-spacing: 0.05em;
-  padding: 0.3rem 0.85rem; border-radius: 99px; cursor: pointer;
-  border: 1.5px solid var(--border-color);
-  background: #f8fafc; color: var(--text-muted);
-  transition: all 0.15s; user-select: none;
+.topbar{
+  height:var(--topbar-h);background:var(--card);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 1.25rem;position:sticky;top:0;z-index:100;
+  box-shadow:0 1px 8px rgba(0,0,0,.06);
 }
-.condition-pill.active { border-color: var(--error); background: #fef2f2; color: var(--error); }
-.condition-pill.active-ok { border-color: var(--success); background: #f0fdf4; color: var(--success); }
+.topbar-brand{display:flex;align-items:center;gap:.75rem}
+.topbar-brand img{height:32px}
+.topbar-brand-text .title{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.04em;color:var(--text)}
+.topbar-brand-text .sub{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.topbar-right{display:flex;align-items:center;gap:.6rem}
+
+.user-pill{
+  font-size:.78rem;font-weight:600;font-family:'Barlow Condensed',sans-serif;
+  background:var(--surface);border:1px solid var(--border);
+  padding:.25rem .75rem;border-radius:99px;color:var(--muted);
+}
+.role-badge{
+  font-size:.72rem;font-weight:600;font-family:'Barlow Condensed',sans-serif;
+  padding:.2rem .6rem;border-radius:99px;text-transform:capitalize;
+}
+.role-badge.admin{background:#fef3c7;color:#92400e}
+.role-badge.technician{background:#f1f5f9;color:#475569}
+.role-badge.manager,.role-badge.lead{background:#ede9fe;color:#4c1d95}
+
+.btn-logout{
+  font-size:.78rem;font-weight:600;font-family:'Barlow',sans-serif;
+  padding:.3rem .8rem;border:1.5px solid var(--border);border-radius:8px;
+  background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;
+}
+.btn-logout:hover{background:var(--surface);color:var(--text)}
+
+/* Page content */
+.page-content{flex:1;padding:1.25rem 1rem calc(var(--nav-h) + 1.5rem);max-width:900px;width:100%;margin:0 auto}
+.page-frame{display:none;animation:fadeUp .3s ease}
+.page-frame.active{display:block}
+
+/* Bottom nav */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;height:var(--nav-h);
+  background:var(--card);border-top:1px solid var(--border);
+  display:flex;justify-content:space-around;align-items:center;
+  padding:0 .5rem calc(env(safe-area-inset-bottom));
+  z-index:100;box-shadow:0 -4px 20px rgba(0,0,0,.06);
+}
+.nav-item{
+  display:flex;flex-direction:column;align-items:center;gap:.2rem;
+  padding:.4rem .75rem;border-radius:10px;cursor:pointer;
+  border:none;background:transparent;font-family:'Barlow',sans-serif;
+  flex:1;transition:background .15s;
+}
+.nav-item:hover{background:var(--surface)}
+.nav-icon{font-size:1.3rem;color:var(--muted);transition:color .15s}
+.nav-label{font-family:'Barlow Condensed',sans-serif;font-size:.65rem;font-weight:600;letter-spacing:.04em;color:var(--muted);transition:color .15s}
+.nav-item.active .nav-icon,.nav-item.active .nav-label{color:var(--teal-mid)}
+.nav-item.active .nav-label{font-weight:700}
+
+/* ── HOME PAGE ──────────────────────────────────────────────────────────── */
+.home-greeting{margin-bottom:1.5rem}
+.home-greeting h2{font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
+.home-greeting p{font-size:.9rem;color:var(--muted);margin-top:.2rem}
+.home-cards{display:flex;flex-direction:column;gap:.75rem}
+.home-card{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;
+  cursor:pointer;transition:all .15s;
+}
+.home-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);transform:translateY(-1px)}
+.home-card-icon{font-size:1.75rem;flex-shrink:0}
+.home-card-text .name{font-weight:600;font-size:.95rem;color:var(--text)}
+.home-card-text .desc{font-size:.78rem;color:var(--muted);margin-top:.1rem}
+.home-card-arrow{margin-left:auto;color:var(--muted);font-size:1.1rem;flex-shrink:0}
+
+/* ── LIVE MAP PAGE ──────────────────────────────────────────────────────── */
+.map-layout{display:grid;grid-template-columns:1fr 320px;gap:1rem;height:calc(100vh - var(--topbar-h) - var(--nav-h) - 2.5rem)}
+@media(max-width:680px){.map-layout{grid-template-columns:1fr;grid-template-rows:300px 1fr;height:auto}}
+
+.map-container{border-radius:16px;overflow:hidden;border:1px solid var(--border);min-height:300px}
+#leaflet-map{width:100%;height:100%}
+
+.map-sidebar{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.map-sidebar-header{
+  padding:.85rem 1rem;border-bottom:1px solid var(--border);
+  font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.map-filter{
+  display:flex;gap:.4rem;padding:.6rem 1rem;border-bottom:1px solid var(--border);
+  flex-wrap:wrap;
+}
+.op-pill{
+  font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:600;
+  letter-spacing:.05em;padding:.2rem .65rem;border-radius:99px;
+  border:1.5px solid var(--border);background:var(--surface);
+  color:var(--muted);cursor:pointer;transition:all .15s;
+}
+.op-pill.active{border-color:currentColor}
+
+.pool-list{flex:1;overflow-y:auto}
+.pool-list-item{
+  padding:.75rem 1rem;border-bottom:1px solid #f1f5f9;cursor:pointer;
+  display:flex;align-items:flex-start;gap:.75rem;transition:background .12s;
+}
+.pool-list-item:hover{background:var(--surface)}
+.pool-list-item.highlighted{background:#e8f5f3}
+.pool-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.pool-list-name{font-weight:600;font-size:.88rem;color:var(--text)}
+.pool-list-meta{font-size:.75rem;color:var(--muted);margin-top:.1rem}
+.pool-list-day{
+  font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:600;
+  letter-spacing:.05em;margin-left:auto;flex-shrink:0;padding:.15rem .5rem;
+  border-radius:5px;text-transform:uppercase;
+}
+
+.map-empty{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:.5rem;padding:2rem;text-align:center;
+}
+.map-empty-icon{font-size:2rem}
+.map-empty-text{font-size:.85rem;color:var(--muted)}
+
+/* ── SERVICE LOG PAGE ───────────────────────────────────────────────────── */
+/* reuses form styles from original form */
+.svc-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:1.25rem;margin-bottom:1.25rem;
+}
+.svc-section-title{
+  font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--teal);
+  border-bottom:2px solid var(--border);padding-bottom:.4rem;margin-bottom:1rem;
+}
+.svc-form-group{margin-bottom:1.1rem}
+.svc-form-group label{display:block;font-weight:600;font-size:.88rem;margin-bottom:.35rem}
+.svc-help{font-size:.75rem;color:var(--muted);margin-bottom:.3rem;margin-top:-.2rem;display:block}
+.svc-input{
+  width:100%;padding:.7rem .9rem;border:1.5px solid var(--border);
+  border-radius:10px;font-size:.95rem;font-family:'Barlow',sans-serif;
+  background:var(--surface);color:var(--text);transition:all .2s;
+}
+.svc-input:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
+textarea.svc-input{resize:vertical;min-height:72px}
+.svc-checkbox-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem}
+.svc-checkbox-row input{width:auto}
+
+/* Rec box */
+.rec-box{
+  background:#e8f5f3;border:1px dashed var(--teal-mid);border-radius:12px;
+  padding:.9rem 1rem;margin-bottom:1.25rem;display:none;
+}
+.rec-box-hdr{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.78rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--teal);
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;
+}
+.rec-vol{font-size:.7rem;background:rgba(255,255,255,.8);padding:1px 8px;border-radius:10px;color:var(--teal-mid)}
+.rec-flags{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.55rem}
+.rec-flag{font-size:.67rem;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;border-radius:4px}
+.rec-flag.summer{background:rgba(217,119,6,.15);color:var(--warn)}
+.rec-flag.green{background:rgba(239,68,68,.12);color:var(--error)}
+.rec-flag.fiber{background:rgba(26,122,110,.12);color:var(--teal-mid)}
+.rec-flag.plstr{background:rgba(200,168,75,.15);color:var(--gold)}
+.rec-list{display:flex;flex-direction:column;gap:.45rem}
+.rec-item{background:#fff;padding:.65rem .8rem;border-radius:9px;display:flex;flex-direction:column;gap:.15rem}
+.rec-item.bad{border-left:4px solid var(--error)}
+.rec-item.warning{border-left:4px solid var(--warn)}
+.rec-item.good{border-left:4px solid var(--success)}
+.rec-item-top{display:flex;justify-content:space-between;align-items:center}
+.rec-item-name{font-weight:600;font-size:.88rem}
+.rec-item-amt{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;color:var(--teal)}
+.rec-item-reason{font-size:.72rem;color:var(--muted)}
+
+/* Condition pills */
+.cond-pills{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.35rem}
+.cond-pill{
+  font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:600;
+  letter-spacing:.04em;padding:.28rem .8rem;border-radius:99px;cursor:pointer;
+  border:1.5px solid var(--border);background:var(--surface);color:var(--muted);
+  transition:all .15s;user-select:none;
+}
+.cond-pill.active{border-color:var(--error);background:#fef2f2;color:var(--error)}
+.cond-pill.active-ok{border-color:var(--success);background:#f0fdf4;color:var(--success)}
+
+.btn-submit-svc{
+  width:100%;padding:1.1rem;background:var(--teal);color:#fff;border:none;
+  border-radius:12px;font-family:'Oswald',sans-serif;font-weight:600;
+  font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;
+  cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(13,77,68,.2);
+}
+.btn-submit-svc:hover{background:var(--teal-mid);transform:translateY(-1px)}
+.btn-submit-svc:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* Loader */
+.svc-loader{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.spinner{display:inline-block;width:32px;height:32px;border:3px solid rgba(26,122,110,.2);border-radius:50%;border-top-color:var(--teal-mid);animation:spin 1s linear infinite;margin-bottom:.75rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── ADMIN PAGE ─────────────────────────────────────────────────────────── */
+.admin-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:1.25rem}
+.admin-card-title{
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  padding:.85rem 1.1rem;border-bottom:1px solid var(--border);background:var(--surface);
+}
+table.user-table{width:100%;border-collapse:collapse}
+table.user-table th{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border);background:var(--surface)}
+table.user-table td{padding:.75rem .9rem;border-bottom:1px solid #f1f5f9;font-size:.85rem}
+table.user-table tr:last-child td{border-bottom:none}
+.add-user-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:1.1rem}
+@media(max-width:480px){.add-user-grid{grid-template-columns:1fr}}
+.add-user-btn{
+  margin:.25rem 1.1rem 1.1rem;padding:.75rem 1.1rem;background:var(--teal-mid);
+  color:#fff;border:none;border-radius:10px;font-family:'Barlow Condensed',sans-serif;
+  font-size:.9rem;font-weight:700;letter-spacing:.06em;cursor:pointer;transition:background .15s;
+}
+.add-user-btn:hover{background:var(--teal)}
+.inline-msg{font-size:.78rem;font-weight:600;padding:.35rem .75rem;border-radius:7px;margin:.25rem 1.1rem .75rem;display:none}
+.inline-msg.ok{background:#d1fae5;color:#065f46}
+.inline-msg.err{background:#fef2f2;color:var(--error)}
+
+/* Status dot */
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.dot.on{background:var(--success)}.dot.off{background:#cbd5e1}
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <img class="header-logo" src="https://missioncustompools.com/wp-content/uploads/2024/07/mission-custom-pools-logo.webp" alt="Mission Custom Pool Solutions">
-    <div><span class="header-mission">Mission</span></div>
-    <div><span class="header-sub">Custom Pool Solutions</span></div>
+
+<!-- ── LOGIN ──────────────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="https://missioncustompools.com/wp-content/uploads/2024/07/mission-custom-pools-logo.webp" alt="MCPS">
+      <h1>MCPS Employee Portal</h1>
+      <p>Mission Custom Pool Solutions</p>
+    </div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="u" autocomplete="username" autocapitalize="none" placeholder="your username">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="p" autocomplete="current-password" placeholder="••••••••"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Sign In</button>
+    <div class="error-msg" id="login-err"></div>
+  </div>
+</div>
+
+<!-- ── APP ─────────────────────────────────────────────────────────────────── -->
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-brand">
+      <img src="https://missioncustompools.com/wp-content/uploads/2024/07/mission-custom-pools-logo.webp" alt="MCPS">
+      <div class="topbar-brand-text">
+        <div class="title">MCPS Portal</div>
+        <div class="sub">Mission Custom Pool Solutions</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="user-pill" id="tp-name"></span>
+      <span class="role-badge" id="tp-role"></span>
+      <button class="btn-logout" onclick="doLogout()">Sign out</button>
+    </div>
   </header>
 
-  <div id="loader-area" class="center-content">
-    <div class="loader"></div>
-    <p style="color:var(--text-muted);font-weight:500;">Loading form...</p>
-  </div>
+  <div class="page-content">
 
-  <div id="form-container"></div>
+    <!-- Home -->
+    <div class="page-frame active" id="page-home">
+      <div class="home-greeting">
+        <h2>Hey, <span id="home-name"></span> 👋</h2>
+        <p>Select a tool below to get started.</p>
+      </div>
+      <div class="home-cards" id="home-cards"></div>
+    </div>
+
+    <!-- Live Map -->
+    <div class="page-frame" id="page-live_map">
+      <div class="map-layout">
+        <div class="map-container"><div id="leaflet-map"></div></div>
+        <div class="map-sidebar">
+          <div class="map-sidebar-header">
+            <span>Route Assignments</span>
+            <span id="map-pool-count" style="color:var(--teal-mid)"></span>
+          </div>
+          <div class="map-filter" id="op-filter"></div>
+          <div class="pool-list" id="pool-list">
+            <div class="map-empty">
+              <div class="map-empty-icon">🗺️</div>
+              <div class="map-empty-text">Loading routes...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Service Log -->
+    <div class="page-frame" id="page-service_log">
+      <div class="svc-loader" id="svc-loader">
+        <div class="spinner"></div>
+        <div>Loading form...</div>
+      </div>
+      <div id="svc-form-root" style="display:none"></div>
+    </div>
+
+    <!-- Admin -->
+    <div class="page-frame" id="page-admin">
+      <div class="admin-card">
+        <div class="admin-card-title">All Users</div>
+        <table class="user-table">
+          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last Login</th></tr></thead>
+          <tbody id="users-tbody"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="admin-card">
+        <div class="admin-card-title">Add New User</div>
+        <div class="add-user-grid">
+          <div class="form-group"><label>Full Name</label><input class="svc-input" type="text" id="new-name" placeholder="Tony Garcia"></div>
+          <div class="form-group"><label>Username</label><input class="svc-input" type="text" id="new-uname" placeholder="tony" autocapitalize="none"></div>
+          <div class="form-group"><label>Password</label><input class="svc-input" type="password" id="new-pass" placeholder="temporary"></div>
+          <div class="form-group"><label>Role</label>
+            <select class="svc-input" id="new-role">
+              <option value="technician">Technician</option>
+              <option value="lead">Lead Tech</option>
+              <option value="office">Office</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <button class="add-user-btn" onclick="createUser()">Create User</button>
+        <div class="inline-msg" id="create-msg"></div>
+      </div>
+      <div class="admin-card">
+        <div class="admin-card-title">Update User</div>
+        <div class="add-user-grid">
+          <div class="form-group"><label>Username</label><input class="svc-input" type="text" id="edit-uname" placeholder="tony" autocapitalize="none"></div>
+          <div class="form-group"><label>New Role (optional)</label>
+            <select class="svc-input" id="edit-role">
+              <option value="">— no change —</option>
+              <option value="technician">Technician</option>
+              <option value="lead">Lead Tech</option>
+              <option value="office">Office</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="form-group"><label>New Password (optional)</label><input class="svc-input" type="password" id="edit-pass" placeholder="leave blank to keep"></div>
+          <div class="form-group"><label>Active</label>
+            <select class="svc-input" id="edit-active">
+              <option value="">— no change —</option>
+              <option value="true">Active</option>
+              <option value="false">Deactivated</option>
+            </select>
+          </div>
+        </div>
+        <button class="add-user-btn" onclick="updateUser()">Update User</button>
+        <div class="inline-msg" id="update-msg"></div>
+      </div>
+    </div>
+
+  </div><!-- /page-content -->
+
+  <nav class="bottom-nav" id="bottom-nav"></nav>
 </div>
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
-// MCPS RECOMMENDATION ENGINE v2
-// Logic built from 7-year ops head field knowledge, San Antonio conditions.
-// Targets: FC 3-5, pH 7.2-7.6, TA 80-120, CH 250-350
+// CONFIG
 // ══════════════════════════════════════════════════════════════════════════════
+const AS_URL    = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
+const SECRET    = 'mcps_webhook_2026';
 
-const SIZE_GALLONS   = { small: 12000, medium: 17500, large: 25000 };
-const SUMMER_MONTHS  = [6, 7, 8, 9]; // June-Sept San Antonio heat
-
-const TEST_FIELDS = {
-  FC: "Chlorine (Cl)",
-  PH: "pH",
-  TA: "Total Alkalinity (TA)",
-  CH: "Calcium Hardness (CH)"
+const PAGE_META = {
+  home        : { label:'Home',    icon:'🏠' },
+  live_map    : { label:'Map',     icon:'🗺️'  },
+  service_log : { label:'Log',     icon:'📝' },
+  admin       : { label:'Admin',   icon:'🔒' },
 };
 
-function sizeToGallons(poolDropdownValue) {
-  const s = String(poolDropdownValue || "").toLowerCase();
-  if (s.includes("large")  || s.includes(">20") || s.includes("20,000")) return SIZE_GALLONS.large;
-  if (s.includes("medium") || s.includes("15,000")) return SIZE_GALLONS.medium;
-  return SIZE_GALLONS.small;
-}
-
-function getPoolMaterial() {
-  const el = document.getElementById("pool-material-select");
-  return el ? el.value : "plaster";
-}
-
-function getIsGreen() {
-  const pill = document.querySelector(".condition-pill.active");
-  if (pill) return true;
-  const notes = document.querySelector('[name="Notes"]');
-  return notes ? /green|algae|cloudy|murky/i.test(notes.value) : false;
-}
-
-function buildRecs(fc, ph, ta, ch, gallons, material, isGreen) {
-  const results  = [];
-  const isSummer = SUMMER_MONTHS.includes(new Date().getMonth() + 1);
-  const gal10k   = gallons / 10000;
-
-  // ── 1. LIQUID CHLORINE ────────────────────────────────────────────────────
-  if (fc !== null) {
-    let baseGal = 1.0 * gal10k;         // 1 gal per 10k = standard maintenance
-    if (isSummer) baseGal *= 1.5;        // +50% June-Sept (heat burns chlorine faster)
-
-    if (isGreen) {
-      // Algae protocol: double dose, chemistry after
-      results.push({
-        name: "Liquid Chlorine", status: "bad",
-        amt: (baseGal * 2).toFixed(1) + " gal",
-        reason: "Green/algae pool — shock dose. Do NOT adjust pH/TA/CH until chlorine works (24-48 hrs)."
-      });
-    } else if (fc < 2) {
-      // Critically low: 2x
-      results.push({
-        name: "Liquid Chlorine", status: "bad",
-        amt: (baseGal * 2).toFixed(1) + " gal",
-        reason: "FC critically low (below 2 ppm) — double dose" + (isSummer ? " + summer ×1.5" : "")
-      });
-    } else if (fc < 3) {
-      // Below target (3-5): add normal dose
-      results.push({
-        name: "Liquid Chlorine", status: "warning",
-        amt: baseGal.toFixed(1) + " gal",
-        reason: "FC below target (3-5 ppm)" + (isSummer ? " + summer ×1.5" : "")
-      });
-    } else if (fc <= 5) {
-      // In range: still dose maintenance to hold through the week
-      results.push({
-        name: "Liquid Chlorine", status: "good",
-        amt: baseGal.toFixed(1) + " gal",
-        reason: "FC in range — maintenance dose to hold through week" + (isSummer ? " (summer ×1.5)" : "")
-      });
-    }
-    // FC > 5: no chlorine recommendation
-  }
-
-  // ── 2. MURIATIC ACID (pH) ─────────────────────────────────────────────────
-  if (ph !== null) {
-    if (isGreen && ph > 7.6) {
-      // Green pool: acknowledge but defer acid
-      results.push({
-        name: "Muriatic Acid", status: "warning",
-        amt: "Hold — after shock",
-        reason: "pH high but pool is green. Shock chlorine first, adjust pH after 24-48 hrs."
-      });
-    } else if (ph > 7.6) {
-      // Standard dose: 0.5 gal per 10k (ops head confirmed)
-      // One dose max per visit, no split dosing
-      let acidGal = 0.5 * gal10k;
-      if (material === "fiberglass") acidGal *= 0.75; // gentler on fiberglass
-      acidGal = Math.min(acidGal, 1.0 * gal10k);     // never exceed 1 gal/10k
-      acidGal = Math.max(Math.round(acidGal * 4) / 4, 0.25); // round to nearest 0.25 gal
-      const fiberNote = material === "fiberglass" ? " (reduced — fiberglass surface is sensitive)" : "";
-      results.push({
-        name: "Muriatic Acid", status: ph >= 8.0 ? "bad" : "warning",
-        amt: acidGal.toFixed(2) + " gal",
-        reason: "Lower pH to 7.2-7.6. One dose max per visit — never split." + fiberNote
-      });
-    } else if (ph < 7.2) {
-      results.push({
-        name: "Soda Ash", status: "bad",
-        amt: "As needed",
-        reason: "pH below 7.2 — raise carefully. Test again before adding more."
-      });
-    }
-  }
-
-  // ── 3. ALKALINITY INCREASER (Sodium Bicarb) ───────────────────────────────
-  // Skip if green — chlorine must work before balancing TA
-  if (ta !== null && !isGreen) {
-    if (ta < 80) {
-      const ppmNeeded = 100 - ta; // target 100 ppm midpoint of 80-120
-      const lbs = (1.4 * gal10k * (ppmNeeded / 10)).toFixed(1);
-      results.push({
-        name: "Alkalinity Increaser (Sodium Bicarb)", status: "warning",
-        amt: lbs + " lbs",
-        reason: "Raise TA to 100 ppm (target 80-120 ppm)"
-      });
-    }
-    // TA 80-120: in range, no action
-    // TA > 120: let acid additions bring it down naturally — no bicarb needed
-  }
-
-  // ── 4. CALCIUM HARDNESS INCREASER ────────────────────────────────────────
-  // Skip if green
-  if (ch !== null && !isGreen) {
-    if (ch < 250) {
-      const ppmNeeded = 300 - ch; // target 300 midpoint of 250-350
-      const lbs = (1.2 * gal10k * (ppmNeeded / 10)).toFixed(1);
-      const plasterNote = material === "plaster"
-        ? " Keep CH toward upper range for plaster surfaces." : "";
-      results.push({
-        name: "Calcium Hardness Increaser", status: "warning",
-        amt: lbs + " lbs",
-        reason: "Raise CH to 300 ppm (target 250-350 ppm)." + plasterNote
-      });
-    }
-    if (ch > 450) {
-      // SA hard water — very common
-      results.push({
-        name: "Calcium (Very High)", status: "warning",
-        amt: "Partial drain",
-        reason: "CH above 450 — consider partial drain + refill. Common in SA hard water areas."
-      });
-    }
-  }
-
-  // ── 5. ALGAE PROTOCOL BANNER ──────────────────────────────────────────────
-  if (isGreen) {
-    results.unshift({
-      name: "ALGAE PROTOCOL", status: "bad",
-      amt: "Shock first",
-      reason: "Brush walls & floor. Shock with double chlorine. Wait 24-48 hrs before adjusting pH, TA, or CH."
-    });
-  }
-
-  return results;
-}
+const ROLE_PAGES = {
+  technician : ['home','live_map','service_log'],
+  lead       : ['home','live_map','service_log'],
+  office     : ['home','service_log'],
+  manager    : ['home','live_map','service_log'],
+  admin      : ['home','live_map','service_log','admin'],
+};
 
 // ══════════════════════════════════════════════════════════════════════════════
-// FORM MACHINERY
+// SESSION
 // ══════════════════════════════════════════════════════════════════════════════
+let _session = null; // { token, name, role, pages }
+let _currentPage = 'home';
 
-let _formItems = [];
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
+function api(payload) {
+  return fetch(AS_URL, { method:'POST', body:JSON.stringify(payload) }).then(r=>r.json());
+}
 
+// ── Boot: check deep link hash then localStorage ──────────────────────────────
 window.onload = () => {
-  fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'get_metadata' })
-  })
-  .then(r => r.json())
-  .then(res => {
-    if (res.ok) renderForm(res.data);
-    else alert("Error loading form: " + res.error);
-  })
-  .catch(err => alert("Network error: " + err));
+  const stored = localStorage.getItem('mcps_session');
+  if (stored) {
+    try {
+      _session = JSON.parse(stored);
+      const deepPage = location.hash.replace('#','') || 'home';
+      showApp(deepPage);
+      return;
+    } catch(e) { localStorage.removeItem('mcps_session'); }
+  }
+  // No session — show login, remember deep link
+  const deepPage = location.hash.replace('#','');
+  if (deepPage) sessionStorage.setItem('mcps_deep', deepPage);
 };
 
-function renderForm(metadata) {
-  document.getElementById('loader-area').style.display = 'none';
-  _formItems = metadata;
-  const container = document.getElementById('form-container');
-  let currentCard = null;
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════════════════
+function doLogin() {
+  const uname = document.getElementById('u').value.trim();
+  const pw    = document.getElementById('p').value.trim();
+  const btn   = document.getElementById('btn-login');
+  const errEl = document.getElementById('login-err');
 
-  const createCard = (title) => {
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.style.display = 'block';
-    if (title) {
-      const h2 = document.createElement('h2');
-      h2.className = 'section-title';
-      h2.innerText = title;
-      div.appendChild(h2);
-    }
-    return div;
+  if (!uname || !pw) { showLoginErr('Enter your username and password.'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in...'; errEl.style.display='none';
+
+  api({ action:'login', username:uname, password:pw })
+    .then(res => {
+      if (res.ok) {
+        const pages = ROLE_PAGES[res.role] || ['home','service_log'];
+        _session = { token:res.token, name:res.name, role:res.role, pages };
+        localStorage.setItem('mcps_session', JSON.stringify(_session));
+        const deep = sessionStorage.getItem('mcps_deep') || 'home';
+        sessionStorage.removeItem('mcps_deep');
+        showApp(deep);
+      } else {
+        showLoginErr(res.error || 'Login failed.');
+        btn.disabled = false; btn.textContent = 'Sign In';
+      }
+    })
+    .catch(() => {
+      showLoginErr('Network error — check connection.');
+      btn.disabled = false; btn.textContent = 'Sign In';
+    });
+}
+
+function showLoginErr(msg) {
+  const el = document.getElementById('login-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+function doLogout() {
+  if (_session) api({ action:'logout', secret:SECRET, token:_session.token }).catch(()=>{});
+  _session = null;
+  localStorage.removeItem('mcps_session');
+  location.hash = '';
+  location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// APP SHELL
+// ══════════════════════════════════════════════════════════════════════════════
+function showApp(startPage) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  document.getElementById('tp-name').textContent = _session.name;
+  const rEl = document.getElementById('tp-role');
+  rEl.textContent = _session.role; rEl.className = 'role-badge ' + _session.role;
+  document.getElementById('home-name').textContent = _session.name.split(' ')[0];
+
+  buildNav(_session.pages);
+  buildHomeCards(_session.pages);
+
+  if (_session.pages.includes('admin')) loadUsers();
+
+  const page = _session.pages.includes(startPage) ? startPage : 'home';
+  navigateTo(page);
+}
+
+function buildNav(pages) {
+  document.getElementById('bottom-nav').innerHTML = pages.map(p => {
+    const m = PAGE_META[p]; if (!m) return '';
+    return `<button class="nav-item" id="nav-${p}" onclick="navigateTo('${p}')">
+      <span class="nav-icon">${m.icon}</span>
+      <span class="nav-label">${m.label}</span>
+    </button>`;
+  }).join('');
+}
+
+function buildHomeCards(pages) {
+  const descs = {
+    live_map    : 'View route assignments in real time',
+    service_log : 'Log a pool visit & get dosage recommendations',
+    admin       : 'Manage users and access',
   };
+  document.getElementById('home-cards').innerHTML = pages
+    .filter(p => p !== 'home')
+    .map(p => {
+      const m = PAGE_META[p]; if (!m) return '';
+      return `<div class="home-card" onclick="navigateTo('${p}')">
+        <span class="home-card-icon">${m.icon}</span>
+        <div class="home-card-text">
+          <div class="name">${m.label}</div>
+          <div class="desc">${descs[p]||''}</div>
+        </div>
+        <span class="home-card-arrow">›</span>
+      </div>`;
+    }).join('');
+}
 
-  currentCard = createCard("Visit Details");
-  container.appendChild(currentCard);
+// ── Navigation — deep-link aware ──────────────────────────────────────────────
+function navigateTo(page) {
+  if (!_session || !_session.pages.includes(page)) return;
+
+  document.querySelectorAll('.page-frame').forEach(f => f.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  const frame = document.getElementById('page-' + page);
+  if (frame) frame.classList.add('active');
+  const nb = document.getElementById('nav-' + page);
+  if (nb) nb.classList.add('active');
+
+  _currentPage = page;
+  location.hash = page === 'home' ? '' : page;
+
+  // Lazy-load pages
+  if (page === 'live_map'    && !_mapLoaded)    loadMap();
+  if (page === 'service_log' && !_formLoaded)   loadServiceLog();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LIVE MAP
+// ══════════════════════════════════════════════════════════════════════════════
+let _mapLoaded = false;
+let _leafletMap = null;
+let _mapData = [];
+let _mapMarkers = [];
+let _activeOp = 'all';
+
+const OP_COLORS = ['#1a7a6e','#e05252','#c8a84b','#3b82f6','#9333ea','#f97316','#ec4899'];
+const opColorMap = {};
+
+function loadMap() {
+  _mapLoaded = true;
+
+  fetch(AS_URL + '?action=map_data&token=' + encodeURIComponent(_session.token))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) { showMapEmpty(res.error || 'Failed to load routes.'); return; }
+      _mapData = res.data || [];
+      initLeaflet();
+      renderMapData();
+    })
+    .catch(e => showMapEmpty('Network error: ' + e.message));
+}
+
+function initLeaflet() {
+  if (_leafletMap) return;
+  _leafletMap = L.map('leaflet-map', { zoomControl:true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap',
+    maxZoom:18
+  }).addTo(_leafletMap);
+}
+
+function renderMapData() {
+  if (!_leafletMap) return;
+
+  // Clear existing markers
+  _mapMarkers.forEach(m => m.remove());
+  _mapMarkers = [];
+
+  const validPools = _mapData.filter(p => {
+    const lat = parseFloat(p.lat || p.Lat);
+    const lng = parseFloat(p.lng || p.Lng);
+    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+  });
+
+  if (!validPools.length) { showMapEmpty('No geocoded pools found.'); return; }
+
+  // Build op color map
+  const ops = [...new Set(validPools.map(p => p.operator || p.Operator || ''))];
+  ops.forEach((op, i) => { opColorMap[op] = OP_COLORS[i % OP_COLORS.length]; });
+
+  // Filter
+  const display = _activeOp === 'all' ? validPools : validPools.filter(p => (p.operator||p.Operator) === _activeOp);
+
+  // Render markers
+  const bounds = [];
+  display.forEach(pool => {
+    const lat  = parseFloat(pool.lat || pool.Lat);
+    const lng  = parseFloat(pool.lng || pool.Lng);
+    const op   = pool.operator || pool.Operator || 'Unknown';
+    const name = pool.customer_name || pool['Customer Name'] || pool.customerName || '';
+    const day  = pool.day_of_week  || pool['Day of Week']  || '';
+    const svc  = pool.service      || pool.Service         || '';
+    const addr = pool.address      || pool.Address         || '';
+    const color = opColorMap[op] || '#888';
+
+    const icon = L.divIcon({
+      className:'',
+      html:`<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+      iconSize:[12,12], iconAnchor:[6,6]
+    });
+
+    const marker = L.marker([lat, lng], { icon })
+      .addTo(_leafletMap)
+      .bindPopup(`<b>${name}</b><br>${addr}<br><small>${day} — ${svc}</small><br><small style="color:#666">${op}</small>`);
+
+    marker.poolData = pool;
+    _mapMarkers.push(marker);
+    bounds.push([lat, lng]);
+  });
+
+  if (bounds.length) _leafletMap.fitBounds(bounds, { padding:[30,30] });
+
+  // Render sidebar
+  renderOpFilter(ops);
+  renderPoolList(display);
+  document.getElementById('map-pool-count').textContent = display.length + ' pools';
+}
+
+function renderOpFilter(ops) {
+  const el = document.getElementById('op-filter');
+  el.innerHTML = `<div class="op-pill ${_activeOp==='all'?'active':''}" style="${_activeOp==='all'?'border-color:'+opColorMap[ops[0]]||'var(--teal)':''}" onclick="filterByOp('all')">All</div>` +
+    ops.map(op => {
+      const color = opColorMap[op];
+      const active = _activeOp === op;
+      return `<div class="op-pill${active?' active':''}" style="color:${color};${active?'border-color:'+color:''}" onclick="filterByOp('${op}')">${op.split(' ')[0]}</div>`;
+    }).join('');
+}
+
+function filterByOp(op) {
+  _activeOp = op;
+  renderMapData();
+}
+
+function renderPoolList(pools) {
+  const el = document.getElementById('pool-list');
+  if (!pools.length) {
+    el.innerHTML = '<div class="map-empty"><div class="map-empty-icon">📍</div><div class="map-empty-text">No pools for this filter.</div></div>';
+    return;
+  }
+
+  const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','Unassigned'];
+  const sorted = [...pools].sort((a,b) => {
+    const dA = a.day_of_week || a['Day of Week'] || '';
+    const dB = b.day_of_week || b['Day of Week'] || '';
+    return (dayOrder.indexOf(dA)||99) - (dayOrder.indexOf(dB)||99);
+  });
+
+  el.innerHTML = sorted.map((pool, i) => {
+    const name  = pool.customer_name || pool['Customer Name'] || '';
+    const day   = pool.day_of_week   || pool['Day of Week']   || '';
+    const op    = pool.operator      || pool.Operator         || '';
+    const addr  = pool.address       || pool.Address          || '';
+    const svc   = pool.service       || pool.Service          || '';
+    const color = opColorMap[op] || '#888';
+    const dayColors = {Monday:'#2aa89a',Tuesday:'#3b82f6',Wednesday:'#c8a84b',Thursday:'#9333ea',Friday:'#f97316'};
+    const dc = dayColors[day] || '#888';
+
+    return `<div class="pool-list-item" id="pli-${i}" onclick="flyToPool(${i})">
+      <div class="pool-dot" style="background:${color}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="pool-list-name">${name}</div>
+        <div class="pool-list-meta">${addr.split(',')[0]} · ${svc.replace(' Full Service','')}</div>
+        <div class="pool-list-meta" style="color:${color}">${op}</div>
+      </div>
+      <div class="pool-list-day" style="background:${dc}20;color:${dc}">${day.slice(0,3)}</div>
+    </div>`;
+  }).join('');
+
+  el._sorted = sorted;
+}
+
+function flyToPool(idx) {
+  const pool = document.getElementById('pool-list')._sorted?.[idx];
+  if (!pool) return;
+  const lat = parseFloat(pool.lat || pool.Lat);
+  const lng = parseFloat(pool.lng || pool.Lng);
+  if (isNaN(lat) || isNaN(lng)) return;
+  _leafletMap.flyTo([lat, lng], 15, { duration:1 });
+  // Find and open marker popup
+  _mapMarkers.forEach(m => {
+    if (m.poolData === pool) m.openPopup();
+  });
+  // Highlight list item
+  document.querySelectorAll('.pool-list-item').forEach(el => el.classList.remove('highlighted'));
+  const el = document.getElementById('pli-' + idx);
+  if (el) { el.classList.add('highlighted'); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+}
+
+function showMapEmpty(msg) {
+  document.getElementById('pool-list').innerHTML = `<div class="map-empty"><div class="map-empty-icon">⚠️</div><div class="map-empty-text">${msg}</div></div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICE LOG (lazy-loaded)
+// ══════════════════════════════════════════════════════════════════════════════
+let _formLoaded = false;
+let _formItems  = [];
+
+const TEST_FIELDS = { FC:"Chlorine (Cl)", PH:"pH", TA:"Total Alkalinity (TA)", CH:"Calcium Hardness (CH)" };
+const SIZE_GALLONS = { small:12000, medium:17500, large:25000 };
+const SUMMER = [6,7,8,9];
+
+function loadServiceLog() {
+  _formLoaded = true;
+  api({ secret:SECRET, action:'get_metadata' })
+    .then(res => {
+      document.getElementById('svc-loader').style.display = 'none';
+      if (res.ok) {
+        document.getElementById('svc-form-root').style.display = 'block';
+        renderServiceForm(res.data);
+      } else {
+        document.getElementById('svc-form-root').innerHTML = `<div style="color:var(--error);padding:2rem;text-align:center">${res.error}</div>`;
+        document.getElementById('svc-form-root').style.display = 'block';
+      }
+    })
+    .catch(e => {
+      document.getElementById('svc-loader').style.display = 'none';
+      document.getElementById('svc-form-root').innerHTML = `<div style="color:var(--error);padding:2rem;text-align:center">Failed to load form: ${e.message}</div>`;
+      document.getElementById('svc-form-root').style.display = 'block';
+    });
+}
+
+function renderServiceForm(metadata) {
+  _formItems = metadata;
+  const root = document.getElementById('svc-form-root');
+  root.innerHTML = '';
+
+  let card = makeCard('Visit Details');
+  root.appendChild(card);
 
   metadata.forEach(item => {
     if (item.isSectionBreak) {
-      currentCard = createCard(item.title || "Chemical Log");
-      container.appendChild(currentCard);
-
-      if (item.title && item.title.trim().toLowerCase() === "used") {
-        const recDiv = document.createElement('div');
-        recDiv.id = 'rec-box';
-        recDiv.className = 'rec-box';
-        recDiv.innerHTML =
-          '<div class="rec-box-header">Calculated Additions<span id="rec-vol-badge" class="rec-vol-badge">—</span></div>' +
-          '<div id="rec-flags" class="rec-flags"></div>' +
-          '<div id="rec-list" class="rec-list"></div>';
-        currentCard.appendChild(recDiv);
+      card = makeCard(item.title || 'Chemical Log');
+      root.appendChild(card);
+      if (item.title && item.title.trim().toLowerCase() === 'used') {
+        const rb = document.createElement('div');
+        rb.id = 'rec-box'; rb.className = 'rec-box';
+        rb.innerHTML = '<div class="rec-box-hdr">Calculated Additions<span id="rec-vol" class="rec-vol">—</span></div><div id="rec-flags" class="rec-flags"></div><div id="rec-list" class="rec-list"></div>';
+        card.appendChild(rb);
       }
       return;
     }
 
-    const group = document.createElement('div');
-    group.className = 'form-group';
-    const labelStr = item.title + (item.isRequired ? " <span style='color:red'>*</span>" : "");
-    group.innerHTML = '<label>' + labelStr + '</label>';
-    if (item.helpText) group.innerHTML += '<div class="help-text">' + item.helpText + '</div>';
+    const grp = document.createElement('div');
+    grp.className = 'svc-form-group';
+    const lbl = item.title + (item.isRequired ? " <span style='color:red'>*</span>" : "");
+    grp.innerHTML = '<label>' + lbl + '</label>' + (item.helpText ? '<span class="svc-help">' + item.helpText + '</span>' : '');
 
-    const te = item.title.replace(/"/g, '&quot;');
-    let inputHtml = '';
+    const te = item.title.replace(/"/g,'&quot;');
+    let inp = '';
 
-    if (item.type === 'LIST' || item.type === 'MULTIPLE_CHOICE') {
-      inputHtml = '<select name="' + te + '" ' + (item.isRequired ? 'required' : '') + ' onchange="runRecs()">' +
-        '<option value="">Select option...</option>' +
-        item.choices.map(function(c) {
-          return '<option value="' + c.replace(/"/g,'&quot;') + '">' + c + '</option>';
-        }).join('') + '</select>';
-    } else if (item.type === 'CHECKBOX') {
-      inputHtml = item.choices.map(function(c) {
-        return '<label class="checkbox-group"><input type="checkbox" name="' + te + '" value="' + c.replace(/"/g,'&quot;') + '" onchange="runRecs()"><span style="font-weight:400">' + c + '</span></label>';
-      }).join('');
-    } else if (item.type === 'PARAGRAPH_TEXT') {
-      inputHtml = '<textarea name="' + te + '" ' + (item.isRequired ? 'required' : '') + ' oninput="runRecs()"></textarea>';
+    if (item.type==='LIST'||item.type==='MULTIPLE_CHOICE') {
+      inp = '<select class="svc-input" name="'+te+'" '+(item.isRequired?'required':'')+' onchange="runRecs()"><option value="">Select...</option>'+
+        item.choices.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>').join('')+'</select>';
+    } else if (item.type==='CHECKBOX') {
+      inp = item.choices.map(c=>'<label class="svc-checkbox-row"><input type="checkbox" name="'+te+'" value="'+c.replace(/"/g,'&quot;')+'" onchange="runRecs()"><span style="font-weight:400">'+c+'</span></label>').join('');
+    } else if (item.type==='PARAGRAPH_TEXT') {
+      inp = '<textarea class="svc-input" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()"></textarea>';
     } else {
-      const isNum = Object.values(TEST_FIELDS).indexOf(item.title) !== -1 ||
-        (item.helpText && item.helpText.toLowerCase().indexOf('quantity') !== -1);
-      inputHtml = '<input type="' + (isNum ? 'number' : 'text') + '" step="any" name="' + te + '" ' + (item.isRequired ? 'required' : '') + ' oninput="runRecs()">';
+      const isNum = Object.values(TEST_FIELDS).indexOf(item.title) !== -1 || (item.helpText&&item.helpText.toLowerCase().indexOf('quantity')!==-1);
+      inp = '<input class="svc-input" type="'+(isNum?'number':'text')+'" step="any" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()">';
     }
 
-    group.innerHTML += inputHtml;
-    currentCard.appendChild(group);
+    grp.innerHTML += inp;
+    card.appendChild(grp);
 
-    // After pool_id: inject material selector + condition pills
     if (item.title && item.title.trim().toLowerCase() === 'pool_id') {
-      const matGroup = document.createElement('div');
-      matGroup.className = 'form-group';
-      matGroup.innerHTML =
-        '<label>Pool Material</label>' +
-        '<div class="help-text">Affects acid dosing. Fiberglass gets a gentler dose.</div>' +
-        '<select id="pool-material-select" onchange="runRecs()">' +
-        '<option value="plaster">Plaster</option>' +
-        '<option value="fiberglass">Fiberglass</option>' +
-        '<option value="vinyl">Vinyl</option>' +
-        '</select>';
-      currentCard.appendChild(matGroup);
-
-      const condGroup = document.createElement('div');
-      condGroup.className = 'form-group';
-      condGroup.innerHTML =
-        '<label>Pool Condition on Arrival</label>' +
-        '<div class="help-text">Tap if applicable — changes chlorine dosing protocol.</div>' +
-        '<div class="condition-pills">' +
-        '<div class="condition-pill" onclick="togglePill(this,false)" data-val="green">Green / Algae</div>' +
-        '<div class="condition-pill" onclick="togglePill(this,false)" data-val="cloudy">Cloudy</div>' +
-        '<div class="condition-pill" onclick="togglePill(this,true)" data-val="clear">Clear</div>' +
-        '</div>';
-      currentCard.appendChild(condGroup);
+      // Material
+      const mg = document.createElement('div'); mg.className = 'svc-form-group';
+      mg.innerHTML = '<label>Pool Material</label><span class="svc-help">Affects acid dosing — fiberglass gets reduced dose.</span><select class="svc-input" id="pool-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
+      card.appendChild(mg);
+      // Condition pills
+      const cg = document.createElement('div'); cg.className = 'svc-form-group';
+      cg.innerHTML = '<label>Pool Condition on Arrival</label><span class="svc-help">Tap if applicable — changes chlorine dosing protocol.</span><div class="cond-pills"><div class="cond-pill" onclick="toggleCond(this,false)" data-val="green">Green / Algae</div><div class="cond-pill" onclick="toggleCond(this,false)" data-val="cloudy">Cloudy</div><div class="cond-pill" onclick="toggleCond(this,true)" data-val="clear">Clear</div></div>';
+      card.appendChild(cg);
     }
   });
 
-  const btnWrapper = document.createElement('div');
-  btnWrapper.className = 'card';
-  btnWrapper.style.cssText = 'display:block;background:transparent;box-shadow:none;border:none;padding:0;';
-  btnWrapper.innerHTML = '<button type="button" class="btn-submit" id="btn-submit" onclick="submitForm()">Submit Log to MCPS</button>';
-  container.appendChild(btnWrapper);
+  const submitCard = makeCard('');
+  submitCard.style.background = 'transparent';
+  submitCard.style.boxShadow = 'none';
+  submitCard.style.border = 'none';
+  submitCard.style.padding = '0';
+  submitCard.innerHTML = '<button class="btn-submit-svc" id="btn-svc-submit" onclick="submitServiceLog()">Submit Log to MCPS</button>';
+  root.appendChild(submitCard);
 }
 
-function togglePill(el, isOk) {
-  const wasActive = el.classList.contains('active') || el.classList.contains('active-ok');
-  document.querySelectorAll('.condition-pill').forEach(function(p) {
-    p.classList.remove('active', 'active-ok');
-  });
-  if (!wasActive) el.classList.add(isOk ? 'active-ok' : 'active');
+function makeCard(title) {
+  const d = document.createElement('div');
+  d.className = 'svc-card';
+  if (title) {
+    const h = document.createElement('div');
+    h.className = 'svc-section-title';
+    h.textContent = title;
+    d.appendChild(h);
+  }
+  return d;
+}
+
+function toggleCond(el, isOk) {
+  const was = el.classList.contains('active') || el.classList.contains('active-ok');
+  document.querySelectorAll('.cond-pill').forEach(p => p.classList.remove('active','active-ok'));
+  if (!was) el.classList.add(isOk ? 'active-ok' : 'active');
   runRecs();
 }
 
 function getNum(title) {
-  const el = document.querySelector('[name="' + title + '"]');
+  const el = document.querySelector('[name="'+title+'"]');
   if (!el || !el.value) return null;
-  const v = parseFloat(el.value);
-  return isNaN(v) ? null : v;
+  const v = parseFloat(el.value); return isNaN(v) ? null : v;
+}
+
+function sizeToGallons(val) {
+  const s = String(val||'').toLowerCase();
+  if (s.includes('large')||s.includes('>20')) return SIZE_GALLONS.large;
+  if (s.includes('medium')||s.includes('15,000')) return SIZE_GALLONS.medium;
+  return SIZE_GALLONS.small;
 }
 
 function runRecs() {
-  const fc = getNum(TEST_FIELDS.FC);
-  const ph = getNum(TEST_FIELDS.PH);
-  const ta = getNum(TEST_FIELDS.TA);
-  const ch = getNum(TEST_FIELDS.CH);
-
+  const fc = getNum(TEST_FIELDS.FC), ph = getNum(TEST_FIELDS.PH);
+  const ta = getNum(TEST_FIELDS.TA), ch = getNum(TEST_FIELDS.CH);
   const poolEl = document.querySelector('[name="pool_id"]');
-  const gallons = sizeToGallons(poolEl ? poolEl.value : "");
-  const material = getPoolMaterial();
-  const isGreen  = getIsGreen();
-  const isSummer = SUMMER_MONTHS.indexOf(new Date().getMonth() + 1) !== -1;
-
-  const recBox   = document.getElementById('rec-box');
-  const recList  = document.getElementById('rec-list');
-  const recFlags = document.getElementById('rec-flags');
-  const volBadge = document.getElementById('rec-vol-badge');
-  if (!recBox || !recList) return;
-
-  if (fc === null && ph === null && ta === null && ch === null && !isGreen) {
-    recBox.style.display = 'none';
-    return;
-  }
-
-  const recs = buildRecs(fc, ph, ta, ch, gallons, material, isGreen);
-
-  if (volBadge) volBadge.textContent = (gallons / 1000).toFixed(0) + 'K gal';
-
-  const flags = [];
-  if (isSummer) flags.push('<span class="rec-flag summer">Summer +50% Cl</span>');
-  if (isGreen)  flags.push('<span class="rec-flag green">Algae Protocol Active</span>');
-  if (material === 'fiberglass') flags.push('<span class="rec-flag fiber">Fiberglass — reduced acid</span>');
-  if (material === 'plaster')    flags.push('<span class="rec-flag plstr">Plaster — watch CH</span>');
-  recFlags.innerHTML = flags.join('');
-
-  if (!recs.length) { recBox.style.display = 'none'; return; }
-
-  recBox.style.display = 'block';
-  recList.innerHTML = recs.map(function(r) {
-    return '<div class="rec-item ' + r.status + '">' +
-      '<div class="rec-item-top">' +
-      '<span class="rec-item-name">' + r.name + '</span>' +
-      '<span class="rec-item-amt">' + r.amt + '</span>' +
-      '</div>' +
-      '<div class="rec-item-reason">↳ ' + r.reason + '</div>' +
-      '</div>';
-  }).join('');
+  const gallons = sizeToGallons(poolEl ? poolEl.value : '');
+  const mat = (document.getElementById('pool-mat')||{value:'plaster'}).value;
+  const isGreen = !!document.querySelector('.cond-pill.active');
+  const isSummer = SUMMER.indexOf(new Date().getMonth()+1) !== -1;
+  const recBox = document.getElementById('rec-box');
+  if (!recBox) return;
+  if (fc===null&&ph===null&&ta===null&&ch===null&&!isGreen) { recBox.style.display='none'; return; }
+  const recs = buildRecs(fc,ph,ta,ch,gallons,mat,isGreen);
+  const volEl = document.getElementById('rec-vol');
+  if (volEl) volEl.textContent = (gallons/1000).toFixed(0)+'K gal';
+  const flagEl = document.getElementById('rec-flags');
+  if (flagEl) flagEl.innerHTML = (isSummer?'<span class="rec-flag summer">Summer +50% Cl</span>':'')+(isGreen?'<span class="rec-flag green">Algae Protocol</span>':'')+(mat==='fiberglass'?'<span class="rec-flag fiber">Fiberglass — reduced acid</span>':'')+(mat==='plaster'?'<span class="rec-flag plstr">Plaster — watch CH</span>':'');
+  if (!recs.length) { recBox.style.display='none'; return; }
+  recBox.style.display='block';
+  document.getElementById('rec-list').innerHTML = recs.map(r=>
+    '<div class="rec-item '+r.status+'"><div class="rec-item-top"><span class="rec-item-name">'+r.name+'</span><span class="rec-item-amt">'+r.amt+'</span></div><div class="rec-item-reason">↳ '+r.reason+'</div></div>'
+  ).join('');
 }
 
-function submitForm() {
-  const btn = document.getElementById('btn-submit');
-  const payload = {};
-  let hasError = false;
-
-  _formItems.forEach(function(item) {
-    if (!item.title) return;
-    let val;
-    if (item.type === 'CHECKBOX') {
-      const boxes = document.querySelectorAll('input[name="' + item.title.replace(/"/g,'&quot;') + '"]:checked');
-      val = Array.from(boxes).map(function(b) { return b.value; });
-      if (!val.length) val = null;
-    } else {
-      const el = document.querySelector('[name="' + item.title.replace(/"/g,'&quot;') + '"]');
-      if (el) val = el.value.trim();
-    }
-    if (item.isRequired && (!val || (Array.isArray(val) && !val.length))) hasError = true;
-    if (val) payload[item.title] = val;
-  });
-
-  // Append pool condition to notes
-  const activePill = document.querySelector('.condition-pill.active');
-  if (activePill) {
-    const cond = activePill.dataset.val;
-    payload['Notes'] = ((payload['Notes'] || '') + ' [Condition on arrival: ' + cond + ']').trim();
+// Rec engine (same logic as standalone form)
+function buildRecs(fc,ph,ta,ch,gallons,mat,isGreen) {
+  const results=[], isSummer=SUMMER.indexOf(new Date().getMonth()+1)!==-1, gal10k=gallons/10000;
+  if (fc!==null) {
+    let base=1.0*gal10k; if(isSummer)base*=1.5;
+    if(isGreen) results.push({name:'Liquid Chlorine',status:'bad',amt:(base*2).toFixed(1)+' gal',reason:'Green/algae — shock dose. Balance chemistry after 24-48 hrs.'});
+    else if(fc<2) results.push({name:'Liquid Chlorine',status:'bad',amt:(base*2).toFixed(1)+' gal',reason:'FC critically low — double dose'+(isSummer?' + summer ×1.5':'')});
+    else if(fc<3) results.push({name:'Liquid Chlorine',status:'warning',amt:base.toFixed(1)+' gal',reason:'FC below target (3–5 ppm)'+(isSummer?' (summer ×1.5)':'')});
+    else if(fc<=5) results.push({name:'Liquid Chlorine',status:'good',amt:base.toFixed(1)+' gal',reason:'FC in range — maintenance dose'+(isSummer?' (summer ×1.5)':'')});
   }
+  if (ph!==null) {
+    if(isGreen&&ph>7.6) results.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'pH high but pool is green. Shock first, adjust pH after 24-48 hrs.'});
+    else if(ph>7.6) {
+      let a=0.5*gal10k; if(mat==='fiberglass')a*=0.75; a=Math.min(a,1.0*gal10k); a=Math.max(Math.round(a*4)/4,0.25);
+      results.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2–7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});
+    } else if(ph<7.2) results.push({name:'Soda Ash',status:'bad',amt:'As needed',reason:'pH below 7.2 — raise carefully, test before adding more.'});
+  }
+  if(ta!==null&&ta<80&&!isGreen) results.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:(1.4*gal10k*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80–120 ppm)'});
+  if(ch!==null&&!isGreen) {
+    if(ch<250) results.push({name:'Calcium Hardness Increaser',status:'warning',amt:(1.2*gal10k*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250–350).'+(mat==='plaster'?' Keep at upper range for plaster.':'')});
+    if(ch>450) results.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA hard water.'});
+  }
+  if(isGreen) results.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH/TA/CH.'});
+  return results;
+}
 
-  if (hasError) { alert("Please fill out all required fields marked with *"); return; }
-
-  btn.disabled = true;
-  btn.innerText = "Submitting...";
-
-  fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'submit_form', data: payload })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(res) {
-    if (res.ok) {
-      document.body.innerHTML =
-        '<div style="text-align:center;padding:4rem 1rem;font-family:Inter,sans-serif;">' +
-        '<div style="font-size:4rem;margin-bottom:1rem;">&#x2705;</div>' +
-        '<div style="font-family:Oswald,sans-serif;font-size:2rem;font-weight:700;letter-spacing:0.1em;color:#0d4d44;margin-bottom:0.5rem;">SUBMITTED</div>' +
-        '<p style="color:#64748b;font-size:1rem;margin-bottom:2rem;">Log written, inventory deducted, and email sent.</p>' +
-        '<button onclick="window.location.reload()" style="padding:1rem 2rem;background:#0d4d44;color:white;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1.1rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;">Log Another Pool</button>' +
-        '</div>';
+function submitServiceLog() {
+  const btn = document.getElementById('btn-svc-submit');
+  const payload = {}; let hasErr = false;
+  _formItems.forEach(item => {
+    if(!item.title) return;
+    let val;
+    if(item.type==='CHECKBOX') {
+      const boxes = document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');
+      val = Array.from(boxes).map(b=>b.value); if(!val.length)val=null;
     } else {
-      alert("Error: " + res.error);
-      btn.disabled = false;
-      btn.innerText = "Submit Log to MCPS";
+      const el = document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+      if(el) val = el.value.trim();
     }
-  })
-  .catch(function(err) {
-    alert("Network error: " + err);
-    btn.disabled = false;
-    btn.innerText = "Submit Log to MCPS";
+    if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length))) hasErr=true;
+    if(val) payload[item.title]=val;
   });
+  const ap = document.querySelector('.cond-pill.active');
+  if(ap) payload['Notes'] = ((payload['Notes']||'')+' [Condition: '+ap.dataset.val+']').trim();
+  if(hasErr){alert('Please fill out all required fields.');return;}
+  btn.disabled=true; btn.textContent='Submitting...';
+  api({secret:SECRET,action:'submit_form',token:_session.token,data:payload})
+    .then(res=>{
+      if(res.ok){
+        document.getElementById('svc-form-root').innerHTML =
+          '<div style="text-align:center;padding:3rem 1rem">'+
+          '<div style="font-size:3.5rem;margin-bottom:1rem;">✅</div>'+
+          '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'+
+          '<p style="color:#64748b;margin-bottom:1.5rem">Log written, inventory deducted, email sent.</p>'+
+          '<button onclick="resetServiceLog()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'+
+          '</div>';
+      } else {
+        alert('Error: '+res.error); btn.disabled=false; btn.textContent='Submit Log to MCPS';
+      }
+    })
+    .catch(e=>{alert('Network error: '+e.message);btn.disabled=false;btn.textContent='Submit Log to MCPS';});
+}
+
+function resetServiceLog() {
+  _formLoaded = false;
+  document.getElementById('svc-form-root').style.display='none';
+  document.getElementById('svc-form-root').innerHTML='';
+  document.getElementById('svc-loader').style.display='block';
+  loadServiceLog();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN
+// ══════════════════════════════════════════════════════════════════════════════
+function loadUsers() {
+  api({secret:SECRET,action:'list_users',token:_session.token}).then(res=>{
+    if(!res.ok)return;
+    const tb = document.getElementById('users-tbody');
+    if(!res.users.length){tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';return;}
+    tb.innerHTML = res.users.map(u=>`
+      <tr>
+        <td style="font-weight:600">${u.name||'—'}</td>
+        <td style="color:var(--muted);font-size:.82rem">${u.username}</td>
+        <td><span class="role-badge ${u.role}" style="font-size:.72rem">${u.role}</span></td>
+        <td><span class="dot ${(u.active===true||u.active==='TRUE')?'on':'off'}"></span>${(u.active===true||u.active==='TRUE')?'Active':'Inactive'}</td>
+        <td style="font-size:.75rem;color:var(--muted)">${u.last_login?new Date(u.last_login).toLocaleDateString():'—'}</td>
+      </tr>`).join('');
+  });
+}
+
+function createUser(){
+  const name=document.getElementById('new-name').value.trim();
+  const uname=document.getElementById('new-uname').value.trim().toLowerCase();
+  const pw=document.getElementById('new-pass').value.trim();
+  const role=document.getElementById('new-role').value;
+  const msgEl=document.getElementById('create-msg');
+  if(!name||!uname||!pw){showMsg(msgEl,'All fields required.',false);return;}
+  api({secret:SECRET,action:'create_user',token:_session.token,username:uname,password:pw,name,role})
+    .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok){document.getElementById('new-name').value='';document.getElementById('new-uname').value='';document.getElementById('new-pass').value='';loadUsers();}});
+}
+
+function updateUser(){
+  const uname=document.getElementById('edit-uname').value.trim().toLowerCase();
+  const role=document.getElementById('edit-role').value;
+  const pw=document.getElementById('edit-pass').value.trim();
+  const active=document.getElementById('edit-active').value;
+  const msgEl=document.getElementById('update-msg');
+  if(!uname){showMsg(msgEl,'Username required.',false);return;}
+  const fields={};
+  if(role)fields.role=role;if(pw)fields.password=pw;if(active)fields.active=(active==='true');
+  if(!Object.keys(fields).length){showMsg(msgEl,'No changes specified.',false);return;}
+  api({secret:SECRET,action:'update_user',token:_session.token,username:uname,fields})
+    .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok)loadUsers();});
+}
+
+function showMsg(el,text,ok){
+  el.textContent=text;el.className='inline-msg '+(ok?'ok':'err');el.style.display='block';
+  setTimeout(()=>{el.style.display='none';},4000);
 }
 </script>
 </body>
