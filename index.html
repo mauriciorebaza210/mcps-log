@@ -560,7 +560,10 @@ function renderRoutePage(){
     const isToday = d.day === today;
     const count   = d.pool_count;
     const locked  = d.locked;
-    const dateStr = d.date ? new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    const dateStr = d.date ? (() => {
+      const [y,mo,dy] = d.date.split('-').map(Number);
+      return new Date(y, mo-1, dy).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    })() : d.day;
     return `<div class="day-tab${isToday?' today':''}${locked?' locked':''}" id="tab-${d.day}" onclick="selectDay('${d.day}')">
       <span class="dt-day">${d.day.slice(0,3)}${locked?'<span class="dt-lock">🔒</span>':''}</span>
       <span class="dt-date">${dateStr}</span>
