@@ -10,296 +10,287 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
 :root{
-  --teal:#0d4d44;--teal-mid:#1a7a6e;--teal-light:#2aa89a;
-  --gold:#c8a84b;--text:#0f172a;--muted:#64748b;
-  --border:#e2e8f0;--success:#16a34a;--error:#ef4444;--warn:#d97706;
-  --bg:#f0faf9;--card:#ffffff;--surface:#f8fafc;
-  --nav-h:60px;--topbar-h:56px;
+  --teal:#0d4d44;--teal-mid:#1a7a6e;--teal-light:#2aa89a;--teal-glow:rgba(42,168,154,.1);
+  --gold:#c8a84b;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --success:#16a34a;--error:#ef4444;--warn:#d97706;
+  --bg:#f0faf9;--card:#fff;--surface:#f8fafc;
+  --nav-h:62px;--top-h:56px;
 }
-
 body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 
 /* ── LOGIN ──────────────────────────────────────────────────────────────── */
-#login-screen{
-  display:flex;align-items:center;justify-content:center;
-  min-height:100vh;padding:1.5rem;
-  background:linear-gradient(160deg,#e0f2f0 0%,#d1ece8 40%,#dcfce7 100%);
-}
-.login-card{
-  background:var(--card);border-radius:24px;
-  box-shadow:0 20px 60px -10px rgba(0,0,0,0.12);
-  padding:2.5rem 2rem;width:100%;max-width:400px;
-  animation:fadeUp .4s ease;
-}
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1.5rem;background:linear-gradient(160deg,#e0f2f0,#d1ece8 40%,#dcfce7)}
+.login-card{background:var(--card);border-radius:24px;box-shadow:0 20px 60px -10px rgba(0,0,0,.12);padding:2.5rem 2rem;width:100%;max-width:400px;animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 .login-logo{text-align:center;margin-bottom:1.75rem}
 .login-logo img{max-height:72px;margin-bottom:.75rem}
-.login-logo h1{font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.login-logo h1{font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:.02em}
 .login-logo p{font-size:.85rem;color:var(--muted);margin-top:.2rem}
-
-.form-group{margin-bottom:1.1rem}
-.form-group label{display:block;font-size:.875rem;font-weight:600;margin-bottom:.4rem}
-.form-group input{
-  width:100%;padding:.8rem 1rem;border:1.5px solid var(--border);
-  border-radius:12px;font-size:1rem;font-family:'Barlow',sans-serif;
-  background:var(--surface);color:var(--text);transition:all .2s;
-}
-.form-group input:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
-
-.btn-login{
-  width:100%;padding:1rem;background:var(--teal);color:#fff;border:none;
-  border-radius:12px;font-family:'Oswald',sans-serif;font-size:1.05rem;
-  font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-  cursor:pointer;margin-top:.5rem;transition:all .15s;
-  box-shadow:0 4px 12px rgba(0,0,0,.12);
-}
+.fg{margin-bottom:1.1rem}
+.fg label{display:block;font-size:.875rem;font-weight:600;margin-bottom:.4rem}
+.fg input{width:100%;padding:.8rem 1rem;border:1.5px solid var(--border);border-radius:12px;font-size:1rem;font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:all .2s}
+.fg input:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
+.btn-login{width:100%;padding:1rem;background:var(--teal);color:#fff;border:none;border-radius:12px;font-family:'Oswald',sans-serif;font-size:1.05rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-top:.5rem;transition:all .15s;box-shadow:0 4px 12px rgba(0,0,0,.12)}
 .btn-login:hover:not(:disabled){background:var(--teal-mid);transform:translateY(-1px)}
 .btn-login:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
-.error-msg{
-  background:#fef2f2;border:1px solid #fecaca;color:var(--error);
-  border-radius:10px;padding:.65rem 1rem;font-size:.875rem;font-weight:500;
-  margin-top:1rem;display:none;
-}
+.err-msg{background:#fef2f2;border:1px solid #fecaca;color:var(--error);border-radius:10px;padding:.65rem 1rem;font-size:.875rem;font-weight:500;margin-top:1rem;display:none}
 
 /* ── APP SHELL ───────────────────────────────────────────────────────────── */
 #app{display:none;flex-direction:column;min-height:100vh}
+.topbar{height:var(--top-h);background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;position:sticky;top:0;z-index:200;box-shadow:0 1px 8px rgba(0,0,0,.06)}
+.tb-brand{display:flex;align-items:center;gap:.75rem}
+.tb-brand img{height:32px}
+.tb-title{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.04em}
+.tb-sub{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.tb-right{display:flex;align-items:center;gap:.6rem}
+.u-pill{font-size:.78rem;font-weight:600;font-family:'Barlow Condensed',sans-serif;background:var(--surface);border:1px solid var(--border);padding:.2rem .7rem;border-radius:99px;color:var(--muted)}
+.r-badge{font-size:.7rem;font-weight:600;font-family:'Barlow Condensed',sans-serif;padding:.18rem .55rem;border-radius:99px;text-transform:capitalize}
+.r-badge.admin{background:#fef3c7;color:#92400e}
+.r-badge.technician,.r-badge.lead{background:#f1f5f9;color:#475569}
+.r-badge.manager{background:#ede9fe;color:#4c1d95}
+.btn-out{font-size:.78rem;font-weight:600;font-family:'Barlow',sans-serif;padding:.3rem .8rem;border:1.5px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
+.btn-out:hover{background:var(--surface);color:var(--text)}
 
-.topbar{
-  height:var(--topbar-h);background:var(--card);
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 1.25rem;position:sticky;top:0;z-index:100;
-  box-shadow:0 1px 8px rgba(0,0,0,.06);
-}
-.topbar-brand{display:flex;align-items:center;gap:.75rem}
-.topbar-brand img{height:32px}
-.topbar-brand-text .title{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.04em;color:var(--text)}
-.topbar-brand-text .sub{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
-.topbar-right{display:flex;align-items:center;gap:.6rem}
+.page-wrap{flex:1;padding:1.25rem 1rem calc(var(--nav-h) + 1.5rem);max-width:960px;width:100%;margin:0 auto}
+.pf{display:none;animation:fadeUp .3s ease}.pf.active{display:block}
 
-.user-pill{
-  font-size:.78rem;font-weight:600;font-family:'Barlow Condensed',sans-serif;
-  background:var(--surface);border:1px solid var(--border);
-  padding:.25rem .75rem;border-radius:99px;color:var(--muted);
-}
-.role-badge{
-  font-size:.72rem;font-weight:600;font-family:'Barlow Condensed',sans-serif;
-  padding:.2rem .6rem;border-radius:99px;text-transform:capitalize;
-}
-.role-badge.admin{background:#fef3c7;color:#92400e}
-.role-badge.technician{background:#f1f5f9;color:#475569}
-.role-badge.manager,.role-badge.lead{background:#ede9fe;color:#4c1d95}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:var(--nav-h);background:var(--card);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:center;padding:0 .5rem calc(env(safe-area-inset-bottom));z-index:200;box-shadow:0 -4px 20px rgba(0,0,0,.06)}
+.ni{display:flex;flex-direction:column;align-items:center;gap:.18rem;padding:.4rem .6rem;border-radius:10px;cursor:pointer;border:none;background:transparent;font-family:'Barlow',sans-serif;flex:1;transition:background .15s}
+.ni:hover{background:var(--surface)}
+.ni-icon{font-size:1.25rem;color:var(--muted);transition:color .15s}
+.ni-label{font-family:'Barlow Condensed',sans-serif;font-size:.62rem;font-weight:600;letter-spacing:.04em;color:var(--muted);transition:color .15s}
+.ni.active .ni-icon,.ni.active .ni-label{color:var(--teal-mid)}
+.ni.active .ni-label{font-weight:700}
 
-.btn-logout{
-  font-size:.78rem;font-weight:600;font-family:'Barlow',sans-serif;
-  padding:.3rem .8rem;border:1.5px solid var(--border);border-radius:8px;
-  background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;
-}
-.btn-logout:hover{background:var(--surface);color:var(--text)}
-
-/* Page content */
-.page-content{flex:1;padding:1.25rem 1rem calc(var(--nav-h) + 1.5rem);max-width:900px;width:100%;margin:0 auto}
-.page-frame{display:none;animation:fadeUp .3s ease}
-.page-frame.active{display:block}
-
-/* Bottom nav */
-.bottom-nav{
-  position:fixed;bottom:0;left:0;right:0;height:var(--nav-h);
-  background:var(--card);border-top:1px solid var(--border);
-  display:flex;justify-content:space-around;align-items:center;
-  padding:0 .5rem calc(env(safe-area-inset-bottom));
-  z-index:100;box-shadow:0 -4px 20px rgba(0,0,0,.06);
-}
-.nav-item{
-  display:flex;flex-direction:column;align-items:center;gap:.2rem;
-  padding:.4rem .75rem;border-radius:10px;cursor:pointer;
-  border:none;background:transparent;font-family:'Barlow',sans-serif;
-  flex:1;transition:background .15s;
-}
-.nav-item:hover{background:var(--surface)}
-.nav-icon{font-size:1.3rem;color:var(--muted);transition:color .15s}
-.nav-label{font-family:'Barlow Condensed',sans-serif;font-size:.65rem;font-weight:600;letter-spacing:.04em;color:var(--muted);transition:color .15s}
-.nav-item.active .nav-icon,.nav-item.active .nav-label{color:var(--teal-mid)}
-.nav-item.active .nav-label{font-weight:700}
-
-/* ── HOME PAGE ──────────────────────────────────────────────────────────── */
-.home-greeting{margin-bottom:1.5rem}
-.home-greeting h2{font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.01em;color:var(--text)}
-.home-greeting p{font-size:.9rem;color:var(--muted);margin-top:.2rem}
-.home-cards{display:flex;flex-direction:column;gap:.75rem}
-.home-card{
-  background:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;
-  cursor:pointer;transition:all .15s;
-}
+/* ── HOME ────────────────────────────────────────────────────────────────── */
+.home-hi{margin-bottom:1.5rem}
+.home-hi h2{font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.01em}
+.home-hi p{font-size:.9rem;color:var(--muted);margin-top:.2rem}
+.home-grid{display:flex;flex-direction:column;gap:.75rem}
+.home-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;cursor:pointer;transition:all .15s}
 .home-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);transform:translateY(-1px)}
-.home-card-icon{font-size:1.75rem;flex-shrink:0}
-.home-card-text .name{font-weight:600;font-size:.95rem;color:var(--text)}
-.home-card-text .desc{font-size:.78rem;color:var(--muted);margin-top:.1rem}
-.home-card-arrow{margin-left:auto;color:var(--muted);font-size:1.1rem;flex-shrink:0}
+.hc-icon{font-size:1.75rem;flex-shrink:0}
+.hc-name{font-weight:600;font-size:.95rem}
+.hc-desc{font-size:.78rem;color:var(--muted);margin-top:.1rem}
+.hc-arrow{margin-left:auto;color:var(--muted);font-size:1.1rem;flex-shrink:0}
 
-/* ── LIVE MAP PAGE ──────────────────────────────────────────────────────── */
-.map-layout{display:grid;grid-template-columns:1fr 320px;gap:1rem;height:calc(100vh - var(--topbar-h) - var(--nav-h) - 2.5rem)}
-@media(max-width:680px){.map-layout{grid-template-columns:1fr;grid-template-rows:300px 1fr;height:auto}}
+/* ── MAP / ROUTES PAGE ───────────────────────────────────────────────────── */
 
-.map-container{border-radius:16px;overflow:hidden;border:1px solid var(--border);min-height:300px}
-#leaflet-map{width:100%;height:100%}
-
-.map-sidebar{
-  background:var(--card);border:1px solid var(--border);border-radius:16px;
-  display:flex;flex-direction:column;overflow:hidden;
+/* Day selector tabs */
+.day-tabs-bar{
+  display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.5rem;
+  scrollbar-width:none;margin-bottom:1rem;
 }
-.map-sidebar-header{
-  padding:.85rem 1rem;border-bottom:1px solid var(--border);
-  font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+.day-tabs-bar::-webkit-scrollbar{display:none}
+.day-tab{
+  display:flex;flex-direction:column;align-items:center;
+  padding:.5rem .9rem;border-radius:12px;cursor:pointer;
+  border:1.5px solid var(--border);background:var(--card);
+  transition:all .15s;white-space:nowrap;flex-shrink:0;min-width:72px;
+  font-family:'Barlow Condensed',sans-serif;
+}
+.day-tab:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.day-tab.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.day-tab.today:not(.active){border-color:var(--teal-mid);background:var(--teal-glow)}
+.day-tab.locked .dt-lock{display:inline}
+.dt-lock{display:none;font-size:.65rem;margin-left:.2rem}
+.dt-day{font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.dt-date{font-size:.68rem;opacity:.75;margin-top:.05rem}
+.dt-count{
+  font-size:.65rem;font-weight:700;font-family:'Barlow Condensed',sans-serif;
+  margin-top:.2rem;background:rgba(255,255,255,.25);
+  padding:0 5px;border-radius:99px;
+}
+.day-tab.active .dt-count{background:rgba(255,255,255,.3)}
+.day-tab:not(.active) .dt-count{background:var(--teal-glow);color:var(--teal-mid)}
+
+/* Route card for the selected day */
+.route-day-card{background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden}
+
+.rdc-header{
+  padding:1rem 1.25rem;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(135deg,var(--teal) 0%,var(--teal-mid) 100%);
+  color:#fff;
 }
-.map-filter{
-  display:flex;gap:.4rem;padding:.6rem 1rem;border-bottom:1px solid var(--border);
-  flex-wrap:wrap;
+.rdc-header.locked-day{background:linear-gradient(135deg,#475569,#64748b)}
+.rdc-day-name{font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:.06em}
+.rdc-meta{font-size:.8rem;opacity:.85;margin-top:.1rem;font-family:'Barlow Condensed',sans-serif;letter-spacing:.04em}
+.rdc-badges{display:flex;gap:.5rem;align-items:center}
+.rdc-badge{
+  font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;padding:.2rem .65rem;
+  border-radius:99px;background:rgba(255,255,255,.2);
 }
-.op-pill{
+.rdc-badge.locked{background:rgba(255,255,255,.25)}
+.rdc-badge.today-badge{background:rgba(255,255,255,.3);border:1px solid rgba(255,255,255,.4)}
+
+/* Maps launch button */
+.maps-btn-row{padding:.85rem 1.25rem;border-bottom:1px solid var(--border);display:flex;gap:.6rem;background:var(--surface)}
+.maps-btn{
+  display:flex;align-items:center;gap:.5rem;
+  padding:.55rem 1rem;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--card);font-family:'Barlow Condensed',sans-serif;
+  font-size:.82rem;font-weight:700;letter-spacing:.05em;cursor:pointer;
+  text-decoration:none;color:var(--text);transition:all .15s;flex:1;justify-content:center;
+}
+.maps-btn:hover{border-color:var(--teal-light);background:var(--teal-glow);color:var(--teal)}
+.maps-btn svg{width:16px;height:16px;flex-shrink:0}
+.maps-btn.gmaps{border-color:#e8eaed}
+.maps-btn.amaps{border-color:#e8eaed}
+.maps-btn.disabled-btn{opacity:.45;pointer-events:none;cursor:default}
+
+/* Pool stop list */
+.pool-stops{padding:.5rem 0}
+.pool-stop{
+  display:flex;align-items:flex-start;gap:.9rem;
+  padding:.9rem 1.25rem;border-bottom:1px solid #f1f5f9;
+  transition:background .12s;cursor:default;
+}
+.pool-stop:last-child{border-bottom:none}
+.pool-stop.done-stop{opacity:.5}
+.stop-num-wrap{display:flex;flex-direction:column;align-items:center;gap:.2rem;flex-shrink:0}
+.stop-num{
+  width:28px;height:28px;border-radius:50%;background:var(--teal);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Oswald',sans-serif;font-size:.85rem;font-weight:700;
+  flex-shrink:0;transition:background .15s;
+}
+.done-stop .stop-num{background:#16a34a}
+.stop-check{
+  width:18px;height:18px;border-radius:4px;border:2px solid var(--border);
+  cursor:pointer;flex-shrink:0;appearance:none;-webkit-appearance:none;
+  background:#fff;transition:all .15s;position:relative;
+}
+.stop-check:checked{background:var(--success);border-color:var(--success)}
+.stop-check:checked::after{content:'✓';position:absolute;top:-1px;left:2px;font-size:12px;color:#fff;font-weight:700}
+
+.stop-body{flex:1;min-width:0}
+.stop-name{font-weight:600;font-size:.92rem;color:var(--text)}
+.stop-addr{font-size:.78rem;color:var(--muted);margin-top:.15rem}
+.stop-svc{
+  display:inline-block;margin-top:.3rem;
   font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:600;
-  letter-spacing:.05em;padding:.2rem .65rem;border-radius:99px;
-  border:1.5px solid var(--border);background:var(--surface);
+  letter-spacing:.05em;text-transform:uppercase;padding:.15rem .55rem;
+  border-radius:5px;
+}
+.svc-weekly{background:rgba(26,122,110,.1);color:var(--teal-mid)}
+.svc-startup{background:rgba(200,168,75,.15);color:#92400e}
+.svc-monthly{background:rgba(59,130,246,.1);color:#1d4ed8}
+.svc-gtc{background:rgba(239,68,68,.1);color:#b91c1c}
+.svc-other{background:var(--surface);color:var(--muted)}
+
+.stop-notes{
+  margin-top:.35rem;font-size:.75rem;color:var(--muted);
+  background:var(--surface);border-left:3px solid var(--border);
+  padding:.3rem .6rem;border-radius:0 6px 6px 0;
+}
+
+.stop-nav-btn{
+  flex-shrink:0;width:34px;height:34px;border-radius:9px;
+  border:1.5px solid var(--border);background:var(--card);
+  display:flex;align-items:center;justify-content:center;
+  text-decoration:none;color:var(--muted);transition:all .15s;
+}
+.stop-nav-btn:hover{border-color:var(--teal-light);background:var(--teal-glow);color:var(--teal)}
+.stop-nav-btn svg{width:15px;height:15px}
+
+/* Admin filter */
+.op-filter-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem}
+.op-filter-btn{
+  font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:600;
+  letter-spacing:.05em;padding:.25rem .7rem;border-radius:99px;
+  border:1.5px solid var(--border);background:var(--card);
   color:var(--muted);cursor:pointer;transition:all .15s;
 }
-.op-pill.active{border-color:currentColor}
+.op-filter-btn.active{background:var(--teal);border-color:var(--teal);color:#fff}
 
-.pool-list{flex:1;overflow-y:auto}
-.pool-list-item{
-  padding:.75rem 1rem;border-bottom:1px solid #f1f5f9;cursor:pointer;
-  display:flex;align-items:flex-start;gap:.75rem;transition:background .12s;
-}
-.pool-list-item:hover{background:var(--surface)}
-.pool-list-item.highlighted{background:#e8f5f3}
-.pool-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px}
-.pool-list-name{font-weight:600;font-size:.88rem;color:var(--text)}
-.pool-list-meta{font-size:.75rem;color:var(--muted);margin-top:.1rem}
-.pool-list-day{
-  font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:600;
-  letter-spacing:.05em;margin-left:auto;flex-shrink:0;padding:.15rem .5rem;
-  border-radius:5px;text-transform:uppercase;
-}
-
-.map-empty{
-  flex:1;display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:.5rem;padding:2rem;text-align:center;
-}
-.map-empty-icon{font-size:2rem}
-.map-empty-text{font-size:.85rem;color:var(--muted)}
-
-/* ── SERVICE LOG PAGE ───────────────────────────────────────────────────── */
-/* reuses form styles from original form */
-.svc-card{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:16px;padding:1.25rem;margin-bottom:1.25rem;
-}
-.svc-section-title{
-  font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--teal);
-  border-bottom:2px solid var(--border);padding-bottom:.4rem;margin-bottom:1rem;
-}
-.svc-form-group{margin-bottom:1.1rem}
-.svc-form-group label{display:block;font-weight:600;font-size:.88rem;margin-bottom:.35rem}
-.svc-help{font-size:.75rem;color:var(--muted);margin-bottom:.3rem;margin-top:-.2rem;display:block}
-.svc-input{
-  width:100%;padding:.7rem .9rem;border:1.5px solid var(--border);
-  border-radius:10px;font-size:.95rem;font-family:'Barlow',sans-serif;
-  background:var(--surface);color:var(--text);transition:all .2s;
-}
-.svc-input:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
-textarea.svc-input{resize:vertical;min-height:72px}
-.svc-checkbox-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem}
-.svc-checkbox-row input{width:auto}
-
-/* Rec box */
-.rec-box{
-  background:#e8f5f3;border:1px dashed var(--teal-mid);border-radius:12px;
-  padding:.9rem 1rem;margin-bottom:1.25rem;display:none;
-}
-.rec-box-hdr{
-  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.78rem;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--teal);
-  display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;
-}
-.rec-vol{font-size:.7rem;background:rgba(255,255,255,.8);padding:1px 8px;border-radius:10px;color:var(--teal-mid)}
-.rec-flags{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.55rem}
-.rec-flag{font-size:.67rem;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;border-radius:4px}
-.rec-flag.summer{background:rgba(217,119,6,.15);color:var(--warn)}
-.rec-flag.green{background:rgba(239,68,68,.12);color:var(--error)}
-.rec-flag.fiber{background:rgba(26,122,110,.12);color:var(--teal-mid)}
-.rec-flag.plstr{background:rgba(200,168,75,.15);color:var(--gold)}
-.rec-list{display:flex;flex-direction:column;gap:.45rem}
-.rec-item{background:#fff;padding:.65rem .8rem;border-radius:9px;display:flex;flex-direction:column;gap:.15rem}
-.rec-item.bad{border-left:4px solid var(--error)}
-.rec-item.warning{border-left:4px solid var(--warn)}
-.rec-item.good{border-left:4px solid var(--success)}
-.rec-item-top{display:flex;justify-content:space-between;align-items:center}
-.rec-item-name{font-weight:600;font-size:.88rem}
-.rec-item-amt{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;color:var(--teal)}
-.rec-item-reason{font-size:.72rem;color:var(--muted)}
-
-/* Condition pills */
-.cond-pills{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.35rem}
-.cond-pill{
-  font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:600;
-  letter-spacing:.04em;padding:.28rem .8rem;border-radius:99px;cursor:pointer;
-  border:1.5px solid var(--border);background:var(--surface);color:var(--muted);
-  transition:all .15s;user-select:none;
-}
-.cond-pill.active{border-color:var(--error);background:#fef2f2;color:var(--error)}
-.cond-pill.active-ok{border-color:var(--success);background:#f0fdf4;color:var(--success)}
-
-.btn-submit-svc{
-  width:100%;padding:1.1rem;background:var(--teal);color:#fff;border:none;
-  border-radius:12px;font-family:'Oswald',sans-serif;font-weight:600;
-  font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;
-  cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(13,77,68,.2);
-}
-.btn-submit-svc:hover{background:var(--teal-mid);transform:translateY(-1px)}
-.btn-submit-svc:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
-
-/* Loader */
-.svc-loader{text-align:center;padding:3rem 1rem;color:var(--muted)}
-.spinner{display:inline-block;width:32px;height:32px;border:3px solid rgba(26,122,110,.2);border-radius:50%;border-top-color:var(--teal-mid);animation:spin 1s linear infinite;margin-bottom:.75rem}
+/* Empty / loading states */
+.route-empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.route-empty-icon{font-size:2.5rem;margin-bottom:.75rem}
+.route-empty-text{font-size:.9rem}
+.route-loading{text-align:center;padding:3rem 1rem}
+.spinner{display:inline-block;width:32px;height:32px;border:3px solid rgba(26,122,110,.2);border-radius:50%;border-top-color:var(--teal-mid);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── ADMIN PAGE ─────────────────────────────────────────────────────────── */
-.admin-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:1.25rem}
-.admin-card-title{
-  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
-  padding:.85rem 1.1rem;border-bottom:1px solid var(--border);background:var(--surface);
+/* Locked day overlay */
+.locked-notice{
+  display:flex;align-items:center;gap:.6rem;
+  background:#fffbeb;border:1px solid #fde68a;
+  border-radius:10px;padding:.65rem 1rem;margin:.85rem 1.25rem;
+  font-size:.82rem;color:var(--warn);font-weight:500;
 }
-table.user-table{width:100%;border-collapse:collapse}
-table.user-table th{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border);background:var(--surface)}
-table.user-table td{padding:.75rem .9rem;border-bottom:1px solid #f1f5f9;font-size:.85rem}
-table.user-table tr:last-child td{border-bottom:none}
-.add-user-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:1.1rem}
-@media(max-width:480px){.add-user-grid{grid-template-columns:1fr}}
-.add-user-btn{
-  margin:.25rem 1.1rem 1.1rem;padding:.75rem 1.1rem;background:var(--teal-mid);
-  color:#fff;border:none;border-radius:10px;font-family:'Barlow Condensed',sans-serif;
-  font-size:.9rem;font-weight:700;letter-spacing:.06em;cursor:pointer;transition:background .15s;
-}
-.add-user-btn:hover{background:var(--teal)}
-.inline-msg{font-size:.78rem;font-weight:600;padding:.35rem .75rem;border-radius:7px;margin:.25rem 1.1rem .75rem;display:none}
-.inline-msg.ok{background:#d1fae5;color:#065f46}
-.inline-msg.err{background:#fef2f2;color:var(--error)}
+.locked-notice svg{width:16px;height:16px;flex-shrink:0}
 
-/* Status dot */
+/* Map panel (collapsed by default, expandable) */
+.map-toggle-btn{
+  display:flex;align-items:center;justify-content:center;gap:.4rem;
+  width:100%;padding:.6rem;background:var(--surface);
+  border:none;border-top:1px solid var(--border);
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer;
+  transition:background .15s;
+}
+.map-toggle-btn:hover{background:#e8f5f3;color:var(--teal)}
+.map-panel{height:260px;display:none;border-top:1px solid var(--border)}
+.map-panel.open{display:block}
+#leaflet-map{width:100%;height:100%}
+
+/* ── SERVICE LOG ─────────────────────────────────────────────────────────── */
+.svc-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.25rem;margin-bottom:1.25rem}
+.svc-stitle{font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);border-bottom:2px solid var(--border);padding-bottom:.4rem;margin-bottom:1rem}
+.sfg{margin-bottom:1.1rem}
+.sfg label{display:block;font-weight:600;font-size:.88rem;margin-bottom:.35rem}
+.sfg .sh{font-size:.75rem;color:var(--muted);margin-bottom:.3rem;display:block}
+.si{width:100%;padding:.7rem .9rem;border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:all .2s}
+.si:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
+textarea.si{resize:vertical;min-height:72px}
+.scb{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem}
+.scb input{width:auto}
+.rec-box{background:#e8f5f3;border:1px dashed var(--teal-mid);border-radius:12px;padding:.9rem 1rem;margin-bottom:1.25rem;display:none}
+.rb-hdr{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
+.rb-vol{font-size:.7rem;background:rgba(255,255,255,.8);padding:1px 8px;border-radius:10px;color:var(--teal-mid)}
+.rb-flags{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.55rem}
+.rf{font-size:.67rem;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;border-radius:4px}
+.rf.summer{background:rgba(217,119,6,.15);color:var(--warn)}
+.rf.green{background:rgba(239,68,68,.12);color:var(--error)}
+.rf.fiber{background:rgba(26,122,110,.12);color:var(--teal-mid)}
+.rf.plstr{background:rgba(200,168,75,.15);color:var(--gold)}
+.rb-list{display:flex;flex-direction:column;gap:.45rem}
+.ri{background:#fff;padding:.65rem .8rem;border-radius:9px;display:flex;flex-direction:column;gap:.15rem}
+.ri.bad{border-left:4px solid var(--error)}.ri.warning{border-left:4px solid var(--warn)}.ri.good{border-left:4px solid var(--success)}
+.ri-top{display:flex;justify-content:space-between;align-items:center}
+.ri-name{font-weight:600;font-size:.88rem}.ri-amt{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;color:var(--teal)}
+.ri-why{font-size:.72rem;color:var(--muted)}
+.cp{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.35rem}
+.cpill{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.04em;padding:.28rem .8rem;border-radius:99px;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--muted);transition:all .15s;user-select:none}
+.cpill.active{border-color:var(--error);background:#fef2f2;color:var(--error)}
+.cpill.active-ok{border-color:var(--success);background:#f0fdf4;color:var(--success)}
+.btn-svc{width:100%;padding:1.1rem;background:var(--teal);color:#fff;border:none;border-radius:12px;font-family:'Oswald',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(13,77,68,.2)}
+.btn-svc:hover{background:var(--teal-mid);transform:translateY(-1px)}
+.btn-svc:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ── ADMIN ───────────────────────────────────────────────────────────────── */
+.adm-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:1.25rem}
+.adm-title{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:.85rem 1.1rem;border-bottom:1px solid var(--border);background:var(--surface)}
+table.ut{width:100%;border-collapse:collapse}
+table.ut th{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border);background:var(--surface)}
+table.ut td{padding:.75rem .9rem;border-bottom:1px solid #f1f5f9;font-size:.85rem}
+table.ut tr:last-child td{border-bottom:none}
+.au-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;padding:1.1rem}
+@media(max-width:480px){.au-grid{grid-template-columns:1fr}}
+.au-btn{margin:.25rem 1.1rem 1.1rem;padding:.75rem 1.1rem;background:var(--teal-mid);color:#fff;border:none;border-radius:10px;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:700;letter-spacing:.06em;cursor:pointer;transition:background .15s}
+.au-btn:hover{background:var(--teal)}
+.im{font-size:.78rem;font-weight:600;padding:.35rem .75rem;border-radius:7px;margin:.25rem 1.1rem .75rem;display:none}
+.im.ok{background:#d1fae5;color:#065f46}.im.err{background:#fef2f2;color:var(--error)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
 .dot.on{background:var(--success)}.dot.off{background:#cbd5e1}
 </style>
 </head>
 <body>
 
-<!-- ── LOGIN ──────────────────────────────────────────────────────────────── -->
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
@@ -307,706 +298,614 @@ table.user-table tr:last-child td{border-bottom:none}
       <h1>MCPS Employee Portal</h1>
       <p>Mission Custom Pool Solutions</p>
     </div>
-    <div class="form-group">
-      <label>Username</label>
-      <input type="text" id="u" autocomplete="username" autocapitalize="none" placeholder="your username">
-    </div>
-    <div class="form-group">
-      <label>Password</label>
-      <input type="password" id="p" autocomplete="current-password" placeholder="••••••••"
-             onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
+    <div class="fg"><label>Username</label><input type="text" id="u" autocomplete="username" autocapitalize="none" placeholder="your username"></div>
+    <div class="fg"><label>Password</label><input type="password" id="p" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn-login" id="btn-login" onclick="doLogin()">Sign In</button>
-    <div class="error-msg" id="login-err"></div>
+    <div class="err-msg" id="lerr"></div>
   </div>
 </div>
 
-<!-- ── APP ─────────────────────────────────────────────────────────────────── -->
+<!-- APP -->
 <div id="app">
   <header class="topbar">
-    <div class="topbar-brand">
+    <div class="tb-brand">
       <img src="https://missioncustompools.com/wp-content/uploads/2024/07/mission-custom-pools-logo.webp" alt="MCPS">
-      <div class="topbar-brand-text">
-        <div class="title">MCPS Portal</div>
-        <div class="sub">Mission Custom Pool Solutions</div>
-      </div>
+      <div><div class="tb-title">MCPS Portal</div><div class="tb-sub">Mission Custom Pool Solutions</div></div>
     </div>
-    <div class="topbar-right">
-      <span class="user-pill" id="tp-name"></span>
-      <span class="role-badge" id="tp-role"></span>
-      <button class="btn-logout" onclick="doLogout()">Sign out</button>
+    <div class="tb-right">
+      <span class="u-pill" id="tp-name"></span>
+      <span class="r-badge" id="tp-role"></span>
+      <button class="btn-out" onclick="doLogout()">Sign out</button>
     </div>
   </header>
 
-  <div class="page-content">
+  <div class="page-wrap">
 
     <!-- Home -->
-    <div class="page-frame active" id="page-home">
-      <div class="home-greeting">
-        <h2>Hey, <span id="home-name"></span> 👋</h2>
-        <p>Select a tool below to get started.</p>
-      </div>
-      <div class="home-cards" id="home-cards"></div>
+    <div class="pf active" id="page-home">
+      <div class="home-hi"><h2>Hey, <span id="home-name"></span> 👋</h2><p>Select a tool to get started.</p></div>
+      <div class="home-grid" id="home-grid"></div>
     </div>
 
-    <!-- Live Map -->
-    <div class="page-frame" id="page-live_map">
-      <div class="map-layout">
-        <div class="map-container"><div id="leaflet-map"></div></div>
-        <div class="map-sidebar">
-          <div class="map-sidebar-header">
-            <span>Route Assignments</span>
-            <span id="map-pool-count" style="color:var(--teal-mid)"></span>
-          </div>
-          <div class="map-filter" id="op-filter"></div>
-          <div class="pool-list" id="pool-list">
-            <div class="map-empty">
-              <div class="map-empty-icon">🗺️</div>
-              <div class="map-empty-text">Loading routes...</div>
-            </div>
-          </div>
+    <!-- Routes / Map -->
+    <div class="pf" id="page-live_map">
+      <div id="route-loading" class="route-loading"><div class="spinner"></div></div>
+      <div id="route-content" style="display:none">
+        <!-- Admin operator filter -->
+        <div id="op-filter-row" class="op-filter-row" style="display:none"></div>
+        <!-- Day tabs -->
+        <div class="day-tabs-bar" id="day-tabs"></div>
+        <!-- Selected day route card -->
+        <div class="route-day-card" id="route-day-card">
+          <div class="route-empty"><div class="route-empty-icon">📅</div><div class="route-empty-text">Select a day above.</div></div>
         </div>
       </div>
     </div>
 
     <!-- Service Log -->
-    <div class="page-frame" id="page-service_log">
-      <div class="svc-loader" id="svc-loader">
-        <div class="spinner"></div>
-        <div>Loading form...</div>
-      </div>
-      <div id="svc-form-root" style="display:none"></div>
+    <div class="pf" id="page-service_log">
+      <div class="route-loading" id="svc-loading"><div class="spinner"></div></div>
+      <div id="svc-root" style="display:none"></div>
     </div>
 
     <!-- Admin -->
-    <div class="page-frame" id="page-admin">
-      <div class="admin-card">
-        <div class="admin-card-title">All Users</div>
-        <table class="user-table">
-          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last Login</th></tr></thead>
-          <tbody id="users-tbody"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr></tbody>
-        </table>
+    <div class="pf" id="page-admin">
+      <div class="adm-card">
+        <div class="adm-title">All Users</div>
+        <table class="ut"><thead><tr><th>Name</th><th>Username</th><th>Roles</th><th>Operator Name</th><th>Status</th></tr></thead>
+        <tbody id="utbody"><tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
-      <div class="admin-card">
-        <div class="admin-card-title">Add New User</div>
-        <div class="add-user-grid">
-          <div class="form-group"><label>Full Name</label><input class="svc-input" type="text" id="new-name" placeholder="Tony Garcia"></div>
-          <div class="form-group"><label>Username</label><input class="svc-input" type="text" id="new-uname" placeholder="tony" autocapitalize="none"></div>
-          <div class="form-group"><label>Password</label><input class="svc-input" type="password" id="new-pass" placeholder="temporary"></div>
-          <div class="form-group"><label>Role</label>
-            <select class="svc-input" id="new-role">
-              <option value="technician">Technician</option>
-              <option value="lead">Lead Tech</option>
-              <option value="office">Office</option>
-              <option value="manager">Manager</option>
-              <option value="admin">Admin</option>
-            </select>
+      <div class="adm-card">
+        <div class="adm-title">Add New User</div>
+        <div class="au-grid">
+          <div class="fg"><label>Full Name</label><input class="si" type="text" id="new-name" placeholder="Tony Garcia"></div>
+          <div class="fg"><label>Username</label><input class="si" type="text" id="new-uname" placeholder="tony" autocapitalize="none"></div>
+          <div class="fg"><label>Password</label><input class="si" type="password" id="new-pass" placeholder="temporary"></div>
+          <div class="fg"><label>Roles (comma-separated)</label><input class="si" type="text" id="new-roles" placeholder="technician" value="technician"></div>
+          <div class="fg"><label>Operator Name (matches Routes sheet)</label><input class="si" type="text" id="new-opname" placeholder="Tony Siller"></div>
+        </div>
+        <button class="au-btn" onclick="createUser()">Create User</button>
+        <div class="im" id="create-msg"></div>
+      </div>
+      <div class="adm-card">
+        <div class="adm-title">Update User</div>
+        <div class="au-grid">
+          <div class="fg"><label>Username</label><input class="si" type="text" id="edit-uname" placeholder="tony" autocapitalize="none"></div>
+          <div class="fg"><label>New Roles (optional)</label><input class="si" type="text" id="edit-roles" placeholder="e.g. admin,technician"></div>
+          <div class="fg"><label>Operator Name (optional)</label><input class="si" type="text" id="edit-opname" placeholder="Tony Siller"></div>
+          <div class="fg"><label>New Password (optional)</label><input class="si" type="password" id="edit-pass" placeholder="leave blank to keep"></div>
+          <div class="fg"><label>Active</label>
+            <select class="si" id="edit-active"><option value="">— no change —</option><option value="true">Active</option><option value="false">Deactivated</option></select>
           </div>
         </div>
-        <button class="add-user-btn" onclick="createUser()">Create User</button>
-        <div class="inline-msg" id="create-msg"></div>
-      </div>
-      <div class="admin-card">
-        <div class="admin-card-title">Update User</div>
-        <div class="add-user-grid">
-          <div class="form-group"><label>Username</label><input class="svc-input" type="text" id="edit-uname" placeholder="tony" autocapitalize="none"></div>
-          <div class="form-group"><label>New Role (optional)</label>
-            <select class="svc-input" id="edit-role">
-              <option value="">— no change —</option>
-              <option value="technician">Technician</option>
-              <option value="lead">Lead Tech</option>
-              <option value="office">Office</option>
-              <option value="manager">Manager</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div class="form-group"><label>New Password (optional)</label><input class="svc-input" type="password" id="edit-pass" placeholder="leave blank to keep"></div>
-          <div class="form-group"><label>Active</label>
-            <select class="svc-input" id="edit-active">
-              <option value="">— no change —</option>
-              <option value="true">Active</option>
-              <option value="false">Deactivated</option>
-            </select>
-          </div>
-        </div>
-        <button class="add-user-btn" onclick="updateUser()">Update User</button>
-        <div class="inline-msg" id="update-msg"></div>
+        <button class="au-btn" onclick="updateUser()">Update User</button>
+        <div class="im" id="update-msg"></div>
       </div>
     </div>
 
-  </div><!-- /page-content -->
-
-  <nav class="bottom-nav" id="bottom-nav"></nav>
+  </div><!-- /page-wrap -->
+  <nav class="bottom-nav" id="bnav"></nav>
 </div>
 
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════════════════════════════════
-const AS_URL    = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
-const SECRET    = 'mcps_webhook_2026';
+const AS = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
+const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
-  home        : { label:'Home',    icon:'🏠' },
-  live_map    : { label:'Map',     icon:'🗺️'  },
-  service_log : { label:'Log',     icon:'📝' },
-  admin       : { label:'Admin',   icon:'🔒' },
+  home:'🏠|Home', live_map:'🗺️|Map', service_log:'📝|Log',
+  inventory:'📦|Stock', quotes:'📄|Quotes', admin:'🔒|Admin'
 };
 
+// Pages per role — additive
 const ROLE_PAGES = {
-  technician : ['home','live_map','service_log'],
-  lead       : ['home','live_map','service_log'],
-  office     : ['home','service_log'],
-  manager    : ['home','live_map','service_log'],
-  admin      : ['home','live_map','service_log','admin'],
+  technician:['home','live_map','service_log'],
+  lead:['home','live_map','service_log'],
+  office:['home','quotes','inventory'],
+  manager:['home','live_map','service_log','inventory','quotes'],
+  admin:['home','live_map','service_log','inventory','quotes','admin'],
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SESSION
 // ══════════════════════════════════════════════════════════════════════════════
-let _session = null; // { token, name, role, pages }
-let _currentPage = 'home';
+let _s = null; // { token, name, roles[], operator_name, pages[] }
+let _curPage = 'home';
+let _routeData = null;
+let _activeDay = null;
+let _activeOp = 'all';
+let _formItems = [];
+let _mapLoaded = false;
+let _leafMap = null;
+let _mapMarkers = [];
 
-function api(payload) {
-  return fetch(AS_URL, { method:'POST', body:JSON.stringify(payload) }).then(r=>r.json());
-}
+function api(payload){ return fetch(AS,{method:'POST',body:JSON.stringify(payload)}).then(r=>r.json()); }
+function apiGet(params){ return fetch(AS+'?'+new URLSearchParams(params)).then(r=>r.json()); }
 
-// ── Boot: check deep link hash then localStorage ──────────────────────────────
 window.onload = () => {
-  const stored = localStorage.getItem('mcps_session');
+  const stored = localStorage.getItem('mcps_s');
   if (stored) {
-    try {
-      _session = JSON.parse(stored);
-      const deepPage = location.hash.replace('#','') || 'home';
-      showApp(deepPage);
-      return;
-    } catch(e) { localStorage.removeItem('mcps_session'); }
+    try { _s = JSON.parse(stored); showApp(location.hash.replace('#','') || 'home'); return; } catch(e) { localStorage.removeItem('mcps_s'); }
   }
-  // No session — show login, remember deep link
-  const deepPage = location.hash.replace('#','');
-  if (deepPage) sessionStorage.setItem('mcps_deep', deepPage);
+  const deep = location.hash.replace('#','');
+  if (deep) sessionStorage.setItem('mcps_deep', deep);
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-// AUTH
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Auth ──────────────────────────────────────────────────────────────────────
 function doLogin() {
-  const uname = document.getElementById('u').value.trim();
-  const pw    = document.getElementById('p').value.trim();
-  const btn   = document.getElementById('btn-login');
-  const errEl = document.getElementById('login-err');
+  const u = document.getElementById('u').value.trim();
+  const p = document.getElementById('p').value.trim();
+  const btn = document.getElementById('btn-login');
+  const err = document.getElementById('lerr');
+  if (!u||!p){showLErr('Enter username and password.');return;}
+  btn.disabled=true; btn.textContent='Signing in...'; err.style.display='none';
+  api({action:'login',username:u,password:p}).then(res=>{
+    if(res.ok){
+      const roles = res.roles || [res.role || 'technician'];
+      const pages = unionPages_(roles);
+      _s = {token:res.token,name:res.name,roles,operator_name:res.operator_name||'',pages};
+      localStorage.setItem('mcps_s',JSON.stringify(_s));
+      const deep = sessionStorage.getItem('mcps_deep')||'home';
+      sessionStorage.removeItem('mcps_deep');
+      showApp(deep);
+    } else {
+      showLErr(res.error||'Login failed.');
+      btn.disabled=false; btn.textContent='Sign In';
+    }
+  }).catch(()=>{showLErr('Network error.');btn.disabled=false;btn.textContent='Sign In';});
+}
+function showLErr(m){const el=document.getElementById('lerr');el.textContent=m;el.style.display='block';}
+function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch(()=>{});_s=null;localStorage.removeItem('mcps_s');location.hash='';location.reload();}
 
-  if (!uname || !pw) { showLoginErr('Enter your username and password.'); return; }
-  btn.disabled = true; btn.textContent = 'Signing in...'; errEl.style.display='none';
-
-  api({ action:'login', username:uname, password:pw })
-    .then(res => {
-      if (res.ok) {
-        const pages = ROLE_PAGES[res.role] || ['home','service_log'];
-        _session = { token:res.token, name:res.name, role:res.role, pages };
-        localStorage.setItem('mcps_session', JSON.stringify(_session));
-        const deep = sessionStorage.getItem('mcps_deep') || 'home';
-        sessionStorage.removeItem('mcps_deep');
-        showApp(deep);
-      } else {
-        showLoginErr(res.error || 'Login failed.');
-        btn.disabled = false; btn.textContent = 'Sign In';
-      }
-    })
-    .catch(() => {
-      showLoginErr('Network error — check connection.');
-      btn.disabled = false; btn.textContent = 'Sign In';
-    });
+function unionPages_(roles) {
+  const set = new Set();
+  const order = ['home','live_map','service_log','inventory','quotes','admin'];
+  roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
+  return order.filter(p=>set.has(p));
 }
 
-function showLoginErr(msg) {
-  const el = document.getElementById('login-err');
-  el.textContent = msg; el.style.display = 'block';
-}
+function hasRole(role){return _s&&(_s.roles||[]).includes(role);}
+function isAdmin(){return hasRole('admin')||hasRole('manager');}
 
-function doLogout() {
-  if (_session) api({ action:'logout', secret:SECRET, token:_session.token }).catch(()=>{});
-  _session = null;
-  localStorage.removeItem('mcps_session');
-  location.hash = '';
-  location.reload();
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// APP SHELL
-// ══════════════════════════════════════════════════════════════════════════════
+// ── App shell ─────────────────────────────────────────────────────────────────
 function showApp(startPage) {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-
-  document.getElementById('tp-name').textContent = _session.name;
-  const rEl = document.getElementById('tp-role');
-  rEl.textContent = _session.role; rEl.className = 'role-badge ' + _session.role;
-  document.getElementById('home-name').textContent = _session.name.split(' ')[0];
-
-  buildNav(_session.pages);
-  buildHomeCards(_session.pages);
-
-  if (_session.pages.includes('admin')) loadUsers();
-
-  const page = _session.pages.includes(startPage) ? startPage : 'home';
-  navigateTo(page);
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('tp-name').textContent=_s.name;
+  const rb=document.getElementById('tp-role');
+  rb.textContent=(_s.roles||[]).join(', '); rb.className='r-badge '+(_s.roles||[])[0];
+  document.getElementById('home-name').textContent=_s.name.split(' ')[0];
+  buildNav(); buildHomeCards();
+  if((_s.pages||[]).includes('admin')) loadUsers();
+  const pg = (_s.pages||[]).includes(startPage)?startPage:'home';
+  navigateTo(pg);
 }
 
-function buildNav(pages) {
-  document.getElementById('bottom-nav').innerHTML = pages.map(p => {
-    const m = PAGE_META[p]; if (!m) return '';
-    return `<button class="nav-item" id="nav-${p}" onclick="navigateTo('${p}')">
-      <span class="nav-icon">${m.icon}</span>
-      <span class="nav-label">${m.label}</span>
-    </button>`;
+function buildNav(){
+  document.getElementById('bnav').innerHTML=(_s.pages||[]).map(p=>{
+    const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
+    return `<button class="ni" id="ni-${p}" onclick="navigateTo('${p}')"><span class="ni-icon">${icon}</span><span class="ni-label">${label}</span></button>`;
   }).join('');
 }
 
-function buildHomeCards(pages) {
-  const descs = {
-    live_map    : 'View route assignments in real time',
-    service_log : 'Log a pool visit & get dosage recommendations',
-    admin       : 'Manage users and access',
-  };
-  document.getElementById('home-cards').innerHTML = pages
-    .filter(p => p !== 'home')
-    .map(p => {
-      const m = PAGE_META[p]; if (!m) return '';
-      return `<div class="home-card" onclick="navigateTo('${p}')">
-        <span class="home-card-icon">${m.icon}</span>
-        <div class="home-card-text">
-          <div class="name">${m.label}</div>
-          <div class="desc">${descs[p]||''}</div>
-        </div>
-        <span class="home-card-arrow">›</span>
-      </div>`;
-    }).join('');
+function buildHomeCards(){
+  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical stock levels',quotes:'Quote calculator',admin:'Manage users & access'};
+  document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
+    const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
+    return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
+  }).join('');
 }
 
-// ── Navigation — deep-link aware ──────────────────────────────────────────────
-function navigateTo(page) {
-  if (!_session || !_session.pages.includes(page)) return;
-
-  document.querySelectorAll('.page-frame').forEach(f => f.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-
-  const frame = document.getElementById('page-' + page);
-  if (frame) frame.classList.add('active');
-  const nb = document.getElementById('nav-' + page);
-  if (nb) nb.classList.add('active');
-
-  _currentPage = page;
-  location.hash = page === 'home' ? '' : page;
-
-  // Lazy-load pages
-  if (page === 'live_map'    && !_mapLoaded)    loadMap();
-  if (page === 'service_log' && !_formLoaded)   loadServiceLog();
+function navigateTo(page){
+  if(!_s||!(_s.pages||[]).includes(page))return;
+  document.querySelectorAll('.pf').forEach(f=>f.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
+  const frame=document.getElementById('page-'+page);
+  if(frame)frame.classList.add('active');
+  const nb=document.getElementById('ni-'+page);
+  if(nb)nb.classList.add('active');
+  _curPage=page;
+  location.hash=page==='home'?'':page;
+  if(page==='live_map'&&!_routeData) loadRoutes();
+  if(page==='service_log'&&!_formItems.length) loadServiceLog();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// LIVE MAP
+// ROUTES / MAP PAGE
 // ══════════════════════════════════════════════════════════════════════════════
-let _mapLoaded = false;
-let _leafletMap = null;
-let _mapData = [];
-let _mapMarkers = [];
-let _activeOp = 'all';
-
-const OP_COLORS = ['#1a7a6e','#e05252','#c8a84b','#3b82f6','#9333ea','#f97316','#ec4899'];
-const opColorMap = {};
-
-function loadMap() {
-  _mapLoaded = true;
-
-  fetch(AS_URL + '?action=map_data&token=' + encodeURIComponent(_session.token))
-    .then(r => r.json())
-    .then(res => {
-      if (!res.ok) { showMapEmpty(res.error || 'Failed to load routes.'); return; }
-      _mapData = res.data || [];
-      initLeaflet();
-      renderMapData();
+function loadRoutes(opOverride) {
+  document.getElementById('route-loading').style.display='block';
+  document.getElementById('route-content').style.display='none';
+  const op = opOverride || _activeOp;
+  apiGet({action:'route_data', token:_s.token, operator:op})
+    .then(res=>{
+      document.getElementById('route-loading').style.display='none';
+      if(!res.ok){
+        document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error}</div></div>`;
+        document.getElementById('route-content').style.display='block';
+        return;
+      }
+      _routeData = res;
+      document.getElementById('route-content').style.display='block';
+      renderRoutePage();
     })
-    .catch(e => showMapEmpty('Network error: ' + e.message));
-}
-
-function initLeaflet() {
-  if (_leafletMap) return;
-  _leafletMap = L.map('leaflet-map', { zoomControl:true });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution:'© OpenStreetMap',
-    maxZoom:18
-  }).addTo(_leafletMap);
-}
-
-function renderMapData() {
-  if (!_leafletMap) return;
-
-  // Clear existing markers
-  _mapMarkers.forEach(m => m.remove());
-  _mapMarkers = [];
-
-  const validPools = _mapData.filter(p => {
-    const lat = parseFloat(p.lat || p.Lat);
-    const lng = parseFloat(p.lng || p.Lng);
-    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
-  });
-
-  if (!validPools.length) { showMapEmpty('No geocoded pools found.'); return; }
-
-  // Build op color map
-  const ops = [...new Set(validPools.map(p => p.operator || p.Operator || ''))];
-  ops.forEach((op, i) => { opColorMap[op] = OP_COLORS[i % OP_COLORS.length]; });
-
-  // Filter
-  const display = _activeOp === 'all' ? validPools : validPools.filter(p => (p.operator||p.Operator) === _activeOp);
-
-  // Render markers
-  const bounds = [];
-  display.forEach(pool => {
-    const lat  = parseFloat(pool.lat || pool.Lat);
-    const lng  = parseFloat(pool.lng || pool.Lng);
-    const op   = pool.operator || pool.Operator || 'Unknown';
-    const name = pool.customer_name || pool['Customer Name'] || pool.customerName || '';
-    const day  = pool.day_of_week  || pool['Day of Week']  || '';
-    const svc  = pool.service      || pool.Service         || '';
-    const addr = pool.address      || pool.Address         || '';
-    const color = opColorMap[op] || '#888';
-
-    const icon = L.divIcon({
-      className:'',
-      html:`<div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
-      iconSize:[12,12], iconAnchor:[6,6]
+    .catch(e=>{
+      document.getElementById('route-loading').style.display='none';
+      document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
+      document.getElementById('route-content').style.display='block';
     });
-
-    const marker = L.marker([lat, lng], { icon })
-      .addTo(_leafletMap)
-      .bindPopup(`<b>${name}</b><br>${addr}<br><small>${day} — ${svc}</small><br><small style="color:#666">${op}</small>`);
-
-    marker.poolData = pool;
-    _mapMarkers.push(marker);
-    bounds.push([lat, lng]);
-  });
-
-  if (bounds.length) _leafletMap.fitBounds(bounds, { padding:[30,30] });
-
-  // Render sidebar
-  renderOpFilter(ops);
-  renderPoolList(display);
-  document.getElementById('map-pool-count').textContent = display.length + ' pools';
 }
 
-function renderOpFilter(ops) {
-  const el = document.getElementById('op-filter');
-  el.innerHTML = `<div class="op-pill ${_activeOp==='all'?'active':''}" style="${_activeOp==='all'?'border-color:'+opColorMap[ops[0]]||'var(--teal)':''}" onclick="filterByOp('all')">All</div>` +
-    ops.map(op => {
-      const color = opColorMap[op];
-      const active = _activeOp === op;
-      return `<div class="op-pill${active?' active':''}" style="color:${color};${active?'border-color:'+color:''}" onclick="filterByOp('${op}')">${op.split(' ')[0]}</div>`;
-    }).join('');
-}
+function renderRoutePage(){
+  if(!_routeData) return;
 
-function filterByOp(op) {
-  _activeOp = op;
-  renderMapData();
-}
-
-function renderPoolList(pools) {
-  const el = document.getElementById('pool-list');
-  if (!pools.length) {
-    el.innerHTML = '<div class="map-empty"><div class="map-empty-icon">📍</div><div class="map-empty-text">No pools for this filter.</div></div>';
-    return;
+  // Admin op filter
+  const opRow = document.getElementById('op-filter-row');
+  if(isAdmin() && _routeData.all_operators && _routeData.all_operators.length > 1){
+    opRow.style.display='flex';
+    opRow.innerHTML='<button class="op-filter-btn'+((_activeOp==='all')?' active':'')+'" onclick="switchOp(\'all\')">All</button>'+
+      _routeData.all_operators.map(op=>`<button class="op-filter-btn${_activeOp===op?' active':''}" onclick="switchOp('${op}')">${op.split(' ')[0]}</button>`).join('');
+  } else {
+    opRow.style.display='none';
   }
 
-  const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','Unassigned'];
-  const sorted = [...pools].sort((a,b) => {
-    const dA = a.day_of_week || a['Day of Week'] || '';
-    const dB = b.day_of_week || b['Day of Week'] || '';
-    return (dayOrder.indexOf(dA)||99) - (dayOrder.indexOf(dB)||99);
-  });
+  // Build day tabs
+  const tabsEl = document.getElementById('day-tabs');
+  const days = _routeData.days || [];
+  const today = _routeData.today;
 
-  el.innerHTML = sorted.map((pool, i) => {
-    const name  = pool.customer_name || pool['Customer Name'] || '';
-    const day   = pool.day_of_week   || pool['Day of Week']   || '';
-    const op    = pool.operator      || pool.Operator         || '';
-    const addr  = pool.address       || pool.Address          || '';
-    const svc   = pool.service       || pool.Service          || '';
-    const color = opColorMap[op] || '#888';
-    const dayColors = {Monday:'#2aa89a',Tuesday:'#3b82f6',Wednesday:'#c8a84b',Thursday:'#9333ea',Friday:'#f97316'};
-    const dc = dayColors[day] || '#888';
-
-    return `<div class="pool-list-item" id="pli-${i}" onclick="flyToPool(${i})">
-      <div class="pool-dot" style="background:${color}"></div>
-      <div style="flex:1;min-width:0">
-        <div class="pool-list-name">${name}</div>
-        <div class="pool-list-meta">${addr.split(',')[0]} · ${svc.replace(' Full Service','')}</div>
-        <div class="pool-list-meta" style="color:${color}">${op}</div>
-      </div>
-      <div class="pool-list-day" style="background:${dc}20;color:${dc}">${day.slice(0,3)}</div>
+  tabsEl.innerHTML = days.map(d=>{
+    const isToday = d.day === today;
+    const count   = d.pool_count;
+    const locked  = d.locked;
+    const dateStr = d.date ? new Date(d.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    return `<div class="day-tab${isToday?' today':''}${locked?' locked':''}" id="tab-${d.day}" onclick="selectDay('${d.day}')">
+      <span class="dt-day">${d.day.slice(0,3)}${locked?'<span class="dt-lock">🔒</span>':''}</span>
+      <span class="dt-date">${dateStr}</span>
+      <span class="dt-count">${count} pool${count!==1?'s':''}</span>
     </div>`;
   }).join('');
 
-  el._sorted = sorted;
+  // Auto-select today if has pools, else first day with pools, else Monday
+  let autoDay = null;
+  const todayData = days.find(d=>d.day===today);
+  if(todayData && todayData.pool_count>0) autoDay=today;
+  if(!autoDay) { const fd=days.find(d=>d.pool_count>0); if(fd)autoDay=fd.day; }
+  if(!autoDay) autoDay=days[0]&&days[0].day;
+
+  selectDay(autoDay || today);
 }
 
-function flyToPool(idx) {
-  const pool = document.getElementById('pool-list')._sorted?.[idx];
-  if (!pool) return;
-  const lat = parseFloat(pool.lat || pool.Lat);
-  const lng = parseFloat(pool.lng || pool.Lng);
-  if (isNaN(lat) || isNaN(lng)) return;
-  _leafletMap.flyTo([lat, lng], 15, { duration:1 });
-  // Find and open marker popup
-  _mapMarkers.forEach(m => {
-    if (m.poolData === pool) m.openPopup();
+function switchOp(op){
+  _activeOp = op;
+  _routeData = null;
+  loadRoutes(op);
+}
+
+function selectDay(dayName){
+  _activeDay = dayName;
+
+  // Update tab active state
+  document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
+  const tab = document.getElementById('tab-'+dayName);
+  if(tab) tab.classList.add('active');
+
+  const dayData = (_routeData&&_routeData.days||[]).find(d=>d.day===dayName);
+  renderDayCard(dayData);
+}
+
+function renderDayCard(dayData){
+  const card = document.getElementById('route-day-card');
+  if(!dayData){
+    card.innerHTML='<div class="route-empty"><div class="route-empty-icon">📅</div><div class="route-empty-text">No data for this day.</div></div>';
+    return;
+  }
+
+  const today   = _routeData.today;
+  const isToday = dayData.day === today;
+  const locked  = dayData.locked;
+  const pools   = dayData.pools || [];
+  const dateStr = dayData.date ? new Date(dayData.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}) : dayData.day;
+
+  // Load done state from localStorage
+  const doneKey = `mcps_done_${_routeData.week_start}_${dayData.day}`;
+  const doneSet = new Set(JSON.parse(localStorage.getItem(doneKey)||'[]'));
+
+  let html = '';
+
+  // Header
+  html += `<div class="rdc-header${locked?' locked-day':''}">
+    <div>
+      <div class="rdc-day-name">${dayData.day}</div>
+      <div class="rdc-meta">${dateStr} · ${pools.length} pool${pools.length!==1?'s':''}</div>
+    </div>
+    <div class="rdc-badges">
+      ${isToday?'<span class="rdc-badge today-badge">Today</span>':''}
+      ${locked?'<span class="rdc-badge locked">Locked 🔒</span>':''}
+    </div>
+  </div>`;
+
+  if(!pools.length){
+    html += '<div class="route-empty" style="padding:2.5rem 1rem"><div class="route-empty-icon">😎</div><div class="route-empty-text">No pools scheduled for this day.</div></div>';
+    card.innerHTML = html;
+    return;
+  }
+
+  // Locked notice
+  if(locked){
+    html += `<div class="locked-notice">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Route locked — no changes will be made to today's schedule. See you next week!
+    </div>`;
+  }
+
+  // Maps launch buttons
+  const gmapsUrl = dayData.maps_url || '';
+  const amapsUrl = gmapsUrl.replace('https://www.google.com/maps/dir/','https://maps.apple.com/?daddr=').replace(/\//g,'&daddr=');
+
+  html += `<div class="maps-btn-row">
+    <a class="maps-btn gmaps${!gmapsUrl?' disabled-btn':''}" href="${gmapsUrl}" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+      Google Maps Route
+    </a>
+    <a class="maps-btn amaps${!gmapsUrl?' disabled-btn':''}" href="${buildAppleMapsUrl_(pools)}" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+      Apple Maps Route
+    </a>
+  </div>`;
+
+  // Pool stop list
+  html += '<div class="pool-stops">';
+  pools.forEach((pool, idx) => {
+    const done = doneSet.has(pool.pool_id || String(idx));
+    const svcClass = getSvcClass_(pool.service);
+    const svcLabel = getSvcLabel_(pool.service);
+    const indivMaps = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(pool.address+', '+pool.city+', TX');
+
+    html += `<div class="pool-stop${done?' done-stop':''}" id="stop-${idx}">
+      <div class="stop-num-wrap">
+        <div class="stop-num">${idx+1}</div>
+        <input type="checkbox" class="stop-check" ${done?'checked':''} onchange="toggleDone(this,${idx},'${pool.pool_id||idx}','${doneKey}')">
+      </div>
+      <div class="stop-body">
+        <div class="stop-name">${pool.customer_name||'—'}</div>
+        <div class="stop-addr">${pool.address}${pool.city?', '+pool.city:''}</div>
+        <span class="stop-svc ${svcClass}">${svcLabel}</span>
+        ${pool.notes?`<div class="stop-notes">📋 ${pool.notes}</div>`:''}
+      </div>
+      <a class="stop-nav-btn" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+      </a>
+    </div>`;
   });
-  // Highlight list item
-  document.querySelectorAll('.pool-list-item').forEach(el => el.classList.remove('highlighted'));
-  const el = document.getElementById('pli-' + idx);
-  if (el) { el.classList.add('highlighted'); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  html += '</div>';
+
+  // Expandable map panel
+  html += `<button class="map-toggle-btn" id="map-toggle-btn" onclick="toggleMapPanel()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+    Show on Map
+  </button>
+  <div class="map-panel" id="map-panel"><div id="leaflet-map"></div></div>`;
+
+  card.innerHTML = html;
+
+  // Init/update map
+  initOrUpdateMap_(pools);
 }
 
-function showMapEmpty(msg) {
-  document.getElementById('pool-list').innerHTML = `<div class="map-empty"><div class="map-empty-icon">⚠️</div><div class="map-empty-text">${msg}</div></div>`;
+function toggleMapPanel(){
+  const panel = document.getElementById('map-panel');
+  const btn   = document.getElementById('map-toggle-btn');
+  const open  = panel.classList.toggle('open');
+  btn.textContent = open ? '▲ Hide Map' : '▼ Show on Map';
+  if(open && _leafMap) setTimeout(()=>_leafMap.invalidateSize(), 50);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// SERVICE LOG (lazy-loaded)
-// ══════════════════════════════════════════════════════════════════════════════
-let _formLoaded = false;
-let _formItems  = [];
+function initOrUpdateMap_(pools) {
+  // Defer until panel is opened
+  const valid = pools.filter(p=>p.lat&&p.lng&&p.lat!==0&&p.lng!==0);
+  if(!valid.length) return;
 
-const TEST_FIELDS = { FC:"Chlorine (Cl)", PH:"pH", TA:"Total Alkalinity (TA)", CH:"Calcium Hardness (CH)" };
-const SIZE_GALLONS = { small:12000, medium:17500, large:25000 };
-const SUMMER = [6,7,8,9];
+  // We reinitialize when the day changes
+  if(_leafMap){_leafMap.remove();_leafMap=null;_mapMarkers=[];}
 
-function loadServiceLog() {
-  _formLoaded = true;
-  api({ secret:SECRET, action:'get_metadata' })
-    .then(res => {
-      document.getElementById('svc-loader').style.display = 'none';
-      if (res.ok) {
-        document.getElementById('svc-form-root').style.display = 'block';
-        renderServiceForm(res.data);
-      } else {
-        document.getElementById('svc-form-root').innerHTML = `<div style="color:var(--error);padding:2rem;text-align:center">${res.error}</div>`;
-        document.getElementById('svc-form-root').style.display = 'block';
-      }
-    })
-    .catch(e => {
-      document.getElementById('svc-loader').style.display = 'none';
-      document.getElementById('svc-form-root').innerHTML = `<div style="color:var(--error);padding:2rem;text-align:center">Failed to load form: ${e.message}</div>`;
-      document.getElementById('svc-form-root').style.display = 'block';
+  setTimeout(()=>{
+    const el = document.getElementById('leaflet-map');
+    if(!el) return;
+    _leafMap = L.map(el,{zoomControl:true});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(_leafMap);
+
+    const bounds = [];
+    valid.forEach((pool,i)=>{
+      const icon = L.divIcon({
+        className:'',
+        html:`<div style="width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;font-size:13px;font-weight:700;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25)">${i+1}</div>`,
+        iconSize:[26,26],iconAnchor:[13,13]
+      });
+      const m = L.marker([pool.lat,pool.lng],{icon}).addTo(_leafMap)
+        .bindPopup(`<b>${pool.customer_name}</b><br>${pool.address}<br><small>${pool.service}</small>`);
+      _mapMarkers.push(m);
+      bounds.push([pool.lat,pool.lng]);
     });
+    if(bounds.length) _leafMap.fitBounds(bounds,{padding:[20,20]});
+  },100);
 }
 
-function renderServiceForm(metadata) {
-  _formItems = metadata;
-  const root = document.getElementById('svc-form-root');
-  root.innerHTML = '';
+function toggleDone(cb, idx, poolId, doneKey){
+  const row = document.getElementById('stop-'+idx);
+  const done = JSON.parse(localStorage.getItem(doneKey)||'[]');
+  if(cb.checked){ if(!done.includes(poolId))done.push(poolId); }
+  else { const i=done.indexOf(poolId); if(i!==-1)done.splice(i,1); }
+  localStorage.setItem(doneKey, JSON.stringify(done));
+  if(row) row.classList.toggle('done-stop', cb.checked);
+  const numEl = row&&row.querySelector('.stop-num');
+  if(numEl) numEl.style.background = cb.checked ? 'var(--success)' : 'var(--teal)';
+}
 
-  let card = makeCard('Visit Details');
-  root.appendChild(card);
+function buildAppleMapsUrl_(pools){
+  if(!pools.length) return '#';
+  const last = pools[pools.length-1];
+  const dest = encodeURIComponent(last.address+', '+last.city+', TX');
+  if(pools.length===1) return 'https://maps.apple.com/?daddr='+dest;
+  // Apple Maps doesn't support true multi-stop — deep link to last destination
+  return 'https://maps.apple.com/?daddr='+dest+'&dirflg=d';
+}
 
-  metadata.forEach(item => {
-    if (item.isSectionBreak) {
-      card = makeCard(item.title || 'Chemical Log');
-      root.appendChild(card);
-      if (item.title && item.title.trim().toLowerCase() === 'used') {
-        const rb = document.createElement('div');
-        rb.id = 'rec-box'; rb.className = 'rec-box';
-        rb.innerHTML = '<div class="rec-box-hdr">Calculated Additions<span id="rec-vol" class="rec-vol">—</span></div><div id="rec-flags" class="rec-flags"></div><div id="rec-list" class="rec-list"></div>';
+function getSvcClass_(svc){
+  const s=(svc||'').toLowerCase();
+  if(s.includes('weekly'))return 'svc-weekly';
+  if(s.includes('startup'))return 'svc-startup';
+  if(s.includes('monthly'))return 'svc-monthly';
+  if(s.includes('green')||s.includes('clean'))return 'svc-gtc';
+  return 'svc-other';
+}
+function getSvcLabel_(svc){
+  const s=(svc||'').toLowerCase();
+  if(s.includes('weekly full'))return 'Weekly';
+  if(s.includes('bi-weekly')||s.includes('biweekly'))return 'Bi-Weekly';
+  if(s.includes('startup'))return 'Startup';
+  if(s.includes('monthly'))return 'Monthly';
+  if(s.includes('green'))return 'Green-to-Clean';
+  return svc||'Service';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICE LOG
+// ══════════════════════════════════════════════════════════════════════════════
+const TF={FC:"Chlorine (Cl)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium Hardness (CH)"};
+const SG={small:12000,medium:17500,large:25000};
+const SM=[6,7,8,9];
+
+function loadServiceLog(){
+  api({secret:SEC,action:'get_metadata'}).then(res=>{
+    document.getElementById('svc-loading').style.display='none';
+    if(res.ok){document.getElementById('svc-root').style.display='block';renderSvcForm(res.data);}
+    else{document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">'+res.error+'</div>';document.getElementById('svc-root').style.display='block';}
+  }).catch(e=>{document.getElementById('svc-loading').style.display='none';document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">Failed: '+e.message+'</div>';document.getElementById('svc-root').style.display='block';});
+}
+
+function renderSvcForm(meta){
+  _formItems=meta;
+  const root=document.getElementById('svc-root');root.innerHTML='';
+  let card=mkCard('Visit Details');root.appendChild(card);
+  meta.forEach(item=>{
+    if(item.isSectionBreak){
+      card=mkCard(item.title||'Chemical Log');root.appendChild(card);
+      if(item.title&&item.title.trim().toLowerCase()==='used'){
+        const rb=document.createElement('div');rb.id='rec-box';rb.className='rec-box';
+        rb.innerHTML='<div class="rb-hdr">Calculated Additions<span id="rb-vol" class="rb-vol">—</span></div><div id="rb-flags" class="rb-flags"></div><div id="rb-list" class="rb-list"></div>';
         card.appendChild(rb);
       }
       return;
     }
-
-    const grp = document.createElement('div');
-    grp.className = 'svc-form-group';
-    const lbl = item.title + (item.isRequired ? " <span style='color:red'>*</span>" : "");
-    grp.innerHTML = '<label>' + lbl + '</label>' + (item.helpText ? '<span class="svc-help">' + item.helpText + '</span>' : '');
-
-    const te = item.title.replace(/"/g,'&quot;');
-    let inp = '';
-
-    if (item.type==='LIST'||item.type==='MULTIPLE_CHOICE') {
-      inp = '<select class="svc-input" name="'+te+'" '+(item.isRequired?'required':'')+' onchange="runRecs()"><option value="">Select...</option>'+
-        item.choices.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>').join('')+'</select>';
-    } else if (item.type==='CHECKBOX') {
-      inp = item.choices.map(c=>'<label class="svc-checkbox-row"><input type="checkbox" name="'+te+'" value="'+c.replace(/"/g,'&quot;')+'" onchange="runRecs()"><span style="font-weight:400">'+c+'</span></label>').join('');
-    } else if (item.type==='PARAGRAPH_TEXT') {
-      inp = '<textarea class="svc-input" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()"></textarea>';
-    } else {
-      const isNum = Object.values(TEST_FIELDS).indexOf(item.title) !== -1 || (item.helpText&&item.helpText.toLowerCase().indexOf('quantity')!==-1);
-      inp = '<input class="svc-input" type="'+(isNum?'number':'text')+'" step="any" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()">';
+    const grp=document.createElement('div');grp.className='sfg';
+    const lbl=item.title+(item.isRequired?" <span style='color:red'>*</span>":'');
+    grp.innerHTML='<label>'+lbl+'</label>'+(item.helpText?'<span class="sh">'+item.helpText+'</span>':'');
+    const te=item.title.replace(/"/g,'&quot;');
+    let inp='';
+    if(item.type==='LIST'||item.type==='MULTIPLE_CHOICE'){
+      inp='<select class="si" name="'+te+'" '+(item.isRequired?'required':'')+' onchange="runRecs()"><option value="">Select...</option>'+item.choices.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>').join('')+'</select>';
+    }else if(item.type==='CHECKBOX'){
+      inp=item.choices.map(c=>'<label class="scb"><input type="checkbox" name="'+te+'" value="'+c.replace(/"/g,'&quot;')+'" onchange="runRecs()"><span style="font-weight:400">'+c+'</span></label>').join('');
+    }else if(item.type==='PARAGRAPH_TEXT'){
+      inp='<textarea class="si" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()"></textarea>';
+    }else{
+      const isNum=Object.values(TF).indexOf(item.title)!==-1||(item.helpText&&item.helpText.toLowerCase().indexOf('quantity')!==-1);
+      inp='<input class="si" type="'+(isNum?'number':'text')+'" step="any" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()">';
     }
-
-    grp.innerHTML += inp;
-    card.appendChild(grp);
-
-    if (item.title && item.title.trim().toLowerCase() === 'pool_id') {
-      // Material
-      const mg = document.createElement('div'); mg.className = 'svc-form-group';
-      mg.innerHTML = '<label>Pool Material</label><span class="svc-help">Affects acid dosing — fiberglass gets reduced dose.</span><select class="svc-input" id="pool-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
+    grp.innerHTML+=inp;card.appendChild(grp);
+    if(item.title&&item.title.trim().toLowerCase()==='pool_id'){
+      const mg=document.createElement('div');mg.className='sfg';
+      mg.innerHTML='<label>Pool Material</label><span class="sh">Affects acid dose — fiberglass gets reduced amount.</span><select class="si" id="svc-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
       card.appendChild(mg);
-      // Condition pills
-      const cg = document.createElement('div'); cg.className = 'svc-form-group';
-      cg.innerHTML = '<label>Pool Condition on Arrival</label><span class="svc-help">Tap if applicable — changes chlorine dosing protocol.</span><div class="cond-pills"><div class="cond-pill" onclick="toggleCond(this,false)" data-val="green">Green / Algae</div><div class="cond-pill" onclick="toggleCond(this,false)" data-val="cloudy">Cloudy</div><div class="cond-pill" onclick="toggleCond(this,true)" data-val="clear">Clear</div></div>';
+      const cg=document.createElement('div');cg.className='sfg';
+      cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,false)" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,false)" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,true)" data-val="clear">Clear</div></div>';
       card.appendChild(cg);
     }
   });
-
-  const submitCard = makeCard('');
-  submitCard.style.background = 'transparent';
-  submitCard.style.boxShadow = 'none';
-  submitCard.style.border = 'none';
-  submitCard.style.padding = '0';
-  submitCard.innerHTML = '<button class="btn-submit-svc" id="btn-svc-submit" onclick="submitServiceLog()">Submit Log to MCPS</button>';
-  root.appendChild(submitCard);
+  const sc=mkCard('');sc.style.cssText='background:transparent;box-shadow:none;border:none;padding:0';
+  sc.innerHTML='<button class="btn-svc" id="btn-svc" onclick="submitSvc()">Submit Log to MCPS</button>';root.appendChild(sc);
 }
 
-function makeCard(title) {
-  const d = document.createElement('div');
-  d.className = 'svc-card';
-  if (title) {
-    const h = document.createElement('div');
-    h.className = 'svc-section-title';
-    h.textContent = title;
-    d.appendChild(h);
-  }
-  return d;
+function mkCard(t){const d=document.createElement('div');d.className='svc-card';if(t){const h=document.createElement('div');h.className='svc-stitle';h.textContent=t;d.appendChild(h);}return d;}
+function tCond(el,ok){const was=el.classList.contains('active')||el.classList.contains('active-ok');document.querySelectorAll('.cpill').forEach(p=>p.classList.remove('active','active-ok'));if(!was)el.classList.add(ok?'active-ok':'active');runRecs();}
+
+function gn(t){const el=document.querySelector('[name="'+t+'"]');if(!el||!el.value)return null;const v=parseFloat(el.value);return isNaN(v)?null:v;}
+function s2g(v){const s=String(v||'').toLowerCase();if(s.includes('large')||s.includes('>20'))return SG.large;if(s.includes('medium')||s.includes('15,000'))return SG.medium;return SG.small;}
+
+function runRecs(){
+  const fc=gn(TF.FC),ph=gn(TF.PH),ta=gn(TF.TA),ch=gn(TF.CH);
+  const pe=document.querySelector('[name="pool_id"]');
+  const gal=s2g(pe?pe.value:'');
+  const mat=(document.getElementById('svc-mat')||{value:'plaster'}).value;
+  const isG=!!document.querySelector('.cpill.active');
+  const isS=SM.indexOf(new Date().getMonth()+1)!==-1;
+  const rb=document.getElementById('rec-box');if(!rb)return;
+  if(fc===null&&ph===null&&ta===null&&ch===null&&!isG){rb.style.display='none';return;}
+  const recs=buildRecs(fc,ph,ta,ch,gal,mat,isG);
+  const vb=document.getElementById('rb-vol');if(vb)vb.textContent=(gal/1000).toFixed(0)+'K gal';
+  const fe=document.getElementById('rb-flags');if(fe)fe.innerHTML=(isS?'<span class="rf summer">Summer +50% Cl</span>':'')+(isG?'<span class="rf green">Algae Protocol</span>':'')+(mat==='fiberglass'?'<span class="rf fiber">Fiberglass</span>':'')+(mat==='plaster'?'<span class="rf plstr">Plaster</span>':'');
+  if(!recs.length){rb.style.display='none';return;}
+  rb.style.display='block';
+  document.getElementById('rb-list').innerHTML=recs.map(r=>'<div class="ri '+r.status+'"><div class="ri-top"><span class="ri-name">'+r.name+'</span><span class="ri-amt">'+r.amt+'</span></div><div class="ri-why">↳ '+r.reason+'</div></div>').join('');
 }
 
-function toggleCond(el, isOk) {
-  const was = el.classList.contains('active') || el.classList.contains('active-ok');
-  document.querySelectorAll('.cond-pill').forEach(p => p.classList.remove('active','active-ok'));
-  if (!was) el.classList.add(isOk ? 'active-ok' : 'active');
-  runRecs();
+function buildRecs(fc,ph,ta,ch,gal,mat,isG){
+  const res=[],isS=SM.indexOf(new Date().getMonth()+1)!==-1,g=gal/10000;
+  if(fc!==null){let b=1*g;if(isS)b*=1.5;if(isG)res.push({name:'Liquid Chlorine',status:'bad',amt:(b*2).toFixed(1)+' gal',reason:'Green/algae — shock dose. Balance chem after 24-48 hrs.'});else if(fc<2)res.push({name:'Liquid Chlorine',status:'bad',amt:(b*2).toFixed(1)+' gal',reason:'FC critically low — double dose'+(isS?' + summer ×1.5':'')});else if(fc<3)res.push({name:'Liquid Chlorine',status:'warning',amt:b.toFixed(1)+' gal',reason:'FC below target 3-5 ppm'+(isS?' (summer ×1.5)':'')});else if(fc<=5)res.push({name:'Liquid Chlorine',status:'good',amt:b.toFixed(1)+' gal',reason:'FC in range — maintenance dose'+(isS?' (summer ×1.5)':'')});}
+  if(ph!==null){if(isG&&ph>7.6)res.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'Green pool: shock first, adjust pH after 24-48 hrs.'});else if(ph>7.6){let a=0.5*g;if(mat==='fiberglass')a*=0.75;a=Math.min(a,1*g);a=Math.max(Math.round(a*4)/4,0.25);res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2-7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});}else if(ph<7.2)res.push({name:'Soda Ash',status:'bad',amt:'As needed',reason:'pH below 7.2 — raise carefully.'});}
+  if(ta!==null&&ta<80&&!isG)res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:(1.4*g*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80-120)'});
+  if(ch!==null&&!isG){if(ch<250)res.push({name:'Calcium Hardness Increaser',status:'warning',amt:(1.2*g*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250-350).'+(mat==='plaster'?' Upper range for plaster.':'')});if(ch>450)res.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA.'});}
+  if(isG)res.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH/TA/CH.'});
+  return res;
 }
 
-function getNum(title) {
-  const el = document.querySelector('[name="'+title+'"]');
-  if (!el || !el.value) return null;
-  const v = parseFloat(el.value); return isNaN(v) ? null : v;
-}
-
-function sizeToGallons(val) {
-  const s = String(val||'').toLowerCase();
-  if (s.includes('large')||s.includes('>20')) return SIZE_GALLONS.large;
-  if (s.includes('medium')||s.includes('15,000')) return SIZE_GALLONS.medium;
-  return SIZE_GALLONS.small;
-}
-
-function runRecs() {
-  const fc = getNum(TEST_FIELDS.FC), ph = getNum(TEST_FIELDS.PH);
-  const ta = getNum(TEST_FIELDS.TA), ch = getNum(TEST_FIELDS.CH);
-  const poolEl = document.querySelector('[name="pool_id"]');
-  const gallons = sizeToGallons(poolEl ? poolEl.value : '');
-  const mat = (document.getElementById('pool-mat')||{value:'plaster'}).value;
-  const isGreen = !!document.querySelector('.cond-pill.active');
-  const isSummer = SUMMER.indexOf(new Date().getMonth()+1) !== -1;
-  const recBox = document.getElementById('rec-box');
-  if (!recBox) return;
-  if (fc===null&&ph===null&&ta===null&&ch===null&&!isGreen) { recBox.style.display='none'; return; }
-  const recs = buildRecs(fc,ph,ta,ch,gallons,mat,isGreen);
-  const volEl = document.getElementById('rec-vol');
-  if (volEl) volEl.textContent = (gallons/1000).toFixed(0)+'K gal';
-  const flagEl = document.getElementById('rec-flags');
-  if (flagEl) flagEl.innerHTML = (isSummer?'<span class="rec-flag summer">Summer +50% Cl</span>':'')+(isGreen?'<span class="rec-flag green">Algae Protocol</span>':'')+(mat==='fiberglass'?'<span class="rec-flag fiber">Fiberglass — reduced acid</span>':'')+(mat==='plaster'?'<span class="rec-flag plstr">Plaster — watch CH</span>':'');
-  if (!recs.length) { recBox.style.display='none'; return; }
-  recBox.style.display='block';
-  document.getElementById('rec-list').innerHTML = recs.map(r=>
-    '<div class="rec-item '+r.status+'"><div class="rec-item-top"><span class="rec-item-name">'+r.name+'</span><span class="rec-item-amt">'+r.amt+'</span></div><div class="rec-item-reason">↳ '+r.reason+'</div></div>'
-  ).join('');
-}
-
-// Rec engine (same logic as standalone form)
-function buildRecs(fc,ph,ta,ch,gallons,mat,isGreen) {
-  const results=[], isSummer=SUMMER.indexOf(new Date().getMonth()+1)!==-1, gal10k=gallons/10000;
-  if (fc!==null) {
-    let base=1.0*gal10k; if(isSummer)base*=1.5;
-    if(isGreen) results.push({name:'Liquid Chlorine',status:'bad',amt:(base*2).toFixed(1)+' gal',reason:'Green/algae — shock dose. Balance chemistry after 24-48 hrs.'});
-    else if(fc<2) results.push({name:'Liquid Chlorine',status:'bad',amt:(base*2).toFixed(1)+' gal',reason:'FC critically low — double dose'+(isSummer?' + summer ×1.5':'')});
-    else if(fc<3) results.push({name:'Liquid Chlorine',status:'warning',amt:base.toFixed(1)+' gal',reason:'FC below target (3–5 ppm)'+(isSummer?' (summer ×1.5)':'')});
-    else if(fc<=5) results.push({name:'Liquid Chlorine',status:'good',amt:base.toFixed(1)+' gal',reason:'FC in range — maintenance dose'+(isSummer?' (summer ×1.5)':'')});
-  }
-  if (ph!==null) {
-    if(isGreen&&ph>7.6) results.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'pH high but pool is green. Shock first, adjust pH after 24-48 hrs.'});
-    else if(ph>7.6) {
-      let a=0.5*gal10k; if(mat==='fiberglass')a*=0.75; a=Math.min(a,1.0*gal10k); a=Math.max(Math.round(a*4)/4,0.25);
-      results.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2–7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});
-    } else if(ph<7.2) results.push({name:'Soda Ash',status:'bad',amt:'As needed',reason:'pH below 7.2 — raise carefully, test before adding more.'});
-  }
-  if(ta!==null&&ta<80&&!isGreen) results.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:(1.4*gal10k*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80–120 ppm)'});
-  if(ch!==null&&!isGreen) {
-    if(ch<250) results.push({name:'Calcium Hardness Increaser',status:'warning',amt:(1.2*gal10k*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250–350).'+(mat==='plaster'?' Keep at upper range for plaster.':'')});
-    if(ch>450) results.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA hard water.'});
-  }
-  if(isGreen) results.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH/TA/CH.'});
-  return results;
-}
-
-function submitServiceLog() {
-  const btn = document.getElementById('btn-svc-submit');
-  const payload = {}; let hasErr = false;
-  _formItems.forEach(item => {
-    if(!item.title) return;
-    let val;
-    if(item.type==='CHECKBOX') {
-      const boxes = document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');
-      val = Array.from(boxes).map(b=>b.value); if(!val.length)val=null;
-    } else {
-      const el = document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');
-      if(el) val = el.value.trim();
-    }
-    if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length))) hasErr=true;
-    if(val) payload[item.title]=val;
+function submitSvc(){
+  const btn=document.getElementById('btn-svc');
+  const payload={};let hasErr=false;
+  _formItems.forEach(item=>{
+    if(!item.title)return;let val;
+    if(item.type==='CHECKBOX'){const bs=document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');val=Array.from(bs).map(b=>b.value);if(!val.length)val=null;}
+    else{const el=document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');if(el)val=el.value.trim();}
+    if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
+    if(val)payload[item.title]=val;
   });
-  const ap = document.querySelector('.cond-pill.active');
-  if(ap) payload['Notes'] = ((payload['Notes']||'')+' [Condition: '+ap.dataset.val+']').trim();
-  if(hasErr){alert('Please fill out all required fields.');return;}
-  btn.disabled=true; btn.textContent='Submitting...';
-  api({secret:SECRET,action:'submit_form',token:_session.token,data:payload})
-    .then(res=>{
-      if(res.ok){
-        document.getElementById('svc-form-root').innerHTML =
-          '<div style="text-align:center;padding:3rem 1rem">'+
-          '<div style="font-size:3.5rem;margin-bottom:1rem;">✅</div>'+
-          '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'+
-          '<p style="color:#64748b;margin-bottom:1.5rem">Log written, inventory deducted, email sent.</p>'+
-          '<button onclick="resetServiceLog()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'+
-          '</div>';
-      } else {
-        alert('Error: '+res.error); btn.disabled=false; btn.textContent='Submit Log to MCPS';
-      }
-    })
-    .catch(e=>{alert('Network error: '+e.message);btn.disabled=false;btn.textContent='Submit Log to MCPS';});
+  const ap=document.querySelector('.cpill.active');
+  if(ap)payload['Notes']=((payload['Notes']||'')+' [Condition: '+ap.dataset.val+']').trim();
+  if(hasErr){alert('Fill out all required fields.');return;}
+  btn.disabled=true;btn.textContent='Submitting...';
+  api({secret:SEC,action:'submit_form',token:_s.token,data:payload}).then(res=>{
+    if(res.ok){
+      document.getElementById('svc-root').innerHTML='<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3.5rem;margin-bottom:1rem">✅</div><div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div><p style="color:#64748b;margin-bottom:1.5rem">Log written, inventory deducted, email sent.</p><button onclick="resetSvc()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button></div>';
+    }else{alert('Error: '+res.error);btn.disabled=false;btn.textContent='Submit Log to MCPS';}
+  }).catch(e=>{alert('Network error: '+e.message);btn.disabled=false;btn.textContent='Submit Log to MCPS';});
 }
 
-function resetServiceLog() {
-  _formLoaded = false;
-  document.getElementById('svc-form-root').style.display='none';
-  document.getElementById('svc-form-root').innerHTML='';
-  document.getElementById('svc-loader').style.display='block';
+function resetSvc(){
+  _formItems=[];
+  document.getElementById('svc-root').style.display='none';
+  document.getElementById('svc-root').innerHTML='';
+  document.getElementById('svc-loading').style.display='block';
   loadServiceLog();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN
 // ══════════════════════════════════════════════════════════════════════════════
-function loadUsers() {
-  api({secret:SECRET,action:'list_users',token:_session.token}).then(res=>{
+function loadUsers(){
+  api({secret:SEC,action:'list_users',token:_s.token}).then(res=>{
     if(!res.ok)return;
-    const tb = document.getElementById('users-tbody');
+    const tb=document.getElementById('utbody');
     if(!res.users.length){tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';return;}
-    tb.innerHTML = res.users.map(u=>`
-      <tr>
-        <td style="font-weight:600">${u.name||'—'}</td>
-        <td style="color:var(--muted);font-size:.82rem">${u.username}</td>
-        <td><span class="role-badge ${u.role}" style="font-size:.72rem">${u.role}</span></td>
-        <td><span class="dot ${(u.active===true||u.active==='TRUE')?'on':'off'}"></span>${(u.active===true||u.active==='TRUE')?'Active':'Inactive'}</td>
-        <td style="font-size:.75rem;color:var(--muted)">${u.last_login?new Date(u.last_login).toLocaleDateString():'—'}</td>
-      </tr>`).join('');
+    tb.innerHTML=res.users.map(u=>`<tr>
+      <td style="font-weight:600">${u.name||'—'}</td>
+      <td style="color:var(--muted);font-size:.82rem">${u.username}</td>
+      <td>${(u.roles||[u.role||'—']).join(', ')}</td>
+      <td style="font-size:.82rem;color:var(--muted)">${u.operator_name||'—'}</td>
+      <td><span class="dot ${(u.active===true||u.active==='TRUE')?'on':'off'}"></span>${(u.active===true||u.active==='TRUE')?'Active':'Inactive'}</td>
+    </tr>`).join('');
   });
 }
 
@@ -1014,31 +913,30 @@ function createUser(){
   const name=document.getElementById('new-name').value.trim();
   const uname=document.getElementById('new-uname').value.trim().toLowerCase();
   const pw=document.getElementById('new-pass').value.trim();
-  const role=document.getElementById('new-role').value;
+  const roles=document.getElementById('new-roles').value.trim()||'technician';
+  const opName=document.getElementById('new-opname').value.trim();
   const msgEl=document.getElementById('create-msg');
   if(!name||!uname||!pw){showMsg(msgEl,'All fields required.',false);return;}
-  api({secret:SECRET,action:'create_user',token:_session.token,username:uname,password:pw,name,role})
-    .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok){document.getElementById('new-name').value='';document.getElementById('new-uname').value='';document.getElementById('new-pass').value='';loadUsers();}});
+  api({secret:SEC,action:'create_user',token:_s.token,username:uname,password:pw,name,roles,operator_name:opName})
+    .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok){document.getElementById('new-name').value='';document.getElementById('new-uname').value='';document.getElementById('new-pass').value='';document.getElementById('new-opname').value='';loadUsers();}});
 }
 
 function updateUser(){
   const uname=document.getElementById('edit-uname').value.trim().toLowerCase();
-  const role=document.getElementById('edit-role').value;
+  const roles=document.getElementById('edit-roles').value.trim();
+  const opName=document.getElementById('edit-opname').value.trim();
   const pw=document.getElementById('edit-pass').value.trim();
   const active=document.getElementById('edit-active').value;
   const msgEl=document.getElementById('update-msg');
   if(!uname){showMsg(msgEl,'Username required.',false);return;}
   const fields={};
-  if(role)fields.role=role;if(pw)fields.password=pw;if(active)fields.active=(active==='true');
+  if(roles)fields.roles=roles;if(opName)fields.operator_name=opName;if(pw)fields.password=pw;if(active)fields.active=(active==='true');
   if(!Object.keys(fields).length){showMsg(msgEl,'No changes specified.',false);return;}
-  api({secret:SECRET,action:'update_user',token:_session.token,username:uname,fields})
+  api({secret:SEC,action:'update_user',token:_s.token,username:uname,fields})
     .then(res=>{showMsg(msgEl,res.message||res.error,res.ok);if(res.ok)loadUsers();});
 }
 
-function showMsg(el,text,ok){
-  el.textContent=text;el.className='inline-msg '+(ok?'ok':'err');el.style.display='block';
-  setTimeout(()=>{el.style.display='none';},4000);
-}
+function showMsg(el,text,ok){el.textContent=text;el.className='im '+(ok?'ok':'err');el.style.display='block';setTimeout(()=>{el.style.display='none';},4000);}
 </script>
 </body>
 </html>
