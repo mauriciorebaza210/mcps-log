@@ -1,542 +1,579 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>MCPS Log App</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #1a7a6e;
-            --primary-hover: #155f55;
-            --teal-dark: #0d4d44;
-            --teal-mid: #1a7a6e;
-            --teal-light: #2aa89a;
-            --gold: #c8a84b;
-            --gold-light: #e8c96a;
-            --bg-color: #f0fdf4;
-            --card-bg: rgba(255, 255, 255, 0.97);
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --border-color: #e2e8f0;
-            --success: #10b981;
-            --error: #ef4444;
-            --warning: #f59e0b;
-        }
+<meta charset="UTF-8">
+<title>MCPS Log App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --teal-dark: #0d4d44;
+  --teal-mid: #1a7a6e;
+  --teal-light: #2aa89a;
+  --gold: #c8a84b;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --success: #16a34a;
+  --error: #ef4444;
+  --warning: #d97706;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0;
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(160deg, #e0f2f0 0%, #d1ece8 40%, #dcfce7 100%);
+  color: var(--text-main);
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 1rem;
+}
+.container { width: 100%; max-width: 600px; margin-bottom: 2rem; }
+header { text-align: center; margin-bottom: 1.5rem; padding-top: 1rem; }
+.header-logo { max-height: 100px; margin-bottom: 0.5rem; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.15)); }
+.header-mission { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 2rem; color: var(--teal-dark); letter-spacing: 0.12em; text-transform: uppercase; line-height: 1; }
+.header-sub { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 0.95rem; color: var(--teal-mid); letter-spacing: 0.28em; text-transform: uppercase; }
 
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(160deg, #e0f2f0 0%, #d1ece8 40%, #dcfce7 100%);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 1rem;
-        }
+.card {
+  background: rgba(255,255,255,0.97);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 20px;
+  box-shadow: 0 10px 40px -10px rgba(13,77,68,0.12);
+  padding: 1.5rem; margin-bottom: 1.5rem;
+  display: none; animation: slideUp 0.5s ease;
+}
+@keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
 
-        .container {
-            width: 100%;
-            max-width: 600px;
-            margin-bottom: 2rem;
-        }
+.section-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.1rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  margin-top: 0; margin-bottom: 1.25rem;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 0.5rem; color: var(--teal-dark);
+}
+.form-group { margin-bottom: 1.25rem; }
+label { display: block; margin-bottom: 0.4rem; font-weight: 600; font-size: 0.95rem; }
+.help-text { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; margin-top: -0.2rem; }
 
-        header {
-            text-align: center;
-            margin-bottom: 1.5rem;
-            padding-top: 1rem;
-        }
+input[type="text"], input[type="number"], select, textarea {
+  width: 100%; padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color); border-radius: 12px;
+  font-size: 1rem; font-family: 'Inter', sans-serif;
+  box-sizing: border-box; transition: all 0.2s;
+  background: #f8fafc; color: var(--text-main);
+}
+textarea { resize: vertical; min-height: 80px; }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--teal-mid);
+  background: #fff; box-shadow: 0 0 0 3px rgba(26,122,110,0.15);
+}
+.checkbox-group { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.checkbox-group input { width: auto; }
 
-        .header-logo {
-            max-height: 100px;
-            margin-bottom: 0.5rem;
-            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.15));
-        }
+.loader {
+  display: inline-block; width: 40px; height: 40px;
+  border: 4px solid rgba(26,122,110,0.2);
+  border-radius: 50%; border-top-color: var(--teal-mid);
+  animation: spin 1s ease-in-out infinite; margin: 4rem auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.center-content { text-align: center; }
 
-        .header-wordmark {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0;
-            margin-top: 0.25rem;
-        }
+/* Recommendation box */
+.rec-box {
+  background: #e8f5f3; border: 1px dashed var(--teal-mid);
+  border-radius: 14px; padding: 1rem 1.1rem;
+  margin-bottom: 1.5rem; display: none;
+}
+.rec-box-header {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700; font-size: 0.82rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--teal-dark);
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.6rem;
+}
+.rec-vol-badge {
+  font-size: 0.72rem; background: rgba(255,255,255,0.8);
+  padding: 2px 9px; border-radius: 10px;
+  color: var(--teal-mid); font-weight: 600;
+}
+.rec-flags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+.rec-flag {
+  font-size: 0.7rem; font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 5px;
+}
+.rec-flag.summer { background: rgba(217,119,6,0.15); color: var(--warning); }
+.rec-flag.green  { background: rgba(239,68,68,0.12); color: var(--error); }
+.rec-flag.fiber  { background: rgba(26,122,110,0.12); color: var(--teal-mid); }
+.rec-flag.plstr  { background: rgba(200,168,75,0.15); color: var(--gold); }
 
-        .header-mission {
-            font-family: 'Oswald', sans-serif;
-            font-weight: 700;
-            font-size: 2rem;
-            color: var(--teal-dark);
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            line-height: 1;
-        }
+.rec-list { display: flex; flex-direction: column; gap: 0.55rem; }
+.rec-item {
+  background: #fff; padding: 0.75rem 0.9rem;
+  border-radius: 10px; display: flex; flex-direction: column; gap: 0.2rem;
+}
+.rec-item.bad     { border-left: 4px solid var(--error); }
+.rec-item.warning { border-left: 4px solid var(--warning); }
+.rec-item.good    { border-left: 4px solid var(--success); }
+.rec-item-top { display: flex; justify-content: space-between; align-items: center; }
+.rec-item-name { font-weight: 600; font-size: 0.92rem; }
+.rec-item-amt  { font-family: 'Oswald', sans-serif; font-size: 1.05rem; font-weight: 600; color: var(--teal-dark); }
+.rec-item-reason { font-size: 0.75rem; color: var(--text-muted); }
 
-        .header-sub {
-            font-family: 'Barlow Condensed', sans-serif;
-            font-weight: 600;
-            font-size: 0.95rem;
-            color: var(--teal-mid);
-            letter-spacing: 0.28em;
-            text-transform: uppercase;
-            line-height: 1.2;
-        }
+.btn-submit {
+  width: 100%; padding: 1.25rem;
+  background: var(--teal-dark); color: white; border: none;
+  border-radius: 12px;
+  font-family: 'Oswald', sans-serif; font-weight: 600;
+  font-size: 1.2rem; letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer; transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(13,77,68,0.25); margin-top: 1rem;
+}
+.btn-submit:hover { background: var(--teal-mid); transform: translateY(-2px); }
+.btn-submit:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; box-shadow: none; }
 
-        .card {
-            background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 20px;
-            box-shadow: 0 10px 40px -10px rgba(13, 77, 68, 0.12);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            overflow: hidden;
-            display: none;
-            animation: slideUp 0.5s ease;
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .section-title {
-            font-family: 'Barlow Condensed', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            margin-top: 0;
-            margin-bottom: 1.25rem;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 0.5rem;
-            color: var(--teal-dark);
-        }
-
-        .form-group { margin-bottom: 1.25rem; }
-
-        label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 600;
-            font-size: 0.95rem;
-            color: var(--text-main);
-        }
-
-        .help-text {
-            display: block;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-bottom: 0.4rem;
-            margin-top: -0.2rem;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            font-size: 1rem;
-            font-family: 'Inter', sans-serif;
-            box-sizing: border-box;
-            transition: all 0.2s ease;
-            background: #f8fafc;
-            color: var(--text-main);
-        }
-
-        textarea { resize: vertical; min-height: 80px; }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--teal-mid);
-            background: #fff;
-            box-shadow: 0 0 0 3px rgba(26, 122, 110, 0.15);
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        .checkbox-group input { width: auto; }
-
-        .loader {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(26, 122, 110, 0.2);
-            border-radius: 50%;
-            border-top-color: var(--teal-mid);
-            animation: spin 1s ease-in-out infinite;
-            margin: 4rem auto;
-        }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .center-content { text-align: center; }
-
-        .calc-box {
-            background: #e8f5f3;
-            border: 1px dashed var(--teal-mid);
-            border-radius: 12px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            display: none;
-        }
-
-        .calc-list {
-            margin-top: 0.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .calc-item {
-            background: #fff;
-            padding: 0.75rem;
-            border-radius: 8px;
-            border-left: 4px solid var(--warning);
-            font-size: 0.9rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-        .calc-item.good { border-left-color: var(--success); }
-        .calc-item.bad  { border-left-color: var(--error); }
-
-        .calc-amount { font-weight: 700; font-size: 1.1rem; }
-
-        .btn-submit {
-            width: 100%;
-            padding: 1.25rem;
-            background: var(--teal-dark);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-family: 'Oswald', sans-serif;
-            font-weight: 600;
-            font-size: 1.2rem;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 16px rgba(13, 77, 68, 0.25);
-            margin-top: 1rem;
-        }
-
-        .btn-submit:hover {
-            background: var(--teal-mid);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(13, 77, 68, 0.3);
-        }
-        .btn-submit:active { transform: translateY(0); }
-        .btn-submit:disabled {
-            background: #cbd5e1;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        #gallons-wrapper { display: none; }
-    </style>
+/* Pool condition pills */
+.condition-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
+.condition-pill {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.82rem; font-weight: 600; letter-spacing: 0.05em;
+  padding: 0.3rem 0.85rem; border-radius: 99px; cursor: pointer;
+  border: 1.5px solid var(--border-color);
+  background: #f8fafc; color: var(--text-muted);
+  transition: all 0.15s; user-select: none;
+}
+.condition-pill.active { border-color: var(--error); background: #fef2f2; color: var(--error); }
+.condition-pill.active-ok { border-color: var(--success); background: #f0fdf4; color: var(--success); }
+</style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <img class="header-logo" src="data:image/png;base64,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" alt="Mission Custom Pool Solutions">
-            <div class="header-wordmark">
-                <span class="header-mission">Mission</span>
-                <span class="header-sub">Custom Pool Solutions</span>
-            </div>
-        </header>
+<div class="container">
+  <header>
+    <img class="header-logo" src="https://missioncustompools.com/wp-content/uploads/2024/07/mission-custom-pools-logo.webp" alt="Mission Custom Pool Solutions">
+    <div><span class="header-mission">Mission</span></div>
+    <div><span class="header-sub">Custom Pool Solutions</span></div>
+  </header>
 
-        <div id="loader-area" class="center-content">
-            <div class="loader"></div>
-            <p style="color:var(--text-muted); font-weight:500;">Loading form...</p>
-        </div>
+  <div id="loader-area" class="center-content">
+    <div class="loader"></div>
+    <p style="color:var(--text-muted);font-weight:500;">Loading form...</p>
+  </div>
 
-        <div id="form-container"></div>
-    </div>
+  <div id="form-container"></div>
+</div>
 
-    <script>
-        let _formItems = [];
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// MCPS RECOMMENDATION ENGINE v2
+// Logic built from 7-year ops head field knowledge, San Antonio conditions.
+// Targets: FC 3-5, pH 7.2-7.6, TA 80-120, CH 250-350
+// ══════════════════════════════════════════════════════════════════════════════
 
-        const TEST_FIELDS = {
-            FC: "Chlorine (Cl)",
-            PH: "pH",
-            TA: "Total Alkalinity (TA)",
-            CH: "Calcium Hardness (CH)"
-        };
+const SIZE_GALLONS   = { small: 12000, medium: 17500, large: 25000 };
+const SUMMER_MONTHS  = [6, 7, 8, 9]; // June-Sept San Antonio heat
 
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
+const TEST_FIELDS = {
+  FC: "Chlorine (Cl)",
+  PH: "pH",
+  TA: "Total Alkalinity (TA)",
+  CH: "Calcium Hardness (CH)"
+};
 
-        window.onload = () => {
-            fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'get_metadata' })
-            })
-            .then(r => r.json())
-            .then(res => {
-                if (res.ok) renderForm(res.data);
-                else alert("Error loading form: " + res.error);
-            })
-            .catch(err => alert("Network error: " + err));
-        };
+function sizeToGallons(poolDropdownValue) {
+  const s = String(poolDropdownValue || "").toLowerCase();
+  if (s.includes("large")  || s.includes(">20") || s.includes("20,000")) return SIZE_GALLONS.large;
+  if (s.includes("medium") || s.includes("15,000")) return SIZE_GALLONS.medium;
+  return SIZE_GALLONS.small;
+}
 
-        function renderForm(metadata) {
-            document.getElementById('loader-area').style.display = 'none';
-            _formItems = metadata;
-            const container = document.getElementById('form-container');
-            let currentCard = null;
+function getPoolMaterial() {
+  const el = document.getElementById("pool-material-select");
+  return el ? el.value : "plaster";
+}
 
-            const createCard = (title) => {
-                const div = document.createElement('div');
-                div.className = 'card';
-                div.style.display = 'block';
-                if (title) {
-                    const h2 = document.createElement('h2');
-                    h2.className = 'section-title';
-                    h2.innerText = title;
-                    div.appendChild(h2);
-                }
-                return div;
-            };
+function getIsGreen() {
+  const pill = document.querySelector(".condition-pill.active");
+  if (pill) return true;
+  const notes = document.querySelector('[name="Notes"]');
+  return notes ? /green|algae|cloudy|murky/i.test(notes.value) : false;
+}
 
-            currentCard = createCard("Visit Details");
-            container.appendChild(currentCard);
+function buildRecs(fc, ph, ta, ch, gallons, material, isGreen) {
+  const results  = [];
+  const isSummer = SUMMER_MONTHS.includes(new Date().getMonth() + 1);
+  const gal10k   = gallons / 10000;
 
-            metadata.forEach(item => {
-                if (item.isSectionBreak) {
-                    currentCard = createCard(item.title || "Chemical Summary");
-                    container.appendChild(currentCard);
+  // ── 1. LIQUID CHLORINE ────────────────────────────────────────────────────
+  if (fc !== null) {
+    let baseGal = 1.0 * gal10k;         // 1 gal per 10k = standard maintenance
+    if (isSummer) baseGal *= 1.5;        // +50% June-Sept (heat burns chlorine faster)
 
-                    if (item.title && item.title.trim().toLowerCase() === "used") {
-                        const calcDiv = document.createElement('div');
-                        calcDiv.id = "live-calc-box";
-                        calcDiv.className = "calc-box";
-                        calcDiv.innerHTML = `
-                            <div style="font-weight:700; color:var(--teal-dark); margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center;">
-                                <span>Calculated Additions</span>
-                                <span id="calc-vol-display" style="font-size:0.8rem; background:rgba(255,255,255,0.7); padding:2px 8px; border-radius:10px;">Vol: 10K Gal</span>
-                            </div>
-                            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.5rem;">Based on 10k gallons default (adjust via Volume field above).</div>
-                            <div id="calc-items" class="calc-list"></div>
-                        `;
-                        currentCard.appendChild(calcDiv);
-                    }
-                    return;
-                }
+    if (isGreen) {
+      // Algae protocol: double dose, chemistry after
+      results.push({
+        name: "Liquid Chlorine", status: "bad",
+        amt: (baseGal * 2).toFixed(1) + " gal",
+        reason: "Green/algae pool — shock dose. Do NOT adjust pH/TA/CH until chlorine works (24-48 hrs)."
+      });
+    } else if (fc < 2) {
+      // Critically low: 2x
+      results.push({
+        name: "Liquid Chlorine", status: "bad",
+        amt: (baseGal * 2).toFixed(1) + " gal",
+        reason: "FC critically low (below 2 ppm) — double dose" + (isSummer ? " + summer ×1.5" : "")
+      });
+    } else if (fc < 3) {
+      // Below target (3-5): add normal dose
+      results.push({
+        name: "Liquid Chlorine", status: "warning",
+        amt: baseGal.toFixed(1) + " gal",
+        reason: "FC below target (3-5 ppm)" + (isSummer ? " + summer ×1.5" : "")
+      });
+    } else if (fc <= 5) {
+      // In range: still dose maintenance to hold through the week
+      results.push({
+        name: "Liquid Chlorine", status: "good",
+        amt: baseGal.toFixed(1) + " gal",
+        reason: "FC in range — maintenance dose to hold through week" + (isSummer ? " (summer ×1.5)" : "")
+      });
+    }
+    // FC > 5: no chlorine recommendation
+  }
 
-                const group = document.createElement('div');
-                group.className = 'form-group';
+  // ── 2. MURIATIC ACID (pH) ─────────────────────────────────────────────────
+  if (ph !== null) {
+    if (isGreen && ph > 7.6) {
+      // Green pool: acknowledge but defer acid
+      results.push({
+        name: "Muriatic Acid", status: "warning",
+        amt: "Hold — after shock",
+        reason: "pH high but pool is green. Shock chlorine first, adjust pH after 24-48 hrs."
+      });
+    } else if (ph > 7.6) {
+      // Standard dose: 0.5 gal per 10k (ops head confirmed)
+      // One dose max per visit, no split dosing
+      let acidGal = 0.5 * gal10k;
+      if (material === "fiberglass") acidGal *= 0.75; // gentler on fiberglass
+      acidGal = Math.min(acidGal, 1.0 * gal10k);     // never exceed 1 gal/10k
+      acidGal = Math.max(Math.round(acidGal * 4) / 4, 0.25); // round to nearest 0.25 gal
+      const fiberNote = material === "fiberglass" ? " (reduced — fiberglass surface is sensitive)" : "";
+      results.push({
+        name: "Muriatic Acid", status: ph >= 8.0 ? "bad" : "warning",
+        amt: acidGal.toFixed(2) + " gal",
+        reason: "Lower pH to 7.2-7.6. One dose max per visit — never split." + fiberNote
+      });
+    } else if (ph < 7.2) {
+      results.push({
+        name: "Soda Ash", status: "bad",
+        amt: "As needed",
+        reason: "pH below 7.2 — raise carefully. Test again before adding more."
+      });
+    }
+  }
 
-                let labelStr = item.title;
-                if (item.isRequired) labelStr += " <span style='color:red;'>*</span>";
-                group.innerHTML = `<label>${labelStr}</label>`;
-                if (item.helpText) {
-                    group.innerHTML += `<div class="help-text">${item.helpText}</div>`;
-                }
+  // ── 3. ALKALINITY INCREASER (Sodium Bicarb) ───────────────────────────────
+  // Skip if green — chlorine must work before balancing TA
+  if (ta !== null && !isGreen) {
+    if (ta < 80) {
+      const ppmNeeded = 100 - ta; // target 100 ppm midpoint of 80-120
+      const lbs = (1.4 * gal10k * (ppmNeeded / 10)).toFixed(1);
+      results.push({
+        name: "Alkalinity Increaser (Sodium Bicarb)", status: "warning",
+        amt: lbs + " lbs",
+        reason: "Raise TA to 100 ppm (target 80-120 ppm)"
+      });
+    }
+    // TA 80-120: in range, no action
+    // TA > 120: let acid additions bring it down naturally — no bicarb needed
+  }
 
-                const titleEscaped = item.title.replace(/"/g, '&quot;');
-                let inputHtml = '';
+  // ── 4. CALCIUM HARDNESS INCREASER ────────────────────────────────────────
+  // Skip if green
+  if (ch !== null && !isGreen) {
+    if (ch < 250) {
+      const ppmNeeded = 300 - ch; // target 300 midpoint of 250-350
+      const lbs = (1.2 * gal10k * (ppmNeeded / 10)).toFixed(1);
+      const plasterNote = material === "plaster"
+        ? " Keep CH toward upper range for plaster surfaces." : "";
+      results.push({
+        name: "Calcium Hardness Increaser", status: "warning",
+        amt: lbs + " lbs",
+        reason: "Raise CH to 300 ppm (target 250-350 ppm)." + plasterNote
+      });
+    }
+    if (ch > 450) {
+      // SA hard water — very common
+      results.push({
+        name: "Calcium (Very High)", status: "warning",
+        amt: "Partial drain",
+        reason: "CH above 450 — consider partial drain + refill. Common in SA hard water areas."
+      });
+    }
+  }
 
-                if (item.type === 'LIST' || item.type === 'MULTIPLE_CHOICE') {
-                    inputHtml = `<select name="${titleEscaped}" ${item.isRequired ? 'required' : ''}>
-                        <option value="">Select option...</option>
-                        ${item.choices.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('')}
-                    </select>`;
-                } else if (item.type === 'CHECKBOX') {
-                    inputHtml = item.choices.map(c => `
-                        <label class="checkbox-group">
-                            <input type="checkbox" name="${titleEscaped}" value="${c.replace(/"/g, '&quot;')}">
-                            <span style="font-weight:400;">${c}</span>
-                        </label>
-                    `).join('');
-                } else if (item.type === 'PARAGRAPH_TEXT') {
-                    inputHtml = `<textarea name="${titleEscaped}" ${item.isRequired ? 'required' : ''}></textarea>`;
-                } else {
-                    const isNumber = Object.values(TEST_FIELDS).includes(item.title) || (item.helpText && item.helpText.toLowerCase().includes('quantity'));
-                    inputHtml = `<input type="${isNumber ? 'number' : 'text'}" step="any" name="${titleEscaped}" ${item.isRequired ? 'required' : ''} oninput="runRecs()">`;
-                }
+  // ── 5. ALGAE PROTOCOL BANNER ──────────────────────────────────────────────
+  if (isGreen) {
+    results.unshift({
+      name: "ALGAE PROTOCOL", status: "bad",
+      amt: "Shock first",
+      reason: "Brush walls & floor. Shock with double chlorine. Wait 24-48 hrs before adjusting pH, TA, or CH."
+    });
+  }
 
-                group.innerHTML += inputHtml;
-                currentCard.appendChild(group);
+  return results;
+}
 
-                if (item.title && item.title.trim().toLowerCase() === "pool_id") {
-                    const volGroup = document.createElement('div');
-                    volGroup.className = 'form-group';
-                    volGroup.innerHTML = `
-                        <label>Estimated Pool Volume (Gallons)</label>
-                        <div class="help-text">Used solely for calculating exact dosages below.</div>
-                        <input type="number" id="custom_vol" value="10000" oninput="runRecs()">
-                    `;
-                    currentCard.appendChild(volGroup);
-                }
-            });
+// ══════════════════════════════════════════════════════════════════════════════
+// FORM MACHINERY
+// ══════════════════════════════════════════════════════════════════════════════
 
-            const btnWrapper = document.createElement('div');
-            btnWrapper.className = 'card';
-            btnWrapper.style.display = 'block';
-            btnWrapper.style.background = 'transparent';
-            btnWrapper.style.boxShadow = 'none';
-            btnWrapper.style.border = 'none';
-            btnWrapper.style.padding = '0';
-            btnWrapper.innerHTML = `<button type="button" class="btn-submit" id="btn-submit" onclick="submitForm()">Submit Log to MCPS</button>`;
-            container.appendChild(btnWrapper);
-        }
+let _formItems = [];
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
 
-        function getValByTitle(title) {
-            const el = document.querySelector(`[name="${title}"]`);
-            if (!el || !el.value) return null;
-            const v = parseFloat(el.value);
-            return isNaN(v) ? null : v;
-        }
+window.onload = () => {
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'get_metadata' })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.ok) renderForm(res.data);
+    else alert("Error loading form: " + res.error);
+  })
+  .catch(err => alert("Network error: " + err));
+};
 
-        function runRecs() {
-            const fc = getValByTitle(TEST_FIELDS.FC);
-            const ph = getValByTitle(TEST_FIELDS.PH);
-            const ta = getValByTitle(TEST_FIELDS.TA);
-            const ch = getValByTitle(TEST_FIELDS.CH);
+function renderForm(metadata) {
+  document.getElementById('loader-area').style.display = 'none';
+  _formItems = metadata;
+  const container = document.getElementById('form-container');
+  let currentCard = null;
 
-            const volEl = document.getElementById('custom_vol');
-            let gallons = 10000;
-            if (volEl && volEl.value) gallons = parseFloat(volEl.value) || 10000;
+  const createCard = (title) => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.style.display = 'block';
+    if (title) {
+      const h2 = document.createElement('h2');
+      h2.className = 'section-title';
+      h2.innerText = title;
+      div.appendChild(h2);
+    }
+    return div;
+  };
 
-            const calcBox  = document.getElementById('live-calc-box');
-            const calcList = document.getElementById('calc-items');
-            const volDisplay = document.getElementById('calc-vol-display');
+  currentCard = createCard("Visit Details");
+  container.appendChild(currentCard);
 
-            if (!calcBox || !calcList) return;
+  metadata.forEach(item => {
+    if (item.isSectionBreak) {
+      currentCard = createCard(item.title || "Chemical Log");
+      container.appendChild(currentCard);
 
-            const results = [];
-            volDisplay.innerText = `Vol: ${gallons.toLocaleString()} Gal`;
+      if (item.title && item.title.trim().toLowerCase() === "used") {
+        const recDiv = document.createElement('div');
+        recDiv.id = 'rec-box';
+        recDiv.className = 'rec-box';
+        recDiv.innerHTML =
+          '<div class="rec-box-header">Calculated Additions<span id="rec-vol-badge" class="rec-vol-badge">—</span></div>' +
+          '<div id="rec-flags" class="rec-flags"></div>' +
+          '<div id="rec-list" class="rec-list"></div>';
+        currentCard.appendChild(recDiv);
+      }
+      return;
+    }
 
-            let poolSize = "small";
-            if (gallons > 15000 && gallons <= 20000) poolSize = "medium";
-            else if (gallons > 20000) poolSize = "large";
+    const group = document.createElement('div');
+    group.className = 'form-group';
+    const labelStr = item.title + (item.isRequired ? " <span style='color:red'>*</span>" : "");
+    group.innerHTML = '<label>' + labelStr + '</label>';
+    if (item.helpText) group.innerHTML += '<div class="help-text">' + item.helpText + '</div>';
 
-            // 1. CHLORINE
-            if (fc !== null) {
-                if (poolSize === "small" || poolSize === "medium") {
-                    if (fc <= 2) results.push({ name: 'Liquid Chlorine', status: 'bad',     amt: '2 gal', reason: 'FC low' });
-                    else if (fc <= 4) results.push({ name: 'Liquid Chlorine', status: 'warning', amt: '1 gal', reason: 'FC maintaining' });
-                } else {
-                    if (fc <= 2) results.push({ name: 'Liquid Chlorine', status: 'bad',     amt: '3 gal', reason: 'FC low' });
-                    else if (fc <= 4) results.push({ name: 'Liquid Chlorine', status: 'warning', amt: '2 gal', reason: 'FC maintaining' });
-                }
-            }
+    const te = item.title.replace(/"/g, '&quot;');
+    let inputHtml = '';
 
-            // 2. PH (Muriatic Acid 31.45%)
-            if (ph !== null) {
-                if (ph >= 7.6) {
-                    let drop_needed = ph - 7.4;
-                    let dropRate = 0.15;
-                    if (ta !== null) {
-                        if (ta < 90)  dropRate = 0.20;
-                        else if (ta > 120) dropRate = 0.10;
-                    }
-                    let quartsNeeded = (drop_needed / dropRate) * (gallons / 10000);
-                    let galNeeded    = quartsNeeded / 4;
-                    let maxGal       = 0.25 * (gallons / 10000);
-                    let reasonStr    = 'Lower pH to 7.4 (factoring TA)';
-                    if (galNeeded > maxGal) { galNeeded = maxGal; reasonStr = 'Max safe dose applied to avoid crash'; }
-                    let flooredQuarters = Math.round(galNeeded * 4) / 4;
-                    if (flooredQuarters < 0.25) flooredQuarters = 0.25;
-                    let severity = ph >= 8.0 ? 'bad' : 'warning';
-                    results.push({ name: 'Muriatic Acid', status: severity, amt: flooredQuarters.toFixed(2) + ' gal', reason: reasonStr });
-                } else if (ph <= 7.0) {
-                    results.push({ name: 'Soda Ash', status: 'bad', amt: 'As needed', reason: 'pH low' });
-                }
-            }
+    if (item.type === 'LIST' || item.type === 'MULTIPLE_CHOICE') {
+      inputHtml = '<select name="' + te + '" ' + (item.isRequired ? 'required' : '') + ' onchange="runRecs()">' +
+        '<option value="">Select option...</option>' +
+        item.choices.map(function(c) {
+          return '<option value="' + c.replace(/"/g,'&quot;') + '">' + c + '</option>';
+        }).join('') + '</select>';
+    } else if (item.type === 'CHECKBOX') {
+      inputHtml = item.choices.map(function(c) {
+        return '<label class="checkbox-group"><input type="checkbox" name="' + te + '" value="' + c.replace(/"/g,'&quot;') + '" onchange="runRecs()"><span style="font-weight:400">' + c + '</span></label>';
+      }).join('');
+    } else if (item.type === 'PARAGRAPH_TEXT') {
+      inputHtml = '<textarea name="' + te + '" ' + (item.isRequired ? 'required' : '') + ' oninput="runRecs()"></textarea>';
+    } else {
+      const isNum = Object.values(TEST_FIELDS).indexOf(item.title) !== -1 ||
+        (item.helpText && item.helpText.toLowerCase().indexOf('quantity') !== -1);
+      inputHtml = '<input type="' + (isNum ? 'number' : 'text') + '" step="any" name="' + te + '" ' + (item.isRequired ? 'required' : '') + ' oninput="runRecs()">';
+    }
 
-            // 3. ALKALINITY — Alkalinity Increaser (Sodium Bicarb)
-            if (ta !== null && ta < 90) {
-                let ppm_inc = 100 - ta;
-                let lbs = 1.4 * (gallons / 10000) * (ppm_inc / 10);
-                results.push({ name: 'Alkalinity Increaser (Sodium Bicarb)', status: 'warning', amt: lbs.toFixed(1) + ' lbs', reason: 'Raise TA to 100ppm' });
-            }
+    group.innerHTML += inputHtml;
+    currentCard.appendChild(group);
 
-            // 4. CALCIUM
-            if (ch !== null && ch < 200) {
-                let ppm_inc = 200 - ch;
-                let lbs = 1.2 * (gallons / 10000) * (ppm_inc / 10);
-                results.push({ name: 'Calcium Hardness Increaser', status: 'warning', amt: lbs.toFixed(1) + ' lbs', reason: 'Raise CH to 200ppm' });
-            }
+    // After pool_id: inject material selector + condition pills
+    if (item.title && item.title.trim().toLowerCase() === 'pool_id') {
+      const matGroup = document.createElement('div');
+      matGroup.className = 'form-group';
+      matGroup.innerHTML =
+        '<label>Pool Material</label>' +
+        '<div class="help-text">Affects acid dosing. Fiberglass gets a gentler dose.</div>' +
+        '<select id="pool-material-select" onchange="runRecs()">' +
+        '<option value="plaster">Plaster</option>' +
+        '<option value="fiberglass">Fiberglass</option>' +
+        '<option value="vinyl">Vinyl</option>' +
+        '</select>';
+      currentCard.appendChild(matGroup);
 
-            if (results.length === 0) { calcBox.style.display = 'none'; return; }
+      const condGroup = document.createElement('div');
+      condGroup.className = 'form-group';
+      condGroup.innerHTML =
+        '<label>Pool Condition on Arrival</label>' +
+        '<div class="help-text">Tap if applicable — changes chlorine dosing protocol.</div>' +
+        '<div class="condition-pills">' +
+        '<div class="condition-pill" onclick="togglePill(this,false)" data-val="green">Green / Algae</div>' +
+        '<div class="condition-pill" onclick="togglePill(this,false)" data-val="cloudy">Cloudy</div>' +
+        '<div class="condition-pill" onclick="togglePill(this,true)" data-val="clear">Clear</div>' +
+        '</div>';
+      currentCard.appendChild(condGroup);
+    }
+  });
 
-            calcBox.style.display = 'block';
-            calcList.innerHTML = results.map(r => `
-                <div class="calc-item ${r.status}">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-weight:600">${r.name}</span>
-                        <span class="calc-amount">${r.amt}</span>
-                    </div>
-                    ${r.reason ? `<div style="font-size:0.75rem; color:var(--text-muted);">↳ ${r.reason}</div>` : ''}
-                </div>
-            `).join('');
-        }
+  const btnWrapper = document.createElement('div');
+  btnWrapper.className = 'card';
+  btnWrapper.style.cssText = 'display:block;background:transparent;box-shadow:none;border:none;padding:0;';
+  btnWrapper.innerHTML = '<button type="button" class="btn-submit" id="btn-submit" onclick="submitForm()">Submit Log to MCPS</button>';
+  container.appendChild(btnWrapper);
+}
 
-        function submitForm() {
-            const btn = document.getElementById('btn-submit');
-            const payload = {};
-            let hasError = false;
+function togglePill(el, isOk) {
+  const wasActive = el.classList.contains('active') || el.classList.contains('active-ok');
+  document.querySelectorAll('.condition-pill').forEach(function(p) {
+    p.classList.remove('active', 'active-ok');
+  });
+  if (!wasActive) el.classList.add(isOk ? 'active-ok' : 'active');
+  runRecs();
+}
 
-            _formItems.forEach(item => {
-                if (!item.title) return;
-                let val;
-                if (item.type === 'CHECKBOX') {
-                    const boxes = document.querySelectorAll(`input[name="${item.title.replace(/"/g, '&quot;')}"]:checked`);
-                    val = Array.from(boxes).map(b => b.value);
-                    if (val.length === 0) val = null;
-                } else {
-                    const el = document.querySelector(`[name="${item.title.replace(/"/g, '&quot;')}"]`);
-                    if (el) val = el.value.trim();
-                }
-                if (item.isRequired && (!val || (Array.isArray(val) && val.length === 0))) hasError = true;
-                if (val) payload[item.title] = val;
-            });
+function getNum(title) {
+  const el = document.querySelector('[name="' + title + '"]');
+  if (!el || !el.value) return null;
+  const v = parseFloat(el.value);
+  return isNaN(v) ? null : v;
+}
 
-            if (hasError) { alert("Please fill out all required fields marked with *"); return; }
+function runRecs() {
+  const fc = getNum(TEST_FIELDS.FC);
+  const ph = getNum(TEST_FIELDS.PH);
+  const ta = getNum(TEST_FIELDS.TA);
+  const ch = getNum(TEST_FIELDS.CH);
 
-            btn.disabled    = true;
-            btn.innerText   = "Submitting...";
+  const poolEl = document.querySelector('[name="pool_id"]');
+  const gallons = sizeToGallons(poolEl ? poolEl.value : "");
+  const material = getPoolMaterial();
+  const isGreen  = getIsGreen();
+  const isSummer = SUMMER_MONTHS.indexOf(new Date().getMonth() + 1) !== -1;
 
-            fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'submit_form', data: payload })
-            })
-            .then(r => r.json())
-            .then(res => {
-                if (res.ok) {
-                    document.body.innerHTML = `
-                        <div style="text-align:center; padding:4rem 1rem; font-family:'Inter',sans-serif;">
-                            <div style="font-size:4rem; margin-bottom:1rem;">✅</div>
-                            <div style="font-family:'Oswald',sans-serif; font-size:2rem; font-weight:700; letter-spacing:0.1em; color:#0d4d44; margin-bottom:0.5rem;">SUBMITTED</div>
-                            <p style="color:#64748b; font-size:1rem; margin-bottom:2rem;">Log written, inventory deducted, and email blasted.</p>
-                            <button onclick="window.location.reload()" style="padding:1rem 2rem; background:#0d4d44; color:white; border:none; border-radius:12px; font-family:'Oswald',sans-serif; font-size:1.1rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer;">
-                                Log Another Pool
-                            </button>
-                        </div>`;
-                } else {
-                    alert("Error: " + res.error);
-                    btn.disabled  = false;
-                    btn.innerText = "Submit Log to MCPS";
-                }
-            })
-            .catch(err => {
-                alert("Network error: " + err);
-                btn.disabled  = false;
-                btn.innerText = "Submit Log to MCPS";
-            });
-        }
-    </script>
+  const recBox   = document.getElementById('rec-box');
+  const recList  = document.getElementById('rec-list');
+  const recFlags = document.getElementById('rec-flags');
+  const volBadge = document.getElementById('rec-vol-badge');
+  if (!recBox || !recList) return;
+
+  if (fc === null && ph === null && ta === null && ch === null && !isGreen) {
+    recBox.style.display = 'none';
+    return;
+  }
+
+  const recs = buildRecs(fc, ph, ta, ch, gallons, material, isGreen);
+
+  if (volBadge) volBadge.textContent = (gallons / 1000).toFixed(0) + 'K gal';
+
+  const flags = [];
+  if (isSummer) flags.push('<span class="rec-flag summer">Summer +50% Cl</span>');
+  if (isGreen)  flags.push('<span class="rec-flag green">Algae Protocol Active</span>');
+  if (material === 'fiberglass') flags.push('<span class="rec-flag fiber">Fiberglass — reduced acid</span>');
+  if (material === 'plaster')    flags.push('<span class="rec-flag plstr">Plaster — watch CH</span>');
+  recFlags.innerHTML = flags.join('');
+
+  if (!recs.length) { recBox.style.display = 'none'; return; }
+
+  recBox.style.display = 'block';
+  recList.innerHTML = recs.map(function(r) {
+    return '<div class="rec-item ' + r.status + '">' +
+      '<div class="rec-item-top">' +
+      '<span class="rec-item-name">' + r.name + '</span>' +
+      '<span class="rec-item-amt">' + r.amt + '</span>' +
+      '</div>' +
+      '<div class="rec-item-reason">↳ ' + r.reason + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function submitForm() {
+  const btn = document.getElementById('btn-submit');
+  const payload = {};
+  let hasError = false;
+
+  _formItems.forEach(function(item) {
+    if (!item.title) return;
+    let val;
+    if (item.type === 'CHECKBOX') {
+      const boxes = document.querySelectorAll('input[name="' + item.title.replace(/"/g,'&quot;') + '"]:checked');
+      val = Array.from(boxes).map(function(b) { return b.value; });
+      if (!val.length) val = null;
+    } else {
+      const el = document.querySelector('[name="' + item.title.replace(/"/g,'&quot;') + '"]');
+      if (el) val = el.value.trim();
+    }
+    if (item.isRequired && (!val || (Array.isArray(val) && !val.length))) hasError = true;
+    if (val) payload[item.title] = val;
+  });
+
+  // Append pool condition to notes
+  const activePill = document.querySelector('.condition-pill.active');
+  if (activePill) {
+    const cond = activePill.dataset.val;
+    payload['Notes'] = ((payload['Notes'] || '') + ' [Condition on arrival: ' + cond + ']').trim();
+  }
+
+  if (hasError) { alert("Please fill out all required fields marked with *"); return; }
+
+  btn.disabled = true;
+  btn.innerText = "Submitting...";
+
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({ secret: 'mcps_webhook_2026', action: 'submit_form', data: payload })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.ok) {
+      document.body.innerHTML =
+        '<div style="text-align:center;padding:4rem 1rem;font-family:Inter,sans-serif;">' +
+        '<div style="font-size:4rem;margin-bottom:1rem;">&#x2705;</div>' +
+        '<div style="font-family:Oswald,sans-serif;font-size:2rem;font-weight:700;letter-spacing:0.1em;color:#0d4d44;margin-bottom:0.5rem;">SUBMITTED</div>' +
+        '<p style="color:#64748b;font-size:1rem;margin-bottom:2rem;">Log written, inventory deducted, and email sent.</p>' +
+        '<button onclick="window.location.reload()" style="padding:1rem 2rem;background:#0d4d44;color:white;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1.1rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;">Log Another Pool</button>' +
+        '</div>';
+    } else {
+      alert("Error: " + res.error);
+      btn.disabled = false;
+      btn.innerText = "Submit Log to MCPS";
+    }
+  })
+  .catch(function(err) {
+    alert("Network error: " + err);
+    btn.disabled = false;
+    btn.innerText = "Submit Log to MCPS";
+  });
+}
+</script>
 </body>
 </html>
