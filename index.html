@@ -534,11 +534,7 @@ table.ut tr:last-child td{border-bottom:none}
         </div>
       </div>
  
-      <div class="dfg">
-        <label>Operator Name</label>
-        <input class="si" type="text" id="d-opname" placeholder="Eduardo García">
-        <span class="dfg-hint">Must match exactly what's in the Routes sheet Operator column.</span>
-      </div>
+
  
       <div class="dfg">
         <label>Available Days</label>
@@ -1529,7 +1525,7 @@ function saveUser() {
     ? document.getElementById('d-uname').value.trim().toLowerCase()
     : _editingUsername;
   const password = document.getElementById('d-pass').value.trim();
-  const opName   = document.getElementById('d-opname').value.trim();
+
  
   // Collect roles
   const roles = Array.from(document.querySelectorAll('#role-checkboxes input:checked'))
@@ -1561,7 +1557,7 @@ function saveUser() {
       password,
       name,
       roles   : roles.join(','),
-      operator_name  : opName,
+      operator_name  : name, // Default to full name
       available_days : days.join(','),
     }).then(res => {
       btn.disabled = false; btn.textContent = 'Save User';
@@ -1578,7 +1574,7 @@ function saveUser() {
     const fields = {
       name,
       roles          : roles.join(','),
-      operator_name  : opName,
+      operator_name  : name,
       available_days : days.join(','),
       active,
     };
