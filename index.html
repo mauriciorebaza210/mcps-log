@@ -1272,9 +1272,12 @@ function renderSvcForm(meta){
     if(item.title&&item.title.trim().toLowerCase()==='pool_id'){
       const mg=document.createElement('div');mg.className='sfg';
       mg.innerHTML='<label>Pool Material</label><span class="sh">Affects acid dose — fiberglass gets reduced amount.</span><select class="si" id="svc-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
+      const pg=document.createElement('div');pg.className='sfg';
+      pg.innerHTML='<label>Pool Size</label><span class="sh">Used for chemical dosing calculations.</span><select class="si" id="svc-size" onchange="runRecs()"><option value="small">Small (~12,000 gal)</option><option value="medium">Medium (~17,500 gal)</option><option value="large">Large (~25,000 gal)</option></select>';
+      card.appendChild(pg);
       card.appendChild(mg);
       const cg=document.createElement('div');cg.className='sfg';
-      cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,false)" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,false)" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,true)" data-val="clear">Clear</div></div>';
+      cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,\'green\')" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,\'cloudy\')" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,\'clear\')" data-val="clear">Clear</div></div>';
       card.appendChild(cg);
     }
   });
@@ -1304,7 +1307,7 @@ function renderSvcForm(meta){
 }
 
 function mkCard(t){const d=document.createElement('div');d.className='svc-card';if(t){const h=document.createElement('div');h.className='svc-stitle';h.textContent=t;d.appendChild(h);}return d;}
-function tCond(el,ok){const was=el.classList.contains('active')||el.classList.contains('active-ok');document.querySelectorAll('.cpill').forEach(p=>p.classList.remove('active','active-ok'));if(!was)el.classList.add(ok?'active-ok':'active');runRecs();}
+function tCond(el,type){const was=el.classList.contains('active')||el.classList.contains('active-ok')||el.classList.contains('active-cloudy');document.querySelectorAll('.cpill').forEach(p=>p.classList.remove('active','active-ok','active-cloudy'));if(!was)el.classList.add(type==='green'?'active':type==='clear'?'active-ok':'active-cloudy');runRecs();}
 
 function gn(t){const el=document.querySelector('[name="'+t+'"]');if(!el||!el.value)return null;const v=parseFloat(el.value);return isNaN(v)?null:v;}
 function s2g(v){const s=String(v||'').toLowerCase();if(s.includes('large')||s.includes('>20'))return SG.large;if(s.includes('medium')||s.includes('15,000'))return SG.medium;return SG.small;}
@@ -1312,7 +1315,8 @@ function s2g(v){const s=String(v||'').toLowerCase();if(s.includes('large')||s.in
 function runRecs(){
   const fc=gn(TF.FC),ph=gn(TF.PH),ta=gn(TF.TA),ch=gn(TF.CH);
   const pe=document.querySelector('[name="pool_id"]');
-  const gal=s2g(pe?pe.value:'');
+  const szEl=document.getElementById('svc-size');
+  const gal=szEl?SG[szEl.value]||SG.small:s2g(pe?pe.value:'');
   const mat=(document.getElementById('svc-mat')||{value:'plaster'}).value;
   const isG=!!document.querySelector('.cpill.active');
   const isS=SM.indexOf(new Date().getMonth()+1)!==-1;
@@ -1329,7 +1333,7 @@ function runRecs(){
 function buildRecs(fc,ph,ta,ch,gal,mat,isG){
   const res=[],isS=SM.indexOf(new Date().getMonth()+1)!==-1,g=gal/10000;
   if(fc!==null){let b=1*g;if(isS)b*=1.5;if(isG)res.push({name:'Liquid Chlorine',status:'bad',amt:(b*2).toFixed(1)+' gal',reason:'Green/algae — shock dose. Balance chem after 24-48 hrs.'});else if(fc<2)res.push({name:'Liquid Chlorine',status:'bad',amt:(b*2).toFixed(1)+' gal',reason:'FC critically low — double dose'+(isS?' + summer ×1.5':'')});else if(fc<3)res.push({name:'Liquid Chlorine',status:'warning',amt:b.toFixed(1)+' gal',reason:'FC below target 3-5 ppm'+(isS?' (summer ×1.5)':'')});else if(fc<=5)res.push({name:'Liquid Chlorine',status:'good',amt:b.toFixed(1)+' gal',reason:'FC in range — maintenance dose'+(isS?' (summer ×1.5)':'')});}
-  if(ph!==null){if(isG&&ph>7.6)res.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'Green pool: shock first, adjust pH after 24-48 hrs.'});else if(ph>7.6){let a=0.5*g;if(mat==='fiberglass')a*=0.75;a=Math.min(a,1*g);a=Math.max(Math.round(a*4)/4,0.25);res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2-7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});}else if(ph<7.2)res.push({name:'Soda Ash',status:'bad',amt:'As needed',reason:'pH below 7.2 — raise carefully.'});}
+  if(ph!==null){if(isG&&ph>7.6)res.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'Green pool: shock first, adjust pH after 24-48 hrs.'});else if(ph>7.6){let a=0.5*g;if(mat==='fiberglass')a*=0.75;a=Math.min(a,1*g);a=Math.max(Math.round(a*4)/4,0.25);res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2-7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});}}
   if(ta!==null&&ta<80&&!isG)res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:(1.4*g*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80-120)'});
   if(ch!==null&&!isG){if(ch<250)res.push({name:'Calcium Hardness Increaser',status:'warning',amt:(1.2*g*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250-350).'+(mat==='plaster'?' Upper range for plaster.':'')});if(ch>450)res.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA.'});}
   if(isG)res.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH/TA/CH.'});
@@ -1346,7 +1350,7 @@ function submitSvc(){
     if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
     if(val)payload[item.title]=val;
   });
-  const ap = document.querySelector('.cpill.active');
+  const ap = document.querySelector('.cpill.active, .cpill.active-cloudy');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
   if(hasErr){alert('Fill out all required fields.');return;}
   btn.disabled=true;
