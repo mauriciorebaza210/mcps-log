@@ -836,7 +836,7 @@ function renderRoutePage(){
 
   tabsEl.innerHTML = days.map(d=>{
     const isToday = d.day === today;
-    const count   = d.pool_count;
+    const count   = (d.pools || []).length;
     const locked  = d.locked;
     const dateStr = d.date ? (() => {
       const [y,mo,dy] = d.date.split('-').map(Number);
@@ -852,8 +852,8 @@ function renderRoutePage(){
   // Auto-select today if has pools, else first day with pools, else Monday
   let autoDay = null;
   const todayData = days.find(d=>d.day===today);
-  if(todayData && todayData.pool_count>0) autoDay=today;
-  if(!autoDay) { const fd=days.find(d=>d.pool_count>0); if(fd)autoDay=fd.day; }
+  if(todayData && (todayData.pools || []).length > 0) autoDay=today;
+  if(!autoDay) { const fd=days.find(d=>(d.pools || []).length > 0); if(fd)autoDay=fd.day; }
   if(!autoDay) autoDay=days[0]&&days[0].day;
 
   selectDay(autoDay || today);
@@ -1449,7 +1449,7 @@ function openUserDrawer(username) {
   document.getElementById('d-name').value    = '';
   document.getElementById('d-uname').value   = '';
   document.getElementById('d-pass').value    = '';
-  document.getElementById('d-opname').value  = '';
+
   document.getElementById('drawer-msg').style.display = 'none';
  
   // Uncheck all roles and days
@@ -1481,7 +1481,7 @@ function openUserDrawer(username) {
     document.getElementById('d-uname').disabled         = true; // username immutable
     document.getElementById('uname-hint').style.display = 'block';
     document.getElementById('d-pass-optional').style.display = 'inline';
-    document.getElementById('d-opname').value           = user.operator_name || '';
+
  
     // Set roles
     const roles = Array.isArray(user.roles) ? user.roles : String(user.roles||'').split(',').map(r=>r.trim());
