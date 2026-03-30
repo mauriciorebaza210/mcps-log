@@ -1418,23 +1418,23 @@ function loadUsers() {
 }
  
 function renderUserTable(users) {
-  const tb = document.getElementById('utbody');
+  const tb = document.getElementById('user-tbody'); // Corrected ID
+  if (!tb) return;
   if (!users.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet. Click + Add User to create one.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';
     return;
   }
   tb.innerHTML = users.map(u => {
-    const roles = Array.isArray(u.roles) ? u.roles : [u.role||'—'];
+    const roles = Array.isArray(u.roles) ? u.roles : String(u.roles||'').split(',').map(r=>r.trim());
     const days  = u.available_days
       ? String(u.available_days).split(',').map(d=>d.trim().slice(0,3)).join(', ')
       : '<span class="no-days">Not set</span>';
     const active = u.active === true || String(u.active).toUpperCase() === 'TRUE';
-    return `<tr onclick="openUserDrawer('${u.username}')">
+    return `<tr onclick="openUserDrawer('${u.username}')" style="cursor:pointer">
       <td style="font-weight:600">${u.name||'—'}</td>
-      <td style="color:var(--muted);font-size:.82rem">${u.username}</td>
-      <td class="roles-cell">${roles.join(', ')}</td>
-      <td style="font-size:.82rem;color:var(--muted)">${u.operator_name||'—'}</td>
-      <td class="days-cell">${days}</td>
+      <td style="color:var(--muted)">${u.username}</td>
+      <td>${roles.join(', ')}</td>
+      <td>${days}</td>
       <td><span class="dot ${active?'on':'off'}"></span>${active?'Active':'Inactive'}</td>
     </tr>`;
   }).join('');
