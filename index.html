@@ -484,7 +484,7 @@ table.ut tr:last-child td{border-bottom:none}
           <th>Name</th><th>Username</th><th>Roles</th>
           <th>Operator Name</th><th>Available Days</th><th>Status</th>
         </tr></thead>
-        <tbody id="utbody">
+        <tbody id="user-tbody">
           <tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr>
         </tbody>
       </table>
@@ -1418,14 +1418,15 @@ function loadUsers() {
 }
  
 function renderUserTable(users) {
-  const tb = document.getElementById('user-tbody'); // Corrected ID
+  const tb = document.getElementById('user-tbody');
   if (!tb) return;
   if (!users.length) {
-    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';
     return;
   }
   tb.innerHTML = users.map(u => {
     const roles = Array.isArray(u.roles) ? u.roles : String(u.roles||'').split(',').map(r=>r.trim());
+    const operatorName = u.operator_name || u.name || '—';
     const days  = u.available_days
       ? String(u.available_days).split(',').map(d=>d.trim().slice(0,3)).join(', ')
       : '<span class="no-days">Not set</span>';
@@ -1434,6 +1435,7 @@ function renderUserTable(users) {
       <td style="font-weight:600">${u.name||'—'}</td>
       <td style="color:var(--muted)">${u.username}</td>
       <td>${roles.join(', ')}</td>
+      <td>${operatorName}</td>
       <td>${days}</td>
       <td><span class="dot ${active?'on':'off'}"></span>${active?'Active':'Inactive'}</td>
     </tr>`;
