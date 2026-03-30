@@ -471,7 +471,13 @@ table.ut tr:last-child td{border-bottom:none}
 <!-- ── REPLACE the entire id="page-admin" div with this ── -->
  
 <div class="pf" id="page-admin">
- 
+
+  <div style="padding:.85rem 1.1rem;border-top:1px solid var(--border)">
+    <button class="adm-new-btn" style="background:var(--teal)" onclick="recalculateRoutes()">
+      🔄 Recalculate All Routes
+    </button>
+  </div>
+  
   <!-- User table -->
   <div class="adm-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -770,6 +776,27 @@ function loadRoutes(opOverride) {
       document.getElementById('route-loading').style.display='none';
       document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
       document.getElementById('route-content').style.display='block';
+    });
+}
+
+function recalculateRoutes() {
+  if (!confirm('⚠️ Recalculate ALL routes?\n\nThis will reassign every un-pinned pool. Pinned pools stay put. Locked days are not affected.\n\nContinue?')) return;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Recalculating...';
+  api({ secret: SEC, action: 'recalculate_routes', token: _s.token })
+    .then(res => {
+      btn.disabled = false; btn.textContent = '🔄 Recalculate All Routes';
+      if (res.ok) {
+        _routeData = null;
+        alert('✅ Routes recalculated successfully!');
+        if (_curPage === 'live_map') loadRoutes();
+      } else {
+        alert('Error: ' + (res.error || 'Unknown'));
+      }
+    })
+    .catch(e => {
+      btn.disabled = false; btn.textContent = '🔄 Recalculate All Routes';
+      alert('Network error: ' + e.message);
     });
 }
 
