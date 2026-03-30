@@ -286,6 +286,18 @@ table.ut tr:last-child td{border-bottom:none}
 .im.ok{background:#d1fae5;color:#065f46}.im.err{background:#fef2f2;color:var(--error)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
 .dot.on{background:var(--success)}.dot.off{background:#cbd5e1}
+  /* ── PHOTO UPLOAD ─────────────────────────────────────────────────────────── */
+.photo-upload-area{border:2px dashed var(--border);border-radius:12px;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);position:relative}
+.photo-upload-area:hover,.photo-upload-area.drag-over{border-color:var(--teal-mid);background:var(--teal-glow)}
+.photo-upload-area input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.pu-icon{font-size:2rem;margin-bottom:.4rem}
+.pu-label{font-size:.88rem;font-weight:600;color:var(--teal-mid)}
+.pu-sub{font-size:.75rem;color:var(--muted);margin-top:.2rem}
+.photo-preview-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.6rem;margin-top:.85rem}
+.photo-thumb{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:4/3;background:var(--surface);border:1px solid var(--border)}
+.photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-thumb-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;line-height:1}
+.photo-count-badge{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.06em;padding:.18rem .6rem;border-radius:99px;background:var(--teal-glow);color:var(--teal-mid);display:inline-block;margin-top:.5rem}
 </style>
 </head>
 <body>
@@ -903,6 +915,27 @@ function renderSvcForm(meta){
       card.appendChild(cg);
     }
   });
+  // ── Photo upload card ──────────────────────────────────────────────────────
+  window._svcPhotos = [];
+  const photoCard = mkCard('📸 Visit Photos');
+  photoCard.innerHTML += `
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .85rem">
+      Optional — attach up to 4 photos (before/after, equipment, water).
+    </p>
+    <div class="photo-upload-area" id="photo-drop-zone"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handlePhotoDrop(event)">
+      <input type="file" id="photo-file-input" accept="image/*" multiple
+             onchange="handlePhotoSelect(this)">
+      <div class="pu-icon">📷</div>
+      <div class="pu-label">Tap to take photo or choose from library</div>
+      <div class="pu-sub">JPEG · PNG · max 4 photos · 10 MB each</div>
+    </div>
+    <div class="photo-preview-grid" id="photo-preview-grid" style="display:none"></div>
+    <div style="text-align:center" id="photo-count-wrap"></div>
+  `;
+  root.appendChild(photoCard);
   const sc=mkCard('');sc.style.cssText='background:transparent;box-shadow:none;border:none;padding:0';
   sc.innerHTML='<button class="btn-svc" id="btn-svc" onclick="submitSvc()">Submit Log to MCPS</button>';root.appendChild(sc);
 }
@@ -953,14 +986,82 @@ function submitSvc(){
   const ap=document.querySelector('.cpill.active');
   if(ap)payload['Notes']=((payload['Notes']||'')+' [Condition: '+ap.dataset.val+']').trim();
   if(hasErr){alert('Fill out all required fields.');return;}
-  btn.disabled=true;btn.textContent='Submitting...';
-  api({secret:SEC,action:'submit_form',token:_s.token,data:payload}).then(res=>{
+  btn.disabled=true;
+  btn.textContent=(window._svcPhotos&&window._svcPhotos.length)
+    ?'Uploading '+window._svcPhotos.length+' photo(s)...'
+    :'Submitting...';
+  api({secret:SEC,action:'submit_form',token:_s.token,data:payload,photos:window._svcPhotos||[]}).then(res=>{
     if(res.ok){
-      document.getElementById('svc-root').innerHTML='<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3.5rem;margin-bottom:1rem">✅</div><div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div><p style="color:#64748b;margin-bottom:1.5rem">Log written, inventory deducted, email sent.</p><button onclick="resetSvc()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button></div>';
+      const pc=(window._svcPhotos||[]).length;
+      document.getElementById('svc-root').innerHTML='<div style="text-align:center;padding:3rem 1rem">'
+        +'<div style="font-size:3.5rem;margin-bottom:1rem">✅</div>'
+        +'<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'
+        +'<p style="color:#64748b;margin-bottom:.35rem">Log written, inventory deducted, email sent.</p>'
+        +(pc?'<p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">📸 '+pc+' photo'+(pc>1?'s':'')+' saved to Drive.</p>':'<br>')
+        +'<button onclick="resetSvc()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'
+        +'</div>';
     }else{alert('Error: '+res.error);btn.disabled=false;btn.textContent='Submit Log to MCPS';}
   }).catch(e=>{alert('Network error: '+e.message);btn.disabled=false;btn.textContent='Submit Log to MCPS';});
 }
+// ── Photo handlers ──────────────────────────────────────────────────────────
+const MAX_PHOTOS = 4;
+const MAX_BYTES  = 10 * 1024 * 1024;
 
+function handlePhotoSelect(input) {
+  addPhotos_(Array.from(input.files || []));
+  input.value = '';
+}
+
+function handlePhotoDrop(event) {
+  event.preventDefault();
+  document.getElementById('photo-drop-zone').classList.remove('drag-over');
+  addPhotos_(Array.from(event.dataTransfer.files || []).filter(f => f.type.startsWith('image/')));
+}
+
+function addPhotos_(files) {
+  const remaining = MAX_PHOTOS - window._svcPhotos.length;
+  const toAdd = files.slice(0, remaining);
+  if (files.length > remaining) alert('Max 4 photos per visit. Only the first ' + remaining + ' were added.');
+  let pending = toAdd.length;
+  if (!pending) return;
+  toAdd.forEach(file => {
+    if (file.size > MAX_BYTES) { alert(file.name + ' is too large (max 10 MB).'); pending--; if (!pending) renderPhotoPreviews_(); return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      window._svcPhotos.push({ base64: e.target.result.split(',')[1], mimeType: file.type || 'image/jpeg', name: file.name });
+      pending--;
+      if (!pending) renderPhotoPreviews_();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function removePhoto_(idx) {
+  window._svcPhotos.splice(idx, 1);
+  renderPhotoPreviews_();
+}
+
+function renderPhotoPreviews_() {
+  const grid      = document.getElementById('photo-preview-grid');
+  const countWrap = document.getElementById('photo-count-wrap');
+  const dropZone  = document.getElementById('photo-drop-zone');
+  if (!grid) return;
+  if (!window._svcPhotos.length) {
+    grid.style.display = 'none';
+    countWrap.innerHTML = '';
+    dropZone.style.display = 'block';
+    return;
+  }
+  dropZone.style.display = window._svcPhotos.length >= MAX_PHOTOS ? 'none' : 'block';
+  grid.style.display = 'grid';
+  countWrap.innerHTML = '<span class="photo-count-badge">' + window._svcPhotos.length + ' / ' + MAX_PHOTOS + ' photos</span>';
+  grid.innerHTML = window._svcPhotos.map((p, i) =>
+    `<div class="photo-thumb">
+      <img src="data:${p.mimeType};base64,${p.base64}" alt="Photo ${i+1}">
+      <button class="photo-thumb-remove" onclick="removePhoto_(${i})">✕</button>
+    </div>`
+  ).join('');
+}
 function resetSvc(){
   _formItems=[];
   document.getElementById('svc-root').style.display='none';
@@ -1266,6 +1367,84 @@ function showMsg(el, text, ok) {
 }
 .drawer-save-btn:hover { background:var(--teal-mid); }
 .drawer-save-btn:disabled { background:#cbd5e1;cursor:not-allowed; }
+
+.photo-upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--surface);
+  position: relative;
+}
+.photo-upload-area:hover,
+.photo-upload-area.drag-over {
+  border-color: var(--teal-mid);
+  background: var(--teal-glow);
+}
+.photo-upload-area input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.pu-icon  { font-size: 2rem; margin-bottom: .4rem; }
+.pu-label { font-size: .88rem; font-weight: 600; color: var(--teal-mid); }
+.pu-sub   { font-size: .75rem; color: var(--muted); margin-top: .2rem; }
+ 
+/* Photo preview grid */
+.photo-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .6rem;
+  margin-top: .85rem;
+}
+.photo-thumb {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 4/3;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-thumb-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.6);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.photo-count-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: .18rem .6rem;
+  border-radius: 99px;
+  background: var(--teal-glow);
+  color: var(--teal-mid);
+  display: inline-block;
+  margin-top: .5rem;
+}
 </style>
 </body>
 </html>
