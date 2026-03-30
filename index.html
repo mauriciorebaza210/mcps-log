@@ -1319,8 +1319,8 @@ function submitSvc(){
     if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
     if(val)payload[item.title]=val;
   });
-  const ap=document.querySelector('.cpill.active');
-  if(ap)payload['Notes']=((payload['Notes']||'')+' [Condition: '+ap.dataset.val+']').trim();
+  const ap = document.querySelector('.cpill.active');
+  if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
   if(hasErr){alert('Fill out all required fields.');return;}
   btn.disabled=true;
   btn.textContent=(window._svcPhotos&&window._svcPhotos.length)
