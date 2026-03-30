@@ -298,6 +298,47 @@ table.ut tr:last-child td{border-bottom:none}
 .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .photo-thumb-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;line-height:1}
 .photo-count-badge{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.06em;padding:.18rem .6rem;border-radius:99px;background:var(--teal-glow);color:var(--teal-mid);display:inline-block;margin-top:.5rem}
+
+/* ── INVENTORY ──────────────────────────────────────────────────────────── */
+.inv-tab-bar{display:flex;gap:.4rem;margin-bottom:1.25rem}
+.inv-tab{flex:1;padding:.55rem .5rem;border-radius:10px;border:1.5px solid var(--border);background:var(--card);font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;color:var(--muted);transition:all .15s;text-align:center}
+.inv-tab:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.inv-tab.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.inv-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1.25rem}
+.inv-stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:.9rem .75rem;text-align:center}
+.inv-stat-num{font-family:'Oswald',sans-serif;font-size:1.75rem;font-weight:700;line-height:1}
+.inv-stat-lbl{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:.25rem}
+.inv-stat.out-stat .inv-stat-num{color:var(--error)}
+.inv-stat.low-stat .inv-stat-num{color:var(--warn)}
+.inv-stat.ok-stat .inv-stat-num{color:var(--success)}
+.inv-action-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.25rem}
+.inv-action-btn{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.06em;padding:.5rem .9rem;border-radius:10px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;color:var(--text);transition:all .15s;white-space:nowrap}
+.inv-action-btn:hover{border-color:var(--teal-light);background:var(--teal-glow);color:var(--teal)}
+.inv-action-btn:disabled{opacity:.45;cursor:not-allowed}
+.status-badge{display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.18rem .55rem;border-radius:5px}
+.status-badge.ok{background:#dcfce7;color:#15803d}
+.status-badge.low{background:#fef3c7;color:#92400e}
+.status-badge.out{background:#fee2e2;color:#b91c1c}
+.inv-tbl{width:100%;border-collapse:collapse}
+.inv-tbl th{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border);background:var(--surface)}
+.inv-tbl td{padding:.7rem .9rem;border-bottom:1px solid #f1f5f9;font-size:.85rem}
+.inv-tbl tr:last-child td{border-bottom:none}
+.inv-tbl tr.row-out{background:#fff5f5}
+.inv-tbl tr.row-low{background:#fffbeb}
+.inv-empty{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:.9rem}
+.pend-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:.75rem}
+.pend-sku{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+.pend-desc{font-size:.92rem;font-weight:600;margin:.2rem 0 .5rem}
+.pend-ai{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.75rem}
+.pend-ai-pill{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.05em;padding:.15rem .5rem;border-radius:5px;background:var(--surface);border:1px solid var(--border);color:var(--muted)}
+.pend-ai-pill.conf-high{background:#dcfce7;border-color:#bbf7d0;color:#15803d}
+.pend-ai-pill.conf-medium{background:#fef3c7;border-color:#fde68a;color:#92400e}
+.pend-ai-pill.conf-low{background:#fee2e2;border-color:#fecaca;color:#b91c1c}
+.pend-btns{display:flex;gap:.5rem}
+.pend-approve{flex:1;padding:.5rem;border-radius:9px;background:var(--teal);color:#fff;border:none;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+.pend-approve:hover{background:var(--teal-mid)}
+.pend-reject{padding:.5rem 1rem;border-radius:9px;background:transparent;color:var(--muted);border:1.5px solid var(--border);font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s}
+.pend-reject:hover{background:#fee2e2;border-color:#fca5a5;color:#b91c1c}
 </style>
 </head>
 <body>
@@ -465,6 +506,20 @@ table.ut tr:last-child td{border-bottom:none}
 </div>
  
 
+    <!-- Inventory -->
+    <div class="pf" id="page-inventory">
+      <div id="inv-loading" class="route-loading"><div class="spinner"></div></div>
+      <div id="inv-root" style="display:none"></div>
+    </div>
+
+    <!-- Quotes placeholder -->
+    <div class="pf" id="page-quotes">
+      <div style="text-align:center;padding:4rem 1rem;color:var(--muted)">
+        <div style="font-size:2.5rem;margin-bottom:.75rem">📄</div>
+        <div style="font-size:.9rem;font-weight:500">Quote calculator coming soon.</div>
+      </div>
+    </div>
+
   </div><!-- /page-wrap -->
   <nav class="bottom-nav" id="bnav"></nav>
 </div>
@@ -597,6 +652,7 @@ function navigateTo(page){
   location.hash=page==='home'?'':page;
   if(page==='live_map'&&!_routeData) loadRoutes();
   if(page==='service_log'&&!_formItems.length) loadServiceLog();
+  if(page==='inventory'&&!_invLoaded) loadInventory();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1276,6 +1332,253 @@ function showMsg(el, text, ok) {
   el.className   = 'im ' + (ok ? 'ok' : 'err');
   el.style.display = 'block';
   setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INVENTORY
+// ══════════════════════════════════════════════════════════════════════════════
+let _invLoaded = false;
+let _invData   = null;
+let _invTab    = 'stock';
+
+function loadInventory() {
+  _invLoaded = true;
+  document.getElementById('inv-loading').style.display = 'block';
+  document.getElementById('inv-root').style.display    = 'none';
+  apiGet({ action:'get_inventory', token:_s.token })
+    .then(res => {
+      document.getElementById('inv-loading').style.display = 'none';
+      document.getElementById('inv-root').style.display    = 'block';
+      if (!res.ok) {
+        document.getElementById('inv-root').innerHTML =
+          `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error||'Failed to load inventory.'}</div></div>`;
+        return;
+      }
+      _invData = res.data;
+      renderInventoryPage();
+    })
+    .catch(e => {
+      document.getElementById('inv-loading').style.display = 'none';
+      document.getElementById('inv-root').style.display    = 'block';
+      document.getElementById('inv-root').innerHTML =
+        `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
+    });
+}
+
+function renderInventoryPage() {
+  const root    = document.getElementById('inv-root');
+  const mgr     = isAdmin();
+  const items   = _invData || [];
+  const outCount= items.filter(i=>i.status==='OUT').length;
+  const lowCount= items.filter(i=>i.status==='LOW').length;
+  const okCount = items.filter(i=>i.status==='OK').length;
+
+  let html = '';
+
+  // Stats row
+  html += `<div class="inv-stat-row">
+    <div class="inv-stat out-stat"><div class="inv-stat-num">${outCount}</div><div class="inv-stat-lbl">Out</div></div>
+    <div class="inv-stat low-stat"><div class="inv-stat-num">${lowCount}</div><div class="inv-stat-lbl">Low</div></div>
+    <div class="inv-stat ok-stat"><div class="inv-stat-num">${okCount}</div><div class="inv-stat-lbl">OK</div></div>
+  </div>`;
+
+  // Manager/admin action buttons
+  if (mgr) {
+    html += `<div class="inv-action-row">
+      <button class="inv-action-btn" id="inv-btn-refresh" onclick="invRefreshData()">↻ Refresh</button>
+      <button class="inv-action-btn" id="inv-btn-apply"   onclick="invApplyPurchases()">✓ Apply Purchases</button>
+    </div>`;
+  }
+
+  // Tab bar
+  html += `<div class="inv-tab-bar">
+    <button class="inv-tab${_invTab==='stock'    ?' active':''}" onclick="invTab('stock')">Stock</button>
+    <button class="inv-tab${_invTab==='purchases'?' active':''}" onclick="invTab('purchases')">Purchases</button>
+    ${mgr ? `<button class="inv-tab${_invTab==='review'?' active':''}" onclick="invTab('review')">Review</button>` : ''}
+  </div>`;
+
+  html += `<div id="inv-tab-content">${renderInvTabContent_()}</div>`;
+  root.innerHTML = html;
+}
+
+function renderInvTabContent_() {
+  if (_invTab === 'stock')     return renderStockTab_();
+  if (_invTab === 'purchases') return renderPurchasesTab_();
+  if (_invTab === 'review')    return renderReviewTab_();
+  return '';
+}
+
+function renderStockTab_() {
+  const items = _invData || [];
+  if (!items.length) return `<div class="inv-empty">No inventory data found.</div>`;
+  let html = `<div class="adm-card"><div style="overflow-x:auto"><table class="inv-tbl">
+    <thead><tr>
+      <th>Chemical</th><th>On Hand</th><th>Status</th><th>Reorder At</th><th>Target</th>
+    </tr></thead><tbody>`;
+  items.forEach(item => {
+    const rc  = item.status==='OUT'?'row-out':item.status==='LOW'?'row-low':'';
+    const bdg = `<span class="status-badge ${item.status.toLowerCase()}">${item.status}</span>`;
+    const qty = fmtQty_(item.qty);
+    const ro  = item.reorder_level>0 ? `${fmtQty_(item.reorder_level)} <span style="font-size:.72rem;color:var(--muted)">${item.unit}</span>` : '—';
+    const tg  = item.target_level >0 ? `${fmtQty_(item.target_level)}  <span style="font-size:.72rem;color:var(--muted)">${item.unit}</span>` : '—';
+    html += `<tr class="${rc}">
+      <td style="font-weight:600">${item.name}</td>
+      <td>${qty} <span style="font-size:.75rem;color:var(--muted)">${item.unit}</span></td>
+      <td>${bdg}</td><td>${ro}</td><td>${tg}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+function renderPurchasesTab_() {
+  if (window._invPurchases) return `<div id="inv-purchases-content">${buildPurchaseTable_(window._invPurchases)}</div>`;
+  apiGet({ action:'get_purchase_log', token:_s.token })
+    .then(res => {
+      window._invPurchases = res.ok ? res.data : [];
+      const el = document.getElementById('inv-purchases-content');
+      if (el) el.innerHTML = buildPurchaseTable_(window._invPurchases);
+    })
+    .catch(() => {
+      const el = document.getElementById('inv-purchases-content');
+      if (el) el.innerHTML = `<div class="inv-empty">Failed to load purchase log.</div>`;
+    });
+  return `<div id="inv-purchases-content"><div class="route-loading"><div class="spinner"></div></div></div>`;
+}
+
+function buildPurchaseTable_(rows) {
+  if (!rows||!rows.length) return `<div class="inv-empty">No purchases found.</div>`;
+  let html = `<div class="adm-card"><div style="overflow-x:auto"><table class="inv-tbl">
+    <thead><tr>
+      <th>Date</th><th>Invoice</th><th>Chemical</th><th>Qty</th><th>Applied</th>
+    </tr></thead><tbody>`;
+  rows.forEach(r => {
+    const applied = r.applied==='yes'
+      ? `<span class="status-badge ok">Applied</span>`
+      : r.applied==='superseded'
+        ? `<span class="status-badge" style="background:#f1f5f9;color:var(--muted)">Superseded</span>`
+        : `<span class="status-badge low">Pending</span>`;
+    const name = r.display_name||r.description||r.sku||'—';
+    const qty  = r.qty_shipped>0 ? `${r.qty_shipped} ${r.uom}` : '—';
+    html += `<tr>
+      <td style="white-space:nowrap">${r.invoice_date||'—'}</td>
+      <td style="font-family:'Barlow Condensed',sans-serif;font-size:.78rem;color:var(--muted)">${r.invoice_id||'—'}</td>
+      <td style="font-weight:600;max-width:180px">${name}</td>
+      <td style="white-space:nowrap">${qty}</td>
+      <td>${applied}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+function renderReviewTab_() {
+  if (window._invPending) return `<div id="inv-review-content">${buildPendingCards_(window._invPending)}</div>`;
+  apiGet({ action:'get_pending_skus', token:_s.token })
+    .then(res => {
+      window._invPending = res.ok ? res.data : [];
+      const el = document.getElementById('inv-review-content');
+      if (el) el.innerHTML = buildPendingCards_(window._invPending);
+    })
+    .catch(() => {
+      const el = document.getElementById('inv-review-content');
+      if (el) el.innerHTML = `<div class="inv-empty">Failed to load pending SKUs.</div>`;
+    });
+  return `<div id="inv-review-content"><div class="route-loading"><div class="spinner"></div></div></div>`;
+}
+
+function buildPendingCards_(items) {
+  if (!items||!items.length) return `<div class="inv-empty">No SKUs pending review. 🎉</div>`;
+  return items.map(item => {
+    const cc = item.ai_confidence==='high'?'conf-high':item.ai_confidence==='medium'?'conf-medium':'conf-low';
+    return `<div class="pend-card" id="pend-row-${item.rowIndex}">
+      <div class="pend-sku">${item.sku}</div>
+      <div class="pend-desc">${item.description||'—'}</div>
+      <div class="pend-ai">
+        ${item.ai_display_name?`<span class="pend-ai-pill">${item.ai_display_name}</span>`:''}
+        ${item.ai_category   ?`<span class="pend-ai-pill">${item.ai_category}</span>`:''}
+        ${item.ai_confidence ?`<span class="pend-ai-pill ${cc}">${item.ai_confidence} confidence</span>`:''}
+        ${item.qty_shipped   ?`<span class="pend-ai-pill">Qty: ${item.qty_shipped} ${item.uom}</span>`:''}
+      </div>
+      ${item.ai_reason?`<div style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem">${item.ai_reason}</div>`:''}
+      <div class="pend-btns">
+        <button class="pend-approve" onclick="invApproveSku(${item.rowIndex})">Approve</button>
+        <button class="pend-reject"  onclick="invRejectSku(${item.rowIndex})">Reject</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function invTab(tab) {
+  _invTab = tab;
+  document.querySelectorAll('.inv-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.trim().toLowerCase()===tab);
+  });
+  document.getElementById('inv-tab-content').innerHTML = renderInvTabContent_();
+}
+
+function invRefreshData() {
+  const btn = document.getElementById('inv-btn-refresh');
+  if (btn) { btn.disabled=true; btn.textContent='Refreshing…'; }
+  _invLoaded = false; _invData = null;
+  window._invPurchases = null; window._invPending = null;
+  loadInventory();
+}
+
+function invApplyPurchases() {
+  const btn = document.getElementById('inv-btn-apply');
+  if (btn) { btn.disabled=true; btn.textContent='Applying…'; }
+  api({ secret:SEC, action:'manual_apply_purchases', token:_s.token })
+    .then(res => {
+      if (btn) { btn.disabled=false; btn.textContent='✓ Apply Purchases'; }
+      if (res.ok) {
+        const r = res.result||{};
+        const msg = `Applied: ${r.applied||0}  |  Reversed: ${r.reversed||0}`
+          + (r.unmapped&&r.unmapped.length ? `\nUnmapped: ${r.unmapped.join(', ')}` : '');
+        alert(msg);
+        invRefreshData();
+      } else { alert('Error: '+(res.error||'Unknown')); }
+    })
+    .catch(e => { if (btn) { btn.disabled=false; btn.textContent='✓ Apply Purchases'; } alert('Network error: '+e.message); });
+}
+
+function invApproveSku(rowIndex) {
+  const card = document.getElementById('pend-row-'+rowIndex);
+  if (!card) return;
+  const btn = card.querySelector('.pend-approve');
+  if (btn) { btn.disabled=true; btn.textContent='Approving…'; }
+  api({ secret:SEC, action:'approve_pending_sku', token:_s.token, rowIndex, overrides:{} })
+    .then(res => {
+      if (res.ok) {
+        card.style.opacity='0.4'; card.style.pointerEvents='none';
+        card.querySelector('.pend-btns').innerHTML =
+          `<span style="font-family:'Barlow Condensed',sans-serif;font-size:.82rem;color:var(--success);font-weight:700">✓ Approved — ${res.displayName||''}</span>`;
+        window._invPending = null;
+      } else {
+        if (btn) { btn.disabled=false; btn.textContent='Approve'; }
+        alert('Error: '+(res.error||'Unknown'));
+      }
+    })
+    .catch(e => { if (btn) { btn.disabled=false; btn.textContent='Approve'; } alert('Network error: '+e.message); });
+}
+
+function invRejectSku(rowIndex) {
+  if (!confirm('Reject this SKU?')) return;
+  const card = document.getElementById('pend-row-'+rowIndex);
+  api({ secret:SEC, action:'reject_pending_sku', token:_s.token, rowIndex })
+    .then(res => {
+      if (res.ok && card) {
+        card.style.opacity='0.4'; card.style.pointerEvents='none';
+        card.querySelector('.pend-btns').innerHTML =
+          `<span style="font-family:'Barlow Condensed',sans-serif;font-size:.82rem;color:var(--error);font-weight:700">✕ Rejected</span>`;
+        window._invPending = null;
+      }
+    });
+}
+
+function fmtQty_(n) {
+  const num = Number(n||0);
+  return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/,'');
 }
 
 </script>
