@@ -237,6 +237,73 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .map-panel.open{display:block}
 #leaflet-map{width:100%;height:100%}
 
+/* ── Pool pin indicator ───────────────────────────────────────────────── */
+.stop-pin{font-size:.7rem;margin-left:.35rem;vertical-align:middle}
+.stop-pinned{color:var(--teal-mid)}
+.stop-unpinned{color:#cbd5e1;font-size:.6rem}
+.pin-all-btn{
+  font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;
+  letter-spacing:.05em;padding:.15rem .5rem;border-radius:6px;
+  border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);
+  color:#fff;cursor:pointer;transition:background .15s;
+}
+.pin-all-btn:hover{background:rgba(255,255,255,.3)}
+
+/* ── New Pools Banner ─────────────────────────────────────────────────── */
+.new-pools-banner{background:#fff8eb;border:1.5px solid #fde68a;border-radius:14px;margin-bottom:1rem;overflow:hidden}
+.npb-header{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;cursor:pointer;transition:background .12s}
+.npb-header:hover{background:#fef3c7}
+.npb-title{font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;color:#92400e}
+.npb-count{color:#92400e;font-size:.7rem}
+.npb-body{display:none;padding:0 1rem .75rem;border-top:1px solid #fde68a}
+.npb-body.open{display:block}
+.npb-pool{display:flex;align-items:center;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid #fef3c7}
+.npb-pool:last-of-type{border-bottom:none}
+.npb-pool-name{font-weight:600;font-size:.88rem}
+.npb-pool-addr{font-size:.75rem;color:var(--muted)}
+.npb-place-btn{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;padding:.3rem .7rem;border-radius:8px;border:1.5px solid var(--teal-mid);background:transparent;color:var(--teal-mid);cursor:pointer;transition:all .15s;flex-shrink:0}
+.npb-place-btn:hover{background:var(--teal-glow)}
+.npb-auto-btn{width:100%;margin-top:.65rem;padding:.6rem;border-radius:10px;background:var(--teal);color:#fff;border:none;font-family:'Oswald',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+.npb-auto-btn:hover{background:var(--teal-mid)}
+.npb-auto-btn:disabled{background:#cbd5e1;cursor:not-allowed}
+
+/* ── Pool Action Bottom Sheet ─────────────────────────────────────────── */
+.pool-action-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:none;animation:fadein .2s}
+.pool-action-backdrop.open{display:block}
+.pool-action-sheet{
+  position:fixed;bottom:0;left:0;right:0;z-index:301;
+  background:var(--card);border-radius:20px 20px 0 0;
+  box-shadow:0 -8px 40px rgba(0,0,0,.15);
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.16,1,.3,1);
+  padding:1.25rem;max-height:80vh;overflow-y:auto;
+}
+.pool-action-sheet.open{transform:translateY(0)}
+.pas-handle{width:36px;height:4px;border-radius:2px;background:#d1d5db;margin:0 auto .85rem}
+.pas-title{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.04em}
+.pas-sub{font-size:.8rem;color:var(--muted);margin-top:.15rem;margin-bottom:1rem}
+.pas-section{margin-bottom:1rem}
+.pas-section-label{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.pas-day-grid{display:flex;gap:.35rem;flex-wrap:wrap}
+.pas-day-btn{
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
+  letter-spacing:.05em;padding:.35rem .7rem;border-radius:8px;
+  border:1.5px solid var(--border);background:var(--card);color:var(--muted);
+  cursor:pointer;transition:all .15s;
+}
+.pas-day-btn:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.pas-day-btn.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.pas-op-select{width:100%;padding:.6rem .8rem;border:1.5px solid var(--border);border-radius:10px;font-size:.9rem;font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:border .15s}
+.pas-op-select:focus{border-color:var(--teal-mid);outline:none}
+.pas-pin-toggle{display:flex;align-items:center;gap:.6rem;padding:.55rem .8rem;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;transition:all .15s}
+.pas-pin-toggle:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.pas-pin-toggle.pinned{border-color:var(--teal-mid);background:rgba(42,168,154,.08)}
+.pas-pin-icon{font-size:1.1rem}
+.pas-pin-text{font-size:.82rem;color:var(--muted)}
+.pas-apply-btn{width:100%;padding:.85rem;margin-top:.5rem;border:none;border-radius:12px;background:var(--teal);color:#fff;font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s;box-shadow:0 4px 12px rgba(13,77,68,.15)}
+.pas-apply-btn:hover{background:var(--teal-mid);transform:translateY(-1px)}
+.pas-apply-btn:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
+
+
 /* ── SERVICE LOG ─────────────────────────────────────────────────────────── */
 .svc-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.25rem;margin-bottom:1.25rem}
 .svc-stitle{font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);border-bottom:2px solid var(--border);padding-bottom:.4rem;margin-bottom:1rem}
@@ -481,6 +548,7 @@ table.ut tr:last-child td{border-bottom:none}
           <label class="dcb"><input type="checkbox" value="Wednesday"> Wed</label>
           <label class="dcb"><input type="checkbox" value="Thursday"> Thu</label>
           <label class="dcb"><input type="checkbox" value="Friday"> Fri</label>
+          <label class="dcb"><input type="checkbox" value="Saturday"> Sat</label>
         </div>
         <span class="dfg-hint">Which days this technician works. Used for route planning.</span>
       </div>
@@ -524,6 +592,30 @@ table.ut tr:last-child td{border-bottom:none}
   <nav class="bottom-nav" id="bnav"></nav>
 </div>
 
+<!-- Pool Action Bottom Sheet -->
+<div class="pool-action-backdrop" id="pas-backdrop" onclick="closePoolAction()"></div>
+<div class="pool-action-sheet" id="pas-sheet">
+  <div class="pas-handle"></div>
+  <div class="pas-title" id="pas-title">Pool Name</div>
+  <div class="pas-sub" id="pas-sub">Address · Service</div>
+  <div class="pas-section">
+    <div class="pas-section-label">📅 Move to different day</div>
+    <div class="pas-day-grid" id="pas-day-grid"></div>
+  </div>
+  <div class="pas-section">
+    <div class="pas-section-label">👤 Change operator</div>
+    <select class="pas-op-select" id="pas-op-select"></select>
+  </div>
+  <div class="pas-section">
+    <div class="pas-section-label">📌 Pin status</div>
+    <div class="pas-pin-toggle" id="pas-pin-toggle" onclick="togglePasPin()">
+      <span class="pas-pin-icon" id="pas-pin-icon">📌</span>
+      <span class="pas-pin-text" id="pas-pin-text">Pinned — won't be moved by auto-placement</span>
+    </div>
+  </div>
+  <button class="pas-apply-btn" id="pas-apply-btn" onclick="applyPoolAction()">Apply Changes</button>
+</div>
+
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -546,7 +638,7 @@ const ROLE_PAGES = {
 };
 
 const ALL_ROLES = ['technician','lead','office','manager','admin'];
-const ALL_DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+const ALL_DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 let _editingUsername = null;
 let _usersCache = [];
 
@@ -556,6 +648,8 @@ let _usersCache = [];
 let _s = null; // { token, name, roles[], operator_name, pages[] }
 let _curPage = 'home';
 let _routeData = null;
+let _unassignedPools = null;
+let _pasState = null; // { pool_id, day, operator, pinned, newDay, newOp, newPinned }
 let _activeDay = null;
 let _activeOp = 'all';
 let _formItems = [];
@@ -673,12 +767,57 @@ function loadRoutes(opOverride) {
       _routeData = res;
       document.getElementById('route-content').style.display='block';
       renderRoutePage();
+      // Load unassigned pools for admins
+      if(isAdmin()) loadUnassigned();
     })
     .catch(e=>{
       document.getElementById('route-loading').style.display='none';
       document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
       document.getElementById('route-content').style.display='block';
     });
+}
+
+function loadUnassigned() {
+  apiGet({action:'get_unassigned', token:_s.token}).then(res=>{
+    if(res.ok && res.pools && res.pools.length){
+      _unassignedPools = res.pools;
+      renderNewPoolsBanner();
+    } else {
+      _unassignedPools = [];
+      const existing = document.getElementById('new-pools-banner');
+      if(existing) existing.remove();
+    }
+  }).catch(()=>{});
+}
+
+function renderNewPoolsBanner() {
+  let banner = document.getElementById('new-pools-banner');
+  if(!_unassignedPools || !_unassignedPools.length) {
+    if(banner) banner.remove();
+    return;
+  }
+  const html = `<div class="new-pools-banner" id="new-pools-banner">
+    <div class="npb-header" onclick="document.getElementById('npb-body').classList.toggle('open')">
+      <span class="npb-title">⚠️ ${_unassignedPools.length} new pool${_unassignedPools.length>1?'s':''} need${_unassignedPools.length===1?'s':''} routing</span>
+      <span class="npb-count">▼</span>
+    </div>
+    <div class="npb-body" id="npb-body">
+      ${_unassignedPools.map(p=>`<div class="npb-pool">
+        <div class="npb-pool-info">
+          <div class="npb-pool-name">${p.customer_name||p.pool_id}</div>
+          <div class="npb-pool-addr">${p.address||''}, ${p.city||''}</div>
+        </div>
+        <button class="npb-place-btn" onclick="openPlacePool('${p.pool_id}')">Place ▸</button>
+      </div>`).join('')}
+      <button class="npb-auto-btn" onclick="autoPlaceAll()">⚡ Auto-place all new pools</button>
+    </div>
+  </div>`;
+  if(!banner) {
+    const content = document.getElementById('route-content');
+    content.insertAdjacentHTML('afterbegin', html);
+  } else {
+    banner.outerHTML = html;
+  }
 }
 
 function renderRoutePage(){
@@ -770,6 +909,7 @@ function renderDayCard(dayData){
     <div class="rdc-badges">
       ${isToday?'<span class="rdc-badge today-badge">Today</span>':''}
       ${locked?'<span class="rdc-badge locked">Locked 🔒</span>':''}
+      ${isAdmin()?'<button class="pin-all-btn" onclick="pinAllDay(\''+dayData.day+'\')" title="Pin all pools on this day">📌 Pin All</button>':''}
     </div>
   </div>`;
 
@@ -809,19 +949,24 @@ function renderDayCard(dayData){
     const svcClass = getSvcClass_(pool.service);
     const svcLabel = getSvcLabel_(pool.service);
     const indivMaps = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(pool.address+', '+pool.city+', TX');
+    const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
+    const pinIcon = isPinned ? '📌' : '○';
+    const pinClass = isPinned ? 'stop-pinned' : 'stop-unpinned';
+    const adminTap = isAdmin() ? ` onclick="openPoolAction('${pool.pool_id||idx}','${dayData.day}','${pool.operator||''}',${isPinned})"` : '';
 
-    html += `<div class="pool-stop${done?' done-stop':''}" id="stop-${idx}">
+    html += `<div class="pool-stop${done?' done-stop':''}" id="stop-${idx}" style="${isAdmin()?'cursor:pointer':''}"${adminTap}>
       <div class="stop-num-wrap">
         <div class="stop-num">${idx+1}</div>
-        <input type="checkbox" class="stop-check" ${done?'checked':''} onchange="toggleDone(this,${idx},'${pool.pool_id||idx}','${doneKey}')">
+        <input type="checkbox" class="stop-check" ${done?'checked':''} onchange="event.stopPropagation();toggleDone(this,${idx},'${pool.pool_id||idx}','${doneKey}')">
       </div>
       <div class="stop-body">
-        <div class="stop-name">${pool.customer_name||'—'}</div>
+        <div class="stop-name">${pool.customer_name||'—'}<span class="stop-pin ${pinClass}" title="${isPinned?'Pinned':'Not pinned'}">${pinIcon}</span></div>
         <div class="stop-addr">${pool.address}${pool.city?', '+pool.city:''}</div>
         <span class="stop-svc ${svcClass}">${svcLabel}</span>
+        ${pool.operator && isAdmin()?`<span class="stop-svc svc-other" style="margin-left:.3rem">${pool.operator}</span>`:''}
         ${pool.notes?`<div class="stop-notes">📋 ${pool.notes}</div>`:''}
       </div>
-      <a class="stop-nav-btn" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool">
+      <a class="stop-nav-btn" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool" onclick="event.stopPropagation()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
       </a>
     </div>`;
@@ -915,6 +1060,145 @@ function getSvcLabel_(svc){
   if(s.includes('monthly'))return 'Monthly';
   if(s.includes('green'))return 'Green-to-Clean';
   return svc||'Service';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ROUTE MANAGEMENT (Admin portal controls)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openPoolAction(poolId, day, operator, pinned) {
+  if(!isAdmin()) return;
+  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned };
+  // Fill title
+  const pool = findPool_(poolId);
+  document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
+  document.getElementById('pas-sub').textContent = pool ? `${pool.address}, ${pool.city} · ${pool.service}` : '';
+  // Day grid
+  const dayGrid = document.getElementById('pas-day-grid');
+  dayGrid.innerHTML = ALL_DAYS.map(d =>
+    `<button class="pas-day-btn${d===day?' active':''}" onclick="pasSelectDay(this,'${d}')">${d.slice(0,3)}</button>`
+  ).join('');
+  // Operator select
+  const opSel = document.getElementById('pas-op-select');
+  const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
+  opSel.innerHTML = ops.map(op => `<option value="${op}"${op===operator?' selected':''}>${op}</option>`).join('');
+  // Pin toggle
+  updatePasPin_(pinned);
+  // Show
+  document.getElementById('pas-backdrop').classList.add('open');
+  document.getElementById('pas-sheet').classList.add('open');
+}
+
+function closePoolAction() {
+  document.getElementById('pas-backdrop').classList.remove('open');
+  document.getElementById('pas-sheet').classList.remove('open');
+  _pasState = null;
+}
+
+function pasSelectDay(btn, day) {
+  document.querySelectorAll('.pas-day-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if(_pasState) _pasState.newDay = day;
+}
+
+function togglePasPin() {
+  if(!_pasState) return;
+  _pasState.newPinned = !_pasState.newPinned;
+  updatePasPin_(_pasState.newPinned);
+}
+
+function updatePasPin_(pinned) {
+  const toggle = document.getElementById('pas-pin-toggle');
+  const icon = document.getElementById('pas-pin-icon');
+  const text = document.getElementById('pas-pin-text');
+  toggle.classList.toggle('pinned', pinned);
+  icon.textContent = pinned ? '📌' : '○';
+  text.textContent = pinned ? 'Pinned — won\'t be moved by auto-placement' : 'Unpinned — can be auto-reassigned';
+}
+
+function applyPoolAction() {
+  if(!_pasState) return;
+  const btn = document.getElementById('pas-apply-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  const newOp = document.getElementById('pas-op-select').value;
+  _pasState.newOp = newOp;
+  api({
+    secret: SEC, action: 'move_pool', token: _s.token,
+    pool_id: _pasState.pool_id,
+    new_day: _pasState.newDay,
+    new_operator: _pasState.newOp,
+    pinned: _pasState.newPinned
+  }).then(res => {
+    btn.disabled = false; btn.textContent = 'Apply Changes';
+    if(res.ok) {
+      closePoolAction();
+      _routeData = null;
+      loadRoutes();
+    } else {
+      alert('Error: ' + (res.error || 'Unknown'));
+    }
+  }).catch(e => {
+    btn.disabled = false; btn.textContent = 'Apply Changes';
+    alert('Network error: ' + e.message);
+  });
+}
+
+function pinAllDay(day) {
+  if(!isAdmin() || !confirm('Pin all pools on ' + day + '?')) return;
+  api({
+    secret: SEC, action: 'pin_day', token: _s.token, day: day, pinned: true
+  }).then(res => {
+    if(res.ok) { _routeData = null; loadRoutes(); }
+    else alert('Error: ' + (res.error || 'Unknown'));
+  }).catch(e => alert('Network error: ' + e.message));
+}
+
+function autoPlaceAll() {
+  if(!isAdmin() || !confirm('Auto-place all new pools using the route algorithm?')) return;
+  const btn = document.querySelector('.npb-auto-btn');
+  if(btn) { btn.disabled = true; btn.textContent = 'Placing...'; }
+  api({
+    secret: SEC, action: 'recalculate_new', token: _s.token
+  }).then(res => {
+    if(btn) { btn.disabled = false; btn.textContent = '⚡ Auto-place all new pools'; }
+    if(res.ok) {
+      _routeData = null;
+      _unassignedPools = null;
+      loadRoutes();
+    } else {
+      alert('Error: ' + (res.error || 'Unknown'));
+    }
+  }).catch(e => {
+    if(btn) { btn.disabled = false; btn.textContent = '⚡ Auto-place all new pools'; }
+    alert('Network error: ' + e.message);
+  });
+}
+
+function openPlacePool(poolId) {
+  // Open pool action sheet in "place" mode for an unassigned pool
+  const pool = _unassignedPools ? _unassignedPools.find(p => p.pool_id === poolId) : null;
+  _pasState = { pool_id: poolId, day: 'Monday', operator: '', pinned: true, newDay: 'Monday', newOp: '', newPinned: true };
+  document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
+  document.getElementById('pas-sub').textContent = pool ? `${pool.address||''}, ${pool.city||''} · ${pool.service||''}` : 'New pool — choose a day and operator';
+  const dayGrid = document.getElementById('pas-day-grid');
+  dayGrid.innerHTML = ALL_DAYS.map(d =>
+    `<button class="pas-day-btn${d==='Monday'?' active':''}" onclick="pasSelectDay(this,'${d}')">${d.slice(0,3)}</button>`
+  ).join('');
+  const opSel = document.getElementById('pas-op-select');
+  const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
+  opSel.innerHTML = ops.map((op,i) => `<option value="${op}"${i===0?' selected':''}>${op}</option>`).join('');
+  updatePasPin_(true);
+  document.getElementById('pas-backdrop').classList.add('open');
+  document.getElementById('pas-sheet').classList.add('open');
+}
+
+function findPool_(poolId) {
+  if(!_routeData || !_routeData.days) return null;
+  for(const d of _routeData.days) {
+    const p = (d.pools||[]).find(p => p.pool_id === poolId);
+    if(p) return p;
+  }
+  return null;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
