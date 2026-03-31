@@ -1248,7 +1248,7 @@ function renderSvcForm(meta){
       card=mkCard(item.title||'Chemical Log');root.appendChild(card);
       if(item.title&&item.title.trim().toLowerCase()==='used'){
         const rb=document.createElement('div');rb.id='rec-box';rb.className='rec-box';
-        rb.innerHTML='<div class="rb-hdr">Calculated Additions<span id="rb-vol" class="rb-vol">—</span></div><div id="rb-flags" class="rb-flags"></div><div id="rb-list" class="rb-list"></div>';
+        rb.innerHTML='<div class="rb-hdr">Mr. Chuy Recommends:<span id="rb-vol" class="rb-vol">—</span></div><div id="rb-flags" class="rb-flags"></div><div id="rb-list" class="rb-list"></div>';
         card.appendChild(rb);
       }
       return;
@@ -1273,7 +1273,7 @@ function renderSvcForm(meta){
       const mg=document.createElement('div');mg.className='sfg';
       mg.innerHTML='<label>Pool Material</label><span class="sh">Affects acid dose — fiberglass gets reduced amount.</span><select class="si" id="svc-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
       const pg=document.createElement('div');pg.className='sfg';
-      pg.innerHTML='<label>Pool Size</label><span class="sh">Used for chemical dosing calculations.</span><select class="si" id="svc-size" onchange="runRecs()"><option value="small">Small (~12,000 gal)</option><option value="medium">Medium (~17,500 gal)</option><option value="large">Large (~25,000 gal)</option></select>';
+      pg.innerHTML='<label>Pool Size</label><span class="sh">Used for chemical dosing calculations.</span><select class="si" id="svc-size" onchange="runRecs()"><option value="small">Small (&lt;15k gal)</option><option value="medium">Medium (15k–20k gal)</option><option value="large">Large (20k+ gal)</option></select>';
       card.appendChild(pg);
       card.appendChild(mg);
       const cg=document.createElement('div');cg.className='sfg';
