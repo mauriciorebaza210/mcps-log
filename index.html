@@ -353,7 +353,77 @@ table.ut tr:last-child td{border-bottom:none}
 .im.ok{background:#d1fae5;color:#065f46}.im.err{background:#fef2f2;color:var(--error)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
 .dot.on{background:var(--success)}.dot.off{background:#cbd5e1}
-  /* ── PHOTO UPLOAD ─────────────────────────────────────────────────────────── */
+  /* ── QUOTE CALCULATOR ────────────────────────────────────────────────────── */
+.q-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.1rem}
+.q-hdr-title{font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700}
+.q-newbtn{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.06em;padding:.35rem .85rem;border-radius:9px;background:transparent;color:var(--teal-mid);border:1.5px solid var(--teal-mid);cursor:pointer;transition:all .15s}
+.q-newbtn:hover{background:var(--teal-glow)}
+.q-sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem 1rem .85rem;margin-bottom:.75rem}
+.q-sec-lbl{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem}
+.q-sub-lbl{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem}
+/* Service cards */
+.q-svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}
+.q-svc-card{padding:.65rem .8rem;border:1.5px solid var(--border);border-radius:11px;cursor:pointer;transition:all .15s;background:var(--surface)}
+.q-svc-card:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.q-svc-card.active{border-color:var(--teal-mid);background:var(--teal-glow)}
+.q-svc-name{font-family:'Barlow Condensed',sans-serif;font-size:.88rem;font-weight:700;color:var(--text)}
+.q-svc-card.active .q-svc-name{color:var(--teal)}
+.q-svc-desc{font-size:.7rem;color:var(--muted);margin-top:.08rem}
+/* Pills */
+.q-pills{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.2rem;margin-bottom:.7rem}
+.q-pill{padding:.4rem .85rem;border:1.5px solid var(--border);border-radius:99px;background:var(--surface);cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:.83rem;font-weight:600;letter-spacing:.02em;transition:all .12s}
+.q-pill:hover{border-color:var(--teal-light)}
+.q-pill.active{border-color:var(--teal-mid);background:var(--teal-mid);color:#fff}
+/* Toggle checks */
+.q-checks{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.2rem;margin-bottom:.7rem}
+.q-chk{display:flex;align-items:center;gap:.4rem;padding:.42rem .8rem;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;background:var(--surface);transition:all .12s;font-size:.82rem;font-weight:500;user-select:none}
+.q-chk:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.q-chk.active{border-color:var(--teal-mid);background:var(--teal-glow);color:var(--teal)}
+/* Form fields */
+.q-2col{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.6rem}
+.q-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:.6rem}
+@media(max-width:500px){.q-2col{grid-template-columns:1fr}.q-3col{grid-template-columns:1fr 1fr}}
+.q-1col{margin-bottom:.6rem}
+.q-flabel{font-size:.78rem;font-weight:600;display:block;margin-bottom:.25rem}
+.q-inp{width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:all .2s}
+.q-inp:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.12)}
+textarea.q-inp{resize:vertical;min-height:66px}
+select.q-inp{cursor:pointer}
+/* Summary */
+.q-sum{background:var(--card);border:1.5px solid var(--teal-light);border-radius:16px;padding:1.1rem;margin-bottom:.75rem;animation:fadeUp .25s ease}
+.q-sum-title{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.04em;color:var(--teal);margin-bottom:.85rem}
+.q-metrics4{display:grid;grid-template-columns:repeat(2,1fr);gap:.45rem;margin-bottom:.7rem}
+@media(min-width:480px){.q-metrics4{grid-template-columns:repeat(4,1fr)}}
+.q-met{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.55rem .7rem}
+.q-met.hi{border-color:var(--teal-mid);background:var(--teal-glow)}
+.q-met-lbl{font-family:'Barlow Condensed',sans-serif;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.1rem}
+.q-met-val{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700}
+.q-met.hi .q-met-val{color:var(--teal)}
+.q-specs-txt{font-size:.78rem;color:var(--muted);margin:.3rem 0 .5rem;line-height:1.55}
+.q-sku-chip{display:inline-block;font-size:.7rem;font-weight:700;font-family:'Barlow Condensed',sans-serif;background:#f1f5f9;border:1px solid var(--border);padding:.13rem .48rem;border-radius:5px;margin:.1rem .1rem 0 0;letter-spacing:.04em}
+.q-margin-row{font-size:.78rem;color:var(--muted);padding-top:.5rem;border-top:1px solid var(--border);margin-top:.4rem}
+.q-margin-row b{color:var(--text)}
+.q-warn-box{background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.5rem .8rem;font-size:.8rem;color:var(--warn);margin-top:.5rem}
+/* Travel bar */
+.q-travel-bar{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;padding:.55rem .75rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:.45rem;flex-wrap:wrap}
+.q-travel-info{font-size:.78rem;color:var(--muted);line-height:1.5;flex:1}
+.q-voidbtn{font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;padding:.28rem .7rem;border-radius:8px;border:1.5px solid #fca5a5;color:#dc2626;background:#fef2f2;cursor:pointer;transition:all .15s;flex-shrink:0}
+.q-voidbtn.restored{border-color:var(--teal-mid);color:var(--teal-mid);background:var(--teal-glow)}
+/* Discount bar */
+.q-disc-bar{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.55rem .75rem;margin-bottom:.45rem;font-size:.8rem;color:var(--warn)}
+.q-disc-bar b{color:var(--text)}
+/* Actions */
+.q-action-row{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.6rem}
+.q-savebtn{width:100%;padding:.9rem;background:var(--teal);color:#fff;border:none;border-radius:12px;font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.q-savebtn:hover:not(:disabled){background:var(--teal-mid);transform:translateY(-1px)}
+.q-savebtn:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
+.q-resetbtn{width:100%;padding:.9rem;background:transparent;border:1.5px solid var(--border);border-radius:12px;font-family:'Barlow',sans-serif;font-size:.9rem;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s}
+.q-resetbtn:hover{background:var(--surface);color:var(--text)}
+.q-msg{margin-top:.6rem;padding:.6rem 1rem;border-radius:10px;font-size:.84rem;font-weight:500;text-align:center;display:none}
+.q-msg.ok{display:block;background:#d1fae5;color:#065f46}
+.q-msg.err{display:block;background:#fef2f2;color:var(--error)}
+.q-msg.warn{display:block;background:#fffbeb;color:var(--warn)}
+/* ── PHOTO UPLOAD ─────────────────────────────────────────────────────────── */
 .photo-upload-area{border:2px dashed var(--border);border-radius:12px;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);position:relative}
 .photo-upload-area:hover,.photo-upload-area.drag-over{border-color:var(--teal-mid);background:var(--teal-glow)}
 .photo-upload-area input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -622,11 +692,203 @@ table.ut tr:last-child td{border-bottom:none}
       <div id="inv-root" style="display:none"></div>
     </div>
 
-    <!-- Quotes placeholder -->
+    <!-- Quote Calculator -->
     <div class="pf" id="page-quotes">
-      <div style="text-align:center;padding:4rem 1rem;color:var(--muted)">
-        <div style="font-size:2.5rem;margin-bottom:.75rem">📄</div>
-        <div style="font-size:.9rem;font-weight:500">Quote calculator coming soon.</div>
+      <div class="q-hdr">
+        <div class="q-hdr-title">Quote Calculator</div>
+        <button class="q-newbtn" onclick="qReset()">+ New Quote</button>
+      </div>
+
+      <!-- Service Type -->
+      <div class="q-sec">
+        <div class="q-sec-lbl">Service Type</div>
+        <div class="q-svc-grid">
+          <div class="q-svc-card active" data-svc="weekly_full" onclick="qSetService('weekly_full')">
+            <div class="q-svc-name">Weekly Full Service</div>
+            <div class="q-svc-desc">Weekly maintenance + chemicals</div>
+          </div>
+          <div class="q-svc-card" data-svc="biweekly_maint" onclick="qSetService('biweekly_maint')">
+            <div class="q-svc-name">Bi-Weekly Maintenance</div>
+            <div class="q-svc-desc">Every two weeks, no chemicals</div>
+          </div>
+          <div class="q-svc-card" data-svc="green_to_clean" onclick="qSetService('green_to_clean')">
+            <div class="q-svc-name">Green-to-Clean</div>
+            <div class="q-svc-desc">One-time cleaning service</div>
+          </div>
+          <div class="q-svc-card" data-svc="pool_startup" onclick="qSetService('pool_startup')">
+            <div class="q-svc-name">Pool Startup</div>
+            <div class="q-svc-desc">New plaster / builder handoff</div>
+          </div>
+          <div class="q-svc-card" data-svc="repair_job" onclick="qSetService('repair_job')">
+            <div class="q-svc-name">Repair / Other Job</div>
+            <div class="q-svc-desc">Repairs, replacements, invoices</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pool Details (weekly/biweekly/GTC) -->
+      <div class="q-sec" id="q-pool-sec">
+        <div class="q-sec-lbl">Pool Details</div>
+        <div class="q-sub-lbl">Pool Size</div>
+        <div class="q-pills">
+          <button class="q-pill" data-grp="size" data-val="small" onclick="qPill(this,'size')">Small <span style="font-size:.7rem;opacity:.7">0–15k gal</span></button>
+          <button class="q-pill active" data-grp="size" data-val="medium" onclick="qPill(this,'size')">Medium <span style="font-size:.7rem;opacity:.7">15–20k gal</span></button>
+          <button class="q-pill" data-grp="size" data-val="large" onclick="qPill(this,'size')">Large <span style="font-size:.7rem;opacity:.7">20k+ gal</span></button>
+        </div>
+        <div class="q-sub-lbl">Pool Type</div>
+        <div class="q-pills">
+          <button class="q-pill active" data-grp="pool_type" data-val="inground" onclick="qPill(this,'pool_type')">Inground</button>
+          <button class="q-pill" data-grp="pool_type" data-val="above_ground" onclick="qPill(this,'pool_type')">Above Ground</button>
+        </div>
+        <div class="q-sub-lbl">Material</div>
+        <div class="q-pills">
+          <button class="q-pill active" data-grp="material" data-val="plaster" onclick="qPill(this,'material')">Plaster</button>
+          <button class="q-pill" data-grp="material" data-val="vinyl" onclick="qPill(this,'material')">Vinyl</button>
+          <button class="q-pill" data-grp="material" data-val="fiberglass" onclick="qPill(this,'material')">Fiberglass</button>
+        </div>
+        <div class="q-sub-lbl">Finish &amp; Debris</div>
+        <div class="q-pills">
+          <button class="q-pill active" data-grp="finish" data-val="light" onclick="qPill(this,'finish')">Light Finish</button>
+          <button class="q-pill" data-grp="finish" data-val="dark" onclick="qPill(this,'finish')">Dark Finish <span style="font-size:.7rem;opacity:.7">+$10</span></button>
+          <button class="q-pill active" data-grp="debris" data-val="light" onclick="qPill(this,'debris')">Light Debris</button>
+          <button class="q-pill" data-grp="debris" data-val="heavy" onclick="qPill(this,'debris')">Heavy Debris <span style="font-size:.7rem;opacity:.7">+$10</span></button>
+        </div>
+        <div class="q-sub-lbl">Add-ons</div>
+        <div class="q-checks">
+          <div class="q-chk" id="qchk-spa" onclick="qChk('spa')">🛁 Attached Spa <span style="font-size:.7rem;opacity:.7">+$25</span></div>
+          <div class="q-chk" id="qchk-robot" onclick="qChk('robot')">🤖 Cleaning Robot <span style="font-size:.7rem;opacity:.7">−$5</span></div>
+          <div class="q-chk" id="qchk-sun" onclick="qChk('sun')">☀️ High Sun Exposure <span style="font-size:.7rem;opacity:.7">+$10</span></div>
+          <div class="q-chk" id="qchk-pets" onclick="qChk('pets')">🐾 Pets on Property <span style="font-size:.7rem;opacity:.7">+$5</span></div>
+        </div>
+      </div>
+
+      <!-- Pool Startup Options -->
+      <div class="q-sec" id="q-startup-sec" style="display:none">
+        <div class="q-sec-lbl">Startup Services</div>
+        <div class="q-checks" style="margin-bottom:.75rem">
+          <div class="q-chk active" id="qchk-chem" onclick="qChk('chem')">Chemical Work <span style="font-size:.7rem;opacity:.7">$287.86</span></div>
+          <div class="q-chk active" id="qchk-prog" onclick="qChk('prog')">Programming <span style="font-size:.7rem;opacity:.7">$125</span></div>
+          <div class="q-chk" id="qchk-school" onclick="qChk('school')">Pool School <span style="font-size:.7rem;opacity:.7">$62.50</span></div>
+        </div>
+        <div class="q-1col">
+          <label class="q-flabel">Startup Coming From (Builder / Plaster Co.)</label>
+          <input class="q-inp" id="q-startup-co" type="text" placeholder="e.g. XYZ Plaster" oninput="qField('startup_company',this.value)">
+        </div>
+        <div class="q-checks" style="margin-bottom:.5rem">
+          <div class="q-chk" id="qchk-mcp" onclick="qChk('mcp')">MCP Paid First Month <span style="font-size:.7rem;opacity:.7">creates 2 CRM entries</span></div>
+          <div class="q-chk" id="qchk-override" onclick="qChk('override')">Override status to SIGNED</div>
+        </div>
+        <div id="q-startup-date-row" style="display:none">
+          <div class="q-1col">
+            <label class="q-flabel">Startup Start Date</label>
+            <input class="q-inp" id="q-startup-date" type="date" onchange="qField('startup_start_date',this.value)">
+          </div>
+          <div id="q-startup-date-hint" style="font-size:.75rem;color:var(--muted);margin-top:-.3rem;margin-bottom:.5rem"></div>
+        </div>
+      </div>
+
+      <!-- Repair / Other Job Options -->
+      <div class="q-sec" id="q-repair-sec" style="display:none">
+        <div class="q-sec-lbl">Job Details</div>
+        <div class="q-sub-lbl">Job Type</div>
+        <div class="q-pills">
+          <button class="q-pill active" data-grp="repair_type" data-val="repair_replacement" onclick="qPill(this,'repair_type')">Repair / Replacement</button>
+          <button class="q-pill" data-grp="repair_type" data-val="other_job" onclick="qPill(this,'repair_type')">Other Job</button>
+        </div>
+        <div class="q-2col">
+          <div>
+            <label class="q-flabel">Company / Billing Name</label>
+            <input class="q-inp" id="q-rep-co" type="text" placeholder="Mission Custom Pools" oninput="qField('repair_company',this.value)">
+          </div>
+          <div>
+            <label class="q-flabel">QuickBooks SKU <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+            <input class="q-inp" id="q-rep-sku" type="text" placeholder="REPAIR-GENERAL" oninput="qField('repair_sku',this.value)">
+          </div>
+        </div>
+        <div class="q-1col">
+          <label class="q-flabel">Service Address</label>
+          <textarea class="q-inp" id="q-rep-addr" rows="2" placeholder="123 Pool Lane, San Antonio TX 78245" oninput="qField('repair_address',this.value)"></textarea>
+        </div>
+        <div class="q-1col">
+          <label class="q-flabel">Job Description</label>
+          <textarea class="q-inp" id="q-rep-desc" rows="2" placeholder="Describe the repair or work..." oninput="qField('repair_desc',this.value)"></textarea>
+        </div>
+        <div class="q-1col" style="margin-bottom:0">
+          <label class="q-flabel">Invoice Amount ($)</label>
+          <input class="q-inp" id="q-rep-amt" type="number" min="0" step="0.01" placeholder="0.00" oninput="qField('repair_amount',parseFloat(this.value)||0)">
+        </div>
+      </div>
+
+      <!-- Contact Info -->
+      <div class="q-sec">
+        <div class="q-sec-lbl">Contact Info <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(optional — saved to CRM)</span></div>
+        <div class="q-2col">
+          <div>
+            <label class="q-flabel">First Name</label>
+            <input class="q-inp" id="q-fname" type="text" placeholder="Tony" oninput="qField('first_name',this.value)">
+          </div>
+          <div>
+            <label class="q-flabel">Last Name</label>
+            <input class="q-inp" id="q-lname" type="text" placeholder="Siller" oninput="qField('last_name',this.value)">
+          </div>
+        </div>
+        <div class="q-2col">
+          <div>
+            <label class="q-flabel">Email</label>
+            <input class="q-inp" id="q-email" type="email" placeholder="tony@email.com" oninput="qField('email',this.value)">
+          </div>
+          <div>
+            <label class="q-flabel">Phone</label>
+            <input class="q-inp" id="q-phone" type="tel" placeholder="(555) 555-5555" oninput="qField('phone',this.value)">
+          </div>
+        </div>
+        <div class="q-1col">
+          <label class="q-flabel">Property Address</label>
+          <input class="q-inp" id="q-address" type="text" placeholder="123 Pool Lane, San Antonio TX" oninput="qField('address',this.value)">
+        </div>
+        <div class="q-2col" style="margin-bottom:0">
+          <div>
+            <label class="q-flabel">ZIP Code <span style="font-weight:400;color:var(--muted);font-size:.72rem">→ travel fee</span></label>
+            <input class="q-inp" id="q-zip" type="text" placeholder="78245" oninput="qField('zip_code',this.value)" onblur="qLookupTravel()">
+          </div>
+          <div>
+            <label class="q-flabel">City</label>
+            <input class="q-inp" id="q-city" type="text" placeholder="San Antonio" oninput="qField('city',this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Discount -->
+      <div class="q-sec">
+        <div class="q-sec-lbl">Discount <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(optional)</span></div>
+        <div class="q-2col" style="margin-bottom:0">
+          <div>
+            <label class="q-flabel">Discount Type</label>
+            <select class="q-inp" id="q-disc-type" onchange="qDiscTypeChange(this.value)">
+              <option value="none">No Discount</option>
+              <option value="Percentage">Percentage (%)</option>
+              <option value="Dollar Amount">Dollar Amount ($)</option>
+              <option value="Custom Price">Custom Price</option>
+            </select>
+          </div>
+          <div id="q-disc-val-wrap" style="display:none">
+            <label class="q-flabel" id="q-disc-val-lbl">Discount Value</label>
+            <input class="q-inp" id="q-disc-val" type="number" min="0" step="0.01" placeholder="0" oninput="qDiscValChange(this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Quote Summary (live) -->
+      <div id="q-summary" style="display:none">
+        <div class="q-sum">
+          <div class="q-sum-title">Quote Summary</div>
+          <div id="q-sum-content"></div>
+        </div>
+        <div class="q-action-row">
+          <button class="q-savebtn" id="q-save-btn" onclick="qSave()">Save to CRM</button>
+          <button class="q-resetbtn" onclick="qReset()">New Quote</button>
+        </div>
+        <div id="q-save-msg" class="q-msg"></div>
       </div>
     </div>
 
@@ -789,6 +1051,7 @@ function navigateTo(page){
   if(page==='live_map'&&!_routeData) loadRoutes();
   if(page==='service_log'&&!_formItems.length) loadServiceLog();
   if(page==='inventory'&&!_invLoaded) loadInventory();
+  if(page==='quotes') qInit();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2166,6 +2429,356 @@ function invDownloadOrderCsv() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// QUOTE CALCULATOR
+// ══════════════════════════════════════════════════════════════════════════════
+const Q_TAX = 0.0825;
+
+const _qDef = () => ({
+  service:'weekly_full', size:'medium', pool_type:'inground', material:'plaster',
+  spa:false, finish:'light', debris:'light', has_robot:false,
+  high_sun_exposure:false, has_pets:false,
+  startup_chemical:true, startup_programming:true, startup_pool_school:false,
+  startup_company:'', sponsored_by_mcp:false, startup_start_date:'', override_signed:false,
+  repair_type:'repair_replacement', repair_company:'', repair_address:'',
+  repair_desc:'', repair_amount:0, repair_sku:'',
+  discount_type:'none', discount_value:0, custom_price:0,
+  void_travel:false, travel:null, travel_loading:false, travel_error:'',
+  first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'',
+  _calc:null, saved_id:null, saving:false
+});
+let _qS = _qDef();
+
+function qSetService(svc) {
+  _qS.service = svc;
+  document.querySelectorAll('.q-svc-card').forEach(c => c.classList.toggle('active', c.dataset.svc === svc));
+  const isRepair  = svc === 'repair_job';
+  const isStartup = svc === 'pool_startup';
+  document.getElementById('q-pool-sec').style.display    = (!isRepair && !isStartup) ? '' : 'none';
+  document.getElementById('q-startup-sec').style.display = isStartup ? '' : 'none';
+  document.getElementById('q-repair-sec').style.display  = isRepair  ? '' : 'none';
+  qRecalc();
+}
+
+function qPill(el, grp) {
+  document.querySelectorAll(`.q-pill[data-grp="${grp}"]`).forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  _qS[grp] = el.dataset.val;
+  qRecalc();
+}
+
+function qChk(key) {
+  const map = { spa:'spa', robot:'has_robot', sun:'high_sun_exposure', pets:'has_pets',
+    chem:'startup_chemical', prog:'startup_programming', school:'startup_pool_school',
+    mcp:'sponsored_by_mcp', override:'override_signed' };
+  const field = map[key];
+  _qS[field] = !_qS[field];
+  document.getElementById('qchk-' + key).classList.toggle('active', _qS[field]);
+  if (key === 'mcp') {
+    const show = _qS.sponsored_by_mcp;
+    document.getElementById('q-startup-date-row').style.display = show ? '' : 'none';
+    if (show && !_qS.startup_start_date) {
+      const d = new Date(), diff = (8 - d.getDay()) % 7 || 7;
+      const nm = new Date(d); nm.setDate(d.getDate() + diff);
+      const ds = nm.toISOString().slice(0, 10);
+      _qS.startup_start_date = ds;
+      document.getElementById('q-startup-date').value = ds;
+      qStartupDateHint(ds);
+    }
+  }
+  qRecalc();
+}
+
+function qStartupDateHint(ds) {
+  const hint = document.getElementById('q-startup-date-hint');
+  if (!hint || !ds) return;
+  const d = new Date(ds + 'T12:00:00'), d2 = new Date(d);
+  d2.setDate(d.getDate() + 2);
+  const fmt = x => x.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  hint.textContent = `Startup: ${fmt(d)} → ${fmt(d2)} (3 days)`;
+}
+
+function qField(field, val) {
+  _qS[field] = val;
+  if (field === 'startup_start_date') qStartupDateHint(val);
+  qRecalc();
+}
+
+function qDiscTypeChange(val) {
+  _qS.discount_type = val; _qS.discount_value = 0; _qS.custom_price = 0;
+  const wrap = document.getElementById('q-disc-val-wrap');
+  const lbl  = document.getElementById('q-disc-val-lbl');
+  const inp  = document.getElementById('q-disc-val');
+  inp.value = '';
+  if (val === 'none') { wrap.style.display = 'none'; }
+  else {
+    wrap.style.display = '';
+    if (val === 'Percentage')    { lbl.textContent = 'Discount %'; inp.placeholder = '10'; }
+    else if (val === 'Dollar Amount') { lbl.textContent = 'Discount $'; inp.placeholder = '20.00'; }
+    else                              { lbl.textContent = 'Custom Service Price'; inp.placeholder = '220.00'; }
+  }
+  qRecalc();
+}
+
+function qDiscValChange(raw) {
+  const v = parseFloat(raw) || 0;
+  if (_qS.discount_type === 'Custom Price') { _qS.custom_price = v; _qS.discount_value = 0; }
+  else { _qS.discount_value = v; _qS.custom_price = 0; }
+  qRecalc();
+}
+
+function qLookupTravel() {
+  const dest = (_qS.zip_code || _qS.address || '').trim();
+  if (!dest) { _qS.travel = null; _qS.travel_error = ''; qRecalc(); return; }
+  if (_qS.travel && _qS.travel._dest === dest) return;
+  _qS.travel_loading = true; _qS.travel_error = ''; qRecalc();
+  apiGet({ action:'distance', dest })
+    .then(res => {
+      _qS.travel_loading = false;
+      if (res.ok && res.travel) { _qS.travel = { ...res.travel, _dest: dest }; _qS.travel_error = ''; }
+      else { _qS.travel = null; _qS.travel_error = res.error || 'Travel fee unavailable'; }
+      qRecalc();
+    })
+    .catch(() => { _qS.travel_loading = false; _qS.travel = null; _qS.travel_error = 'Travel lookup failed'; qRecalc(); });
+}
+
+function qVoidTravel() { _qS.void_travel = !_qS.void_travel; qRecalc(); }
+
+// ─── Pricing engine — faithful port of pricing.py ────────────────────────────
+function qCalcEngine(s) {
+  const { service, size, pool_type, material, spa, finish, debris, has_robot,
+          high_sun_exposure, has_pets, startup_chemical, startup_programming,
+          startup_pool_school, startup_company, repair_type, repair_company,
+          repair_address, repair_desc, repair_amount, repair_sku, first_name, last_name } = s;
+
+  let base = 0, chem = 0, pr = true, pw = '';
+  let svcLabel = '', sizeLabel = size, qbNames = [], qbSkus = [];
+  const ptLabel  = pool_type === 'inground' ? 'Inground' : 'Above Ground';
+  const matLabel = material.charAt(0).toUpperCase() + material.slice(1);
+
+  if (service === 'green_to_clean') {
+    base = 200; svcLabel = 'Green-to-Clean Cleaning Service';
+    qbNames = [svcLabel]; qbSkus = ['GTC-CLEAN'];
+  } else if (service === 'pool_startup') {
+    svcLabel = 'Pool Startup'; sizeLabel = 'startup';
+    if (startup_chemical)    { base += 287.86; chem += 162.86; qbNames.push('Startup Chemicals','Pool Startup Chemical Work'); qbSkus.push('START-CHEM','START-CHEM-LABOR'); }
+    if (startup_programming) { base += 125;    qbNames.push('Pool Startup Programming'); qbSkus.push('START-PROGRAM'); }
+    if (startup_pool_school) { base += 62.5;   qbNames.push('Pool School'); qbSkus.push('POOL-SCHOOL'); }
+  } else if (service === 'repair_job') {
+    base = Math.max(parseFloat(repair_amount) || 0, 0);
+    svcLabel = 'Repair / Replacement / Other Job'; sizeLabel = 'repair';
+    const sku = (repair_sku || '').trim() || (repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB');
+    qbNames = [(repair_desc || '').trim() || svcLabel]; qbSkus = [sku];
+  } else {
+    svcLabel = service === 'weekly_full' ? 'Weekly Full Service' : 'Bi-Weekly Maintenance';
+    if (service === 'weekly_full') {
+      const r = {small:220,medium:260,large:300}, c = {small:25,medium:40,large:60};
+      base = r[size]||0; chem = c[size]||0;
+      qbNames = [svcLabel]; qbSkus = [`WEEKLY-${size.toUpperCase()}`];
+    } else {
+      if (pool_type === 'above_ground') { base = 0; pr = false; pw = 'Above-ground bi-weekly pricing not set yet.'; }
+      else { const r = {small:120,medium:140,large:170}; base = r[size]||0; }
+      qbNames = [svcLabel]; qbSkus = [`BIWEEKLY-${size.toUpperCase()}`];
+    }
+  }
+
+  let specs = [`Pool Type: ${ptLabel}`, `Size: ${sizeLabel}`, `Material: ${matLabel}`];
+
+  if (service === 'weekly_full' || service === 'biweekly_maint') {
+    const fg = service === 'weekly_full' && material === 'fiberglass';
+    if (fg) { base = 200; qbNames = ['Swimming Pool Maintenance (Fiberglass Pool)']; qbSkus = ['WEEKLY-FIBERGLASS']; specs.push('Fiberglass Weekly Full Service Flat Rate'); }
+    if (spa)               { if (!fg) { base += 25; specs.push('Attached Spa'); } }
+    if (finish === 'dark') { if (!fg) { base += 10; specs.push('Dark Pool Color'); } } else { if (!fg) specs.push('Light Pool Color'); }
+    if (debris === 'heavy'){ if (!fg) { base += 10; specs.push('Debris: Heavy'); } } else { if (!fg) specs.push('Debris: Light'); }
+    if (high_sun_exposure && !fg) { base += 10; specs.push('High Sun Exposure'); }
+    if (has_pets && !fg)          { base +=  5; specs.push('Pets on Property'); }
+    if (has_robot && !fg)         { base -=  5; specs.push('Cleaning Robot Discount'); }
+  } else {
+    if (spa) specs.push('Attached Spa');
+    specs.push(`Pool Color: ${finish === 'dark' ? 'Dark' : 'Light'}`);
+    specs.push(`Debris: ${debris === 'heavy' ? 'Heavy' : 'Light'}`);
+    if (high_sun_exposure) specs.push('High Sun Exposure');
+    if (has_pets)          specs.push('Pets on Property');
+    if (has_robot)         specs.push('Cleaning Robot On Site');
+    if (service === 'pool_startup') {
+      const si = [startup_chemical?'Chemical Work':'', startup_programming?'Programming':'', startup_pool_school?'Pool School':''].filter(Boolean);
+      specs.push(`Startup Services: ${si.join(', ') || 'None Selected'}`);
+      if ((startup_company || '').trim()) specs.push(`Startup Coming From: ${startup_company.trim()}`);
+    } else if (service === 'repair_job') {
+      const sku = (repair_sku || '').trim() || (repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB');
+      const cn = ((first_name||'')+' '+(last_name||'')).trim() || (repair_company||'').trim();
+      specs = [
+        `Job Type: ${repair_type === 'repair_replacement' ? 'Repair / Replacement' : 'Other Job'}`,
+        `Company: ${(repair_company||'').trim() || cn || 'N/A'}`,
+        `Address: ${(repair_address||'').trim() || 'Not provided'}`,
+        `Job Description: ${(repair_desc||'').trim() || 'Not provided'}`,
+        `QuickBooks SKU: ${sku}`
+      ];
+    }
+  }
+
+  return { service_label:svcLabel, pool_type:ptLabel, size:sizeLabel, material:matLabel,
+           spa:spa?'Yes':'No', finish:finish==='dark'?'Dark':'Light', debris:debris==='heavy'?'Heavy':'Light',
+           subtotal:Math.round(base*100)/100, chem_cost:Math.round(chem*100)/100,
+           specs_summary:specs.join(', '), pricing_ready:pr, pricing_warning:pw, qb_names:qbNames, qb_skus:qbSkus };
+}
+
+function qCalcDiscount(subtotal, dtype, dval, cprice) {
+  if (dtype === 'Percentage') {
+    const da = Math.round(subtotal * Math.min(dval, 100) / 100 * 100) / 100;
+    return { da, discounted: Math.round(Math.max(subtotal-da,0)*100)/100 };
+  } else if (dtype === 'Dollar Amount') {
+    const da = Math.round(Math.min(dval, subtotal)*100)/100;
+    return { da, discounted: Math.round(Math.max(subtotal-da,0)*100)/100 };
+  } else if (dtype === 'Custom Price') {
+    const cp = Math.round(Math.min(cprice, subtotal)*100)/100;
+    return { da: Math.round(Math.max(subtotal-cp,0)*100)/100, discounted: cp };
+  }
+  return { da:0, discounted:subtotal };
+}
+
+function qRecalc() {
+  const eng = qCalcEngine(_qS);
+  const tFee = _qS.void_travel ? 0 : ((_qS.travel && !_qS.travel_loading) ? (_qS.travel.travel_fee||0) : 0);
+  const { da, discounted } = qCalcDiscount(eng.subtotal, _qS.discount_type, _qS.discount_value, _qS.custom_price);
+  const sub   = Math.round((discounted+tFee)*100)/100;
+  const tax   = Math.round(sub*Q_TAX*100)/100;
+  const total = Math.round((sub+tax)*100)/100;
+  const net   = Math.round((sub-eng.chem_cost)*100)/100;
+  const margin = sub > 0 ? Math.round(net/sub*1000)/10 : 0;
+  _qS._calc = { eng, tFee, da, discounted, sub, tax, total, net, margin };
+  qRenderSummary();
+}
+
+function qRenderSummary() {
+  const c = _qS._calc;
+  if (!c) { document.getElementById('q-summary').style.display='none'; return; }
+  document.getElementById('q-summary').style.display = '';
+  const { eng, tFee, da, discounted, sub, tax, total, net, margin } = c;
+  let html = '';
+
+  html += `<div class="q-metrics4">
+    <div class="q-met"><div class="q-met-lbl">Service</div><div class="q-met-val">$${eng.subtotal.toFixed(2)}</div></div>
+    <div class="q-met"><div class="q-met-lbl">Travel</div><div class="q-met-val">${_qS.travel_loading?'…':`$${tFee.toFixed(2)}`}</div></div>
+    <div class="q-met"><div class="q-met-lbl">Tax (8.25%)</div><div class="q-met-val">$${tax.toFixed(2)}</div></div>
+    <div class="q-met hi"><div class="q-met-lbl">Total</div><div class="q-met-val">$${total.toFixed(2)}</div></div>
+  </div>`;
+
+  if (_qS.travel && !_qS.void_travel) {
+    html += `<div class="q-travel-bar">
+      <div class="q-travel-info">🚗 ${_qS.travel.round_trip_miles} mi RT · Billable: ${_qS.travel.billable_round_trip_miles} mi · <em>${_qS.travel.distance_source}</em></div>
+      <button class="q-voidbtn" onclick="qVoidTravel()">Void Travel</button>
+    </div>`;
+  } else if (_qS.void_travel && _qS.travel) {
+    html += `<div class="q-travel-bar">
+      <div class="q-travel-info">Travel fee voided (was $${_qS.travel.travel_fee.toFixed(2)})</div>
+      <button class="q-voidbtn restored" onclick="qVoidTravel()">Restore</button>
+    </div>`;
+  } else if (_qS.travel_loading) {
+    html += `<div class="q-travel-bar"><div class="q-travel-info">⏳ Looking up travel distance…</div></div>`;
+  } else if (_qS.travel_error) {
+    html += `<div class="q-travel-bar"><div class="q-travel-info" style="color:var(--warn)">⚠️ ${_qS.travel_error}</div></div>`;
+  }
+
+  if (_qS.discount_type !== 'none' && da > 0) {
+    html += `<div class="q-disc-bar">🏷️ Discount: <b>−$${da.toFixed(2)}</b> · Discounted service: <b>$${discounted.toFixed(2)}</b></div>`;
+  }
+
+  html += `<div class="q-specs-txt">${eng.specs_summary || '—'}</div>`;
+  if (eng.qb_skus && eng.qb_skus.length) html += eng.qb_skus.map(s=>`<span class="q-sku-chip">${s}</span>`).join('');
+  if (!eng.pricing_ready && eng.pricing_warning) html += `<div class="q-warn-box">⚠️ ${eng.pricing_warning}</div>`;
+  if (_qS.service !== 'repair_job') {
+    const mc = margin >= 50 ? 'var(--success)' : margin >= 25 ? 'var(--warn)' : 'var(--error)';
+    html += `<div class="q-margin-row">Margin: <b style="color:${mc}">${margin.toFixed(1)}%</b> · Est. Net: <b>$${net.toFixed(2)}</b> · Chem: $${eng.chem_cost.toFixed(2)}</div>`;
+  }
+
+  document.getElementById('q-sum-content').innerHTML = html;
+  const btn = document.getElementById('q-save-btn');
+  btn.disabled = !eng.pricing_ready || _qS.saving;
+  btn.textContent = _qS.saving ? 'Saving…' : (_qS.saved_id ? `Saved ✓ (${_qS.saved_id})` : 'Save to CRM');
+}
+
+function qReset() {
+  _qS = _qDef();
+  document.querySelectorAll('.q-svc-card').forEach(c => c.classList.toggle('active', c.dataset.svc==='weekly_full'));
+  const pd = { size:'medium', pool_type:'inground', material:'plaster', finish:'light', debris:'light', repair_type:'repair_replacement' };
+  Object.entries(pd).forEach(([g,v]) => document.querySelectorAll(`.q-pill[data-grp="${g}"]`).forEach(p => p.classList.toggle('active', p.dataset.val===v)));
+  document.getElementById('q-pool-sec').style.display    = '';
+  document.getElementById('q-startup-sec').style.display = 'none';
+  document.getElementById('q-repair-sec').style.display  = 'none';
+  document.getElementById('q-startup-date-row').style.display = 'none';
+  const hint = document.getElementById('q-startup-date-hint'); if(hint) hint.textContent='';
+  ['spa','robot','sun','pets','school','mcp','override'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
+  document.getElementById('qchk-chem')?.classList.add('active');
+  document.getElementById('qchk-prog')?.classList.add('active');
+  ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city',
+   'q-startup-co','q-startup-date','q-rep-co','q-rep-sku','q-rep-addr','q-rep-desc','q-rep-amt'
+  ].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('q-disc-type').value = 'none';
+  document.getElementById('q-disc-val-wrap').style.display = 'none';
+  document.getElementById('q-disc-val').value = '';
+  const msg = document.getElementById('q-save-msg'); msg.className='q-msg'; msg.textContent='';
+  qRecalc();
+}
+
+async function qSave() {
+  const c = _qS._calc;
+  if (!c || !c.eng.pricing_ready || _qS.saving) return;
+  const { eng, tFee, da, discounted, sub, tax, total, net, margin } = c;
+  _qS.saving = true; qRenderSummary();
+
+  const payload = {
+    action: 'save_quote', token: _s ? _s.token : '',
+    first_name:_qS.first_name, last_name:_qS.last_name, email:_qS.email, phone:_qS.phone,
+    address:_qS.address, city:_qS.city, zip_code:_qS.zip_code,
+    service:eng.service_label, pool_type:eng.pool_type, size:eng.size, material:eng.material,
+    spa:eng.spa, finish:eng.finish, debris:eng.debris,
+    has_robot:_qS.has_robot, high_sun_exposure:_qS.high_sun_exposure, has_pets:_qS.has_pets,
+    startup_chemical_work:_qS.startup_chemical, startup_programming:_qS.startup_programming,
+    startup_pool_school:_qS.startup_pool_school, startup_company:_qS.startup_company,
+    sponsored_by_mcp:_qS.sponsored_by_mcp, startup_start_date:_qS.startup_start_date,
+    startup_total_days:_qS.sponsored_by_mcp ? 3 : 0,
+    repair_job_type:_qS.repair_type, repair_company_name:_qS.repair_company,
+    repair_company_address:_qS.repair_address, repair_job_description:_qS.repair_desc,
+    repair_invoice_amount:_qS.repair_amount, repair_sku:_qS.repair_sku,
+    travel_fee:tFee,
+    travel_one_way_miles:             (_qS.travel&&!_qS.void_travel)?_qS.travel.one_way_miles:0,
+    travel_round_trip_miles:          (_qS.travel&&!_qS.void_travel)?_qS.travel.round_trip_miles:0,
+    travel_billable_round_trip_miles: (_qS.travel&&!_qS.void_travel)?_qS.travel.billable_round_trip_miles:0,
+    distance_source: (_qS.travel&&!_qS.void_travel)?_qS.travel.distance_source:'none',
+    service_subtotal:eng.subtotal, discount_type:_qS.discount_type==='none'?'':_qS.discount_type,
+    discount_value:_qS.discount_value, discount_amount:da, discounted_service_subtotal:discounted,
+    quote_subtotal:sub, sales_tax:tax, total_with_tax:total,
+    chem_cost_est:eng.chem_cost, net_profit_est:net, margin_percent:margin,
+    specs_summary:eng.specs_summary, quickbooks_skus:eng.qb_skus.join(', '), quickbooks_item_names:eng.qb_names.join(', '),
+    created_by:(_s&&_s.name)||'portal', quote_source:'portal', quote_version:'2.0',
+    status:(_qS.service==='pool_startup'&&_qS.override_signed)?'SIGNED':'UNSENT'
+  };
+
+  try {
+    const res = await api(payload);
+    _qS.saving = false;
+    const msg = document.getElementById('q-save-msg');
+    if (res.ok) {
+      _qS.saved_id = res.quote_id || '✓';
+      msg.className = 'q-msg ok';
+      msg.textContent = `Saved! Quote ID: ${res.quote_id || '—'}`;
+      msg.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    } else {
+      msg.className = 'q-msg err';
+      msg.textContent = `Error: ${res.error || 'Save failed — check Apps Script logs.'}`;
+    }
+  } catch(e) {
+    _qS.saving = false;
+    const msg = document.getElementById('q-save-msg');
+    msg.className = 'q-msg err';
+    msg.textContent = 'Network error — check connection.';
+  }
+  qRenderSummary();
+}
+
+function qInit() { if (!_qS._calc) qRecalc(); }
 
 </script>
   <!-- ════════════════════════════════════════════════════════
