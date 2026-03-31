@@ -392,6 +392,29 @@ table.ut tr:last-child td{border-bottom:none}
 .inv-tbl tr:last-child td{border-bottom:none}
 .inv-tbl tr.row-out{background:#fff5f5}
 .inv-tbl tr.row-low{background:#fffbeb}
+.inv-edit-btn{background:none;border:none;cursor:pointer;color:var(--muted);font-size:.82rem;padding:.1rem .35rem;border-radius:5px;transition:color .15s;line-height:1}
+.inv-edit-btn:hover{color:var(--teal)}
+.inv-qty-wrap{display:inline-flex;align-items:center;gap:.3rem}
+.inv-qty-input{width:68px;padding:.22rem .4rem;border:1.5px solid var(--teal-light);border-radius:6px;font-size:.85rem;background:#fff;color:var(--text);text-align:right}
+.inv-qty-save{background:var(--teal);color:#fff;border:none;cursor:pointer;border-radius:6px;padding:.22rem .55rem;font-size:.75rem;font-weight:700}
+.inv-qty-save:disabled{opacity:.45;cursor:not-allowed}
+.inv-qty-cancel{background:none;color:var(--muted);border:1px solid var(--border);cursor:pointer;border-radius:6px;padding:.22rem .5rem;font-size:.75rem}
+.csv-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:none;align-items:flex-start;justify-content:center;padding:1.5rem 1rem}
+.csv-modal-backdrop.open{display:flex}
+.csv-modal{background:var(--card);border-radius:16px;width:min(700px,100%);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.3)}
+.csv-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .85rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.csv-modal-title{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:600;letter-spacing:.04em}
+.csv-modal-body{overflow-y:auto;flex:1;padding:.75rem 1.25rem}
+.csv-modal-foot{display:flex;gap:.6rem;justify-content:flex-end;padding:.85rem 1.25rem;border-top:1px solid var(--border);flex-shrink:0}
+.csv-tbl{width:100%;border-collapse:collapse;font-size:.83rem}
+.csv-tbl th{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.5rem .6rem;text-align:left;border-bottom:1px solid var(--border);background:var(--surface)}
+.csv-tbl td{padding:.55rem .6rem;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.csv-tbl tr:last-child td{border-bottom:none}
+.csv-order-qty{width:68px;padding:.25rem .4rem;border:1.5px solid var(--border);border-radius:6px;font-size:.83rem;text-align:right;background:var(--surface);color:var(--text)}
+.csv-order-qty:focus{border-color:var(--teal-light);outline:none;background:#fff}
+.csv-dl-btn{background:var(--teal);color:#fff;border:none;cursor:pointer;border-radius:10px;padding:.5rem 1rem;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:.06em}
+.csv-cancel-btn{background:none;color:var(--muted);border:1.5px solid var(--border);cursor:pointer;border-radius:10px;padding:.5rem 1rem;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700}
+.csv-no-sku{color:var(--muted);font-style:italic}
 .inv-empty{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:.9rem}
 .pend-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:.75rem}
 .pend-sku{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
@@ -499,6 +522,23 @@ table.ut tr:last-child td{border-bottom:none}
  
 </div>
  
+<!-- ── Order CSV modal ── -->
+<div class="csv-modal-backdrop" id="csv-modal-backdrop" onclick="invCloseCsvModal(event)">
+  <div class="csv-modal" onclick="event.stopPropagation()">
+    <div class="csv-modal-hdr">
+      <div class="csv-modal-title">Export Order CSV</div>
+      <button class="drawer-close" onclick="invCloseCsvModal()">✕</button>
+    </div>
+    <div class="csv-modal-body" id="csv-modal-body">
+      <div class="route-loading"><div class="spinner"></div></div>
+    </div>
+    <div class="csv-modal-foot">
+      <button class="csv-cancel-btn" onclick="invCloseCsvModal()">Cancel</button>
+      <button class="csv-dl-btn" onclick="invDownloadOrderCsv()">⬇ Download CSV</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── User edit/create drawer ── -->
 <div class="drawer-backdrop" id="user-backdrop" onclick="closeUserDrawer()"></div>
 <div class="drawer" id="user-drawer">
@@ -1739,6 +1779,7 @@ function renderInventoryPage() {
     html += `<div class="inv-action-row">
       <button class="inv-action-btn" id="inv-btn-refresh" onclick="invRefreshData()">↻ Refresh</button>
       <button class="inv-action-btn" id="inv-btn-apply"   onclick="invApplyPurchases()">✓ Apply Purchases</button>
+      <button class="inv-action-btn" id="inv-btn-csv"     onclick="invOpenOrderCsv()">⬇ Order CSV</button>
     </div>`;
   }
 
@@ -1762,21 +1803,23 @@ function renderInvTabContent_() {
 
 function renderStockTab_() {
   const items = _invData || [];
+  const mgr   = isAdmin();
   if (!items.length) return `<div class="inv-empty">No inventory data found.</div>`;
   let html = `<div class="adm-card"><div style="overflow-x:auto"><table class="inv-tbl">
     <thead><tr>
-      <th>Chemical</th><th>On Hand</th><th>Status</th><th>Reorder At</th><th>Target</th>
+      <th>Chemical</th><th>On Hand</th><th>Status</th><th>Reorder At</th><th>Target</th>${mgr ? '<th></th>' : ''}
     </tr></thead><tbody>`;
-  items.forEach(item => {
+  items.forEach((item, idx) => {
     const rc  = item.status==='OUT'?'row-out':item.status==='LOW'?'row-low':'';
     const bdg = `<span class="status-badge ${item.status.toLowerCase()}">${item.status}</span>`;
     const qty = fmtQty_(item.qty);
     const ro  = item.reorder_level>0 ? `${fmtQty_(item.reorder_level)} <span style="font-size:.72rem;color:var(--muted)">${item.unit}</span>` : '—';
     const tg  = item.target_level >0 ? `${fmtQty_(item.target_level)}  <span style="font-size:.72rem;color:var(--muted)">${item.unit}</span>` : '—';
-    html += `<tr class="${rc}">
+    html += `<tr class="${rc}" id="inv-row-${idx}">
       <td style="font-weight:600">${item.name}</td>
-      <td>${qty} <span style="font-size:.75rem;color:var(--muted)">${item.unit}</span></td>
-      <td>${bdg}</td><td>${ro}</td><td>${tg}</td>
+      <td id="inv-qty-cell-${idx}">${qty} <span style="font-size:.75rem;color:var(--muted)">${item.unit}</span></td>
+      <td id="inv-status-cell-${idx}">${bdg}</td><td>${ro}</td><td>${tg}</td>
+      ${mgr ? `<td style="width:28px;padding:.4rem .5rem"><button class="inv-edit-btn" onclick="invEditQty(${idx})" title="Edit quantity">✏</button></td>` : ''}
     </tr>`;
   });
   html += `</tbody></table></div></div>`;
@@ -1931,6 +1974,197 @@ function invRejectSku(rowIndex) {
 function fmtQty_(n) {
   const num = Number(n||0);
   return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.?0+$/,'');
+}
+
+// ── Inline qty editing ──────────────────────────────────────────────────────
+
+function invEditQty(idx) {
+  const item = (_invData||[])[idx];
+  if (!item) return;
+  const cell = document.getElementById('inv-qty-cell-'+idx);
+  if (!cell) return;
+  const cur = Number(item.qty||0);
+  const disp = Number.isInteger(cur) ? String(cur) : cur.toFixed(2).replace(/\.?0+$/,'');
+  cell.innerHTML = `<span class="inv-qty-wrap">
+    <input class="inv-qty-input" id="inv-qty-input-${idx}" type="number" min="0" step="any" value="${disp}">
+    <button class="inv-qty-save" onclick="invSaveQty(${idx})">Save</button>
+    <button class="inv-qty-cancel" onclick="invCancelEdit(${idx})">✕</button>
+  </span>`;
+  const inp = document.getElementById('inv-qty-input-'+idx);
+  if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', e => { if (e.key==='Enter') invSaveQty(idx); if (e.key==='Escape') invCancelEdit(idx); }); }
+}
+
+function invCancelEdit(idx) {
+  const item = (_invData||[])[idx];
+  if (!item) return;
+  const cell = document.getElementById('inv-qty-cell-'+idx);
+  if (!cell) return;
+  cell.innerHTML = `${fmtQty_(item.qty)} <span style="font-size:.75rem;color:var(--muted)">${item.unit}</span>`;
+}
+
+function invSaveQty(idx) {
+  const item = (_invData||[])[idx];
+  if (!item) return;
+  const inp = document.getElementById('inv-qty-input-'+idx);
+  if (!inp) return;
+  const newQty = parseFloat(inp.value);
+  if (isNaN(newQty) || newQty < 0) { inp.focus(); return; }
+  const saveBtn = inp.closest('.inv-qty-wrap').querySelector('.inv-qty-save');
+  if (saveBtn) { saveBtn.disabled=true; saveBtn.textContent='Saving…'; }
+  api({ secret:SEC, action:'set_inventory_qty', token:_s.token, chemical:item.name, qty:newQty })
+    .then(res => {
+      if (res.ok) {
+        item.qty = newQty;
+        // Recompute status
+        if (newQty <= 0) item.status = 'OUT';
+        else if (item.reorder_level > 0 && newQty <= item.reorder_level) item.status = 'LOW';
+        else item.status = 'OK';
+        invCancelEdit(idx);
+        // Update row class
+        const row = document.getElementById('inv-row-'+idx);
+        if (row) row.className = item.status==='OUT'?'row-out':item.status==='LOW'?'row-low':'';
+        // Update status badge
+        const sc = document.getElementById('inv-status-cell-'+idx);
+        if (sc) sc.innerHTML = `<span class="status-badge ${item.status.toLowerCase()}">${item.status}</span>`;
+        // Update summary counters
+        const items = _invData||[];
+        const outN = items.filter(i=>i.status==='OUT').length;
+        const lowN = items.filter(i=>i.status==='LOW').length;
+        const okN  = items.filter(i=>i.status==='OK').length;
+        const el = s => document.querySelector(s);
+        if (el('.out-stat .inv-stat-num')) el('.out-stat .inv-stat-num').textContent = outN;
+        if (el('.low-stat .inv-stat-num')) el('.low-stat .inv-stat-num').textContent = lowN;
+        if (el('.ok-stat  .inv-stat-num')) el('.ok-stat  .inv-stat-num').textContent = okN;
+      } else {
+        if (saveBtn) { saveBtn.disabled=false; saveBtn.textContent='Save'; }
+        alert('Error: '+(res.error||'Unknown'));
+      }
+    })
+    .catch(e => {
+      if (saveBtn) { saveBtn.disabled=false; saveBtn.textContent='Save'; }
+      alert('Network error: '+e.message);
+    });
+}
+
+// ── Order CSV export ────────────────────────────────────────────────────────
+
+function invOpenOrderCsv() {
+  const backdrop = document.getElementById('csv-modal-backdrop');
+  if (!backdrop) return;
+  document.getElementById('csv-modal-body').innerHTML = '<div class="route-loading"><div class="spinner"></div></div>';
+  backdrop.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  invBuildCsvModal_();
+}
+
+function invCloseCsvModal(e) {
+  if (e && e.target !== document.getElementById('csv-modal-backdrop')) return;
+  const backdrop = document.getElementById('csv-modal-backdrop');
+  if (backdrop) backdrop.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function invBuildCsvModal_() {
+  const body = document.getElementById('csv-modal-body');
+  if (!body) return;
+
+  const buildTable = () => {
+    const items    = _invData || [];
+    const purchases = window._invPurchases || [];
+
+    // Build latest-purchase map keyed by display_name
+    const latestPurch = {};
+    for (const p of purchases) {
+      const key = (p.display_name || p.description || p.sku || '').trim();
+      if (!key) continue;
+      latestPurch[key] = { sku: p.sku||'', description: p.description||'', uom: p.uom||'' };
+    }
+
+    const orderItems = items.filter(i => i.status==='OUT' || i.status==='LOW');
+    if (!orderItems.length) {
+      body.innerHTML = `<div class="inv-empty" style="padding:2rem 0">No items need ordering right now. 🎉</div>`;
+      return;
+    }
+
+    let html = `<p style="font-size:.82rem;color:var(--muted);margin-bottom:.85rem">Adjust order quantities as needed, then download. Items without a SKU are excluded from the CSV.</p>`;
+    html += `<table class="csv-tbl"><thead><tr>
+      <th>Chemical</th><th>SKU</th><th>Status</th><th>Stock</th><th>Target</th><th style="text-align:right">Order Qty</th><th>UOM</th>
+    </tr></thead><tbody>`;
+
+    orderItems.forEach(item => {
+      const purch   = latestPurch[item.name] || {};
+      const gap     = Math.max(0, (item.target_level||0) - (item.qty||0));
+      const defQty  = Math.ceil(gap) || 1;
+      const sku     = purch.sku || '';
+      const uom     = purch.uom || item.unit || '';
+      const desc    = purch.description || '';
+      const badge   = `<span class="status-badge ${item.status.toLowerCase()}">${item.status}</span>`;
+      const skuCell = sku
+        ? `<span style="font-family:'Barlow Condensed',sans-serif;font-size:.78rem;">${sku}</span>`
+        : `<span class="csv-no-sku">—</span>`;
+      // escape for data attrs
+      const safeDesc = desc.replace(/"/g, '&quot;');
+      const safeSku  = sku.replace(/"/g, '&quot;');
+      const safeUom  = uom.replace(/"/g, '&quot;');
+      html += `<tr>
+        <td style="font-weight:600">${item.name}</td>
+        <td>${skuCell}</td>
+        <td>${badge}</td>
+        <td>${fmtQty_(item.qty)} <span style="font-size:.72rem;color:var(--muted)">${item.unit}</span></td>
+        <td>${fmtQty_(item.target_level)} <span style="font-size:.72rem;color:var(--muted)">${item.unit}</span></td>
+        <td style="text-align:right"><input class="csv-order-qty" type="number" min="0" step="any" value="${defQty}"
+          data-sku="${safeSku}" data-uom="${safeUom}" data-desc="${safeDesc}"></td>
+        <td style="font-size:.78rem;color:var(--muted)">${uom}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    body.innerHTML = html;
+  };
+
+  if (window._invPurchases) {
+    buildTable();
+  } else {
+    apiGet({ action:'get_purchase_log', token:_s.token })
+      .then(res => { window._invPurchases = res.ok ? res.data : []; buildTable(); })
+      .catch(() => { window._invPurchases = []; buildTable(); });
+  }
+}
+
+function invDownloadOrderCsv() {
+  const inputs = document.querySelectorAll('#csv-modal-body .csv-order-qty');
+  const rows = ['ITEM #,Qty,Product Name,MFG #,Price,UOM,ExtendedPrice'];
+  let hasRows = false;
+
+  inputs.forEach(inp => {
+    const qty = parseFloat(inp.value);
+    if (!qty || qty <= 0) return;
+    const sku  = inp.dataset.sku  || '';
+    const uom  = inp.dataset.uom  || '';
+    let   desc = inp.dataset.desc || '';
+    if (!sku) return; // skip items without a SKU
+    if (desc.includes(',') || desc.includes('"') || desc.includes('\n')) {
+      desc = `"${desc.replace(/"/g, '""')}"`;
+    }
+    rows.push(`${sku},${qty},${desc},,,,${uom},`);
+    hasRows = true;
+  });
+
+  if (!hasRows) {
+    alert('No items with SKUs and qty > 0. Items need purchase history to have a SKU.');
+    return;
+  }
+
+  const csv  = rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const d    = new Date();
+  const pad  = n => String(n).padStart(2, '0');
+  a.href     = url;
+  a.download = `Heritage_Order_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 </script>
