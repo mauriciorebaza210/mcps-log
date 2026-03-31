@@ -1333,13 +1333,49 @@ function runRecs(){
 function roundQ(v){return v===0?0:Math.round(v*4)/4;}  // nearest 0.25 gal (liquids)
 function roundH(v){return v===0?0:Math.round(v*2)/2;}  // nearest 0.5 lbs (solids)
 
-function buildRecs(fc,ph,ta,ch,gal,mat,isG){
-  const res=[],isS=SM.indexOf(new Date().getMonth()+1)!==-1,g=gal/10000;
-  if(fc!==null){let b=1*g;if(isS)b*=1.5;if(isG)res.push({name:'Liquid Chlorine',status:'bad',amt:roundQ(b*2).toFixed(2)+' gal',reason:'Green/algae — shock dose. Balance chem after 24-48 hrs.'});else if(fc<2)res.push({name:'Liquid Chlorine',status:'bad',amt:roundQ(b*2).toFixed(2)+' gal',reason:'FC critically low — double dose'+(isS?' + summer ×1.5':'')});else if(fc<3)res.push({name:'Liquid Chlorine',status:'warning',amt:roundQ(b).toFixed(2)+' gal',reason:'FC below target 3-5 ppm'+(isS?' (summer ×1.5)':'')});else if(fc<=5)res.push({name:'Liquid Chlorine',status:'good',amt:roundQ(b).toFixed(2)+' gal',reason:'FC in range — maintenance dose'+(isS?' (summer ×1.5)':'')});}
-  if(ph!==null){if(isG&&ph>7.6)res.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'Green pool: shock first, adjust pH after 24-48 hrs.'});else if(ph>7.6){let a=0.5*g;if(mat==='fiberglass')a*=0.75;a=Math.min(a,1*g);a=Math.max(roundQ(a),0.25);res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2-7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});}}
-  if(ta!==null&&ta<80&&!isG)res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:roundH(1.4*g*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80-120)'});
-  if(ch!==null&&!isG){if(ch<250)res.push({name:'Calcium Hardness Increaser',status:'warning',amt:roundH(1.2*g*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250-350).'+(mat==='plaster'?' Upper range for plaster.':'')});if(ch>450)res.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA.'});}
-  if(isG)res.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH/TA/CH.'});
+function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
+  const res = [], isS = SM.indexOf(new Date().getMonth()+1) !== -1, g = gal/10000;
+
+  // Rule 1 — Liquid Chlorine
+  if (fc !== null) {
+    let b = 1*g;
+    if (isS) b *= 1.5;
+    if (isG)       res.push({name:'Liquid Chlorine',status:'bad',    amt:roundQ(b*2).toFixed(2)+' gal',reason:'Green/algae — shock dose. Do NOT adjust pH/TA/CH until chlorine works 24-48 hrs.'});
+    else if (fc<2) res.push({name:'Liquid Chlorine',status:'bad',    amt:roundQ(b*2).toFixed(2)+' gal',reason:'FC critically low — double dose'+(isS?' + summer ×1.5':'')});
+    else if (fc<3) res.push({name:'Liquid Chlorine',status:'warning',amt:roundQ(b).toFixed(2)+' gal',  reason:'FC below target (3–5 ppm)'+(isS?' (summer ×1.5)':'')});
+    else if (fc<=5)res.push({name:'Liquid Chlorine',status:'good',   amt:roundQ(b).toFixed(2)+' gal',  reason:'FC in range — maintenance dose to hold through week'+(isS?' (summer ×1.5)':'')});
+    // fc > 5 → no recommendation
+  }
+
+  // Rule 2 — pH / Muriatic Acid or Soda Ash
+  if (ph !== null) {
+    if (ph < 7.2) {
+      // Always recommend soda ash for low pH, even when green
+      res.push({name:'Soda Ash',status:'bad',amt:'As needed',reason:'pH below 7.2 — raise carefully, test before adding more.'});
+    } else if (!isG && ph > 7.6) {
+      let a = 0.5*g;
+      if (mat === 'fiberglass') a *= 0.75;
+      a = Math.min(a, 1.0*g);
+      a = Math.max(roundQ(a), 0.25);
+      res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2–7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});
+    } else if (isG && ph > 7.6) {
+      res.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'Green pool: shock first, adjust pH after 24-48 hrs.'});
+    }
+  }
+
+  // Rule 3 — Alkalinity
+  if (ta !== null && ta < 80 && !isG)
+    res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:roundH(1.4*g*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80–120 ppm)'});
+
+  // Rule 4 — Calcium Hardness
+  if (ch !== null && !isG) {
+    if (ch < 250) res.push({name:'Calcium Hardness Increaser',status:'warning',amt:roundH(1.2*g*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250–350 ppm).'+(mat==='plaster'?' Keep CH toward upper range for plaster surfaces.':'')});
+    if (ch > 450) res.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA hard water.'});
+  }
+
+  // Rule 5 — Algae Protocol banner (always first)
+  if (isG) res.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH, TA, or CH.'});
+
   return res;
 }
 
