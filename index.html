@@ -582,10 +582,10 @@ select.q-inp{cursor:pointer}
       <table class="ut">
         <thead><tr>
           <th>Name</th><th>Username</th><th>Roles</th>
-          <th>Operator Name</th><th>Available Days</th><th>Status</th>
+          <th>Available Days</th><th>Status</th>
         </tr></thead>
         <tbody id="user-tbody">
-          <tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr>
+          <tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -1037,7 +1037,7 @@ let _usersCache = [];
 // ══════════════════════════════════════════════════════════════════════════════
 // SESSION
 // ══════════════════════════════════════════════════════════════════════════════
-let _s = null; // { token, name, roles[], operator_name, pages[] }
+let _s = null; // { token, name, roles[], pages[] }
 let _curPage = 'home';
 let _routeData = null;
 let _unassignedPools = null;
@@ -1073,7 +1073,7 @@ function doLogin() {
     if(res.ok){
       const roles = res.roles || [res.role || 'technician'];
       const pages = unionPages_(roles);
-      _s = {token:res.token,name:res.name,roles,operator_name:res.operator_name||'',pages};
+      _s = {token:res.token,name:res.name,roles,pages};
       localStorage.setItem('mcps_s',JSON.stringify(_s));
       const deep = sessionStorage.getItem('mcps_deep')||'home';
       sessionStorage.removeItem('mcps_deep');
@@ -1883,12 +1883,11 @@ function renderUserTable(users) {
   const tb = document.getElementById('user-tbody');
   if (!tb) return;
   if (!users.length) {
-    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--muted)">No users yet.</td></tr>';
     return;
   }
   tb.innerHTML = users.map(u => {
     const roles = Array.isArray(u.roles) ? u.roles : String(u.roles||'').split(',').map(r=>r.trim());
-    const operatorName = u.operator_name || u.name || '—';
     const days  = u.available_days
       ? String(u.available_days).split(',').map(d=>d.trim().slice(0,3)).join(', ')
       : '<span class="no-days">Not set</span>';
@@ -1897,7 +1896,6 @@ function renderUserTable(users) {
       <td style="font-weight:600">${u.name||'—'}</td>
       <td style="color:var(--muted)">${u.username}</td>
       <td>${roles.join(', ')}</td>
-      <td>${operatorName}</td>
       <td>${days}</td>
       <td><span class="dot ${active?'on':'off'}"></span>${active?'Active':'Inactive'}</td>
     </tr>`;
@@ -2021,7 +2019,6 @@ function saveUser() {
       password,
       name,
       roles   : roles.join(','),
-      operator_name  : name, // Default to full name
       available_days : days.join(','),
     }).then(res => {
       btn.disabled = false; btn.textContent = 'Save User';
@@ -2038,7 +2035,6 @@ function saveUser() {
     const fields = {
       name,
       roles          : roles.join(','),
-      operator_name  : name,
       available_days : days.join(','),
       active,
     };
