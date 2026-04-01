@@ -5,6 +5,7 @@
 // Requires two sheets in your Google Spreadsheet:
 //   "Modules"       — columns: id, title, description, order, created_by, created_at
 //   "Module_Videos" — columns: id, module_id, title, drive_url, description, order, created_at
+//   "Training_Progress" — columns: id, username, module_id, video_id, status, completed_at, last_position_sec, updated_at
 //
 // The doPost / doGet handlers already exist in your main script.
 // Route these actions there by adding calls like:
@@ -16,6 +17,8 @@
 //   case 'create_video':   return trCreateVideo(params, session);
 //   case 'update_video':   return trUpdateVideo(params, session);
 //   case 'delete_video':   return trDeleteVideo(params, session);
+//   case 'get_training_progress':    return trGetTrainingProgress(params, session);
+//   case 'upsert_training_progress': return trUpsertTrainingProgress(params, session);
 //
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -30,6 +33,8 @@ function trGetSheet_(name) {
       sheet.appendRow(['id','title','description','order','created_by','created_at']);
     } else if (name === 'Module_Videos') {
       sheet.appendRow(['id','module_id','title','drive_url','description','order','created_at']);
+    } else if (name === 'Training_Progress') {
+      sheet.appendRow(['id','username','module_id','video_id','status','completed_at','last_position_sec','updated_at']);
     }
   }
   return sheet;
@@ -226,6 +231,87 @@ function trDeleteVideo(params, session) {
     }
   }
   return { ok: false, error: 'Video not found.' };
+}
+
+// ── User Progress ──────────────────────────────────────────────────────────────
+
+function trGetTrainingProgress(params, session) {
+  if (!session || !session.username) return { ok: false, error: 'Authentication required.' };
+  var username = String(session.username).trim();
+  var sheet = trGetSheet_('Training_Progress');
+  var rows = trSheetToObjects_(sheet).filter(function(r) {
+    return String(r.username || '').trim() === username;
+  });
+
+  var progress = {};
+  rows.forEach(function(r) {
+    var moduleId = String(r.module_id || '').trim();
+    var videoId = String(r.video_id || '').trim();
+    if (!moduleId || !videoId) return;
+    var key = moduleId + '::' + videoId;
+    progress[key] = {
+      status: String(r.status || 'not_started'),
+      completed_at: r.completed_at || '',
+      last_position_sec: parseFloat(r.last_position_sec) || 0,
+      updated_at: r.updated_at || ''
+    };
+  });
+
+  return { ok: true, progress: progress };
+}
+
+function trUpsertTrainingProgress(params, session) {
+  if (!session || !session.username) return { ok: false, error: 'Authentication required.' };
+  var username = String(session.username).trim();
+  var moduleId = String(params.module_id || '').trim();
+  var videoId = String(params.video_id || '').trim();
+  if (!moduleId) return { ok: false, error: 'module_id is required.' };
+  if (!videoId) return { ok: false, error: 'video_id is required.' };
+
+  var status = String(params.status || 'in_progress').trim();
+  if (['not_started','in_progress','completed'].indexOf(status) === -1) status = 'in_progress';
+  var position = parseFloat(params.last_position_sec);
+  if (isNaN(position) || position < 0) position = 0;
+  var now = new Date().toISOString();
+  var completedAt = status === 'completed' ? now : '';
+
+  var sheet = trGetSheet_('Training_Progress');
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var userCol = headers.indexOf('username');
+  var moduleCol = headers.indexOf('module_id');
+  var videoCol = headers.indexOf('video_id');
+  var statusCol = headers.indexOf('status');
+  var completedCol = headers.indexOf('completed_at');
+  var positionCol = headers.indexOf('last_position_sec');
+  var updatedCol = headers.indexOf('updated_at');
+
+  for (var i = 1; i < data.length; i++) {
+    if (
+      String(data[i][userCol] || '').trim() === username &&
+      String(data[i][moduleCol] || '').trim() === moduleId &&
+      String(data[i][videoCol] || '').trim() === videoId
+    ) {
+      var row = i + 1;
+      sheet.getRange(row, statusCol + 1).setValue(status);
+      sheet.getRange(row, completedCol + 1).setValue(completedAt);
+      sheet.getRange(row, positionCol + 1).setValue(position);
+      sheet.getRange(row, updatedCol + 1).setValue(now);
+      return { ok: true };
+    }
+  }
+
+  sheet.appendRow([
+    trGenerateId_(),
+    username,
+    moduleId,
+    videoId,
+    status,
+    completedAt,
+    position,
+    now
+  ]);
+  return { ok: true };
 }
 
 // ── Role check helper ─────────────────────────────────────────────────────────
