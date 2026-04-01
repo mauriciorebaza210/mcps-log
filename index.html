@@ -2729,7 +2729,7 @@ async function qSave() {
   _qS.saving = true; qRenderSummary();
 
   const payload = {
-    action: 'save_quote', token: _s ? _s.token : '',
+    secret: SEC, action: 'save_quote', token: _s ? _s.token : '',
     first_name:_qS.first_name, last_name:_qS.last_name, email:_qS.email, phone:_qS.phone,
     address:_qS.address, city:_qS.city, zip_code:_qS.zip_code,
     service:eng.service_label, pool_type:eng.pool_type, size:eng.size, material:eng.material,
