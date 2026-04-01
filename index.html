@@ -49,6 +49,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .r-badge.admin{background:#fef3c7;color:#92400e}
 .r-badge.technician,.r-badge.lead{background:#f1f5f9;color:#475569}
 .r-badge.manager{background:#ede9fe;color:#4c1d95}
+.r-badge.trainee{background:#dcfce7;color:#166534}
 .btn-out{font-size:.78rem;font-weight:600;font-family:'Barlow',sans-serif;padding:.3rem .8rem;border:1.5px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}
 .btn-out:hover{background:var(--surface);color:var(--text)}
 
@@ -647,6 +648,7 @@ select.q-inp{cursor:pointer}
           <label class="rcb"><input type="checkbox" value="office"> Office</label>
           <label class="rcb"><input type="checkbox" value="manager"> Manager</label>
           <label class="rcb"><input type="checkbox" value="admin"> Admin</label>
+          <label class="rcb"><input type="checkbox" value="trainee"> Trainee</label>
         </div>
       </div>
  
@@ -892,8 +894,93 @@ select.q-inp{cursor:pointer}
       </div>
     </div>
 
+    <!-- Training Modules -->
+    <div class="pf" id="page-training">
+      <div class="tr-page-hdr">
+        <h2>Training Modules</h2>
+        <button class="tr-add-btn" id="tr-add-mod-btn" style="display:none" onclick="openModuleDrawer(null)">+ Module</button>
+      </div>
+      <div id="tr-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
+      <div id="tr-root"></div>
+    </div>
+
   </div><!-- /page-wrap -->
   <nav class="bottom-nav" id="bnav"></nav>
+</div>
+
+<!-- ── Video Player Modal ── -->
+<div id="vp-backdrop" class="vp-backdrop" style="display:none" onclick="closeVideoPlayer(event)">
+  <div class="vp-modal" onclick="event.stopPropagation()">
+    <div class="vp-hdr">
+      <div class="vp-title" id="vp-title">Video</div>
+      <button class="vp-close" onclick="closeVideoPlayer()">✕</button>
+    </div>
+    <div class="vp-frame-wrap">
+      <iframe id="vp-frame" src="" allow="autoplay" allowfullscreen></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ── Module Drawer (add/edit module) ── -->
+<div class="mod-drawer-backdrop" id="mod-backdrop" onclick="closeModuleDrawer()"></div>
+<div class="mod-drawer" id="mod-drawer">
+  <div class="mod-drawer-hdr">
+    <div class="mod-drawer-title" id="mod-drawer-title">Add Module</div>
+    <button class="drawer-close" onclick="closeModuleDrawer()">✕</button>
+  </div>
+  <div class="mod-drawer-body">
+    <input type="hidden" id="mod-id">
+    <div class="mod-dfg">
+      <label>Module Title</label>
+      <input type="text" id="mod-title" placeholder="e.g. The P(I)MP Program – Step 1">
+    </div>
+    <div class="mod-dfg">
+      <label>Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+      <textarea id="mod-desc" rows="3" placeholder="Brief summary of what this module covers..."></textarea>
+    </div>
+    <div class="mod-dfg">
+      <label>Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
+      <input type="number" id="mod-order" min="1" placeholder="1">
+    </div>
+    <div class="mod-drawer-msg" id="mod-drawer-msg"></div>
+  </div>
+  <div class="mod-drawer-foot">
+    <button class="mod-save-btn" id="mod-save-btn" onclick="saveModule()">Save Module</button>
+  </div>
+</div>
+
+<!-- ── Video Drawer (add/edit video) ── -->
+<div class="mod-drawer-backdrop" id="vid-backdrop" onclick="closeVideoDrawer()"></div>
+<div class="mod-drawer" id="vid-drawer">
+  <div class="mod-drawer-hdr">
+    <div class="mod-drawer-title" id="vid-drawer-title">Add Video</div>
+    <button class="drawer-close" onclick="closeVideoDrawer()">✕</button>
+  </div>
+  <div class="mod-drawer-body">
+    <input type="hidden" id="vid-id">
+    <input type="hidden" id="vid-module-id">
+    <div class="mod-dfg">
+      <label>Video Title</label>
+      <input type="text" id="vid-title" placeholder="e.g. PMP Step 1 – Arrival & Assessment">
+    </div>
+    <div class="mod-dfg">
+      <label>Google Drive Share URL</label>
+      <input type="text" id="vid-url" placeholder="https://drive.google.com/file/d/…/view">
+      <div class="hint">Paste the "Share" link from Google Drive. Make sure sharing is set to "Anyone with the link."</div>
+    </div>
+    <div class="mod-dfg">
+      <label>Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+      <textarea id="vid-desc" rows="2" placeholder="What is covered in this video..."></textarea>
+    </div>
+    <div class="mod-dfg">
+      <label>Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
+      <input type="number" id="vid-order" min="1" placeholder="1">
+    </div>
+    <div class="mod-drawer-msg" id="vid-drawer-msg"></div>
+  </div>
+  <div class="mod-drawer-foot">
+    <button class="mod-save-btn" id="vid-save-btn" onclick="saveVideo()">Save Video</button>
+  </div>
 </div>
 
 <!-- Pool Action Bottom Sheet -->
@@ -929,19 +1016,20 @@ const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
   home:'🏠|Home', live_map:'🗺️|Map', service_log:'📝|Log',
-  inventory:'📦|Stock', quotes:'📄|Quotes', admin:'🔒|Admin'
+  inventory:'📦|Stock', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin'
 };
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['home','live_map','service_log'],
-  lead:['home','live_map','service_log'],
+  technician:['home','live_map','service_log','training'],
+  lead:['home','live_map','service_log','training'],
+  trainee:['home','training'],
   office:['home','quotes','inventory'],
-  manager:['home','live_map','service_log','inventory','quotes'],
-  admin:['home','live_map','service_log','inventory','quotes','admin'],
+  manager:['home','live_map','service_log','inventory','quotes','training'],
+  admin:['home','live_map','service_log','inventory','quotes','training','admin'],
 };
 
-const ALL_ROLES = ['technician','lead','office','manager','admin'];
+const ALL_ROLES = ['technician','lead','office','manager','admin','trainee'];
 const ALL_DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 let _editingUsername = null;
 let _usersCache = [];
@@ -1001,7 +1089,7 @@ function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch
 
 function unionPages_(roles) {
   const set = new Set();
-  const order = ['home','live_map','service_log','inventory','quotes','admin'];
+  const order = ['home','live_map','service_log','inventory','quotes','training','admin'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }
@@ -1031,7 +1119,7 @@ function buildNav(){
 }
 
 function buildHomeCards(){
-  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical stock levels',quotes:'Quote calculator',admin:'Manage users & access'};
+  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical stock levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
   document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
@@ -1052,6 +1140,7 @@ function navigateTo(page){
   if(page==='service_log'&&!_formItems.length) loadServiceLog();
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
+  if(page==='training') loadTraining();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2780,6 +2869,264 @@ async function qSave() {
 
 function qInit() { if (!_qS._calc) qRecalc(); }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// TRAINING MODULES
+// ══════════════════════════════════════════════════════════════════════════════
+let _trLoaded = false;
+let _trModules = [];
+
+function loadTraining() {
+  if (_trLoaded) { renderTraining(); return; }
+  document.getElementById('tr-loading').style.display = 'block';
+  document.getElementById('tr-root').innerHTML = '';
+  apiGet({action:'get_modules', token:_s.token})
+    .then(res => {
+      document.getElementById('tr-loading').style.display = 'none';
+      if (res.ok) {
+        _trModules = res.modules || [];
+        _trLoaded = true;
+        renderTraining();
+      } else {
+        document.getElementById('tr-root').innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">⚠️</div><div class="tr-empty-text">${res.error||'Failed to load modules'}</div></div>`;
+      }
+    })
+    .catch(e => {
+      document.getElementById('tr-loading').style.display = 'none';
+      document.getElementById('tr-root').innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">⚠️</div><div class="tr-empty-text">Network error: ${e.message}</div></div>`;
+    });
+}
+
+function renderTraining() {
+  const isAdm = isAdmin();
+  const addBtn = document.getElementById('tr-add-mod-btn');
+  if (addBtn) addBtn.style.display = isAdm ? 'inline-block' : 'none';
+
+  const root = document.getElementById('tr-root');
+  if (!_trModules.length) {
+    root.innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">🎓</div><div class="tr-empty-text">No modules yet</div><div class="tr-empty-sub">${isAdm ? 'Click "+ Module" to create the first one.' : 'Check back soon!'}</div></div>`;
+    return;
+  }
+
+  root.innerHTML = _trModules.map((mod, idx) => {
+    const videos = mod.videos || [];
+    const adminActions = isAdm ? `
+      <div class="module-admin-actions">
+        <button class="mod-act-btn" onclick="event.stopPropagation();openModuleDrawer('${mod.id}')">✏️ Edit</button>
+        <button class="mod-act-btn danger" onclick="event.stopPropagation();deleteModule('${mod.id}')">🗑</button>
+      </div>` : '';
+
+    const videoItems = videos.map(v => {
+      const adminVBtns = isAdm ? `
+        <div class="video-admin-btns">
+          <button class="v-act-btn" onclick="event.stopPropagation();openVideoDrawer('${mod.id}','${v.id}')">✏️</button>
+          <button class="v-act-btn danger" onclick="event.stopPropagation();deleteVideo('${mod.id}','${v.id}')">🗑</button>
+        </div>` : '';
+      return `
+        <div class="video-item" onclick="openVideoPlayer(${JSON.stringify(v).replace(/"/g,'&quot;')})">
+          <div class="video-thumb"><span class="video-play-icon">▶️</span>${adminVBtns}</div>
+          <div class="video-item-info">
+            <div class="video-item-title">${escHtml(v.title)}</div>
+            ${v.description ? `<div class="video-item-order">${escHtml(v.description)}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    const addVideoBtn = isAdm ? `
+      <div class="tr-add-video-row">
+        <button class="tr-add-video-btn" onclick="openVideoDrawer('${mod.id}', null)">+ Add Video</button>
+      </div>` : '';
+
+    return `
+      <div class="module-card" id="module-${mod.id}">
+        <div class="module-card-hdr">
+          <div class="module-num">${String(idx+1).padStart(2,'0')}</div>
+          <div class="module-info">
+            <div class="module-title">${escHtml(mod.title)}</div>
+            ${mod.description ? `<div class="module-desc">${escHtml(mod.description)}</div>` : ''}
+            <span class="module-video-count">${videos.length} video${videos.length!==1?'s':''}</span>
+          </div>
+          ${adminActions}
+        </div>
+        ${videos.length || isAdm ? `<div class="module-videos"><div class="video-grid">${videoItems}</div>${addVideoBtn}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Video Player ──────────────────────────────────────────────────────────────
+function openVideoPlayer(video) {
+  if (typeof video === 'string') video = JSON.parse(video);
+  const driveId = extractDriveId(video.drive_url || video.url || '');
+  const embedSrc = driveId
+    ? `https://drive.google.com/file/d/${driveId}/preview`
+    : (video.drive_url || video.url || '');
+  document.getElementById('vp-title').textContent = video.title || 'Video';
+  document.getElementById('vp-frame').src = embedSrc;
+  document.getElementById('vp-backdrop').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeVideoPlayer(e) {
+  if (e && e.target !== document.getElementById('vp-backdrop')) return;
+  document.getElementById('vp-backdrop').style.display = 'none';
+  document.getElementById('vp-frame').src = '';
+  document.body.style.overflow = '';
+}
+
+function extractDriveId(url) {
+  if (!url) return null;
+  // Handle formats:
+  // https://drive.google.com/file/d/FILE_ID/view
+  // https://drive.google.com/file/d/FILE_ID/preview
+  // https://drive.google.com/open?id=FILE_ID
+  const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+// ── Module Drawer ─────────────────────────────────────────────────────────────
+function openModuleDrawer(moduleId) {
+  const isEdit = !!moduleId;
+  document.getElementById('mod-drawer-title').textContent = isEdit ? 'Edit Module' : 'Add Module';
+  document.getElementById('mod-id').value = moduleId || '';
+  document.getElementById('mod-drawer-msg').className = 'mod-drawer-msg';
+  document.getElementById('mod-drawer-msg').textContent = '';
+  if (isEdit) {
+    const mod = _trModules.find(m => m.id === moduleId);
+    document.getElementById('mod-title').value = mod ? mod.title : '';
+    document.getElementById('mod-desc').value = mod ? (mod.description || '') : '';
+    document.getElementById('mod-order').value = mod ? (mod.order || '') : '';
+  } else {
+    document.getElementById('mod-title').value = '';
+    document.getElementById('mod-desc').value = '';
+    document.getElementById('mod-order').value = (_trModules.length + 1);
+  }
+  document.getElementById('mod-backdrop').classList.add('open');
+  document.getElementById('mod-drawer').classList.add('open');
+}
+
+function closeModuleDrawer() {
+  document.getElementById('mod-backdrop').classList.remove('open');
+  document.getElementById('mod-drawer').classList.remove('open');
+}
+
+function saveModule() {
+  const btn = document.getElementById('mod-save-btn');
+  const msgEl = document.getElementById('mod-drawer-msg');
+  const modId = document.getElementById('mod-id').value;
+  const title = document.getElementById('mod-title').value.trim();
+  const desc = document.getElementById('mod-desc').value.trim();
+  const order = parseInt(document.getElementById('mod-order').value) || (_trModules.length + 1);
+  if (!title) { showDrawerMsg(msgEl, 'err', 'Title is required.'); return; }
+  btn.disabled = true; btn.textContent = 'Saving...';
+  msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
+  const payload = {
+    action: modId ? 'update_module' : 'create_module',
+    secret: SEC, token: _s.token,
+    module_id: modId, title, description: desc, order
+  };
+  api(payload).then(res => {
+    btn.disabled = false; btn.textContent = 'Save Module';
+    if (res.ok) {
+      _trLoaded = false;
+      closeModuleDrawer();
+      loadTraining();
+    } else {
+      showDrawerMsg(msgEl, 'err', res.error || 'Error saving module.');
+    }
+  }).catch(() => { btn.disabled = false; btn.textContent = 'Save Module'; showDrawerMsg(msgEl, 'err', 'Network error.'); });
+}
+
+function deleteModule(moduleId) {
+  const mod = _trModules.find(m => m.id === moduleId);
+  if (!confirm(`Delete module "${mod ? mod.title : moduleId}"?\n\nThis will also delete all videos in this module.`)) return;
+  api({action:'delete_module', secret:SEC, token:_s.token, module_id:moduleId})
+    .then(res => {
+      if (res.ok) { _trLoaded = false; loadTraining(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    }).catch(() => alert('Network error.'));
+}
+
+// ── Video Drawer ──────────────────────────────────────────────────────────────
+function openVideoDrawer(moduleId, videoId) {
+  const isEdit = !!videoId;
+  document.getElementById('vid-drawer-title').textContent = isEdit ? 'Edit Video' : 'Add Video';
+  document.getElementById('vid-id').value = videoId || '';
+  document.getElementById('vid-module-id').value = moduleId || '';
+  document.getElementById('vid-drawer-msg').className = 'mod-drawer-msg';
+  document.getElementById('vid-drawer-msg').textContent = '';
+  if (isEdit) {
+    const mod = _trModules.find(m => m.id === moduleId);
+    const vid = mod ? (mod.videos||[]).find(v => v.id === videoId) : null;
+    document.getElementById('vid-title').value = vid ? vid.title : '';
+    document.getElementById('vid-url').value = vid ? (vid.drive_url || vid.url || '') : '';
+    document.getElementById('vid-desc').value = vid ? (vid.description || '') : '';
+    document.getElementById('vid-order').value = vid ? (vid.order || '') : '';
+  } else {
+    document.getElementById('vid-title').value = '';
+    document.getElementById('vid-url').value = '';
+    document.getElementById('vid-desc').value = '';
+    const mod = _trModules.find(m => m.id === moduleId);
+    document.getElementById('vid-order').value = mod ? ((mod.videos||[]).length + 1) : 1;
+  }
+  document.getElementById('vid-backdrop').classList.add('open');
+  document.getElementById('vid-drawer').classList.add('open');
+}
+
+function closeVideoDrawer() {
+  document.getElementById('vid-backdrop').classList.remove('open');
+  document.getElementById('vid-drawer').classList.remove('open');
+}
+
+function saveVideo() {
+  const btn = document.getElementById('vid-save-btn');
+  const msgEl = document.getElementById('vid-drawer-msg');
+  const vidId = document.getElementById('vid-id').value;
+  const moduleId = document.getElementById('vid-module-id').value;
+  const title = document.getElementById('vid-title').value.trim();
+  const url = document.getElementById('vid-url').value.trim();
+  const desc = document.getElementById('vid-desc').value.trim();
+  const order = parseInt(document.getElementById('vid-order').value) || 1;
+  if (!title) { showDrawerMsg(msgEl, 'err', 'Title is required.'); return; }
+  if (!url) { showDrawerMsg(msgEl, 'err', 'Google Drive URL is required.'); return; }
+  if (!extractDriveId(url)) { showDrawerMsg(msgEl, 'err', 'Could not parse a Google Drive file ID from this URL.'); return; }
+  btn.disabled = true; btn.textContent = 'Saving...';
+  msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
+  const payload = {
+    action: vidId ? 'update_video' : 'create_video',
+    secret: SEC, token: _s.token,
+    video_id: vidId, module_id: moduleId, title, drive_url: url, description: desc, order
+  };
+  api(payload).then(res => {
+    btn.disabled = false; btn.textContent = 'Save Video';
+    if (res.ok) {
+      _trLoaded = false;
+      closeVideoDrawer();
+      loadTraining();
+    } else {
+      showDrawerMsg(msgEl, 'err', res.error || 'Error saving video.');
+    }
+  }).catch(() => { btn.disabled = false; btn.textContent = 'Save Video'; showDrawerMsg(msgEl, 'err', 'Network error.'); });
+}
+
+function deleteVideo(moduleId, videoId) {
+  const mod = _trModules.find(m => m.id === moduleId);
+  const vid = mod ? (mod.videos||[]).find(v => v.id === videoId) : null;
+  if (!confirm(`Delete video "${vid ? vid.title : videoId}"?`)) return;
+  api({action:'delete_video', secret:SEC, token:_s.token, video_id:videoId, module_id:moduleId})
+    .then(res => {
+      if (res.ok) { _trLoaded = false; loadTraining(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    }).catch(() => alert('Network error.'));
+}
+
+function showDrawerMsg(el, type, text) {
+  el.textContent = text;
+  el.className = 'mod-drawer-msg ' + type;
+}
+
 </script>
   <!-- ════════════════════════════════════════════════════════
      ADD THESE STYLES to the <style> block in index.html
@@ -2947,6 +3294,75 @@ function qInit() { if (!_qS._calc) qRecalc(); }
   display: inline-block;
   margin-top: .5rem;
 }
+
+/* ── TRAINING MODULES ─────────────────────────────────────────────────────── */
+.tr-page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem}
+.tr-page-hdr h2{font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;letter-spacing:-.01em}
+.tr-add-btn{font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.45rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:10px;cursor:pointer;transition:background .15s}
+.tr-add-btn:hover{background:var(--teal-mid)}
+.module-card{background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:1rem;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.module-card-hdr{padding:1rem 1.1rem;display:flex;align-items:flex-start;gap:.75rem}
+.module-num{font-family:'Oswald',sans-serif;font-size:1.3rem;font-weight:700;color:var(--teal-mid);min-width:2rem;line-height:1.2}
+.module-info{flex:1;min-width:0}
+.module-title{font-family:'Oswald',sans-serif;font-size:1.05rem;font-weight:700;letter-spacing:.01em;line-height:1.2}
+.module-desc{font-size:.82rem;color:var(--muted);margin-top:.2rem;line-height:1.4}
+.module-admin-actions{display:flex;gap:.4rem;flex-shrink:0}
+.mod-act-btn{font-size:.78rem;padding:.3rem .65rem;border-radius:8px;border:1.5px solid var(--border);background:transparent;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600;color:var(--muted);transition:all .15s}
+.mod-act-btn:hover{background:var(--surface);color:var(--text)}
+.mod-act-btn.danger:hover{border-color:#fca5a5;background:#fef2f2;color:var(--error)}
+.module-video-count{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:.15rem .55rem;border-radius:99px;background:var(--surface);border:1px solid var(--border);margin-top:.35rem;display:inline-block}
+.module-videos{padding:.25rem 1rem 1rem}
+.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.75rem}
+.video-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .15s;position:relative}
+.video-item:hover{box-shadow:0 4px 16px rgba(0,0,0,.1);transform:translateY(-2px);border-color:var(--teal-light)}
+.video-thumb{aspect-ratio:16/9;background:linear-gradient(135deg,#0d4d44,#1a7a6e);display:flex;align-items:center;justify-content:center;position:relative}
+.video-play-icon{font-size:2rem;opacity:.85;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.video-item-info{padding:.55rem .65rem}
+.video-item-title{font-size:.8rem;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.video-item-order{font-family:'Barlow Condensed',sans-serif;font-size:.65rem;color:var(--muted);letter-spacing:.04em;margin-top:.15rem}
+.video-admin-btns{position:absolute;top:.35rem;right:.35rem;display:flex;gap:.25rem;opacity:0;transition:opacity .15s}
+.video-item:hover .video-admin-btns{opacity:1}
+.v-act-btn{font-size:.65rem;padding:.2rem .4rem;border-radius:6px;border:none;cursor:pointer;font-weight:600;background:rgba(255,255,255,.9);color:var(--text)}
+.v-act-btn.danger{color:var(--error)}
+.tr-add-video-row{margin-top:.65rem}
+.tr-add-video-btn{font-size:.8rem;font-weight:600;padding:.4rem .9rem;border:1.5px dashed var(--teal-light);border-radius:10px;background:transparent;color:var(--teal-mid);cursor:pointer;transition:all .15s;font-family:'Barlow',sans-serif;display:inline-flex;align-items:center;gap:.3rem}
+.tr-add-video-btn:hover{background:var(--teal-glow);border-style:solid}
+.tr-empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
+.tr-empty-icon{font-size:2.5rem;margin-bottom:.75rem}
+.tr-empty-text{font-size:.95rem;font-weight:500}
+.tr-empty-sub{font-size:.82rem;margin-top:.3rem;opacity:.75}
+
+/* Video player modal */
+.vp-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.vp-modal{background:#000;border-radius:16px;overflow:hidden;width:100%;max-width:700px;box-shadow:0 25px 80px rgba(0,0,0,.5);position:relative}
+.vp-hdr{background:rgba(255,255,255,.05);padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between}
+.vp-title{color:#fff;font-weight:600;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:1rem}
+.vp-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:1rem;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
+.vp-close:hover{background:rgba(255,255,255,.3)}
+.vp-frame-wrap{position:relative;padding-bottom:56.25%;height:0}
+.vp-frame-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+
+/* Module/Video drawers */
+.mod-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:none}
+.mod-drawer-backdrop.open{display:block}
+.mod-drawer{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-radius:20px 20px 0 0;z-index:501;transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:85vh;display:flex;flex-direction:column}
+.mod-drawer.open{transform:translateY(0)}
+.mod-drawer-hdr{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.mod-drawer-title{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700}
+.mod-drawer-body{padding:1.1rem 1.25rem;overflow-y:auto;flex:1}
+.mod-dfg{margin-bottom:1rem}
+.mod-dfg label{display:block;font-size:.85rem;font-weight:600;margin-bottom:.4rem}
+.mod-dfg input,.mod-dfg textarea{width:100%;padding:.75rem 1rem;border:1.5px solid var(--border);border-radius:12px;font-size:.95rem;font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:all .2s;resize:vertical}
+.mod-dfg input:focus,.mod-dfg textarea:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.12)}
+.mod-dfg .hint{font-size:.75rem;color:var(--muted);margin-top:.35rem}
+.mod-drawer-foot{padding:.85rem 1.25rem;border-top:1px solid var(--border);flex-shrink:0}
+.mod-save-btn{width:100%;padding:.85rem;background:var(--teal);color:#fff;border:none;border-radius:12px;font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+.mod-save-btn:hover:not(:disabled){background:var(--teal-mid)}
+.mod-save-btn:disabled{background:#cbd5e1;cursor:not-allowed}
+.mod-drawer-msg{font-size:.82rem;margin-top:.65rem;padding:.55rem .8rem;border-radius:8px;display:none}
+.mod-drawer-msg.err{background:#fef2f2;color:var(--error);display:block}
+.mod-drawer-msg.ok{background:#f0fdf4;color:var(--success);display:block}
 </style>
 </body>
 </html>
