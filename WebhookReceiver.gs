@@ -169,6 +169,9 @@ function doPost(e) {
       return jsonResponse_({ ok: false, error: "Unauthorized" });
     }
 
+    // ── Quote actions ─────────────────────────────────────────────────────────
+    if (payload.action === 'save_quote') return jsonResponse_(handleSaveQuote_(payload));
+
     // ── Auth actions ─────────────────────────────────────────────────────────
     if (payload.action === 'logout')      return jsonResponse_(handleLogout(payload));
     if (payload.action === 'create_user') return jsonResponse_(handleCreateUser(payload));
@@ -494,6 +497,11 @@ function doGet(e) {
       const auth = validateToken(e.parameter.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
       return jsonResponse_({ ok: true, data: getPendingSkus() });
+    }
+
+    // ── Distance lookup (travel fee calculator) ──────────────────────────────
+    if (e && e.parameter && e.parameter.action === 'distance') {
+      return jsonResponse_(handleDistance_(e.parameter.dest || ''));
     }
 
     // ── Test ping ────────────────────────────────────────────────────────────
