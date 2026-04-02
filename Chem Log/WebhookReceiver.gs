@@ -164,6 +164,13 @@ function doPost(e) {
       if (trResult) return jsonResponse_(trResult);
     }
 
+    // ── Quote save (token auth — no webhook secret required) ─────────────────
+    if (payload.action === 'save_quote') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return handleSaveQuote_(payload);
+    }
+
     // ── All other actions require the webhook secret ─────────────────────────
     if (payload.secret !== WEBHOOK_SECRET) {
       return jsonResponse_({ ok: false, error: "Unauthorized" });
@@ -530,6 +537,18 @@ function doGet(e) {
       const auth = validateToken(e.parameter.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
       return jsonResponse_({ ok: true, data: getPendingSkus() });
+    }
+
+    // ── Travel distance lookup (no auth required) ────────────────────────────
+    if (e && e.parameter && e.parameter.action === 'distance') {
+      const dest = (e.parameter.dest || '').trim();
+      if (!dest) return jsonResponse_({ ok: false, error: 'Missing dest' });
+      try {
+        const travel = computeTravelWithCache_(dest);
+        return jsonResponse_({ ok: true, travel });
+      } catch (err) {
+        return jsonResponse_({ ok: false, error: String(err) });
+      }
     }
 
     // ── Test ping ────────────────────────────────────────────────────────────
