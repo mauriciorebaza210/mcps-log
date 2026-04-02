@@ -486,6 +486,19 @@ select.q-inp{cursor:pointer}
 .csv-dl-btn{background:var(--teal);color:#fff;border:none;cursor:pointer;border-radius:10px;padding:.5rem 1rem;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:.06em}
 .csv-cancel-btn{background:none;color:var(--muted);border:1.5px solid var(--border);cursor:pointer;border-radius:10px;padding:.5rem 1rem;font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700}
 .csv-no-sku{color:var(--muted);font-style:italic}
+.conf-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:none;align-items:flex-start;justify-content:center;padding:1.5rem 1rem;overflow-y:auto}
+.conf-modal-backdrop.open{display:flex}
+.conf-modal{background:var(--card);border-radius:16px;width:min(520px,100%);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.3)}
+.conf-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem .85rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.conf-modal-title{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:600;letter-spacing:.04em}
+.conf-modal-body{overflow-y:auto;flex:1;padding:.75rem 1.25rem}
+.conf-modal-foot{display:flex;gap:.6rem;justify-content:flex-end;padding:.85rem 1.25rem;border-top:1px solid var(--border);flex-shrink:0}
+.conf-row{display:flex;justify-content:space-between;align-items:flex-start;padding:.45rem 0;border-bottom:1px solid var(--border);gap:.75rem;font-size:.875rem}
+.conf-row:last-child{border-bottom:none}
+.conf-key{font-weight:600;color:var(--text);min-width:120px;flex-shrink:0}
+.conf-val{color:var(--muted);text-align:right;word-break:break-word}
+.conf-submit-btn{background:var(--teal);color:#fff;border:none;cursor:pointer;border-radius:10px;padding:.5rem 1.1rem;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;letter-spacing:.06em}
+.conf-cancel-btn{background:none;color:var(--muted);border:1.5px solid var(--border);cursor:pointer;border-radius:10px;padding:.5rem 1rem;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700}
 .inv-empty{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:.9rem}
 .pend-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:.75rem}
 .pend-sku{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
@@ -606,6 +619,21 @@ select.q-inp{cursor:pointer}
     <div class="csv-modal-foot">
       <button class="csv-cancel-btn" onclick="invCloseCsvModal()">Cancel</button>
       <button class="csv-dl-btn" onclick="invDownloadOrderCsv()">⬇ Download CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Service log confirmation modal ── -->
+<div class="conf-modal-backdrop" id="conf-modal-backdrop" onclick="closeSvcConfirm(event)">
+  <div class="conf-modal" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Confirm Submission</div>
+      <button class="drawer-close" onclick="closeSvcConfirm()">✕</button>
+    </div>
+    <div class="conf-modal-body" id="conf-modal-body"></div>
+    <div class="conf-modal-foot">
+      <button class="conf-cancel-btn" onclick="closeSvcConfirm()">Cancel</button>
+      <button class="conf-submit-btn" id="conf-submit-btn" onclick="confirmAndSubmit()">Confirm &amp; Submit</button>
     </div>
   </div>
 </div>
@@ -1772,7 +1800,6 @@ function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
 }
 
 function submitSvc(){
-  const btn=document.getElementById('btn-svc');
   const payload={};let hasErr=false;
   _formItems.forEach(item=>{
     if(!item.title)return;let val;
@@ -1784,11 +1811,30 @@ function submitSvc(){
   const ap = document.querySelector('.cpill.active, .cpill.active-cloudy');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
   if(hasErr){alert('Fill out all required fields.');return;}
+  showSvcConfirm(payload);
+}
+function showSvcConfirm(payload){
+  window._svcPayload=payload;
+  const rows=Object.entries(payload).map(([k,v])=>
+    '<div class="conf-row"><span class="conf-key">'+k+'</span><span class="conf-val">'+(Array.isArray(v)?v.join(', '):v)+'</span></div>'
+  ).join('');
+  const pc=(window._svcPhotos||[]).length;
+  const photoRow=pc?'<div class="conf-row"><span class="conf-key">Photos</span><span class="conf-val">'+pc+' attached</span></div>':'';
+  document.getElementById('conf-modal-body').innerHTML=rows+photoRow;
+  document.getElementById('conf-modal-backdrop').classList.add('open');
+}
+function closeSvcConfirm(event){
+  if(event&&event.target!==document.getElementById('conf-modal-backdrop'))return;
+  document.getElementById('conf-modal-backdrop').classList.remove('open');
+}
+function confirmAndSubmit(){
+  document.getElementById('conf-modal-backdrop').classList.remove('open');
+  const btn=document.getElementById('btn-svc');
   btn.disabled=true;
   btn.textContent=(window._svcPhotos&&window._svcPhotos.length)
     ?'Uploading '+window._svcPhotos.length+' photo(s)...'
     :'Submitting...';
-  api({secret:SEC,action:'submit_form',token:_s.token,data:payload,photos:window._svcPhotos||[]}).then(res=>{
+  api({secret:SEC,action:'submit_form',token:_s.token,data:window._svcPayload,photos:window._svcPhotos||[]}).then(res=>{
     if(res.ok){
       const pc=(window._svcPhotos||[]).length;
       document.getElementById('svc-root').innerHTML='<div style="text-align:center;padding:3rem 1rem">'
