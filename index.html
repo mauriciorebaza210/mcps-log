@@ -694,18 +694,12 @@ select.q-inp{cursor:pointer}
       <div id="inv-root" style="display:none"></div>
     </div>
 
-    <!-- Quote Calculator & List -->
+    <!-- Quote Calculator -->
     <div class="pf" id="page-quotes">
-      <div class="q-hdr" style="margin-bottom:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border);">
-        <div class="q-hdr-title">Quotes Dashboard</div>
-        <div class="inv-filters" style="display:flex; gap:0.5rem; justify-content:flex-end;">
-          <button class="inv-fbtn active" id="btn-tab-calc" onclick="switchQuoteTab('calc')">Calculator</button>
-          <button class="inv-fbtn" id="btn-tab-list" onclick="switchQuoteTab('list')">Quotes List</button>
-        </div>
+      <div class="q-hdr">
+        <div class="q-hdr-title">Quote Calculator</div>
+        <button class="q-newbtn" onclick="qReset()">+ New Quote</button>
       </div>
-      
-      <!-- CALCULATOR VIEW -->
-      <div id="q-tab-calc">
 
       <!-- Service Type -->
       <div class="q-sec">
@@ -898,47 +892,7 @@ select.q-inp{cursor:pointer}
         </div>
         <div id="q-save-msg" class="q-msg"></div>
       </div>
-     </div> <!-- /q-tab-calc -->
-
-     <!-- QUOTES LIST VIEW -->
-     <div id="q-tab-list" style="display:none">
-       <div style="display:flex; gap:0.5rem; align-items:center; margin-bottom:1rem; justify-content:space-between">
-         <div class="inv-filters" style="display:flex; gap:0.5rem;">
-          <button class="inv-fbtn active" onclick="setAgrFilter('All', this)">All</button>
-          <button class="inv-fbtn" onclick="setAgrFilter('UNSENT', this)">Needs Contract</button>
-          <button class="inv-fbtn" onclick="setAgrFilter('CONTRACT_GENERATED', this)">Created</button>
-          <button class="inv-fbtn" onclick="setAgrFilter('SENT', this)">Sent</button>
-          <button class="inv-fbtn" onclick="setAgrFilter('SIGNED', this)">Signed</button>
-          <button class="inv-fbtn" onclick="setAgrFilter('LOST', this)">Lost</button>
-         </div>
-         <div style="display:flex; gap:0.5rem; align-items:center;">
-          <input type="text" id="agr-search" placeholder="Search..." oninput="filterAgreements()" class="adm-inp" style="padding:0.4rem 0.6rem; width:150px; font-size:0.9rem;" />
-          <button class="btn-primary" onclick="loadAgreements()">🔄</button>
-         </div>
-       </div>
-
-       <div id="agr-loading" class="sys-loader" style="margin-top:2rem"></div>
-       <div class="adm-table-wrap">
-        <table class="adm-table" id="agr-table" style="display:none">
-          <thead>
-            <tr>
-              <th>ID & Client</th>
-              <th>Service</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="agr-tbody"></tbody>
-        </table>
-       </div>
-       <div id="agr-empty" class="tr-empty" style="display:none">
-        <div class="tr-empty-icon">📂</div>
-        <div class="tr-empty-text">No quotes found.</div>
-       </div>
-     </div> <!-- /q-tab-list -->
-
-    </div> <!-- /page-quotes -->
+    </div>
 
     <!-- Training Modules -->
     <div class="pf" id="page-training">
@@ -950,91 +904,7 @@ select.q-inp{cursor:pointer}
       <div id="tr-root"></div>
     </div>
 
-
-    <!-- ========================================== -->
-    <!-- POOLS DASHBOARD -->
-    <!-- ========================================== -->
-    <div class="pf" id="page-pools">
-      <div class="pg-hdr">
-        <h2 style="font-family:'Oswald',sans-serif; font-size:1.4rem; letter-spacing:-0.01em;">Pool Customers</h2>
-        <div style="display:flex; gap:0.5rem; align-items:center;">
-          <input type="text" id="pool-search" placeholder="Search customer/address..." oninput="filterPools()" class="adm-inp" style="padding:0.4rem 0.6rem; width:200px; font-size:0.9rem;" />
-          <button class="btn-primary" onclick="loadPools()">🔄</button>
-        </div>
-      </div>
-      <div class="inv-filters" style="margin-bottom:1rem; display:flex; gap:0.5rem;">
-        <button class="inv-fbtn active" onclick="setPoolFilter('All', this)">All</button>
-        <button class="inv-fbtn" onclick="setPoolFilter('Regular', this)">Regular Cleaning</button>
-        <button class="inv-fbtn" onclick="setPoolFilter('Green to Clean', this)">Green to Clean</button>
-        <button class="inv-fbtn" onclick="setPoolFilter('Completed', this)">Completed One-Time</button>
-      </div>
-      <div id="pool-loading" class="sys-loader" style="margin-top:2rem"></div>
-      
-      <div class="adm-table-wrap">
-        <table class="adm-table" id="pool-table" style="display:none">
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th>Address</th>
-              <th>Service</th>
-              <th>Joined Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="pool-tbody"></tbody>
-        </table>
-      </div>
-      <div id="pool-empty" class="tr-empty" style="display:none">
-        <div class="tr-empty-icon">🏊</div>
-        <div class="tr-empty-text">No active pools found.</div>
-      </div>
-    </div>
-
   </div><!-- /page-wrap -->
-  
-  <!-- AGREEMENT EDIT DRAWER -->
-  <div class="drawer-backdrop" id="agr-backdrop" onclick="closeAgrModal()"></div>
-  <div class="drawer" id="agr-drawer">
-    <div class="drawer-inner">
-       <div class="drawer-hdr">
-          <div class="drawer-title" id="agr-modal-title">Edit Quote</div>
-          <button class="drawer-close" onclick="closeAgrModal()">✕</button>
-       </div>
-       <div class="drawer-body" style="display:flex; flex-direction:column; gap:0.75rem;">
-          <input type="hidden" id="agr-modal-id">
-          <label class="adm-lbl">First Name <input type="text" id="agr-fn" class="adm-inp"></label>
-          <label class="adm-lbl">Last Name <input type="text" id="agr-ln" class="adm-inp"></label>
-          <label class="adm-lbl">Email Address <input type="email" id="agr-email" class="adm-inp"></label>
-          <label class="adm-lbl">Phone Number <input type="text" id="agr-ph" class="adm-inp"></label>
-          <label class="adm-lbl">Address <input type="text" id="agr-addr" class="adm-inp"></label>
-          <label class="adm-lbl">Service <select id="agr-service" class="adm-sel">
-              <optgroup label="Recurring">
-                 <option value="Weekly Full Cleaning (Chems Included)">Weekly Full Service</option>
-                 <option value="Weekly Chem Check Only">Weekly Chem Check Only</option>
-              </optgroup>
-              <optgroup label="One-Time Jobs">
-                 <option value="Green-to-Clean Cleaning Service">Green-to-Clean</option>
-                 <option value="Pool Startup / Plaster Cure">Pool Startup</option>
-                 <option value="One-Time Cleaning / Filter Clean">One-Time Clean / Filter</option>
-                 <option value="Repair Job / Installation">Repair / Install</option>
-              </optgroup>
-          </select></label>
-          <label class="adm-lbl">Status <select id="agr-status" class="adm-sel">
-              <option value="UNSENT">Needs Contract</option>
-              <option value="CONTRACT_GENERATED">Contract Generated</option>
-              <option value="SENT">Sent</option>
-              <option value="SIGNED">Signed</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="LOST">Lost</option>
-          </select></label>
-       </div>
-       <div class="drawer-footer" style="justify-content: flex-start; gap:0.5rem">
-          <button class="drawer-save-btn" onclick="saveAgrModal()" id="agr-save-btn">Save Changes</button>
-          <div id="agr-modal-msg" style="align-self:center; font-size:0.85rem"></div>
-       </div>
-    </div>
-  </div>
-
   <nav class="bottom-nav" id="bnav"></nav>
 </div>
 
@@ -1146,7 +1016,7 @@ const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
   home:'🏠|Home', live_map:'🗺️|Map', service_log:'📝|Log',
-  inventory:'📦|Stock', quotes:'📄|Quotes', pools:'🏊|Pools', training:'🎓|Training', admin:'🔒|Admin'
+  inventory:'📦|Stock', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin'
 };
 
 // Pages per role — additive
@@ -1154,9 +1024,9 @@ const ROLE_PAGES = {
   technician:['home','live_map','service_log','training'],
   lead:['home','live_map','service_log','training'],
   trainee:['home','training'],
-  office:['home','quotes','pools','inventory'],
-  manager:['home','live_map','service_log','inventory','quotes','pools','training'],
-  admin:['home','live_map','service_log','inventory','quotes','pools','training','admin'],
+  office:['home','quotes','inventory'],
+  manager:['home','live_map','service_log','inventory','quotes','training'],
+  admin:['home','live_map','service_log','inventory','quotes','training','admin'],
 };
 
 const ALL_ROLES = ['technician','lead','office','manager','admin','trainee'];
@@ -1249,7 +1119,7 @@ function buildNav(){
 }
 
 function buildHomeCards(){
-  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical stock levels',quotes:'Quote Calculator & List',pools:'View all Pool Customers',training:'Video training modules',admin:'Manage users & access'};
+  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical stock levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
   document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
@@ -1269,8 +1139,7 @@ function navigateTo(page){
   if(page==='live_map'&&!_routeData) loadRoutes();
   if(page==='service_log'&&!_formItems.length) loadServiceLog();
   if(page==='inventory'&&!_invLoaded) loadInventory();
-  if(page==='quotes') { qInit(); if(!_agreementsLoaded) loadAgreements(); }
-  if(page==='pools') loadPools();
+  if(page==='quotes') qInit();
   if(page==='training') loadTraining();
 }
 
@@ -2995,255 +2864,6 @@ async function qSave() {
 }
 
 function qInit() { if (!_qS._calc) qRecalc(); }
-
-// ══════════════════════════════════════════════════════════════════════════════
-// AGREEMENTS & QUOTES DASHBOARD
-// ══════════════════════════════════════════════════════════════════════════════
-let _agreementsLoaded = false;
-let _agreementsData = [];
-let _agrStatusFilter = 'All';
-
-function switchQuoteTab(tab) {
-  document.getElementById('btn-tab-calc').classList.toggle('active', tab === 'calc');
-  document.getElementById('btn-tab-list').classList.toggle('active', tab === 'list');
-  document.getElementById('q-tab-calc').style.display = tab === 'calc' ? 'block' : 'none';
-  document.getElementById('q-tab-list').style.display = tab === 'list' ? 'block' : 'none';
-  if (tab === 'list' && !_agreementsLoaded) loadAgreements();
-}
-
-async function loadAgreements() {
-  document.getElementById('agr-loading').style.display='block';
-  document.getElementById('agr-table').style.display='none';
-  document.getElementById('agr-empty').style.display='none';
-  try {
-    const res = await apiGet({action:'get_quotes', token:_s?.token});
-    _agreementsLoaded = true;
-    _agreementsData = res.data || [];
-    renderAgreements();
-  } catch(e) {
-    document.getElementById('agr-loading').style.display='none';
-    document.getElementById('agr-empty').innerHTML = `<div class="tr-empty-text" style="color:var(--error)">Failed to load quotes.</div>`;
-    document.getElementById('agr-empty').style.display='block';
-  }
-}
-
-function setAgrFilter(status, btn) {
-  document.querySelectorAll('.inv-fbtn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  _agrStatusFilter = status;
-  renderAgreements();
-}
-
-function filterAgreements() { renderAgreements(); }
-
-function renderAgreements() {
-  document.getElementById('agr-loading').style.display='none';
-  const qStr = document.getElementById('agr-search').value.toLowerCase();
-  
-  const filtered = _agreementsData.filter(q => {
-    if (_agrStatusFilter !== 'All' && String(q.status) !== _agrStatusFilter) return false;
-    if (qStr && !(q.first_name||'').toLowerCase().includes(qStr) && !(q.last_name||'').toLowerCase().includes(qStr) && !(q.quote_id||'').toLowerCase().includes(qStr)) return false;
-    return true;
-  });
-
-  if (!filtered.length) {
-    document.getElementById('agr-table').style.display='none';
-    document.getElementById('agr-empty').style.display='block';
-    return;
-  }
-  
-  document.getElementById('agr-table').style.display='';
-  document.getElementById('agr-empty').style.display='none';
-  
-  document.getElementById('agr-tbody').innerHTML = filtered.map((q, idx) => {
-    const name = `${q.first_name||''} ${q.last_name||''}`.trim();
-    const st = q.status || 'UNSENT';
-    let statBadge = `<span class="r-badge ${st==='SIGNED'||st==='COMPLETED'?'lead':st==='CONTRACT_GENERATED'?'manager':'trainee'}">${st}</span>`;
-    
-    // Actions based on status
-    let btns = `<button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem; margin-right:0.25rem;" onclick="openAgrModal('${q.quote_id}')">✏️ Edit</button>`;
-    
-    if (st !== 'SIGNED' && st !== 'COMPLETED' && st !== 'LOST') {
-      if (!q.contract_file_id) {
-         btns += `<button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem;" onclick="genContract('${q.quote_id}', this)">📄 Gen. Contract</button>`;
-      } else {
-         btns += `<button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem;" onclick="sendContract('${q.quote_id}', this)">📧 Send Contract</button>`;
-         btns += `<a href="${q.contract_url}" target="_blank" style="margin-left:0.5rem; font-size:0.8rem">🔗 View</a>`;
-      }
-    }
-
-    return `<tr>
-      <td><b>${q.quote_id}</b><br><span style="font-size:0.85rem; color:var(--fg-dim)">${name}</span></td>
-      <td>${q.service||'—'}</td>
-      <td>${statBadge}</td>
-      <td style="font-size:0.85rem; color:var(--fg-dim)">${new Date(q.timestamp).toLocaleDateString()}</td>
-      <td><div style="display:flex; gap:0.25rem; align-items:center;">${btns}</div></td>
-    </tr>`;
-  }).join('');
-}
-
-function openAgrModal(id) {
-  const q = _agreementsData.find(x => x.quote_id === id);
-  if(!q) return;
-  document.getElementById('agr-modal-id').value = q.quote_id;
-  document.getElementById('agr-fn').value = q.first_name || '';
-  document.getElementById('agr-ln').value = q.last_name || '';
-  document.getElementById('agr-email').value = q.email || '';
-  document.getElementById('agr-ph').value = q.phone || '';
-  document.getElementById('agr-addr').value = q.address || '';
-  document.getElementById('agr-service').value = q.service || 'Weekly Full Cleaning (Chems Included)';
-  document.getElementById('agr-status').value = q.status || 'UNSENT';
-  document.getElementById('agr-modal-msg').textContent = '';
-  document.getElementById('agr-backdrop').classList.add('open');
-  document.getElementById('agr-drawer').classList.add('open');
-}
-function closeAgrModal() {
-  document.getElementById('agr-backdrop').classList.remove('open');
-  document.getElementById('agr-drawer').classList.remove('open');
-}
-
-async function saveAgrModal() {
-  const id = document.getElementById('agr-modal-id').value;
-  const btn = document.getElementById('agr-save-btn');
-  const msg = document.getElementById('agr-modal-msg');
-  if(!id) return;
-  
-  btn.disabled = true; btn.textContent = 'Saving...';
-  
-  const payload = {
-    action: 'update_quote', token: _s.token,
-    quote_id: id,
-    first_name: document.getElementById('agr-fn').value,
-    last_name: document.getElementById('agr-ln').value,
-    email: document.getElementById('agr-email').value,
-    phone: document.getElementById('agr-ph').value,
-    address: document.getElementById('agr-addr').value,
-    service: document.getElementById('agr-service').value,
-    status: document.getElementById('agr-status').value
-  };
-
-  try {
-    const res = await api(payload);
-    if(res.ok) {
-       msg.style.color = 'var(--success)';
-       msg.textContent = 'Saved!';
-       // local update
-       const q = _agreementsData.find(x => x.quote_id === id);
-       if (q) Object.assign(q, payload);
-       renderAgreements();
-       setTimeout(() => closeAgrModal(), 800);
-    } else { throw new Error(res.error||'Failed'); }
-  } catch(e) {
-    msg.style.color = 'var(--error)';
-    msg.textContent = String(e);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Save Changes';
-  }
-}
-
-async function genContract(id, btn) {
-  if(!confirm(`Generate contract for quote ${id}?`)) return;
-  btn.disabled = true; btn.textContent = 'Generating...';
-  try {
-     const res = await api({ action: 'generate_contract', token: _s.token, quote_id: id });
-     if(res.ok) {
-        alert('Contract generated successfully!');
-        loadAgreements();
-     } else alert(`Failed: ${res.error}`);
-  } catch(e) {
-     alert(`Error: ${e}`);
-  } finally {
-     btn.disabled = false; btn.textContent = '📄 Gen. Contract';
-  }
-}
-
-async function sendContract(id, btn) {
-  if(!confirm(`Send contract email via Zapier for quote ${id}?`)) return;
-  btn.disabled = true; btn.textContent = 'Sending...';
-  try {
-     const res = await api({ action: 'send_contract', token: _s.token, quote_id: id });
-     if(res.ok) {
-        alert('Contract sent!');
-        loadAgreements();
-     } else alert(`Failed: ${res.error}`);
-  } catch(e) {
-     alert(`Error: ${e}`);
-  } finally {
-     btn.disabled = false; btn.textContent = '📧 Send Contract';
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// POOLS DASHBOARD
-// ══════════════════════════════════════════════════════════════════════════════
-let _poolsLoaded = false;
-let _poolsData = [];
-let _poolServiceFilter = 'All';
-
-async function loadPools() {
-  document.getElementById('pool-loading').style.display='block';
-  document.getElementById('pool-table').style.display='none';
-  document.getElementById('pool-empty').style.display='none';
-  try {
-    const res = await apiGet({action:'get_pools', token:_s?.token});
-    _poolsLoaded = true;
-    _poolsData = res.data || [];
-    renderPools();
-  } catch(e) {
-    document.getElementById('pool-loading').style.display='none';
-    document.getElementById('pool-empty').innerHTML = `<div class="tr-empty-text" style="color:var(--error)">Failed to load pools.</div>`;
-    document.getElementById('pool-empty').style.display='block';
-  }
-}
-
-function setPoolFilter(svc, btn) {
-  const fbtns = btn.parentElement.querySelectorAll('.inv-fbtn');
-  fbtns.forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  _poolServiceFilter = svc;
-  renderPools();
-}
-
-function filterPools() { renderPools(); }
-
-function renderPools() {
-  document.getElementById('pool-loading').style.display='none';
-  const qStr = document.getElementById('pool-search').value.toLowerCase();
-  
-  const filtered = _poolsData.filter(p => {
-    if (_poolServiceFilter === 'Regular' && !(p.service||'').toLowerCase().includes('weekly')) return false;
-    if (_poolServiceFilter === 'Green to Clean' && !(p.service||'').toLowerCase().includes('green')) return false;
-    if (_poolServiceFilter === 'Completed' && String(p.status) !== 'COMPLETED') return false;
-    
-    if (qStr && !(p.first_name||'').toLowerCase().includes(qStr) && !(p.last_name||'').toLowerCase().includes(qStr) && !(p.address||'').toLowerCase().includes(qStr)) return false;
-    return true;
-  });
-
-  if (!filtered.length) {
-    document.getElementById('pool-table').style.display='none';
-    document.getElementById('pool-empty').style.display='block';
-    return;
-  }
-  
-  document.getElementById('pool-table').style.display='';
-  document.getElementById('pool-empty').style.display='none';
-  
-  document.getElementById('pool-tbody').innerHTML = filtered.map(p => {
-    const name = `${p.first_name||''} ${p.last_name||''}`.trim();
-    const joined = p.timestamp ? new Date(p.timestamp).toLocaleDateString() : '—';
-    const tag = String(p.status)==='COMPLETED' ? `<span style="color:var(--success); font-size:0.8rem">✓ One-Time</span>` : `<span style="color:var(--lead); font-size:0.8rem">Active</span>`;
-    
-    return `<tr>
-      <td><b>${name}</b><br>${tag}</td>
-      <td style="font-size:0.9rem">${p.address||'—'}<br><span style="color:var(--fg-dim); font-size:0.8rem">${p.city||''} ${p.zip_code||''}</span></td>
-      <td>${p.service||'—'}</td>
-      <td style="font-size:0.85rem; color:var(--fg-dim)">${joined}</td>
-      <td>
-         <button class="btn-primary" style="padding:0.25rem 0.5rem; font-size:0.8rem;" onclick="openAgrModal('${p.quote_id}')">⚙️ Manage</button>
-      </td>
-    </tr>`;
-  }).join('');
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TRAINING MODULES
