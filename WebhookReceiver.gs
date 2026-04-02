@@ -182,68 +182,104 @@ function doPost(e) {
       return jsonResponse_({ ok: true, data: metadata });
     }
 
-    if (payload.action === 'submit_form') {
-      const auth = validateToken(payload.token);
-      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
-      if (!canAccess(auth, 'service_log')) return jsonResponse_({ ok: false, error: 'Access denied.' });
+  if (payload.action === 'submit_form') {
+    const auth = validateToken(payload.token);
+    if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
 
-      // Save photos to Drive first (just get URLs, don't write to sheet yet)
-      let photoUrls = [];
-      if (Array.isArray(payload.photos) && payload.photos.length > 0) {
-        try {
-          photoUrls = saveVisitPhotos_(payload.photos, payload.data);
-        } catch (photoErr) {
-          Logger.log("Photo save error (non-fatal): " + photoErr);
-        }
+    // ── Dedup guard ──────────────────────────────────────────────────────────
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+    const lastRow = rawSheet.getLastRow();
+    if (lastRow > 1) {
+      const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0];
+      const poolColIdx = headers.indexOf('pool_id');
+      const techColIdx = headers.indexOf('Technician');
+      const tsColIdx   = 0; // Timestamp is always col A
+      const lastData   = rawSheet.getRange(lastRow, 1, 1, rawSheet.getLastColumn()).getValues()[0];
+      const lastTs     = new Date(lastData[tsColIdx]);
+      const lastPool   = String(lastData[poolColIdx] || '');
+      const lastTech   = String(lastData[techColIdx] || '');
+      const incomingPool = String(payload.data.pool_id || '');
+      const incomingTech = String(payload.data.Technician || '');
+      const ageMs = new Date() - lastTs;
+
+      if (lastPool === incomingPool && (new Date() - new Date(lastData[tsColIdx])) < 300000) {
+        Logger.log('Dedup blocked: same pool within 5 minutes');
+        return jsonResponse_({ ok: true });
       }
-
-      // Submit the form FIRST so the new row gets appended
-      const result = submitCustomForm(payload.data);
-
-      // Wait briefly for the form response to land in the sheet
-      Utilities.sleep(3000);
-
-      // NOW write photo URLs to the last row
-      if (photoUrls.length > 0) {
-        try {
-          const ss = SpreadsheetApp.getActiveSpreadsheet();
-          const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
-          if (rawSheet && rawSheet.getLastRow() > 1) {
-            const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn())
-              .getValues()[0].map(h => String(h || '').trim());
-            let photoColIdx = headers.indexOf('_photo_urls');
-            if (photoColIdx === -1) {
-              photoColIdx = rawSheet.getLastColumn();
-              rawSheet.getRange(1, photoColIdx + 1).setValue('_photo_urls');
-            }
-            rawSheet.getRange(rawSheet.getLastRow(), photoColIdx + 1)
-              .setValue(JSON.stringify(photoUrls));
-          }
-        } catch (writeErr) {
-          Logger.log('Could not write photo URLs to sheet: ' + writeErr);
-        }
-      }
-
-      // Send visit report email directly from here with photo URLs
-      try {
-        const poolId = extractPoolId_(String(payload.data.pool_id || '').trim());
-        if (poolId && poolId !== 'OTHER / POOL NOT LISTED' && poolId !== 'Other / Pool not listed') {
-          const ss = SpreadsheetApp.getActiveSpreadsheet();
-          const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
-          if (rawSheet && rawSheet.getLastRow() > 1) {
-            const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn())
-              .getValues()[0].map(h => String(h || '').trim());
-            const lastRow = rawSheet.getRange(rawSheet.getLastRow(), 1, 1, rawSheet.getLastColumn())
-              .getValues()[0];
-            sendVisitReportEmail(lastRow, headers, poolId, photoUrls);
-          }
-        }
-      } catch (emailErr) {
-        Logger.log('Visit report email error: ' + emailErr);
-      }
-
-      return jsonResponse_({ ok: result.success, error: result.error });
     }
+    // ── end dedup ─────────────────────────────────────────────────────────────
+
+    // ... rest of submit_form handler unchanged
+    if (!canAccess(auth, 'service_log')) return jsonResponse_({ ok: false, error: 'Access denied.' });
+
+    // Save photos to Drive first
+    let photoUrls = [];
+    if (Array.isArray(payload.photos) && payload.photos.length > 0) {
+      try {
+        photoUrls = saveVisitPhotos_(payload.photos, payload.data);
+      } catch (photoErr) {
+        Logger.log('Photo save error (non-fatal): ' + photoErr);
+      }
+    }
+
+    // Write the row to Chemical_Usage_Log
+    const result = submitCustomForm(payload.data);
+    if (!result.success) return jsonResponse_({ ok: false, error: result.error });
+
+    // Short pause for the sheet append to settle
+    // Short pause for the sheet append to settle
+    Utilities.sleep(1500);
+
+    const newRowNum = rawSheet.getLastRow();  // ✅ ss and rawSheet already exist
+
+    // Write photo URLs to the new row
+    if (photoUrls.length > 0) {
+      try {
+        const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn())
+          .getValues()[0].map(h => String(h || '').trim());
+        let photoColIdx = headers.indexOf('_photo_urls');
+        if (photoColIdx === -1) {
+          photoColIdx = rawSheet.getLastColumn();
+          rawSheet.getRange(1, photoColIdx + 1).setValue('_photo_urls');
+        }
+        rawSheet.getRange(newRowNum, photoColIdx + 1).setValue(JSON.stringify(photoUrls));
+      } catch (writeErr) {
+        Logger.log('Could not write photo URLs to sheet: ' + writeErr);
+      }
+    }
+
+    // ── FULL PIPELINE — triggers must be DELETED before deploying this ─────────
+
+    // 1. Snapshot to Usage_Priced + analytics
+    try {
+      snapshotUsageToPriced_({ range: rawSheet.getRange(newRowNum, 1) });
+    } catch (snapErr) {
+      Logger.log('snapshotUsageToPriced_ error: ' + snapErr);
+    }
+
+    // 2. Inventory deduction
+    try {
+      deductInventoryOnFormSubmit_({ range: rawSheet.getRange(newRowNum, 1) });
+    } catch (invErr) {
+      Logger.log('deductInventoryOnFormSubmit_ error: ' + invErr);
+    }
+
+    // 3. Visit report email (photo URLs already in memory — no sheet race condition)
+    try {
+      const poolId = extractPoolId_(String(payload.data.pool_id || '').trim());
+      if (poolId && poolId !== 'OTHER / POOL NOT LISTED' && poolId !== 'Other / Pool not listed') {
+        const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn())
+          .getValues()[0].map(h => String(h || '').trim());
+        const lastRowData = rawSheet.getRange(newRowNum, 1, 1, rawSheet.getLastColumn()).getValues()[0];
+        sendVisitReportEmail(lastRowData, headers, poolId, photoUrls);
+      }
+    } catch (emailErr) {
+      Logger.log('Visit report email error: ' + emailErr);
+    }
+
+    return jsonResponse_({ ok: true });
+  }
 
     // ── Inventory reads (legacy in POST) ─────────────────────────────────────
     if (e && e.parameter && e.parameter.action === 'get_inventory') {
@@ -533,4 +569,19 @@ function TEST_webhookWithFakeInvoice() {
   const result = processQBOBillPayload_(fakePayload);
   Logger.log("Test result: " + JSON.stringify(result));
   SpreadsheetApp.getActiveSpreadsheet().toast("Test complete — check Purchase_Log", "MCPS");
+}
+
+function testDedup() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Chemical_Usage_Log');
+  const lastRow = sheet.getLastRow();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const poolColIdx = headers.indexOf('pool_id');
+  const techColIdx = headers.indexOf('Technician');
+  const lastData = sheet.getRange(lastRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  Logger.log('Last row pool_id: ' + lastData[poolColIdx]);
+  Logger.log('Last row technician: ' + lastData[techColIdx]);
+  Logger.log('Last row timestamp: ' + lastData[0]);
+  Logger.log('Age in ms: ' + (new Date() - new Date(lastData[0])));
 }
