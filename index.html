@@ -992,14 +992,15 @@ select.q-inp{cursor:pointer}
 
   </div><!-- /page-wrap -->
   
-  <!-- AGREEMENT EDIT MODAL -->
-  <div id="agr-modal" class="r-modal fade">
-    <div class="r-modal-content" style="max-width:500px">
-       <div class="r-modal-hdr">
-          <h3 id="agr-modal-title">Edit Quote</h3>
-          <button class="r-close" onclick="closeAgrModal()">×</button>
+  <!-- AGREEMENT EDIT DRAWER -->
+  <div class="drawer-backdrop" id="agr-backdrop" onclick="closeAgrModal()"></div>
+  <div class="drawer" id="agr-drawer">
+    <div class="drawer-inner">
+       <div class="drawer-hdr">
+          <div class="drawer-title" id="agr-modal-title">Edit Quote</div>
+          <button class="drawer-close" onclick="closeAgrModal()">✕</button>
        </div>
-       <div class="r-modal-body" style="display:flex; flex-direction:column; gap:0.75rem;">
+       <div class="drawer-body" style="display:flex; flex-direction:column; gap:0.75rem;">
           <input type="hidden" id="agr-modal-id">
           <label class="adm-lbl">First Name <input type="text" id="agr-fn" class="adm-inp"></label>
           <label class="adm-lbl">Last Name <input type="text" id="agr-ln" class="adm-inp"></label>
@@ -1026,10 +1027,10 @@ select.q-inp{cursor:pointer}
               <option value="COMPLETED">Completed</option>
               <option value="LOST">Lost</option>
           </select></label>
-          <div style="margin-top:0.75rem; display:flex; gap:0.5rem">
-             <button class="btn-primary" onclick="saveAgrModal()" id="agr-save-btn">Save Changes</button>
-             <div id="agr-modal-msg" style="align-self:center; font-size:0.85rem"></div>
-          </div>
+       </div>
+       <div class="drawer-footer" style="justify-content: flex-start; gap:0.5rem">
+          <button class="drawer-save-btn" onclick="saveAgrModal()" id="agr-save-btn">Save Changes</button>
+          <div id="agr-modal-msg" style="align-self:center; font-size:0.85rem"></div>
        </div>
     </div>
   </div>
@@ -3093,9 +3094,13 @@ function openAgrModal(id) {
   document.getElementById('agr-service').value = q.service || 'Weekly Full Cleaning (Chems Included)';
   document.getElementById('agr-status').value = q.status || 'UNSENT';
   document.getElementById('agr-modal-msg').textContent = '';
-  document.getElementById('agr-modal').classList.add('active');
+  document.getElementById('agr-backdrop').classList.add('open');
+  document.getElementById('agr-drawer').classList.add('open');
 }
-function closeAgrModal() { document.getElementById('agr-modal').classList.remove('active'); }
+function closeAgrModal() {
+  document.getElementById('agr-backdrop').classList.remove('open');
+  document.getElementById('agr-drawer').classList.remove('open');
+}
 
 async function saveAgrModal() {
   const id = document.getElementById('agr-modal-id').value;
