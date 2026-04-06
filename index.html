@@ -937,29 +937,19 @@ select.q-inp{cursor:pointer}
 
     <!-- Training Modules -->
     <div class="pf" id="page-training">
-      <div class="tr-page-hdr">
-        <h2>Training Modules</h2>
-        <button class="tr-add-btn" id="tr-add-mod-btn" style="display:none" onclick="openModuleDrawer(null)">+ Module</button>
+      <div id="tr-mod-list">
+        <div class="tr-page-hdr">
+          <h2>Training Modules</h2>
+          <button class="tr-add-btn" id="tr-add-mod-btn" style="display:none" onclick="openModuleDrawer(null)">+ Module</button>
+        </div>
+        <div id="tr-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
+        <div id="tr-root"></div>
       </div>
-      <div id="tr-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
-      <div id="tr-root"></div>
+      <div id="tr-detail" style="display:none"></div>
     </div>
 
   </div><!-- /page-wrap -->
   <nav class="bottom-nav" id="bnav"></nav>
-</div>
-
-<!-- ── Video Player Modal ── -->
-<div id="vp-backdrop" class="vp-backdrop" style="display:none" onclick="closeVideoPlayer(event)">
-  <div class="vp-modal" onclick="event.stopPropagation()">
-    <div class="vp-hdr">
-      <div class="vp-title" id="vp-title">Video</div>
-      <button class="vp-close" onclick="closeVideoPlayer()">✕</button>
-    </div>
-    <div class="vp-frame-wrap">
-      <iframe id="vp-frame" src="" allow="autoplay" allowfullscreen></iframe>
-    </div>
-  </div>
 </div>
 
 <!-- ── Module Drawer (add/edit module) ── -->
@@ -2936,6 +2926,7 @@ function qInit() { if (!_qS._calc) qRecalc(); }
 let _trLoaded = false;
 let _trModules = [];
 let _trProgress = {};
+let _trOpenModules = new Set();
 
 function loadTraining() {
   if (_trLoaded) { renderTraining(); return; }
@@ -2977,28 +2968,30 @@ function renderTraining() {
     const videos = mod.videos || [];
     const completedCount = videos.filter(v => isVideoCompleted(mod.id, v.id)).length;
     const progressPct = videos.length ? Math.round((completedCount / videos.length) * 100) : 0;
+    const isOpen = _trOpenModules.has(mod.id);
+
     const adminActions = isAdm ? `
-      <div class="module-admin-actions">
+      <div class="tr-mod-actions">
         <button class="mod-act-btn" onclick="event.stopPropagation();openModuleDrawer('${mod.id}')">✏️ Edit</button>
         <button class="mod-act-btn danger" onclick="event.stopPropagation();deleteModule('${mod.id}')">🗑</button>
       </div>` : '';
 
-    const videoItems = videos.map(v => {
+    const itemRows = videos.map(v => {
+      const completed = isVideoCompleted(mod.id, v.id);
       const adminVBtns = isAdm ? `
-        <div class="video-admin-btns">
+        <div class="tr-item-admin">
           <button class="v-act-btn" onclick="event.stopPropagation();openVideoDrawer('${mod.id}','${v.id}')">✏️</button>
           <button class="v-act-btn danger" onclick="event.stopPropagation();deleteVideo('${mod.id}','${v.id}')">🗑</button>
         </div>` : '';
-      const completed = isVideoCompleted(mod.id, v.id);
-      const completeBtn = !completed ? `<button class="v-complete-btn" onclick="event.stopPropagation();markVideoComplete('${mod.id}','${v.id}')">✓ Mark complete</button>` : `<span class="v-complete-tag">Completed</span>`;
       return `
-        <div class="video-item ${completed ? 'done' : ''}" onclick="openVideoPlayer(${JSON.stringify(v).replace(/"/g,'&quot;')})">
-          <div class="video-thumb"><span class="video-play-icon">▶️</span>${adminVBtns}</div>
-          <div class="video-item-info">
-            <div class="video-item-title">${escHtml(v.title)}</div>
-            ${v.description ? `<div class="video-item-order">${escHtml(v.description)}</div>` : ''}
-            <div class="v-complete-row">${completeBtn}</div>
+        <div class="tr-item-row${completed ? ' done' : ''}" onclick="openVideoDetail('${mod.id}','${v.id}')">
+          <span class="tr-item-icon">▶</span>
+          <div class="tr-item-info">
+            <div class="tr-item-title">${escHtml(v.title)}</div>
+            ${v.description ? `<div class="tr-item-desc">${escHtml(v.description)}</div>` : ''}
           </div>
+          ${completed ? `<span class="tr-item-badge">✓ Done</span>` : ''}
+          ${adminVBtns}
         </div>`;
     }).join('');
 
@@ -3007,19 +3000,23 @@ function renderTraining() {
         <button class="tr-add-video-btn" onclick="openVideoDrawer('${mod.id}', null)">+ Add Video</button>
       </div>` : '';
 
+    const bodyContent = (videos.length || isAdm) ? `${itemRows}${addVideoBtn}` : '';
+
     return `
-      <div class="module-card" id="module-${mod.id}">
-        <div class="module-card-hdr">
-          <div class="module-num">${String(idx+1).padStart(2,'0')}</div>
-          <div class="module-info">
-            <div class="module-title">${escHtml(mod.title)}</div>
-            ${mod.description ? `<div class="module-desc">${escHtml(mod.description)}</div>` : ''}
-            <span class="module-video-count">${videos.length} video${videos.length!==1?'s':''}</span>
-            <span class="module-progress">${completedCount}/${videos.length} complete (${progressPct}%)</span>
+      <div class="tr-module-row${isOpen ? ' open' : ''}" id="tr-mod-${mod.id}">
+        <div class="tr-mod-hdr" onclick="toggleModule('${mod.id}')">
+          <span class="tr-mod-arrow">▶</span>
+          <span class="tr-mod-num">${String(idx+1).padStart(2,'0')}</span>
+          <div class="tr-mod-info">
+            <div class="tr-mod-title">${escHtml(mod.title)}</div>
+            <div class="tr-mod-meta">
+              <span class="tr-mod-count">${videos.length} video${videos.length!==1?'s':''}</span>
+              ${videos.length ? `<span class="tr-mod-progress">${completedCount}/${videos.length} complete (${progressPct}%)</span>` : ''}
+            </div>
           </div>
           ${adminActions}
         </div>
-        ${videos.length || isAdm ? `<div class="module-videos"><div class="video-grid">${videoItems}</div>${addVideoBtn}</div>` : ''}
+        ${bodyContent ? `<div class="tr-mod-body">${bodyContent}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -3028,18 +3025,85 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Video Player ──────────────────────────────────────────────────────────────
-function openVideoPlayer(video) {
-  if (typeof video === 'string') video = JSON.parse(video);
-  markVideoInProgress(video.module_id, video.id);
+// ── Accordion toggle ──────────────────────────────────────────────────────────
+function toggleModule(moduleId) {
+  if (_trOpenModules.has(moduleId)) {
+    _trOpenModules.delete(moduleId);
+  } else {
+    _trOpenModules.add(moduleId);
+  }
+  const row = document.getElementById('tr-mod-' + moduleId);
+  if (row) row.classList.toggle('open', _trOpenModules.has(moduleId));
+}
+
+// ── Video Detail View ─────────────────────────────────────────────────────────
+function openVideoDetail(moduleId, videoId) {
+  const mod = _trModules.find(m => m.id === moduleId);
+  if (!mod) return;
+  const video = (mod.videos || []).find(v => v.id === videoId);
+  if (!video) return;
+
+  markVideoInProgress(moduleId, videoId);
+
   const driveId = extractDriveId(video.drive_url || video.url || '');
   const embedSrc = driveId
     ? `https://drive.google.com/file/d/${driveId}/preview`
     : (video.drive_url || video.url || '');
-  document.getElementById('vp-title').textContent = video.title || 'Video';
-  document.getElementById('vp-frame').src = embedSrc;
-  document.getElementById('vp-backdrop').style.display = 'flex';
-  document.body.style.overflow = 'hidden';
+
+  const completed = isVideoCompleted(moduleId, videoId);
+  const completeAction = completed
+    ? `<span class="tr-complete-tag">✓ Completed</span>`
+    : `<button class="tr-complete-btn" id="tr-detail-complete-btn" onclick="markVideoCompleteDetail('${moduleId}','${videoId}')">✓ Mark Complete</button>`;
+
+  const isAdm = isAdmin();
+  const adminActions = isAdm ? `
+    <button class="mod-act-btn" onclick="openVideoDrawer('${moduleId}','${videoId}')">✏️ Edit</button>
+    <button class="mod-act-btn danger" onclick="deleteVideo('${moduleId}','${videoId}')">🗑 Delete</button>` : '';
+
+  document.getElementById('tr-mod-list').style.display = 'none';
+  const detail = document.getElementById('tr-detail');
+  detail.style.display = 'block';
+  detail.innerHTML = `
+    <button class="tr-detail-back" onclick="closeVideoDetail()">← Back to Modules</button>
+    <div class="tr-detail-breadcrumb">${escHtml(mod.title)}</div>
+    <div class="tr-detail-title">${escHtml(video.title)}</div>
+    ${video.description ? `<div class="tr-detail-desc">${escHtml(video.description)}</div>` : ''}
+    <div class="tr-detail-frame-wrap">
+      <iframe src="${embedSrc}" allow="autoplay" allowfullscreen></iframe>
+    </div>
+    <div class="tr-detail-actions">
+      ${completeAction}
+      ${adminActions}
+    </div>`;
+}
+
+function closeVideoDetail() {
+  document.getElementById('tr-detail').style.display = 'none';
+  document.getElementById('tr-detail').innerHTML = '';
+  document.getElementById('tr-mod-list').style.display = 'block';
+  renderTraining();
+}
+
+function markVideoCompleteDetail(moduleId, videoId) {
+  api({
+    action: 'upsert_training_progress',
+    secret: SEC,
+    token: _s.token,
+    module_id: moduleId,
+    video_id: videoId,
+    status: 'completed'
+  }).then(res => {
+    if (!res.ok) { alert('Error: ' + (res.error || 'Unable to save progress.')); return; }
+    const key = `${moduleId}::${videoId}`;
+    _trProgress[key] = { status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const btn = document.getElementById('tr-detail-complete-btn');
+    if (btn) {
+      const span = document.createElement('span');
+      span.className = 'tr-complete-tag';
+      span.textContent = '✓ Completed';
+      btn.replaceWith(span);
+    }
+  }).catch(() => alert('Network error while saving progress.'));
 }
 
 function isVideoCompleted(moduleId, videoId) {
@@ -3060,29 +3124,6 @@ function markVideoInProgress(moduleId, videoId) {
     video_id: videoId,
     status: 'in_progress'
   }).catch(() => {});
-}
-
-function markVideoComplete(moduleId, videoId) {
-  api({
-    action: 'upsert_training_progress',
-    secret: SEC,
-    token: _s.token,
-    module_id: moduleId,
-    video_id: videoId,
-    status: 'completed'
-  }).then(res => {
-    if (!res.ok) { alert('Error: ' + (res.error || 'Unable to save progress.')); return; }
-    const key = `${moduleId}::${videoId}`;
-    _trProgress[key] = { status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    renderTraining();
-  }).catch(() => alert('Network error while saving progress.'));
-}
-
-function closeVideoPlayer(e) {
-  if (e && e.target !== document.getElementById('vp-backdrop')) return;
-  document.getElementById('vp-backdrop').style.display = 'none';
-  document.getElementById('vp-frame').src = '';
-  document.body.style.overflow = '';
 }
 
 function extractDriveId(url) {
@@ -3455,58 +3496,70 @@ function huToast(msg, isErr) {
 }
 
 /* ── TRAINING MODULES ─────────────────────────────────────────────────────── */
-.tr-page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem}
+/* Training page */
+.tr-page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
 .tr-page-hdr h2{font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;letter-spacing:-.01em}
 .tr-add-btn{font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.45rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:10px;cursor:pointer;transition:background .15s}
 .tr-add-btn:hover{background:var(--teal-mid)}
-.module-card{background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:1rem;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04)}
-.module-card-hdr{padding:1rem 1.1rem;display:flex;align-items:flex-start;gap:.75rem}
-.module-num{font-family:'Oswald',sans-serif;font-size:1.3rem;font-weight:700;color:var(--teal-mid);min-width:2rem;line-height:1.2}
-.module-info{flex:1;min-width:0}
-.module-title{font-family:'Oswald',sans-serif;font-size:1.05rem;font-weight:700;letter-spacing:.01em;line-height:1.2}
-.module-desc{font-size:.82rem;color:var(--muted);margin-top:.2rem;line-height:1.4}
-.module-admin-actions{display:flex;gap:.4rem;flex-shrink:0}
-.mod-act-btn{font-size:.78rem;padding:.3rem .65rem;border-radius:8px;border:1.5px solid var(--border);background:transparent;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600;color:var(--muted);transition:all .15s}
+
+/* Accordion module rows (Canvas-style) */
+.tr-module-row{border:1px solid var(--border);border-radius:12px;margin-bottom:.65rem;overflow:hidden;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.tr-mod-hdr{display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;cursor:pointer;user-select:none;transition:background .15s}
+.tr-mod-hdr:hover{background:var(--surface)}
+.tr-mod-arrow{font-size:.7rem;color:var(--muted);flex-shrink:0;transition:transform .2s;line-height:1}
+.tr-module-row.open .tr-mod-arrow{transform:rotate(90deg)}
+.tr-mod-num{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;color:var(--teal-mid);min-width:1.8rem;flex-shrink:0}
+.tr-mod-info{flex:1;min-width:0}
+.tr-mod-title{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.01em;line-height:1.25}
+.tr-mod-meta{display:flex;align-items:center;gap:.5rem;margin-top:.25rem;flex-wrap:wrap}
+.tr-mod-count{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.05em;color:var(--muted);padding:.1rem .45rem;border-radius:99px;background:var(--surface);border:1px solid var(--border)}
+.tr-mod-progress{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.04em;color:var(--teal-mid)}
+.tr-mod-actions{display:flex;gap:.35rem;flex-shrink:0}
+.mod-act-btn{font-size:.75rem;padding:.25rem .55rem;border-radius:7px;border:1.5px solid var(--border);background:transparent;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600;color:var(--muted);transition:all .15s}
 .mod-act-btn:hover{background:var(--surface);color:var(--text)}
 .mod-act-btn.danger:hover{border-color:#fca5a5;background:#fef2f2;color:var(--error)}
-.module-video-count{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:.15rem .55rem;border-radius:99px;background:var(--surface);border:1px solid var(--border);margin-top:.35rem;display:inline-block}
-.module-progress{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.04em;color:var(--teal-mid);margin-top:.35rem;display:block}
-.module-videos{padding:.25rem 1rem 1rem}
-.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.75rem}
-.video-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .15s;position:relative}
-.video-item:hover{box-shadow:0 4px 16px rgba(0,0,0,.1);transform:translateY(-2px);border-color:var(--teal-light)}
-.video-item.done{border-color:rgba(22,163,74,.45);background:#f0fdf4}
-.video-thumb{aspect-ratio:16/9;background:linear-gradient(135deg,#0d4d44,#1a7a6e);display:flex;align-items:center;justify-content:center;position:relative}
-.video-play-icon{font-size:2rem;opacity:.85;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
-.video-item-info{padding:.55rem .65rem}
-.video-item-title{font-size:.8rem;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.video-item-order{font-family:'Barlow Condensed',sans-serif;font-size:.65rem;color:var(--muted);letter-spacing:.04em;margin-top:.15rem}
-.v-complete-row{margin-top:.45rem}
-.v-complete-btn{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.05em;border:1px solid var(--success);color:var(--success);background:#fff;padding:.2rem .45rem;border-radius:6px;cursor:pointer}
-.v-complete-btn:hover{background:#f0fdf4}
-.v-complete-tag{font-family:'Barlow Condensed',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.05em;color:#166534;background:#dcfce7;padding:.2rem .45rem;border-radius:6px;display:inline-block}
-.video-admin-btns{position:absolute;top:.35rem;right:.35rem;display:flex;gap:.25rem;opacity:0;transition:opacity .15s}
-.video-item:hover .video-admin-btns{opacity:1}
-.v-act-btn{font-size:.65rem;padding:.2rem .4rem;border-radius:6px;border:none;cursor:pointer;font-weight:600;background:rgba(255,255,255,.9);color:var(--text)}
-.v-act-btn.danger{color:var(--error)}
-.tr-add-video-row{margin-top:.65rem}
+
+/* Module body (collapsible) */
+.tr-mod-body{display:none;border-top:1px solid var(--border)}
+.tr-module-row.open .tr-mod-body{display:block}
+
+/* Video item rows inside an open module */
+.tr-item-row{display:flex;align-items:center;gap:.75rem;padding:.7rem 1rem;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;position:relative}
+.tr-item-row:last-child{border-bottom:none}
+.tr-item-row:hover{background:var(--surface)}
+.tr-item-row.done{border-left:3px solid #16a34a;padding-left:calc(1rem - 3px)}
+.tr-item-icon{font-size:1rem;flex-shrink:0;color:var(--muted);width:1.25rem;text-align:center}
+.tr-item-info{flex:1;min-width:0}
+.tr-item-title{font-size:.88rem;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-item-desc{font-size:.75rem;color:var(--muted);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-item-badge{font-family:'Barlow Condensed',sans-serif;font-size:.65rem;font-weight:700;letter-spacing:.05em;color:#166534;background:#dcfce7;padding:.15rem .4rem;border-radius:5px;flex-shrink:0}
+.tr-item-admin{display:flex;gap:.25rem;flex-shrink:0;opacity:0;transition:opacity .15s}
+.tr-item-row:hover .tr-item-admin{opacity:1}
+.v-act-btn{font-size:.7rem;padding:.2rem .45rem;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-weight:600;background:var(--card);color:var(--muted);transition:all .12s}
+.v-act-btn:hover{background:var(--surface);color:var(--text)}
+.v-act-btn.danger:hover{border-color:#fca5a5;background:#fef2f2;color:var(--error)}
+.tr-add-video-row{padding:.65rem 1rem;background:var(--surface)}
 .tr-add-video-btn{font-size:.8rem;font-weight:600;padding:.4rem .9rem;border:1.5px dashed var(--teal-light);border-radius:10px;background:transparent;color:var(--teal-mid);cursor:pointer;transition:all .15s;font-family:'Barlow',sans-serif;display:inline-flex;align-items:center;gap:.3rem}
-.tr-add-video-btn:hover{background:var(--teal-glow);border-style:solid}
+.tr-add-video-btn:hover{background:rgba(42,168,154,.08);border-style:solid}
+
+/* Empty state */
 .tr-empty{text-align:center;padding:3rem 1rem;color:var(--muted)}
 .tr-empty-icon{font-size:2.5rem;margin-bottom:.75rem}
 .tr-empty-text{font-size:.95rem;font-weight:500}
 .tr-empty-sub{font-size:.82rem;margin-top:.3rem;opacity:.75}
 
-/* Video player modal */
-.vp-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .2s ease}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.vp-modal{background:#000;border-radius:16px;overflow:hidden;width:100%;max-width:700px;box-shadow:0 25px 80px rgba(0,0,0,.5);position:relative}
-.vp-hdr{background:rgba(255,255,255,.05);padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between}
-.vp-title{color:#fff;font-weight:600;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:1rem}
-.vp-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:1rem;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s}
-.vp-close:hover{background:rgba(255,255,255,.3)}
-.vp-frame-wrap{position:relative;padding-bottom:56.25%;height:0}
-.vp-frame-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+/* Video detail view */
+.tr-detail-back{display:inline-flex;align-items:center;gap:.4rem;font-family:'Barlow',sans-serif;font-size:.85rem;font-weight:600;color:var(--teal-mid);background:none;border:none;cursor:pointer;padding:0;margin-bottom:1rem;transition:color .15s}
+.tr-detail-back:hover{color:var(--teal)}
+.tr-detail-breadcrumb{font-family:'Barlow Condensed',sans-serif;font-size:.75rem;color:var(--muted);letter-spacing:.04em;margin-bottom:.5rem;text-transform:uppercase}
+.tr-detail-title{font-family:'Oswald',sans-serif;font-size:1.5rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin-bottom:.5rem}
+.tr-detail-desc{font-size:.9rem;color:var(--muted);line-height:1.6;margin-bottom:1.1rem}
+.tr-detail-frame-wrap{position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;background:#000;margin-bottom:1.1rem;box-shadow:0 4px 24px rgba(0,0,0,.15)}
+.tr-detail-frame-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+.tr-detail-actions{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.tr-complete-btn{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.05em;border:1.5px solid var(--success);color:var(--success);background:#fff;padding:.4rem .9rem;border-radius:8px;cursor:pointer;transition:all .15s}
+.tr-complete-btn:hover{background:#f0fdf4}
+.tr-complete-tag{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.05em;color:#166534;background:#dcfce7;padding:.4rem .9rem;border-radius:8px;display:inline-block}
 
 /* Module/Video drawers */
 .mod-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;display:none}
