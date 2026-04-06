@@ -1043,8 +1043,8 @@ const AS = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_Qbs
 const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
-  home:'🏠|Home', live_map:'🗺️|Map', service_log:'📝|Log',
-  inventory:'📦|Stock', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin'
+  home:'🏠|Home', live_map:'🗺️|Map', service_log:'📝|Service Log',
+  inventory:'📦|Inventory', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin'
 };
 
 // Pages per role — additive
@@ -1147,7 +1147,7 @@ function buildNav(){
 }
 
 function buildHomeCards(){
-  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical stock levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
+  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical inventory levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
   document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
@@ -2179,7 +2179,7 @@ function renderInventoryPage() {
 
   // Tab bar
   html += `<div class="inv-tab-bar">
-    <button class="inv-tab${_invTab==='stock'    ?' active':''}" onclick="invTab('stock')">Stock</button>
+    <button class="inv-tab${_invTab==='stock'    ?' active':''}" onclick="invTab('stock')">Inventory</button>
     <button class="inv-tab${_invTab==='purchases'?' active':''}" onclick="invTab('purchases')">Purchases</button>
     ${mgr ? `<button class="inv-tab${_invTab==='review'?' active':''}" onclick="invTab('review')">Review</button>` : ''}
   </div>`;
