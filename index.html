@@ -1794,6 +1794,12 @@ function renderSvcForm(meta){
       inp='<input class="si" type="'+(isNum?'number':'text')+'" step="any" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()">';
     }
     grp.innerHTML+=inp;card.appendChild(grp);
+    if(item.title === 'Calcium Hardness (CH)') {
+      // ── Tablet Level pill selector (portal-only) ────────────────────────────
+      const tg=document.createElement('div');tg.className='sfg';
+      tg.innerHTML='<label>Tablet Level <span style="color:red">*</span></label><span class="sh">Current chlorine tablet level in the chlorinator.</span><div class="cp" id="tablet-pills" style="flex-wrap:wrap"><div class="cpill tbpill" onclick="tTablet(this,\'low\')" data-val="low">Low (0–2 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'medium\')" data-val="medium">Medium (3–4 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'full\')" data-val="full">Full (5–6 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'none\')" data-val="none">No Chlorinator</div></div>';
+      card.appendChild(tg);
+    }
     if(item.title&&item.title.trim().toLowerCase()==='pool_id'){
       const mg=document.createElement('div');mg.className='sfg';
       mg.innerHTML='<label>Pool Material</label><span class="sh">Affects acid dose — fiberglass gets reduced amount.</span><select class="si" id="svc-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
@@ -1804,10 +1810,7 @@ function renderSvcForm(meta){
       const cg=document.createElement('div');cg.className='sfg';
       cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,\'green\')" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,\'cloudy\')" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,\'clear\')" data-val="clear">Clear</div></div>';
       card.appendChild(cg);
-      // ── Tablet Level pill selector (portal-only) ────────────────────────────
-      const tg=document.createElement('div');tg.className='sfg';
-      tg.innerHTML='<label>Tablet Level <span style="color:red">*</span></label><span class="sh">Current chlorine tablet level in the chlorinator.</span><div class="cp" id="tablet-pills"><div class="cpill tbpill" onclick="tTablet(this,\'low\')" data-val="low">Low (0–2 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'medium\')" data-val="medium">Medium (3–4 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'full\')" data-val="full">Full (5–6 tabs)</div></div>';
-      card.appendChild(tg);
+      card.appendChild(cg);
     }
   });
   // ── Photo upload card ──────────────────────────────────────────────────────
@@ -1891,7 +1894,7 @@ function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
   const tabLvl = getTabletLevel(); // 'low', 'medium', 'full', or null
 
   // ── Rule 1 — Tablet × Chlorine Matrix ──────────────────────────────────────
-  if (tabLvl && fc !== null) {
+  if (tabLvl && tabLvl !== 'none' && fc !== null) {
     if (tabLvl === 'low') {
       if (fc < 2) {
         // Large pool special: 6 tablets + 3 gal chlorine
@@ -1943,8 +1946,8 @@ function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
       }
       res.push({name:'Chlorinator', status:'good', amt:'Adjust chlorinator', reason:'Tablets full — adjust water flow in the chlorinator for optimal dissolve rate.'});
     }
-  } else if (fc !== null && !tabLvl) {
-    // No tablet level selected — fall back to original liquid chlorine logic
+  } else if (fc !== null && (!tabLvl || tabLvl === 'none')) {
+    // No tablet level or "none" selected — fall back to original liquid chlorine logic
     let b = 1*g;
     if (isS) b *= 1.5;
     if (isG)       res.push({name:'Liquid Chlorine',status:'bad',    amt:roundQ(b*2).toFixed(2)+' gal',reason:'Green/algae — shock dose. Do NOT adjust pH/TA/CH until chlorine works 24-48 hrs.'});
