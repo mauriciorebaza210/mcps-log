@@ -196,6 +196,19 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 }
 .stop-nav-btn:hover{border-color:var(--teal-light);background:var(--teal-glow);color:var(--teal)}
 .stop-nav-btn svg{width:15px;height:15px}
+.stop-actions{display:flex;gap:6px;flex-shrink:0;align-items:center}
+.stop-headsup-btn{
+  flex-shrink:0;height:34px;padding:0 10px;border-radius:9px;
+  border:1.5px solid var(--border);background:var(--card);
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  cursor:pointer;color:var(--muted);transition:all .15s;
+  font-size:.72rem;font-family:'Barlow Condensed',sans-serif;font-weight:600;
+  letter-spacing:.04em;white-space:nowrap;
+}
+.stop-headsup-btn:hover{border-color:#f59e0b;background:#fffbeb;color:#b45309}
+.stop-headsup-btn.sending{opacity:.5;pointer-events:none}
+.stop-headsup-btn.sent{border-color:#22c55e;background:#f0fdf4;color:#15803d}
+.stop-headsup-btn svg{width:13px;height:13px;flex-shrink:0}
 
 /* Admin filter */
 .op-filter-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem}
@@ -1409,9 +1422,15 @@ function renderDayCard(dayData){
         ${pool.operator && isAdmin()?`<span class="stop-svc svc-other" style="margin-left:.3rem">${pool.operator}</span>`:''}
         ${pool.notes?`<div class="stop-notes">📋 ${pool.notes}</div>`:''}
       </div>
-      <a class="stop-nav-btn" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool" onclick="event.stopPropagation()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-      </a>
+      <div class="stop-actions" onclick="event.stopPropagation()">
+        <button class="stop-headsup-btn" data-pool-id="${escHtml(pool.pool_id||String(idx))}" data-cust-name="${escHtml(pool.customer_name||'')}" onclick="headsUp(event,this)" title="Send heads up SMS">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          On the way!
+        </button>
+        <a class="stop-nav-btn" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        </a>
+      </div>
     </div>`;
   });
   html += '</div>';
@@ -3215,6 +3234,56 @@ function deleteVideo(moduleId, videoId) {
 function showDrawerMsg(el, type, text) {
   el.textContent = text;
   el.className = 'mod-drawer-msg ' + type;
+}
+
+// ── Heads-up SMS ──────────────────────────────────────────────────────────────
+function headsUp(e, btn) {
+  e.stopPropagation();
+  if (btn.classList.contains('sending') || btn.classList.contains('sent')) return;
+  const poolId = btn.dataset.poolId;
+  const custName = btn.dataset.custName;
+  btn.classList.add('sending');
+  api({ action: 'send_heads_up', token: _s.token, pool_id: poolId, customer_name: custName })
+    .then(function(res) {
+      btn.classList.remove('sending');
+      if (res.ok) {
+        btn.classList.add('sent');
+        btn.title = 'Heads up sent!';
+        huToast('\u2705 Heads up sent to ' + res.customer + '!');
+        setTimeout(function() {
+          btn.classList.remove('sent');
+          btn.title = 'Send heads up SMS';
+        }, 5000);
+      } else {
+        huToast('\u26a0\ufe0f ' + (res.error || 'Could not send heads up'), true);
+      }
+    })
+    .catch(function() {
+      btn.classList.remove('sending');
+      huToast('\u26a0\ufe0f Network error — could not send heads up', true);
+    });
+}
+
+function huToast(msg, isErr) {
+  var t = document.getElementById('hu-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'hu-toast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);'
+      + 'background:#1a1a1a;color:#fff;padding:.6rem 1.1rem;border-radius:10px;font-size:.85rem;'
+      + 'font-family:Barlow,sans-serif;z-index:9999;opacity:0;transition:all .25s;pointer-events:none;'
+      + 'white-space:nowrap;max-width:90vw;text-align:center;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = isErr ? '#7f1d1d' : '#1a1a1a';
+  t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() {
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(-50%) translateY(20px)';
+  }, 4000);
 }
 
 </script>

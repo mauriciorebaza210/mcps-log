@@ -171,6 +171,13 @@ function doPost(e) {
       return handleSaveQuote_(payload);
     }
 
+    // ── Send heads-up SMS (token auth — no webhook secret required) ──────────
+    if (payload.action === 'send_heads_up') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return jsonResponse_(sendHeadsUp(payload.pool_id || '', payload.customer_name || ''));
+    }
+
     // ── All other actions require the webhook secret ─────────────────────────
     if (payload.secret !== WEBHOOK_SECRET) {
       return jsonResponse_({ ok: false, error: "Unauthorized" });
