@@ -526,6 +526,50 @@ select.q-inp{cursor:pointer}
 .pend-approve:hover{background:var(--teal-mid)}
 .pend-reject{padding:.5rem 1rem;border-radius:9px;background:transparent;color:var(--muted);border:1.5px solid var(--border);font-family:'Barlow Condensed',sans-serif;font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s}
 .pend-reject:hover{background:#fee2e2;border-color:#fca5a5;color:#b91c1c}
+/* ── Content Type Pills ── */
+.content-type-selector { display:flex; gap:.5rem; margin-top:.25rem; }
+.ct-pill { padding:.4rem .8rem; background:#f1f3f4; border:1px solid #dadce0; border-radius:16px; font-size:12px; font-weight:500; color:#5f6368; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:4px; }
+.ct-pill.ct-active { background:#e8f0fe; border-color:#1a73e8; color:#1a73e8; }
+.ct-pill:hover:not(.ct-active) { background:#e8eaed; }
+
+/* ── Content Locks & Gates ── */
+.tr-item-row.locked { opacity:0.6; cursor:not-allowed; background:#f8f9fa; border-color:#f1f3f4; }
+.tr-item-row.locked:hover { transform:none; box-shadow:none; border-color:#f1f3f4; }
+.tr-module-row.locked { opacity:0.6; pointer-events:none; }
+.tr-module-row.locked .tr-mod-hdr { background:#f8f9fa; }
+.mod-gate-label { display:flex; align-items:center; gap:.5rem; font-size:13px; font-weight:500; color:#202124; cursor:pointer; }
+.mod-gate-label input { width:16px; height:16px; accent-color:#1a73e8; cursor:pointer; }
+.tr-empty { padding: 40px 20px; text-align: center; color: #5f6368; background: #fff; border-radius: 8px; border: 1px dashed #dadce0; margin-top: 1rem; }
+.tr-empty-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.8; }
+.tr-empty-text { font-size: 15px; font-weight: 500; color: #202124; margin-bottom: 4px; }
+.tr-empty-sub { font-size: 13px; color: #80868b; }
+
+/* ── Quiz Viewer (Trainee Side) ── */
+.qz-viewer { max-width:800px; margin:0 auto; padding:1rem; background:#fff; border-radius:8px; border:1px solid #dadce0; }
+.qz-question { margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px solid #f1f3f4; }
+.qz-question:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+.qz-qtext { font-size:15px; font-weight:600; color:#202124; margin-bottom:1rem; }
+.qz-options { display:flex; flex-direction:column; gap:.5rem; }
+.qz-option-label { display:flex; align-items:flex-start; gap:.75rem; padding:.75rem 1rem; background:#f8f9fa; border:1px solid #e8eaed; border-radius:6px; cursor:pointer; transition:all 0.2s; }
+.qz-option-label:hover { background:#f1f3f4; border-color:#dadce0; }
+.qz-option-label input { margin-top:4px; accent-color:#1a73e8; cursor:pointer; }
+.qz-option-label span { font-size:14px; color:#3c4043; line-height:1.4; }
+
+/* ── Quiz Wizard (Admin Side) ── */
+.quiz-summary { padding:.5rem .75rem; background:#f8f9fa; border:1px solid #dadce0; border-radius:4px; font-size:13px; color:#5f6368; margin-top:.25rem; font-family:monospace; }
+.quiz-wizard-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(32,33,36,0.6); z-index:4000; display:flex; flex-direction:column; align-items:center; padding:1.5rem; overflow:hidden; }
+.quiz-wizard { background:#fff; width:100%; max-width:700px; max-height:100%; border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.2); display:flex; flex-direction:column; overflow:hidden; animation:slideUp 0.3s cubic-bezier(0,0,0.2,1); }
+.qw-header { padding:1rem 1.5rem; border-bottom:1px solid #dadce0; display:flex; justify-content:space-between; align-items:center; background:#f8f9fa; }
+.qw-title { font-size:16px; font-weight:600; color:#202124; }
+.qw-body { padding:1.5rem; flex:1; overflow-y:auto; background:#f8f9fa; }
+.qw-q-card { background:#fff; padding:1rem; border-radius:8px; border:1px solid #dadce0; margin-bottom:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.05); position:relative; }
+.qw-q-text { font-size:14px; color:#202124; border:1px solid #dadce0; border-radius:4px; }
+.qw-q-text:focus { outline:none; border-color:#1a73e8; box-shadow:inset 0 0 0 1px #1a73e8; }
+.qw-o-text { font-size:13px; color:#3c4043; border:1px solid #dadce0; border-radius:4px; }
+.qw-footer { padding:1rem 1.5rem; border-top:1px solid #dadce0; background:#fff; display:flex; justify-content:flex-end; }
+.qw-preview-toggle { padding:0.5rem 1.5rem; background:#fff; border-top:1px solid #e8eaed; display:flex; justify-content:center; }
+.qw-preview { padding:1.5rem; flex:1; overflow-y:auto; background:#fff; }
+
 </style>
 </head>
 <body>
@@ -973,6 +1017,13 @@ select.q-inp{cursor:pointer}
       <label>Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
       <input type="number" id="mod-order" min="1" placeholder="1">
     </div>
+    <div class="mod-dfg">
+      <label class="mod-gate-label">
+        <input type="checkbox" id="mod-require-prev">
+        <span>Require previous module to be 100% complete</span>
+      </label>
+      <div class="hint">When enabled, trainees must finish the module above this one before accessing it.</div>
+    </div>
     <div class="mod-drawer-msg" id="mod-drawer-msg"></div>
   </div>
   <div class="mod-drawer-foot">
@@ -980,28 +1031,51 @@ select.q-inp{cursor:pointer}
   </div>
 </div>
 
-<!-- ── Video Drawer (add/edit video) ── -->
+<!-- ── Content Drawer (add/edit video, quiz, or document) ── -->
 <div class="mod-drawer-backdrop" id="vid-backdrop" onclick="closeVideoDrawer()"></div>
 <div class="mod-drawer" id="vid-drawer">
   <div class="mod-drawer-hdr">
-    <div class="mod-drawer-title" id="vid-drawer-title">Add Video</div>
+    <div class="mod-drawer-title" id="vid-drawer-title">Add Content</div>
     <button class="drawer-close" onclick="closeVideoDrawer()">✕</button>
   </div>
   <div class="mod-drawer-body">
     <input type="hidden" id="vid-id">
     <input type="hidden" id="vid-module-id">
     <div class="mod-dfg">
-      <label>Video Title</label>
-      <input type="text" id="vid-title" placeholder="e.g. PMP Step 1 – Arrival & Assessment">
+      <label>Content Type</label>
+      <div class="content-type-selector" id="content-type-selector">
+        <div class="ct-pill ct-active" data-type="video" onclick="selectContentType('video')">🎬 Video</div>
+        <div class="ct-pill" data-type="quiz" onclick="selectContentType('quiz')">📝 Quiz</div>
+        <div class="ct-pill" data-type="document" onclick="selectContentType('document')">📄 Document</div>
+      </div>
     </div>
     <div class="mod-dfg">
-      <label>Google Drive Share URL</label>
+      <label>Title</label>
+      <input type="text" id="vid-title" placeholder="e.g. PMP Step 1 – Arrival &amp; Assessment">
+    </div>
+    <div class="mod-dfg" id="content-url-group">
+      <label id="content-url-label">Google Drive Share URL</label>
       <input type="text" id="vid-url" placeholder="https://drive.google.com/file/d/…/view">
-      <div class="hint">Paste the "Share" link from Google Drive. Make sure sharing is set to "Anyone with the link."</div>
+      <div class="hint" id="content-url-hint">Paste the Share link from Google Drive. Supports videos, PDFs, Google Docs, PPTX, Excel, and more.</div>
+    </div>
+    <div class="mod-dfg" id="quiz-builder-group" style="display:none">
+      <label>Quiz Questions</label>
+      <div id="quiz-summary" class="quiz-summary">No questions added yet.</div>
+      <button class="tr-add-video-btn" style="margin-top:.5rem" onclick="openQuizWizard()">📝 Open Quiz Builder</button>
     </div>
     <div class="mod-dfg">
       <label>Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
-      <textarea id="vid-desc" rows="2" placeholder="What is covered in this video..."></textarea>
+      <textarea id="vid-desc" rows="2" placeholder="What is covered in this content..."></textarea>
+    </div>
+    <div class="mod-dfg" id="content-gate-group">
+      <label class="mod-gate-label">
+        <input type="checkbox" id="content-pass-required" onchange="toggleThresholdVisibility()">
+        <span>Must complete/pass to unlock next item</span>
+      </label>
+    </div>
+    <div class="mod-dfg" id="content-threshold-group" style="display:none">
+      <label>Pass Threshold <span style="font-weight:400;color:var(--muted);font-size:.72rem">(%)</span></label>
+      <input type="number" id="content-pass-threshold" min="1" max="100" value="80" placeholder="80">
     </div>
     <div class="mod-dfg">
       <label>Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
@@ -1010,9 +1084,31 @@ select.q-inp{cursor:pointer}
     <div class="mod-drawer-msg" id="vid-drawer-msg"></div>
   </div>
   <div class="mod-drawer-foot">
-    <button class="mod-save-btn" id="vid-save-btn" onclick="saveVideo()">Save Video</button>
+    <button class="mod-save-btn" id="vid-save-btn" onclick="saveVideo()">Save Content</button>
   </div>
 </div>
+
+<!-- ── Quiz Wizard Overlay ── -->
+<div class="quiz-wizard-overlay" id="quiz-wizard-overlay" style="display:none">
+  <div class="quiz-wizard">
+    <div class="qw-header">
+      <div class="qw-title">Quiz Builder</div>
+      <button class="drawer-close" onclick="closeQuizWizard()">✕</button>
+    </div>
+    <div class="qw-body" id="qw-body">
+      <div class="qw-questions" id="qw-questions"></div>
+      <button class="tr-add-video-btn" onclick="addQuizQuestion()" style="margin-top:1rem">+ Add Question</button>
+    </div>
+    <div class="qw-preview-toggle">
+      <button class="mod-act-btn" onclick="toggleQuizPreview()" id="qw-preview-btn">👁 Preview Quiz</button>
+    </div>
+    <div class="qw-preview" id="qw-preview" style="display:none"></div>
+    <div class="qw-footer">
+      <button class="mod-save-btn" onclick="saveQuizFromWizard()">Done — Save Questions</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- Pool Action Bottom Sheet -->
 <div class="pool-action-backdrop" id="pas-backdrop" onclick="closePoolAction()"></div>
@@ -1708,6 +1804,10 @@ function renderSvcForm(meta){
       const cg=document.createElement('div');cg.className='sfg';
       cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,\'green\')" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,\'cloudy\')" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,\'clear\')" data-val="clear">Clear</div></div>';
       card.appendChild(cg);
+      // ── Tablet Level pill selector (portal-only) ────────────────────────────
+      const tg=document.createElement('div');tg.className='sfg';
+      tg.innerHTML='<label>Tablet Level <span style="color:red">*</span></label><span class="sh">Current chlorine tablet level in the chlorinator.</span><div class="cp" id="tablet-pills"><div class="cpill tbpill" onclick="tTablet(this,\'low\')" data-val="low">Low (0–2 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'medium\')" data-val="medium">Medium (3–4 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'full\')" data-val="full">Full (5–6 tabs)</div></div>';
+      card.appendChild(tg);
     }
   });
   // ── Photo upload card ──────────────────────────────────────────────────────
@@ -1733,10 +1833,32 @@ function renderSvcForm(meta){
   root.appendChild(photoCard);
   const sc=mkCard('');sc.style.cssText='background:transparent;box-shadow:none;border:none;padding:0';
   sc.innerHTML='<button class="btn-svc" id="btn-svc" onclick="submitSvc()">Submit Log to MCPS</button>';root.appendChild(sc);
+
+  // ── Auto-fill Technician from logged-in user ────────────────────────────
+  setTimeout(()=>{
+    const techEl = document.querySelector('[name="Technician"]');
+    if (techEl && _s && _s.name) {
+      // For select dropdowns, try to match the option
+      if (techEl.tagName === 'SELECT') {
+        for (let i = 0; i < techEl.options.length; i++) {
+          if (techEl.options[i].value.toLowerCase().trim() === _s.name.toLowerCase().trim() ||
+              techEl.options[i].text.toLowerCase().trim() === _s.name.toLowerCase().trim()) {
+            techEl.selectedIndex = i; break;
+          }
+        }
+      } else {
+        techEl.value = _s.name;
+      }
+      techEl.closest('.sfg').style.display = 'none'; // Hide since auto-filled
+    }
+  }, 100);
 }
 
 function mkCard(t){const d=document.createElement('div');d.className='svc-card';if(t){const h=document.createElement('div');h.className='svc-stitle';h.textContent=t;d.appendChild(h);}return d;}
-function tCond(el,type){const was=el.classList.contains('active')||el.classList.contains('active-ok')||el.classList.contains('active-cloudy');document.querySelectorAll('.cpill').forEach(p=>p.classList.remove('active','active-ok','active-cloudy'));if(!was)el.classList.add(type==='green'?'active':type==='clear'?'active-ok':'active-cloudy');runRecs();}
+function tCond(el,type){const was=el.classList.contains('active')||el.classList.contains('active-ok')||el.classList.contains('active-cloudy');document.querySelectorAll('.cpill:not(.tbpill)').forEach(p=>p.classList.remove('active','active-ok','active-cloudy'));if(!was)el.classList.add(type==='green'?'active':type==='clear'?'active-ok':'active-cloudy');runRecs();}
+// Tablet level pill toggle
+function tTablet(el,level){const was=el.classList.contains('tactive');document.querySelectorAll('.tbpill').forEach(p=>p.classList.remove('tactive'));if(!was)el.classList.add('tactive');runRecs();}
+function getTabletLevel(){const a=document.querySelector('.tbpill.tactive');return a?a.dataset.val:null;}
 
 function gn(t){const el=document.querySelector('[name="'+t+'"]');if(!el||!el.value)return null;const v=parseFloat(el.value);return isNaN(v)?null:v;}
 function s2g(v){const s=String(v||'').toLowerCase();if(s.includes('large')||s.includes('>20'))return SG.large;if(s.includes('medium')||s.includes('15,000'))return SG.medium;return SG.small;}
@@ -1764,45 +1886,117 @@ function roundH(v){return v===0?0:Math.round(v*2)/2;}  // nearest 0.5 lbs (solid
 
 function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
   const res = [], isS = SM.indexOf(new Date().getMonth()+1) !== -1, g = gal/10000;
+  const szEl = document.getElementById('svc-size');
+  const poolSize = szEl ? szEl.value : 'small';
+  const tabLvl = getTabletLevel(); // 'low', 'medium', 'full', or null
 
-  // Rule 1 — Liquid Chlorine
-  if (fc !== null) {
+  // ── Rule 1 — Tablet × Chlorine Matrix ──────────────────────────────────────
+  if (tabLvl && fc !== null) {
+    if (tabLvl === 'low') {
+      if (fc < 2) {
+        // Large pool special: 6 tablets + 3 gal chlorine
+        if (poolSize === 'large') {
+          res.push({name:'Chlorine Tablets', status:'bad', amt:'6 tablets', reason:'Large pool, low tablets + low chlorine — max tablet load.'});
+          let lc = 3;
+          if (isS) lc = roundQ(lc * 1.5);
+          res.push({name:'Liquid Chlorine', status:'bad', amt:lc.toFixed(2)+' gal', reason:'Large pool shock dose to recover FC'+(isS?' (summer ×1.5)':'')+'.'});
+        } else {
+          res.push({name:'Chlorine Tablets', status:'bad', amt:'4 tablets', reason:'Low tablets + low chlorine — replenish tablets.'});
+          let lc = roundQ(0.5 * g);
+          if (isS) lc = roundQ(lc * 1.5);
+          // Medium pool: always 2 gal when FC 0-2
+          if (poolSize === 'medium' && lc < 2) lc = 2;
+          res.push({name:'Liquid Chlorine', status:'bad', amt:lc.toFixed(2)+' gal', reason:'Reduced liquid dose — tablets will raise FC over the week'+(isS?' (summer ×1.5)':'')+'.'});
+        }
+      } else if (fc <= 5) {
+        // Medium or in-range chlorine → add 4 tablets, no liquid
+        res.push({name:'Chlorine Tablets', status:'warning', amt:'4 tablets', reason:'Low tablets — replenish. Chlorine level adequate, no liquid needed.'});
+      } else {
+        // High chlorine → add fewer tablets
+        res.push({name:'Chlorine Tablets', status:'good', amt:'2 tablets', reason:'Low tablets but chlorine is high — add fewer tablets to maintain.'});
+      }
+    } else if (tabLvl === 'medium') {
+      if (fc < 2) {
+        res.push({name:'Chlorine Tablets', status:'warning', amt:'2 tablets', reason:'Medium tablets + low chlorine — top off tablets.'});
+        let lc = 1;
+        if (isS) lc = roundQ(lc * 1.5);
+        if (poolSize === 'medium') lc = Math.max(lc, 2);
+        if (poolSize === 'large') lc = Math.max(lc, 2);
+        res.push({name:'Liquid Chlorine', status:'bad', amt:lc.toFixed(2)+' gal', reason:'FC critically low — add liquid chlorine'+(isS?' (summer ×1.5)':'')+'.'});
+      } else if (fc <= 5) {
+        res.push({name:'Chlorine Tablets', status:'good', amt:'2 tablets', reason:'Medium tablets — top off. Chlorine adequate.'});
+      } else {
+        // High chlorine, medium tablets → leave as is
+        res.push({name:'Chlorine Tablets', status:'good', amt:'Leave as is', reason:'Tablets medium, chlorine high — no changes needed.'});
+      }
+    } else if (tabLvl === 'full') {
+      // Full tablets → only suggest liquid chlorine if needed
+      if (fc < 2) {
+        let lc = roundQ(1 * g);
+        if (isS) lc = roundQ(lc * 1.5);
+        if (poolSize === 'medium') lc = Math.max(lc, 2);
+        res.push({name:'Liquid Chlorine', status:'bad', amt:lc.toFixed(2)+' gal', reason:'Tablets full but FC low — add liquid chlorine'+(isS?' (summer ×1.5)':'')+'.'});
+      } else if (fc < 3) {
+        let lc = roundQ(0.5 * g);
+        if (isS) lc = roundQ(lc * 1.5);
+        res.push({name:'Liquid Chlorine', status:'warning', amt:lc.toFixed(2)+' gal', reason:'Tablets full, FC slightly low — small liquid dose'+(isS?' (summer ×1.5)':'')+'.'});
+      }
+      res.push({name:'Chlorinator', status:'good', amt:'Adjust chlorinator', reason:'Tablets full — adjust water flow in the chlorinator for optimal dissolve rate.'});
+    }
+  } else if (fc !== null && !tabLvl) {
+    // No tablet level selected — fall back to original liquid chlorine logic
     let b = 1*g;
     if (isS) b *= 1.5;
     if (isG)       res.push({name:'Liquid Chlorine',status:'bad',    amt:roundQ(b*2).toFixed(2)+' gal',reason:'Green/algae — shock dose. Do NOT adjust pH/TA/CH until chlorine works 24-48 hrs.'});
-    else if (fc<2) res.push({name:'Liquid Chlorine',status:'bad',    amt:roundQ(b*2).toFixed(2)+' gal',reason:'FC critically low — double dose'+(isS?' + summer ×1.5':'')});
+    else if (fc<2) {
+      let dose = roundQ(b*2);
+      if (poolSize === 'medium') dose = Math.max(dose, 2);
+      res.push({name:'Liquid Chlorine',status:'bad',amt:dose.toFixed(2)+' gal',reason:'FC critically low — double dose'+(isS?' + summer ×1.5':'')});
+    }
     else if (fc<3) res.push({name:'Liquid Chlorine',status:'warning',amt:roundQ(b).toFixed(2)+' gal',  reason:'FC below target (3–5 ppm)'+(isS?' (summer ×1.5)':'')});
     else if (fc<=5)res.push({name:'Liquid Chlorine',status:'good',   amt:roundQ(b).toFixed(2)+' gal',  reason:'FC in range — maintenance dose to hold through week'+(isS?' (summer ×1.5)':'')});
-    // fc > 5 → no recommendation
   }
 
-  // Rule 2 — pH / Muriatic Acid or Soda Ash
+  // ── Algae override (always adds liquid chlorine regardless of tablets) ─────
+  if (isG && fc !== null) {
+    // Remove any existing liquid chlorine recs if algae
+    for (let i = res.length - 1; i >= 0; i--) {
+      if (res[i].name === 'Liquid Chlorine') res.splice(i, 1);
+    }
+    let b = 1*g;
+    if (isS) b *= 1.5;
+    res.push({name:'Liquid Chlorine',status:'bad',amt:roundQ(b*2).toFixed(2)+' gal',reason:'Green/algae — shock dose. Do NOT adjust pH/TA/CH until chlorine works 24-48 hrs.'});
+  }
+
+  // ── Rule 2 — pH / Muriatic Acid or Soda Ash ───────────────────────────────
   if (ph !== null) {
     if (ph < 7.2) {
-      // Always recommend soda ash for low pH, even when green
       res.push({name:'Soda Ash',status:'bad',amt:'As needed',reason:'pH below 7.2 — raise carefully, test before adding more.'});
     } else if (!isG && ph > 7.6) {
       let a = 0.5*g;
       if (mat === 'fiberglass') a *= 0.75;
-      a = Math.min(a, 1.0*g);
+      // Pool-size acid caps
+      if (poolSize === 'medium') a = Math.min(a, 0.75);
+      else if (poolSize === 'large') a = Math.min(a, 1.0);
+      else a = Math.min(a, 0.5); // small pool default cap
       a = Math.max(roundQ(a), 0.25);
-      res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2–7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')});
+      res.push({name:'Muriatic Acid',status:ph>=8?'bad':'warning',amt:a.toFixed(2)+' gal',reason:'Lower pH to 7.2–7.6. One dose max per visit.'+(mat==='fiberglass'?' (reduced — fiberglass)':'')+(poolSize==='medium'?' (cap: 0.75 gal for medium pool)':'')+(poolSize==='large'?' (cap: 1.0 gal for large pool)':'')});
     } else if (isG && ph > 7.6) {
       res.push({name:'Muriatic Acid',status:'warning',amt:'Hold — after shock',reason:'Green pool: shock first, adjust pH after 24-48 hrs.'});
     }
   }
 
-  // Rule 3 — Alkalinity
+  // ── Rule 3 — Alkalinity ────────────────────────────────────────────────────
   if (ta !== null && ta < 80 && !isG)
     res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:roundH(1.4*g*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80–120 ppm)'});
 
-  // Rule 4 — Calcium Hardness
+  // ── Rule 4 — Calcium Hardness ─────────────────────────────────────────────
   if (ch !== null && !isG) {
     if (ch < 250) res.push({name:'Calcium Hardness Increaser',status:'warning',amt:roundH(1.2*g*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250–350 ppm).'+(mat==='plaster'?' Keep CH toward upper range for plaster surfaces.':'')});
     if (ch > 450) res.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA hard water.'});
   }
 
-  // Rule 5 — Algae Protocol banner (always first)
+  // ── Rule 5 — Algae Protocol banner (always first) ─────────────────────────
   if (isG) res.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH, TA, or CH.'});
 
   return res;
@@ -1819,6 +2013,11 @@ function submitSvc(){
   });
   const ap = document.querySelector('.cpill.active, .cpill.active-cloudy');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
+  // Include tablet level from portal pill selector
+  const tabletPill = document.querySelector('.tbpill.tactive');
+  if(tabletPill) payload['Tablet Level'] = tabletPill.dataset.val;
+  // Inject technician name from portal session
+  if(_s && _s.name) payload['Technician'] = _s.name;
   if(hasErr){alert('Fill out all required fields.');return;}
   showSvcConfirm(payload);
 }
@@ -2920,13 +3119,16 @@ async function qSave() {
 
 function qInit() { if (!_qS._calc) qRecalc(); }
 
+
 // ══════════════════════════════════════════════════════════════════════════════
-// TRAINING MODULES
+// TRAINING MODULE (LMS)
 // ══════════════════════════════════════════════════════════════════════════════
 let _trLoaded = false;
 let _trModules = [];
 let _trProgress = {};
 let _trOpenModules = new Set();
+let _activeContentType = 'video';
+let _quizQuestions = [];
 
 function loadTraining() {
   if (_trLoaded) { renderTraining(); return; }
@@ -2953,6 +3155,12 @@ function loadTraining() {
     });
 }
 
+function isModuleFullyCompleted(modId) {
+  const mod = _trModules.find(m => m.id === modId);
+  if (!mod || !mod.items || mod.items.length === 0) return true;
+  return mod.items.every(item => isItemCompleted(modId, item.id));
+}
+
 function renderTraining() {
   const isAdm = isAdmin();
   const addBtn = document.getElementById('tr-add-mod-btn');
@@ -2964,11 +3172,20 @@ function renderTraining() {
     return;
   }
 
-  root.innerHTML = _trModules.map((mod, idx) => {
-    const videos = mod.videos || [];
-    const completedCount = videos.filter(v => isVideoCompleted(mod.id, v.id)).length;
-    const progressPct = videos.length ? Math.round((completedCount / videos.length) * 100) : 0;
+  let html = '';
+  let prevModuleComplete = true; // used for gating
+
+  _trModules.forEach((mod, idx) => {
+    const items = mod.items || mod.videos || [];
+    const completedCount = items.filter(v => isItemCompleted(mod.id, v.id)).length;
+    const progressPct = items.length ? Math.round((completedCount / items.length) * 100) : 0;
     const isOpen = _trOpenModules.has(mod.id);
+
+    // Module Gating
+    let locked = false;
+    if (mod.require_prev_module && !isAdm && !prevModuleComplete) {
+      locked = true;
+    }
 
     const adminActions = isAdm ? `
       <div class="tr-mod-actions">
@@ -2976,16 +3193,40 @@ function renderTraining() {
         <button class="mod-act-btn danger" onclick="event.stopPropagation();deleteModule('${mod.id}')">🗑</button>
       </div>` : '';
 
-    const itemRows = videos.map(v => {
-      const completed = isVideoCompleted(mod.id, v.id);
+    let prevItemComplete = true; // used for item gating
+    const itemRows = items.map(v => {
+      const completed = isItemCompleted(mod.id, v.id);
+      
+      let itemLocked = false;
+      if (v.pass_required && !isAdm && !prevItemComplete) {
+        itemLocked = true;
+      }
+      if (v.pass_required) prevItemComplete = completed; // for next item in loop
+
       const adminVBtns = isAdm ? `
         <div class="tr-item-admin">
           <button class="v-act-btn" onclick="event.stopPropagation();openVideoDrawer('${mod.id}','${v.id}')">✏️</button>
           <button class="v-act-btn danger" onclick="event.stopPropagation();deleteVideo('${mod.id}','${v.id}')">🗑</button>
         </div>` : '';
+
+      let icon = '▶';
+      if (v.content_type === 'quiz') icon = '📝';
+      if (v.content_type === 'document') icon = '📄';
+
+      if (locked || itemLocked) {
+        return `
+          <div class="tr-item-row locked">
+            <span class="tr-item-icon">🔒</span>
+            <div class="tr-item-info">
+              <div class="tr-item-title">${escHtml(v.title)}</div>
+              <div class="tr-item-desc">Finish previous required items to unlock.</div>
+            </div>
+          </div>`;
+      }
+
       return `
-        <div class="tr-item-row${completed ? ' done' : ''}" onclick="openVideoDetail('${mod.id}','${v.id}')">
-          <span class="tr-item-icon">▶</span>
+        <div class="tr-item-row${completed ? ' done' : ''}" onclick="openItemDetail('${mod.id}','${v.id}')">
+          <span class="tr-item-icon">${icon}</span>
           <div class="tr-item-info">
             <div class="tr-item-title">${escHtml(v.title)}</div>
             ${v.description ? `<div class="tr-item-desc">${escHtml(v.description)}</div>` : ''}
@@ -2997,68 +3238,133 @@ function renderTraining() {
 
     const addVideoBtn = isAdm ? `
       <div class="tr-add-video-row">
-        <button class="tr-add-video-btn" onclick="openVideoDrawer('${mod.id}', null)">+ Add Video</button>
+        <button class="tr-add-video-btn" onclick="openVideoDrawer('${mod.id}', null)">+ Add Content</button>
       </div>` : '';
 
-    const bodyContent = (videos.length || isAdm) ? `${itemRows}${addVideoBtn}` : '';
+    const bodyContent = (items.length || isAdm) ? `${itemRows}${addVideoBtn}` : '';
 
-    return `
-      <div class="tr-module-row${isOpen ? ' open' : ''}" id="tr-mod-${mod.id}">
-        <div class="tr-mod-hdr" onclick="toggleModule('${mod.id}')">
-          <span class="tr-mod-arrow">▶</span>
-          <span class="tr-mod-num">${String(idx+1).padStart(2,'0')}</span>
-          <div class="tr-mod-info">
-            <div class="tr-mod-title">${escHtml(mod.title)}</div>
-            <div class="tr-mod-meta">
-              <span class="tr-mod-count">${videos.length} video${videos.length!==1?'s':''}</span>
-              ${videos.length ? `<span class="tr-mod-progress">${completedCount}/${videos.length} complete (${progressPct}%)</span>` : ''}
+    if (locked) {
+      html += `
+        <div class="tr-module-row locked" id="tr-mod-${mod.id}">
+          <div class="tr-mod-hdr">
+            <span class="tr-mod-arrow">🔒</span>
+            <span class="tr-mod-num">${String(idx+1).padStart(2,'0')}</span>
+            <div class="tr-mod-info">
+              <div class="tr-mod-title">${escHtml(mod.title)}</div>
+              <div class="tr-mod-meta">Complete previous module to unlock</div>
             </div>
+            ${adminActions}
           </div>
-          ${adminActions}
-        </div>
-        ${bodyContent ? `<div class="tr-mod-body">${bodyContent}</div>` : ''}
-      </div>`;
-  }).join('');
+        </div>`;
+    } else {
+      html += `
+        <div class="tr-module-row${isOpen ? ' open' : ''}" id="tr-mod-${mod.id}">
+          <div class="tr-mod-hdr" onclick="toggleModule('${mod.id}')">
+            <span class="tr-mod-arrow">▶</span>
+            <span class="tr-mod-num">${String(idx+1).padStart(2,'0')}</span>
+            <div class="tr-mod-info">
+              <div class="tr-mod-title">${escHtml(mod.title)}</div>
+              <div class="tr-mod-meta">
+                <span class="tr-mod-count">${items.length} item${items.length!==1?'s':''}</span>
+                ${items.length ? `<span class="tr-mod-progress">${completedCount}/${items.length} complete (${progressPct}%)</span>` : ''}
+              </div>
+            </div>
+            ${adminActions}
+          </div>
+          ${bodyContent ? `<div class="tr-mod-body">${bodyContent}</div>` : ''}
+        </div>`;
+    }
+
+    prevModuleComplete = isModuleFullyCompleted(mod.id);
+  });
+
+  root.innerHTML = html;
 }
 
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Accordion toggle ──────────────────────────────────────────────────────────
 function toggleModule(moduleId) {
-  if (_trOpenModules.has(moduleId)) {
-    _trOpenModules.delete(moduleId);
-  } else {
-    _trOpenModules.add(moduleId);
-  }
+  if (_trOpenModules.has(moduleId)) _trOpenModules.delete(moduleId);
+  else _trOpenModules.add(moduleId);
   const row = document.getElementById('tr-mod-' + moduleId);
   if (row) row.classList.toggle('open', _trOpenModules.has(moduleId));
 }
 
-// ── Video Detail View ─────────────────────────────────────────────────────────
-function openVideoDetail(moduleId, videoId) {
+// ── Item Detail View (Video/Document/Quiz) ───────────────────────────────────
+let _currentQuizAnswers = {};
+
+function openItemDetail(moduleId, itemId) {
   const mod = _trModules.find(m => m.id === moduleId);
   if (!mod) return;
-  const video = (mod.videos || []).find(v => v.id === videoId);
-  if (!video) return;
+  const item = (mod.items || []).find(v => v.id === itemId);
+  if (!item) return;
 
-  markVideoInProgress(moduleId, videoId);
+  if (item.content_type !== 'quiz') {
+    markItemInProgress(moduleId, itemId);
+  }
 
-  const driveId = extractDriveId(video.drive_url || video.url || '');
-  const embedSrc = driveId
-    ? `https://drive.google.com/file/d/${driveId}/preview`
-    : (video.drive_url || video.url || '');
-
-  const completed = isVideoCompleted(moduleId, videoId);
-  const completeAction = completed
-    ? `<span class="tr-complete-tag">✓ Completed</span>`
-    : `<button class="tr-complete-btn" id="tr-detail-complete-btn" onclick="markVideoCompleteDetail('${moduleId}','${videoId}')">✓ Mark Complete</button>`;
+  const completed = isItemCompleted(moduleId, itemId);
+  let completeAction = '';
+  if (item.content_type !== 'quiz') {
+    completeAction = completed
+      ? `<span class="tr-complete-tag">✓ Completed</span>`
+      : `<button class="tr-complete-btn" id="tr-detail-complete-btn" onclick="markItemCompleteDetail('${moduleId}','${itemId}')">✓ Mark Complete</button>`;
+  }
 
   const isAdm = isAdmin();
   const adminActions = isAdm ? `
-    <button class="mod-act-btn" onclick="openVideoDrawer('${moduleId}','${videoId}')">✏️ Edit</button>
-    <button class="mod-act-btn danger" onclick="deleteVideo('${moduleId}','${videoId}')">🗑 Delete</button>` : '';
+    <button class="mod-act-btn" onclick="openVideoDrawer('${moduleId}','${itemId}')">✏️ Edit</button>
+    <button class="mod-act-btn danger" onclick="deleteVideo('${moduleId}','${itemId}')">🗑 Delete</button>` : '';
+
+  let viewerHtml = '';
+
+  if (item.content_type === 'video' || item.content_type === 'document' || !item.content_type) {
+    const driveId = extractDriveId(item.content_url || item.drive_url || item.url || '');
+    const embedSrc = driveId ? `https://drive.google.com/file/d/${driveId}/preview` : (item.content_url || item.drive_url || item.url || '');
+    viewerHtml = `<div class="tr-detail-frame-wrap"><iframe src="${embedSrc}" allow="autoplay" allowfullscreen></iframe></div>`;
+  } else if (item.content_type === 'quiz') {
+    _currentQuizAnswers = {}; // reset
+    const quizData = typeof item.quiz_data === 'string' ? null : item.quiz_data; // JSON parsed in get_modules
+    if (quizData && quizData.questions && quizData.questions.length) {
+      const qHTML = quizData.questions.map((q, qIdx) => `
+        <div class="qz-question">
+          <div class="qz-qtext">${qIdx + 1}. ${escHtml(q.question)}</div>
+          <div class="qz-options">
+            ${q.options.map((opt, oIdx) => `
+              <label class="qz-option-label">
+                <input type="radio" name="qz_${qIdx}" value="${oIdx}" onchange="setQuizAnswer('${qIdx}', ${oIdx})">
+                <span>${escHtml(opt)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+
+      let progressHtml = '';
+      const key = `${moduleId}::${itemId}`;
+      const prog = _trProgress[key];
+      if (prog && prog.quiz_attempts > 0) {
+        progressHtml = `<div class="mod-drawer-msg ${prog.status==='completed' ? 'ok' : 'warn'}" style="margin-bottom:1rem">
+          Previous Score: ${prog.quiz_score}% (Attempts: ${prog.quiz_attempts})
+          ${prog.status==='completed' ? ' - Passed!' : ''}
+        </div>`;
+      }
+
+      viewerHtml = `
+        <div class="qz-viewer">
+          ${progressHtml}
+          ${qHTML}
+          <div style="margin-top:20px; text-align:center;">
+             <button class="tr-add-video-btn" style="padding:10px 30px" onclick="submitQuizTaking('${moduleId}', '${itemId}')">Submit Quiz</button>
+             <div id="quiz-result-msg" style="margin-top:10px;font-weight:bold;"></div>
+          </div>
+        </div>`;
+    } else {
+      viewerHtml = `<div class="tr-empty">No questions found in this quiz.</div>`;
+    }
+  }
 
   document.getElementById('tr-mod-list').style.display = 'none';
   const detail = document.getElementById('tr-detail');
@@ -3066,15 +3372,51 @@ function openVideoDetail(moduleId, videoId) {
   detail.innerHTML = `
     <button class="tr-detail-back" onclick="closeVideoDetail()">← Back to Modules</button>
     <div class="tr-detail-breadcrumb">${escHtml(mod.title)}</div>
-    <div class="tr-detail-title">${escHtml(video.title)}</div>
-    ${video.description ? `<div class="tr-detail-desc">${escHtml(video.description)}</div>` : ''}
-    <div class="tr-detail-frame-wrap">
-      <iframe src="${embedSrc}" allow="autoplay" allowfullscreen></iframe>
-    </div>
-    <div class="tr-detail-actions">
-      ${completeAction}
-      ${adminActions}
-    </div>`;
+    <div class="tr-detail-title">${escHtml(item.title)}</div>
+    ${item.description ? `<div class="tr-detail-desc">${escHtml(item.description)}</div>` : ''}
+    ${viewerHtml}
+    <div class="tr-detail-actions">${completeAction}${adminActions}</div>`;
+}
+
+function setQuizAnswer(qIdx, optIdx) { _currentQuizAnswers['q' + qIdx] = optIdx; }
+
+function submitQuizTaking(moduleId, itemId) {
+  const mod = _trModules.find(m => m.id === moduleId);
+  if (!mod) return;
+  const item = (mod.items || []).find(v => v.id === itemId);
+  if (!item || !item.quiz_data || !item.quiz_data.questions) return;
+  
+  if (Object.keys(_currentQuizAnswers).length < item.quiz_data.questions.length) {
+    document.getElementById('quiz-result-msg').innerHTML = '<span style="color:red">Please answer all questions before submitting.</span>';
+    return;
+  }
+
+  document.getElementById('quiz-result-msg').innerHTML = 'Grading quiz...';
+  api({
+    action: 'submit_quiz', token: _s.token,
+    module_id: moduleId, content_id: itemId, answers: _currentQuizAnswers
+  }).then(res => {
+    if (!res.ok) { document.getElementById('quiz-result-msg').innerHTML = '<span style="color:red">Error: ' + (res.error||'Failed') + '</span>'; return; }
+    
+    // Update local progress state
+    const key = `${moduleId}::${itemId}`;
+    _trProgress[key] = {
+      status: res.passed ? 'completed' : 'in_progress',
+      quiz_score: res.score,
+      quiz_attempts: (_trProgress[key] ? (_trProgress[key].quiz_attempts || 0) : 0) + 1,
+      updated_at: new Date().toISOString()
+    };
+    
+    let msg = `You scored ${res.score}% (${res.correct}/${res.total}). `;
+    if (res.passed) {
+      msg = `<span style="color:var(--ok)">✓ Passed! ${msg}</span>`;
+      document.getElementById('quiz-result-msg').innerHTML = msg;
+      setTimeout(() => closeVideoDetail(), 2000); // auto close on pass
+    } else {
+      msg = `<span style="color:var(--severe)">❌ Failed. Pass threshold is ${res.pass_threshold}%. ${msg} Please try again.</span>`;
+      document.getElementById('quiz-result-msg').innerHTML = msg;
+    }
+  }).catch(() => { document.getElementById('quiz-result-msg').innerHTML = '<span style="color:red">Network error.</span>'; });
 }
 
 function closeVideoDetail() {
@@ -3084,17 +3426,13 @@ function closeVideoDetail() {
   renderTraining();
 }
 
-function markVideoCompleteDetail(moduleId, videoId) {
+function markItemCompleteDetail(moduleId, itemId) {
   api({
-    action: 'upsert_training_progress',
-    secret: SEC,
-    token: _s.token,
-    module_id: moduleId,
-    video_id: videoId,
-    status: 'completed'
+    action: 'upsert_training_progress', secret: SEC, token: _s.token,
+    module_id: moduleId, content_id: itemId, status: 'completed'
   }).then(res => {
     if (!res.ok) { alert('Error: ' + (res.error || 'Unable to save progress.')); return; }
-    const key = `${moduleId}::${videoId}`;
+    const key = `${moduleId}::${itemId}`;
     _trProgress[key] = { status: 'completed', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const btn = document.getElementById('tr-detail-complete-btn');
     if (btn) {
@@ -3106,32 +3444,24 @@ function markVideoCompleteDetail(moduleId, videoId) {
   }).catch(() => alert('Network error while saving progress.'));
 }
 
-function isVideoCompleted(moduleId, videoId) {
-  const key = `${moduleId}::${videoId}`;
+function isItemCompleted(moduleId, itemId) {
+  const key = `${moduleId}::${itemId}`;
   return !!(_trProgress[key] && _trProgress[key].status === 'completed');
 }
 
-function markVideoInProgress(moduleId, videoId) {
-  if (!moduleId || !videoId) return;
-  const key = `${moduleId}::${videoId}`;
+function markItemInProgress(moduleId, itemId) {
+  if (!moduleId || !itemId) return;
+  const key = `${moduleId}::${itemId}`;
   if (_trProgress[key] && _trProgress[key].status === 'completed') return;
-  _trProgress[key] = Object.assign({}, _trProgress[key], { status: 'in_progress', updated_at: new Date().toISOString() });
+  _trProgress[key] = Object.assign({}, _trProgress[key]||{}, { status: 'in_progress', updated_at: new Date().toISOString() });
   api({
-    action: 'upsert_training_progress',
-    secret: SEC,
-    token: _s.token,
-    module_id: moduleId,
-    video_id: videoId,
-    status: 'in_progress'
+    action: 'upsert_training_progress', secret: SEC, token: _s.token,
+    module_id: moduleId, content_id: itemId, status: 'in_progress'
   }).catch(() => {});
 }
 
 function extractDriveId(url) {
   if (!url) return null;
-  // Handle formats:
-  // https://drive.google.com/file/d/FILE_ID/view
-  // https://drive.google.com/file/d/FILE_ID/preview
-  // https://drive.google.com/open?id=FILE_ID
   const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   return m ? m[1] : null;
 }
@@ -3148,10 +3478,12 @@ function openModuleDrawer(moduleId) {
     document.getElementById('mod-title').value = mod ? mod.title : '';
     document.getElementById('mod-desc').value = mod ? (mod.description || '') : '';
     document.getElementById('mod-order').value = mod ? (mod.order || '') : '';
+    document.getElementById('mod-require-prev').checked = mod ? !!mod.require_prev_module : false;
   } else {
     document.getElementById('mod-title').value = '';
     document.getElementById('mod-desc').value = '';
     document.getElementById('mod-order').value = (_trModules.length + 1);
+    document.getElementById('mod-require-prev').checked = false;
   }
   document.getElementById('mod-backdrop').classList.add('open');
   document.getElementById('mod-drawer').classList.add('open');
@@ -3169,58 +3501,102 @@ function saveModule() {
   const title = document.getElementById('mod-title').value.trim();
   const desc = document.getElementById('mod-desc').value.trim();
   const order = parseInt(document.getElementById('mod-order').value) || (_trModules.length + 1);
+  const reqPrev = document.getElementById('mod-require-prev').checked;
   if (!title) { showDrawerMsg(msgEl, 'err', 'Title is required.'); return; }
   btn.disabled = true; btn.textContent = 'Saving...';
   msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
-  const payload = {
-    action: modId ? 'update_module' : 'create_module',
-    secret: SEC, token: _s.token,
-    module_id: modId, title, description: desc, order
-  };
-  api(payload).then(res => {
+  
+  api({
+    action: modId ? 'update_module' : 'create_module', token: _s.token,
+    module_id: modId, title, description: desc, order, require_prev_module: reqPrev
+  }).then(res => {
     btn.disabled = false; btn.textContent = 'Save Module';
-    if (res.ok) {
-      _trLoaded = false;
-      closeModuleDrawer();
-      loadTraining();
-    } else {
-      showDrawerMsg(msgEl, 'err', res.error || 'Error saving module.');
-    }
-  }).catch(() => { btn.disabled = false; btn.textContent = 'Save Module'; showDrawerMsg(msgEl, 'err', 'Network error.'); });
+    if (res.ok) { _trLoaded = false; closeModuleDrawer(); loadTraining(); }
+    else showDrawerMsg(msgEl, 'err', res.error || 'Error saving module.');
+  }).catch(() => { btn.disabled=false; btn.textContent='Save Module'; showDrawerMsg(msgEl,'err','Network error.'); });
 }
 
 function deleteModule(moduleId) {
   const mod = _trModules.find(m => m.id === moduleId);
-  if (!confirm(`Delete module "${mod ? mod.title : moduleId}"?\n\nThis will also delete all videos in this module.`)) return;
-  api({action:'delete_module', secret:SEC, token:_s.token, module_id:moduleId})
-    .then(res => {
-      if (res.ok) { _trLoaded = false; loadTraining(); }
-      else alert('Error: ' + (res.error || 'Unknown'));
-    }).catch(() => alert('Network error.'));
+  if (!confirm(`Delete module "${mod ? mod.title : moduleId}"?\n\nThis will also delete all items inside it.`)) return;
+  api({action:'delete_module', token:_s.token, module_id:moduleId})
+    .then(res => { if (res.ok) { _trLoaded=false; loadTraining(); } else alert('Error: '+(res.error||'Unknown')); })
+    .catch(() => alert('Network error.'));
 }
 
-// ── Video Drawer ──────────────────────────────────────────────────────────────
-function openVideoDrawer(moduleId, videoId) {
-  const isEdit = !!videoId;
-  document.getElementById('vid-drawer-title').textContent = isEdit ? 'Edit Video' : 'Add Video';
-  document.getElementById('vid-id').value = videoId || '';
+// ── Content Drawer (Video/Doc/Quiz) ─────────────────────────────────────────
+function selectContentType(type) {
+  _activeContentType = type;
+  document.querySelectorAll('.ct-pill').forEach(el => el.classList.remove('ct-active'));
+  document.querySelector(`.ct-pill[data-type="${type}"]`).classList.add('ct-active');
+  
+  const urlGroup = document.getElementById('content-url-group');
+  const quizGroup = document.getElementById('quiz-builder-group');
+  const thresGroup = document.getElementById('content-threshold-group');
+  const passReqCheck = document.getElementById('content-pass-required');
+  const urlLabel = document.getElementById('content-url-label');
+  const urlHint = document.getElementById('content-url-hint');
+
+  if (type === 'quiz') {
+    urlGroup.style.display = 'none';
+    quizGroup.style.display = 'flex';
+    passReqCheck.checked = true; // quizzes usually required to pass
+  } else {
+    urlGroup.style.display = 'flex';
+    quizGroup.style.display = 'none';
+    if (type === 'document') {
+      urlLabel.textContent = 'Document/File URL';
+      urlHint.textContent = 'Paste a Google Drive share link for PDF, Docs, Excel, etc.';
+    } else {
+      urlLabel.textContent = 'Video URL';
+      urlHint.textContent = 'Paste a Google Drive video share link.';
+    }
+  }
+  toggleThresholdVisibility();
+}
+
+function toggleThresholdVisibility() {
+  const showThres = document.getElementById('content-pass-required').checked && _activeContentType === 'quiz';
+  document.getElementById('content-threshold-group').style.display = showThres ? 'flex' : 'none';
+}
+
+function openVideoDrawer(moduleId, itemId) {
+  const isEdit = !!itemId;
+  document.getElementById('vid-drawer-title').textContent = isEdit ? 'Edit Content' : 'Add Content';
+  document.getElementById('vid-id').value = itemId || '';
   document.getElementById('vid-module-id').value = moduleId || '';
   document.getElementById('vid-drawer-msg').className = 'mod-drawer-msg';
   document.getElementById('vid-drawer-msg').textContent = '';
+  
   if (isEdit) {
     const mod = _trModules.find(m => m.id === moduleId);
-    const vid = mod ? (mod.videos||[]).find(v => v.id === videoId) : null;
-    document.getElementById('vid-title').value = vid ? vid.title : '';
-    document.getElementById('vid-url').value = vid ? (vid.drive_url || vid.url || '') : '';
-    document.getElementById('vid-desc').value = vid ? (vid.description || '') : '';
-    document.getElementById('vid-order').value = vid ? (vid.order || '') : '';
+    const item = mod ? (mod.items||[]).find(v => v.id === itemId) : null;
+    document.getElementById('vid-title').value = item ? item.title : '';
+    document.getElementById('vid-url').value = item ? (item.content_url || item.drive_url || item.url || '') : '';
+    document.getElementById('vid-desc').value = item ? (item.description || '') : '';
+    document.getElementById('vid-order').value = item ? (item.order || '') : '';
+    document.getElementById('content-pass-required').checked = item ? !!item.pass_required : false;
+    document.getElementById('content-pass-threshold').value = item ? (item.pass_threshold || 80) : 80;
+    
+    _quizQuestions = [];
+    if (item && item.content_type === 'quiz' && item.quiz_data && item.quiz_data.questions) {
+      _quizQuestions = JSON.parse(JSON.stringify(item.quiz_data.questions));
+    }
+    updateQuizSummary();
+    selectContentType(item ? (item.content_type || 'video') : 'video');
   } else {
     document.getElementById('vid-title').value = '';
     document.getElementById('vid-url').value = '';
     document.getElementById('vid-desc').value = '';
     const mod = _trModules.find(m => m.id === moduleId);
-    document.getElementById('vid-order').value = mod ? ((mod.videos||[]).length + 1) : 1;
+    document.getElementById('vid-order').value = mod ? ((mod.items||[]).length + 1) : 1;
+    document.getElementById('content-pass-required').checked = false;
+    document.getElementById('content-pass-threshold').value = 80;
+    _quizQuestions = [];
+    updateQuizSummary();
+    selectContentType('video');
   }
+  
   document.getElementById('vid-backdrop').classList.add('open');
   document.getElementById('vid-drawer').classList.add('open');
 }
@@ -3233,48 +3609,192 @@ function closeVideoDrawer() {
 function saveVideo() {
   const btn = document.getElementById('vid-save-btn');
   const msgEl = document.getElementById('vid-drawer-msg');
-  const vidId = document.getElementById('vid-id').value;
+  const itemId = document.getElementById('vid-id').value;
   const moduleId = document.getElementById('vid-module-id').value;
   const title = document.getElementById('vid-title').value.trim();
   const url = document.getElementById('vid-url').value.trim();
   const desc = document.getElementById('vid-desc').value.trim();
   const order = parseInt(document.getElementById('vid-order').value) || 1;
+  const passReq = document.getElementById('content-pass-required').checked;
+  const passThres = parseInt(document.getElementById('content-pass-threshold').value) || 80;
+  
   if (!title) { showDrawerMsg(msgEl, 'err', 'Title is required.'); return; }
-  if (!url) { showDrawerMsg(msgEl, 'err', 'Google Drive URL is required.'); return; }
-  if (!extractDriveId(url)) { showDrawerMsg(msgEl, 'err', 'Could not parse a Google Drive file ID from this URL.'); return; }
+  
+  if (_activeContentType === 'video' || _activeContentType === 'document') {
+    if (!url) { showDrawerMsg(msgEl, 'err', 'URL is required.'); return; }
+    if (!extractDriveId(url)) { showDrawerMsg(msgEl, 'err', 'Could not parse a Google Drive file ID from this URL.'); return; }
+  } else if (_activeContentType === 'quiz') {
+    if (_quizQuestions.length === 0) { showDrawerMsg(msgEl, 'err', 'Add at least one quiz question.'); return; }
+  }
+
   btn.disabled = true; btn.textContent = 'Saving...';
   msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
+  
   const payload = {
-    action: vidId ? 'update_video' : 'create_video',
-    secret: SEC, token: _s.token,
-    video_id: vidId, module_id: moduleId, title, drive_url: url, description: desc, order
+    action: itemId ? 'update_content' : 'create_content', token: _s.token,
+    content_id: itemId, module_id: moduleId, title, content_url: url,
+    description: desc, order, content_type: _activeContentType,
+    pass_required: passReq, pass_threshold: passThres,
+    quiz_data: _activeContentType === 'quiz' ? JSON.stringify({questions: _quizQuestions}) : ''
   };
+  
   api(payload).then(res => {
-    btn.disabled = false; btn.textContent = 'Save Video';
-    if (res.ok) {
-      _trLoaded = false;
-      closeVideoDrawer();
-      loadTraining();
-    } else {
-      showDrawerMsg(msgEl, 'err', res.error || 'Error saving video.');
-    }
-  }).catch(() => { btn.disabled = false; btn.textContent = 'Save Video'; showDrawerMsg(msgEl, 'err', 'Network error.'); });
+    btn.disabled = false; btn.textContent = 'Save Content';
+    if (res.ok) { _trLoaded = false; closeVideoDrawer(); loadTraining(); }
+    else showDrawerMsg(msgEl, 'err', res.error || 'Error saving content.');
+  }).catch(() => { btn.disabled=false; btn.textContent='Save Content'; showDrawerMsg(msgEl,'err','Network error.'); });
 }
 
-function deleteVideo(moduleId, videoId) {
+function deleteVideo(moduleId, itemId) {
   const mod = _trModules.find(m => m.id === moduleId);
-  const vid = mod ? (mod.videos||[]).find(v => v.id === videoId) : null;
-  if (!confirm(`Delete video "${vid ? vid.title : videoId}"?`)) return;
-  api({action:'delete_video', secret:SEC, token:_s.token, video_id:videoId, module_id:moduleId})
-    .then(res => {
-      if (res.ok) { _trLoaded = false; loadTraining(); }
-      else alert('Error: ' + (res.error || 'Unknown'));
-    }).catch(() => alert('Network error.'));
+  const item = mod ? (mod.items||[]).find(v => v.id === itemId) : null;
+  if (!confirm(`Delete item "${item ? item.title : itemId}"?`)) return;
+  api({action:'delete_content', token:_s.token, content_id:itemId, module_id:moduleId})
+    .then(res => { if (res.ok) { _trLoaded=false; loadTraining(); } else alert('Error: '+(res.error||'Unknown')); })
+    .catch(() => alert('Network error.'));
 }
 
-function showDrawerMsg(el, type, text) {
-  el.textContent = text;
-  el.className = 'mod-drawer-msg ' + type;
+function showDrawerMsg(el, type, text) { el.textContent = text; el.className = 'mod-drawer-msg ' + type; }
+
+// ── Quiz Wizard ───────────────────────────────────────────────────────────────
+function updateQuizSummary() {
+  document.getElementById('quiz-summary').textContent = _quizQuestions.length ? `${_quizQuestions.length} question(s) configured.` : 'No questions added yet.';
+}
+
+function openQuizWizard() {
+  document.getElementById('quiz-wizard-overlay').style.display = 'flex';
+  renderQuizWizard();
+}
+
+function closeQuizWizard() {
+  document.getElementById('quiz-wizard-overlay').style.display = 'none';
+  updateQuizSummary();
+}
+
+function saveQuizFromWizard() {
+  // Save current dynamic inputs to array
+  const qDivs = document.querySelectorAll('.qw-q-card');
+  const tempArr = [];
+  let valid = true;
+  qDivs.forEach((div, idx) => {
+    const qText = div.querySelector('.qw-q-text').value.trim();
+    if (!qText) return;
+    const opts = [];
+    let correct = 0;
+    div.querySelectorAll('.qw-o-text').forEach((inp, oIdx) => {
+      const txt = inp.value.trim();
+      if (txt) opts.push(txt);
+      if (div.querySelector(`input[name="qw-r-${idx}"]:checked`)?.value == oIdx) correct = opts.length - 1;
+    });
+    if (opts.length < 2) valid = false;
+    tempArr.push({ question: qText, options: opts, correct: correct });
+  });
+  
+  if (!valid) { alert('Each question needs at least 2 options.'); return; }
+  _quizQuestions = tempArr;
+  closeQuizWizard();
+}
+
+function renderQuizWizard() {
+  const cont = document.getElementById('qw-questions');
+  if (!_quizQuestions.length) _quizQuestions.push({ question: '', options: ['',''], correct: 0 }); // init with 1 blank
+  
+  cont.innerHTML = _quizQuestions.map((q, qIdx) => `
+    <div class="qw-q-card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:.5rem;">
+        <strong>Question ${qIdx + 1}</strong>
+        <button class="v-act-btn danger" onclick="removeQuizQuestion(${qIdx})">🗑</button>
+      </div>
+      <input type="text" class="qw-q-text" value="${escHtml(q.question)}" placeholder="Enter your question here..." style="width:100%;padding:.5rem;margin-bottom:.5rem;">
+      <div style="font-size:.8rem;color:#666;margin-bottom:.25rem;">Select the radio button next to the correct answer:</div>
+      <div id="qw-opts-${qIdx}">
+        ${q.options.map((opt, oIdx) => `
+          <div style="display:flex;align-items:center;margin-bottom:.25rem;gap:.5rem;">
+            <input type="radio" name="qw-r-${qIdx}" value="${oIdx}" ${q.correct == oIdx ? 'checked' : ''}>
+            <input type="text" class="qw-o-text" value="${escHtml(opt)}" placeholder="Option ${oIdx+1}" style="flex:1;padding:.4rem;">
+            <button class="v-act-btn" onclick="removeQuizOption(${qIdx}, ${oIdx})">✕</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="mod-act-btn" style="margin-top:.5rem" onclick="addQuizOption(${qIdx})">+ Add Option</button>
+    </div>
+  `).join('');
+}
+
+function addQuizQuestion() {
+  savePartialQuizState();
+  _quizQuestions.push({ question: '', options: ['',''], correct: 0 });
+  renderQuizWizard();
+}
+
+function removeQuizQuestion(qIdx) {
+  savePartialQuizState();
+  _quizQuestions.splice(qIdx, 1);
+  renderQuizWizard();
+}
+
+function addQuizOption(qIdx) {
+  savePartialQuizState();
+  _quizQuestions[qIdx].options.push('');
+  renderQuizWizard();
+}
+
+function removeQuizOption(qIdx, oIdx) {
+  savePartialQuizState();
+  if (_quizQuestions[qIdx].options.length <= 2) return; // need 2 min
+  _quizQuestions[qIdx].options.splice(oIdx, 1);
+  if (_quizQuestions[qIdx].correct == oIdx) _quizQuestions[qIdx].correct = 0;
+  else if (_quizQuestions[qIdx].correct > oIdx) _quizQuestions[qIdx].correct--;
+  renderQuizWizard();
+}
+
+function savePartialQuizState() {
+  const tempArr = [];
+  const qDivs = document.querySelectorAll('.qw-q-card');
+  qDivs.forEach((div, idx) => {
+    const qText = div.querySelector('.qw-q-text').value;
+    const opts = [];
+    let correct = 0;
+    div.querySelectorAll('.qw-o-text').forEach((inp, oIdx) => {
+      opts.push(inp.value);
+      if (div.querySelector(`input[name="qw-r-${idx}"]:checked`)?.value == oIdx) correct = oIdx;
+    });
+    tempArr.push({ question: qText, options: opts, correct: correct });
+  });
+  _quizQuestions = tempArr;
+}
+
+function toggleQuizPreview() {
+  const btn = document.getElementById('qw-preview-btn');
+  const pre = document.getElementById('qw-preview');
+  const bdy = document.getElementById('qw-body');
+  savePartialQuizState();
+  
+  if (pre.style.display === 'none') { // Show preview
+    btn.innerHTML = '✎ Edit Quiz';
+    bdy.style.display = 'none';
+    pre.style.display = 'block';
+    pre.innerHTML = `
+      <div style="font-weight:600;margin-bottom:1rem;color:var(--mcps-blue);">Student Preview:</div>
+      ${_quizQuestions.map((q, qIdx) => `
+        <div class="qz-question" style="background:#f1f3f4;padding:1rem;border-radius:4px;margin-bottom:1rem;">
+          <div class="qz-qtext">${qIdx + 1}. ${escHtml(q.question) || '<i>[Empty Question]</i>'}</div>
+          <div class="qz-options">
+            ${q.options.map((opt, oIdx) => `
+              <label class="qz-option-label">
+                <input type="radio" disabled ${q.correct == oIdx ? 'checked' : ''}>
+                <span style="${q.correct == oIdx ? 'color:var(--ok);font-weight:bold;' : ''}">${escHtml(opt) || '<i>[Empty Option]</i>'}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+    `;
+  } else {
+    btn.innerHTML = '👁 Preview Quiz';
+    pre.style.display = 'none';
+    bdy.style.display = 'block';
+  }
 }
 
 // ── Heads-up SMS ──────────────────────────────────────────────────────────────
