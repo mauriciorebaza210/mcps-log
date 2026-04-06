@@ -281,6 +281,30 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .npb-auto-btn:hover{background:var(--teal-mid)}
 .npb-auto-btn:disabled{background:#cbd5e1;cursor:not-allowed}
 
+/* ── Map Calendar View ──────────────────────────────────────────────────── */
+.map-view-hdr{display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:var(--card);border-bottom:1px solid var(--border);}
+.map-view-toggle{display:flex;gap:0.35rem;background:#f1f5f9;padding:0.25rem;border-radius:8px;}
+.mvt-btn{border:none;background:transparent;padding:0.4rem 0.8rem;border-radius:6px;font-family:'Barlow Condensed',sans-serif;font-size:0.82rem;font-weight:700;letter-spacing:0.04em;color:var(--muted);cursor:pointer;transition:all 0.2s;}
+.mvt-btn.active{background:#fff;color:var(--teal);box-shadow:0 2px 5px rgba(0,0,0,0.05);}
+.map-add-evt-btn{background:var(--teal);color:#fff;border:none;border-radius:6px;padding:0.4rem 0.8rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:0.8rem;cursor:pointer;}
+.cal-hdr{display:flex;justify-content:space-between;align-items:center;padding:1rem;background:var(--surface);}
+.cal-month-title{font-family:'Oswald',sans-serif;font-size:1.2rem;font-weight:600;}
+.cal-nav-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:0.3rem 0.6rem;cursor:pointer;}
+.cal-grid{display:grid;grid-template-columns:repeat(7, 1fr);border-top:1px solid var(--border);border-left:1px solid var(--border);background:var(--card);}
+.cal-dow{font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center;padding:0.5rem;border-bottom:1px solid var(--border);border-right:1px solid var(--border);background:#f8fafc;}
+.cal-cells-wrap{display:contents;} /* Makes cells follow the 7-col grid */
+.cal-cell{border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-height:80px;padding:0.4rem;cursor:pointer;transition:background 0.15s;display:flex;flex-direction:column;gap:0.2rem;}
+.cal-cell:hover{background:#f8fafc;}
+.cal-cell.out-month{background:#fefefe;opacity:0.6;}
+.cal-cell.today{background:#f0fdfa;}
+.cal-cell-date{font-family:'Oswald',sans-serif;font-size:0.9rem;font-weight:600;color:var(--text);margin-bottom:0.25rem;}
+.cal-cell.today .cal-cell-date{color:var(--teal);}
+.cal-pill{font-family:'Barlow Condensed',sans-serif;font-size:0.7rem;font-weight:600;padding:2px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
+.cal-pill.weekly{background:var(--teal-glow);color:var(--teal-mid);border:1px solid rgba(42,168,154,0.3);}
+.cal-pill.proposal{background:#fffbeb;color:#b45309;border:1px solid #fde68a;}
+.cal-pill.green{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;}
+.cal-pill.onetime{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
+
 /* ── Pool Action Bottom Sheet ─────────────────────────────────────────── */
 .pool-action-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:none;animation:fadein .2s}
 .pool-action-backdrop.open{display:block}
@@ -615,14 +639,47 @@ select.q-inp{cursor:pointer}
     <div class="pf" id="page-live_map">
       <div id="route-loading" class="route-loading"><div class="spinner"></div></div>
       <div id="route-content" style="display:none">
+        
+        <!-- View Toggle & Admin Add Button -->
+        <div class="map-view-hdr">
+          <div class="map-view-toggle">
+            <button class="mvt-btn active" id="btn-view-week" onclick="switchMapView('week')">Week View</button>
+            <button class="mvt-btn" id="btn-view-month" onclick="switchMapView('month')">Month Calendar</button>
+          </div>
+          <button class="map-add-evt-btn" id="btn-add-adhoc" style="display:none" onclick="openAdHocModal()">+ Add Event</button>
+        </div>
+
         <!-- Admin operator filter -->
         <div id="op-filter-row" class="op-filter-row" style="display:none"></div>
-        <!-- Day tabs -->
-        <div class="day-tabs-bar" id="day-tabs"></div>
-        <!-- Selected day route card -->
-        <div class="route-day-card" id="route-day-card">
-          <div class="route-empty"><div class="route-empty-icon">📅</div><div class="route-empty-text">Select a day above.</div></div>
+        
+        <!-- WEEK VIEW -->
+        <div id="map-week-view">
+          <!-- Day tabs -->
+          <div class="day-tabs-bar" id="day-tabs"></div>
+          <!-- Selected day route card -->
+          <div class="route-day-card" id="route-day-card">
+            <div class="route-empty"><div class="route-empty-icon">📅</div><div class="route-empty-text">Select a day above.</div></div>
+          </div>
         </div>
+
+        <!-- MONTH CALENDAR VIEW -->
+        <div id="map-month-view" style="display:none">
+          <div class="cal-hdr">
+             <button class="cal-nav-btn" onclick="navMonth(-1)">◀</button>
+             <div class="cal-month-title" id="cal-month-title">Month Year</div>
+             <button class="cal-nav-btn" onclick="navMonth(1)">▶</button>
+          </div>
+          <div class="cal-grid">
+            <div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div>
+            <!-- Calendar cells injected here -->
+            <div id="cal-cells" class="cal-cells-wrap"></div>
+          </div>
+          
+          <div class="route-day-card" id="cal-detail-card" style="margin-top:1rem; display:none;">
+            <!-- detail info for clicked day -->
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -1134,6 +1191,53 @@ select.q-inp{cursor:pointer}
   <button class="pas-apply-btn" id="pas-apply-btn" onclick="applyPoolAction()">Apply Changes</button>
 </div>
 
+<!-- ── Add AdHoc Event Modal ── -->
+<div class="conf-modal-backdrop" id="adhoc-modal-backdrop" onclick="closeAdHocModal(event)">
+  <div class="conf-modal" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Add Calendar Event</div>
+      <button class="drawer-close" onclick="closeAdHocModal()">✕</button>
+    </div>
+    <div class="conf-modal-body">
+      <div class="q-1col">
+        <label class="q-flabel">Date</label>
+        <input type="date" class="q-inp" id="adhoc-date">
+      </div>
+      <div class="q-1col">
+        <label class="q-flabel">Event Type</label>
+        <select class="q-inp" id="adhoc-type">
+          <option value="Proposal">Proposal</option>
+          <option value="One-Time Service">One-Time Service</option>
+          <option value="Green to Clean">Green to Clean</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="q-1col">
+        <label class="q-flabel">Customer Name / Pool</label>
+        <input type="text" class="q-inp" id="adhoc-customer" placeholder="John Doe">
+      </div>
+      <div class="q-1col">
+        <label class="q-flabel">Address &amp; City</label>
+        <input type="text" class="q-inp" id="adhoc-address" placeholder="123 Main St, San Antonio">
+      </div>
+      <div class="q-1col">
+        <label class="q-flabel">Operator</label>
+        <select class="q-inp" id="adhoc-operator">
+          <option value="UNASSIGNED">Unassigned</option>
+        </select>
+      </div>
+      <div class="q-1col">
+        <label class="q-flabel">Notes <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
+        <input type="text" class="q-inp" id="adhoc-notes" placeholder="Needs pressure wash...">
+      </div>
+    </div>
+    <div class="conf-modal-foot">
+      <button class="conf-cancel-btn" onclick="closeAdHocModal()">Cancel</button>
+      <button class="conf-submit-btn" id="btn-save-adhoc" onclick="saveAdHocEvent()">Save Event</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG
@@ -1297,6 +1401,226 @@ function loadRoutes(opOverride) {
       document.getElementById('route-content').style.display='block';
     });
 }
+
+// ── Map Calendar Logic ──
+let _currentMapView = 'week';
+let _calData = null;
+let _calMonth = new Date().getMonth() + 1;
+let _calYear = new Date().getFullYear();
+
+function switchMapView(view) {
+  _currentMapView = view;
+  document.getElementById('btn-view-week').classList.toggle('active', view === 'week');
+  document.getElementById('btn-view-month').classList.toggle('active', view === 'month');
+  
+  if (view === 'week') {
+    document.getElementById('map-week-view').style.display = 'block';
+    document.getElementById('map-month-view').style.display = 'none';
+    const addBtn = document.getElementById('btn-add-adhoc');
+    if(addBtn) addBtn.style.display = 'none';
+    if (!_routeData) loadRoutes();
+  } else {
+    document.getElementById('map-week-view').style.display = 'none';
+    document.getElementById('map-month-view').style.display = 'block';
+    if(isAdmin()) {
+      const addBtn = document.getElementById('btn-add-adhoc');
+      if(addBtn) addBtn.style.display = 'block';
+    }
+    loadCalendarData(_calMonth, _calYear);
+  }
+}
+
+function navMonth(dir) {
+  _calMonth += dir;
+  if (_calMonth > 12) { _calMonth = 1; _calYear++; }
+  else if (_calMonth < 1) { _calMonth = 12; _calYear--; }
+  loadCalendarData(_calMonth, _calYear);
+}
+
+function loadCalendarData(m, y) {
+  document.getElementById('route-loading').style.display = 'block';
+  document.getElementById('route-content').style.display = 'none';
+  
+  const t = new Date(y, m-1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+  const titleEl = document.getElementById('cal-month-title');
+  if(titleEl) titleEl.textContent = t;
+
+  apiGet({action:'calendar_data', token:_s.token, month:m, year:y, operator:_activeOp})
+    .then(res => {
+      document.getElementById('route-loading').style.display = 'none';
+      document.getElementById('route-content').style.display = 'block';
+      if(!res.ok) {
+        document.getElementById('cal-cells').innerHTML = `<div style="grid-column: span 7; padding: 2rem; text-align: center;">Error: ${res.error}</div>`;
+        return;
+      }
+      _calData = res.days || [];
+      if (res.all_operators) _calOperatorList = res.all_operators;
+      
+      // Update Op Filter Data
+      if(isAdmin() && res.all_operators && res.all_operators.length > 1) {
+        const opRow = document.getElementById('op-filter-row');
+        opRow.style.display='flex';
+        opRow.innerHTML='<button class="op-filter-btn'+((_activeOp==='all')?' active':'')+'" onclick="switchOp(\'all\')">All</button>'+
+          res.all_operators.map(op=>`<button class="op-filter-btn${_activeOp===op?' active':''}" onclick="switchOp('${op}')">${op.split(' ')[0]}</button>`).join('');
+      }
+
+      renderMapCalendar();
+    })
+    .catch(e => {
+      document.getElementById('route-loading').style.display = 'none';
+      document.getElementById('route-content').style.display = 'block';
+      document.getElementById('cal-cells').innerHTML = `<div style="grid-column: span 7; padding: 2rem; text-align: center;">Network Error: ${e.message}</div>`;
+    });
+}
+
+function renderMapCalendar() {
+  const wrap = document.getElementById('cal-cells');
+  if(!wrap) return;
+  if(!_calData || !_calData.length) { wrap.innerHTML = ''; return; }
+
+  const todayStr = new Date().toLocaleDateString('en-CA', {year:'numeric', month:'2-digit', day:'2-digit'}); // yyyy-mm-dd
+  
+  let html = '';
+  _calData.forEach((day, idx) => {
+    let pillsHtml = '';
+    
+    // Summarize weeklies
+    if(day.weeklies && day.weeklies.length > 0) {
+       pillsHtml += `<div class="cal-pill weekly">${day.weeklies.length} Weeklies</div>`;
+    }
+    
+    // Adhocs (already filtered softly by backend for technicians, though we enforce admin only on adHoc sheet)
+    if(day.adhocs && day.adhocs.length > 0) {
+       day.adhocs.forEach(a => {
+          let pcls = 'onetime';
+          if(a.type === 'Proposal') pcls = 'proposal';
+          if(a.type === 'Green to Clean') pcls = 'green';
+          pillsHtml += `<div class="cal-pill ${pcls}">${a.type}: ${a.customer_name||a.city||'Unknown'}</div>`;
+       });
+    }
+
+    const cls = [];
+    if(!day.isCurrentMonth) cls.push('out-month');
+    if(day.date === todayStr) cls.push('today');
+    
+    html += `<div class="cal-cell ${cls.join(' ')}" onclick="showCalDayDetails(${idx})">
+               <div class="cal-cell-date">${day.dayNum}</div>
+               ${pillsHtml}
+             </div>`;
+  });
+  
+  wrap.innerHTML = html;
+  document.getElementById('cal-detail-card').style.display = 'none';
+}
+
+function showCalDayDetails(idx) {
+  const day = _calData[idx];
+  if(!day) return;
+  const c = document.getElementById('cal-detail-card');
+  c.style.display = 'block';
+  
+  let html = `<div style="font-family:'Oswald',sans-serif;font-size:1.1rem;color:var(--teal);border-bottom:1px solid var(--border);padding-bottom:0.5rem;margin-bottom:1rem;">Details for ${day.date}</div>`;
+  
+  if((!day.weeklies || !day.weeklies.length) && (!day.adhocs || !day.adhocs.length)) {
+    html += `<div style="color:var(--muted);font-size:0.9rem;">No services scheduled.</div>`;
+  } else {
+    // Adhocs First
+    if(day.adhocs && day.adhocs.length > 0) {
+      html += `<div style="font-weight:600;margin-bottom:0.5rem;font-size:0.85rem;color:var(--muted);text-transform:uppercase;">Special Services & Proposals</div>`;
+      day.adhocs.forEach(a => {
+        let pcls = 'onetime';
+        if(a.type === 'Proposal') pcls = 'proposal';
+        if(a.type === 'Green to Clean') pcls = 'green';
+        
+        html += `<div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+             <span style="font-weight:600;font-size:0.9rem;">${a.customer_name || 'No Name'}</span>
+             <span class="cal-pill ${pcls}">${a.type}</span>
+          </div>
+          <div style="font-size:0.8rem;color:var(--muted);margin-top:0.25rem;">
+            📍 ${a.address || 'No Address'} <br>
+            👤 Op: ${a.operator || 'Unassigned'} <br>
+            ${a.notes ? `📝 ${a.notes}`:''}
+          </div>
+        </div>`;
+      });
+    }
+    
+    // Weeklies
+    if(day.weeklies && day.weeklies.length > 0) {
+      html += `<div style="font-weight:600;margin:1rem 0 0.5rem;font-size:0.85rem;color:var(--muted);text-transform:uppercase;">Recurring Routes (${day.weeklies.length})</div>`;
+      html += `<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));gap:0.5rem;">`;
+      day.weeklies.forEach(w => {
+         html += `<div style="padding:0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.85rem;">
+            <div style="font-weight:600;">${w.customer_name || w.pool_id}</div>
+            <div style="color:var(--muted);font-size:0.75rem;">${w.address}, ${w.city}</div>
+            <div style="color:var(--teal-mid);font-size:0.75rem;margin-top:0.2rem;font-weight:600;">Op: ${w.operator || 'Unassigned'}</div>
+         </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+  
+  c.innerHTML = html;
+  c.scrollIntoView({behavior: 'smooth', block: 'end'});
+}
+
+// ── AdHoc Modal ──
+function openAdHocModal() {
+  document.getElementById('adhoc-date').value = new Date().toLocaleDateString('en-CA');
+  document.getElementById('adhoc-type').value = 'Proposal';
+  document.getElementById('adhoc-customer').value = '';
+  document.getElementById('adhoc-address').value = '';
+  document.getElementById('adhoc-notes').value = '';
+  
+  const opSel = document.getElementById('adhoc-operator');
+  if(opSel) {
+    opSel.innerHTML = '<option value="">Unassigned</option>';
+    if(window._calOperatorList) {
+        _calOperatorList.forEach(op => {
+             opSel.innerHTML += `<option value="${op}">${op}</option>`;
+        });
+    } else if(_routeData && _routeData.all_operators) {
+         _routeData.all_operators.forEach(op => {
+             opSel.innerHTML += `<option value="${op}">${op}</option>`;
+         });
+    }
+  }
+
+  document.getElementById('adhoc-modal-backdrop').classList.add('open');
+}
+
+function closeAdHocModal() {
+  document.getElementById('adhoc-modal-backdrop').classList.remove('open');
+}
+
+function saveAdHocEvent() {
+  const btn = document.getElementById('btn-save-adhoc');
+  const evt = {
+    date: document.getElementById('adhoc-date').value,
+    type: document.getElementById('adhoc-type').value,
+    customer_name: document.getElementById('adhoc-customer').value.trim(),
+    address: document.getElementById('adhoc-address').value.trim(),
+    operator: document.getElementById('adhoc-operator').value,
+    notes: document.getElementById('adhoc-notes').value.trim(),
+  };
+  
+  if(!evt.date) { alert("Date is required"); return; }
+  
+  btn.disabled = true; btn.textContent = 'Saving...';
+  api({action: 'add_adhoc_event', token: _s.token, event: evt})
+    .then(res => {
+       btn.disabled = false; btn.textContent = 'Save Event';
+       if(!res.ok) { alert(res.error || "Failed to save event"); return; }
+       closeAdHocModal();
+       loadCalendarData(_calMonth, _calYear); // reload
+    })
+    .catch(e => {
+       btn.disabled = false; btn.textContent = 'Save Event';
+       alert("Network error: " + e.message);
+    });
+}
+
 
 function recalculateRoutes() {
   if (!confirm('⚠️ Recalculate ALL routes?\n\nThis will reassign every un-pinned pool. Pinned pools stay put. Locked days are not affected.\n\nContinue?')) return;
