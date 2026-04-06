@@ -55,3 +55,22 @@ function sendHeadsUp(pool_id, customer_name) {
 
   return { ok: true, customer: firstName };
 }
+
+// ── Test function — run this directly from the GAS script editor ──────────────
+function TEST_sendHeadsUp() {
+  var zapierUrl = PropertiesService.getScriptProperties().getProperty("ZAPIER_HEADS_UP_WEBHOOK");
+  if (!zapierUrl) {
+    Logger.log("ERROR: ZAPIER_HEADS_UP_WEBHOOK script property not set");
+    return;
+  }
+  var testPhone = "2105592073";
+  var message = "Hi Mauricio! Your MCPS pool technician is on their way. See you soon! \u2013 Mission Custom Pool Solutions";
+  var response = UrlFetchApp.fetch(zapierUrl, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ to: testPhone, message: message, customer: "Mauricio" }),
+    muteHttpExceptions: true
+  });
+  Logger.log("Status: " + response.getResponseCode());
+  Logger.log("Response: " + response.getContentText());
+}
