@@ -209,6 +209,19 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .stop-headsup-btn.sending{opacity:.5;pointer-events:none}
 .stop-headsup-btn.sent{border-color:#22c55e;background:#f0fdf4;color:#15803d}
 .stop-headsup-btn svg{width:13px;height:13px;flex-shrink:0}
+.stop-log-btn{
+  flex-shrink:0;height:34px;padding:0 10px;border-radius:9px;
+  border:1.5px solid var(--teal-light);background:var(--teal-glow);
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  cursor:pointer;color:var(--teal);transition:all .15s;
+  font-size:.72rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  letter-spacing:.04em;white-space:nowrap;
+}
+.stop-log-btn:hover{background:var(--teal-mid);color:#fff;border-color:var(--teal-mid)}
+/* ── Pool trend banner ── */
+.pool-trend-banner{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:.65rem .9rem;margin-bottom:1rem;font-size:.82rem;color:#166534}
+.pool-trend-banner strong{display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#15803d;margin-bottom:.25rem}
+.pool-trend-pill{display:inline-block;background:#dcfce7;border:1px solid #bbf7d0;color:#166534;border-radius:99px;padding:.1rem .55rem;font-size:.75rem;font-weight:600;margin:.1rem .15rem}
 
 /* Admin filter */
 .op-filter-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem}
@@ -2040,6 +2053,9 @@ function renderDayCard(dayData){
         ${pool.notes?`<div class="stop-notes">📋 ${pool.notes}</div>`:''}
       </div>
       <div class="stop-actions" onclick="event.stopPropagation()">
+        <button class="stop-log-btn" onclick="goToSvcLog('${escHtml(pool.pool_id||'')}','${escHtml(pool.customer_name||'')}')">
+          📋 Log
+        </button>
         <button class="stop-headsup-btn" data-pool-id="${escHtml(pool.pool_id||String(idx))}" data-cust-name="${escHtml(pool.customer_name||'')}" onclick="headsUp(event,this)" title="Send heads up SMS">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           On the way!
@@ -2386,9 +2402,97 @@ function renderSvcForm(meta){
       techEl.closest('.sfg').style.display = 'none'; // Hide since auto-filled
     }
   }, 100);
+
+  // ── Prefill from map "Submit Log" button ───────────────────────────────────
+  if (window._prefillPoolId) {
+    const pid = window._prefillPoolId;
+    window._prefillPoolId = null;
+    setTimeout(() => prefillSvcForm_(pid), 160);
+  }
 }
 
 function mkCard(t){const d=document.createElement('div');d.className='svc-card';if(t){const h=document.createElement('div');h.className='svc-stitle';h.textContent=t;d.appendChild(h);}return d;}
+
+// ── Map → Service Log flow ────────────────────────────────────────────────────
+function goToSvcLog(poolId, customerName) {
+  if (!poolId) return;
+  window._prefillPoolId = poolId;
+  window._prefillCustomer = customerName || '';
+  navigateTo('service_log');
+}
+
+function prefillSvcForm_(poolId) {
+  // 1. Set pool_id select
+  const poolSel = document.querySelector('[name="pool_id"]');
+  if (poolSel) {
+    // Try exact match first, then partial (MCPS-XXXX suffix)
+    const mcpsId = poolId.match(/(MCPS-\d{4,})\s*$/i);
+    let matched = false;
+    for (let i = 0; i < poolSel.options.length; i++) {
+      const opt = poolSel.options[i].value;
+      if (opt === poolId || (mcpsId && opt.toUpperCase().includes(mcpsId[1].toUpperCase()))) {
+        poolSel.selectedIndex = i;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) poolSel.dispatchEvent(new Event('change'));
+  }
+
+  // 2. Fetch history context (size, material, trends) from backend
+  api({ secret: SEC, action: 'get_pool_context', token: _s.token, pool_id: poolId })
+    .then(res => {
+      if (!res.ok || !res.data || !res.data.found) return;
+      const ctx = res.data;
+
+      // Prefill pool size
+      if (ctx.last_size) {
+        const sizeSel = document.getElementById('svc-size');
+        if (sizeSel) {
+          for (let i = 0; i < sizeSel.options.length; i++) {
+            if (sizeSel.options[i].value === ctx.last_size) { sizeSel.selectedIndex = i; break; }
+          }
+        }
+      }
+
+      // Prefill pool material
+      if (ctx.last_material) {
+        const matSel = document.getElementById('svc-mat');
+        if (matSel) {
+          for (let i = 0; i < matSel.options.length; i++) {
+            if (matSel.options[i].value === ctx.last_material) { matSel.selectedIndex = i; break; }
+          }
+        }
+      }
+
+      // Prefill tablet level pill
+      if (ctx.last_tablet) {
+        const tp = document.querySelector('.tbpill[data-val="' + ctx.last_tablet + '"]');
+        if (tp) { document.querySelectorAll('.tbpill').forEach(p => p.classList.remove('tactive')); tp.classList.add('tactive'); }
+      }
+
+      // Trigger recs recalc after prefill
+      if (typeof runRecs === 'function') runRecs();
+
+      // Show trend banner
+      if (ctx.trends && ctx.trends.length) renderTrendBanner_(ctx.trends, ctx.visit_count || 0);
+    })
+    .catch(() => {}); // non-critical — fail silently
+}
+
+function renderTrendBanner_(trends, visitCount) {
+  const root = document.getElementById('svc-root');
+  if (!root) return;
+  const existing = document.getElementById('pool-trend-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'pool-trend-banner';
+  banner.className = 'pool-trend-banner';
+  const pills = trends.map(t => '<span class="pool-trend-pill">' + t + '</span>').join(' ');
+  banner.innerHTML = '<strong>📊 Trend — last ' + visitCount + ' visit' + (visitCount !== 1 ? 's' : '') + '</strong>' + pills;
+  root.insertBefore(banner, root.firstChild);
+}
 function tCond(el,type){const was=el.classList.contains('active')||el.classList.contains('active-ok')||el.classList.contains('active-cloudy');document.querySelectorAll('.cpill:not(.tbpill)').forEach(p=>p.classList.remove('active','active-ok','active-cloudy'));if(!was)el.classList.add(type==='green'?'active':type==='clear'?'active-ok':'active-cloudy');runRecs();}
 // Tablet level pill toggle
 function tTablet(el,level){const was=el.classList.contains('tactive');document.querySelectorAll('.tbpill').forEach(p=>p.classList.remove('tactive'));if(!was)el.classList.add('tactive');runRecs();}
@@ -2545,6 +2649,26 @@ function submitSvc(){
     if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
     if(val)payload[item.title]=val;
   });
+
+  // ── Mandatory water chemistry (always required regardless of schema) ────────
+  const requiredChemFields = ['Chlorine (Cl)', 'pH', 'Total Alkalinity (TA)'];
+  const missingChem = requiredChemFields.filter(f => !payload[f] || payload[f].trim() === '');
+  if (missingChem.length) {
+    alert('Please fill in: ' + missingChem.join(', '));
+    // Highlight the missing fields
+    missingChem.forEach(f => {
+      const el = document.querySelector('[name="' + f.replace(/"/g,'&quot;') + '"]');
+      if (el) { el.style.borderColor = 'var(--error)'; el.focus(); el.addEventListener('input', () => { el.style.borderColor = ''; }, { once: true }); }
+    });
+    return;
+  }
+
+  // ── Include portal-only fields in payload ──────────────────────────────────
+  const sizeSel = document.getElementById('svc-size');
+  if (sizeSel && sizeSel.value) payload['Pool Size'] = sizeSel.value;
+  const matSel = document.getElementById('svc-mat');
+  if (matSel && matSel.value) payload['Pool Material'] = matSel.value;
+
   const ap = document.querySelector('.cpill.active, .cpill.active-cloudy');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
   // Include tablet level from portal pill selector
