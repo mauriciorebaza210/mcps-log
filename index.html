@@ -379,6 +379,20 @@ textarea.si{resize:vertical;min-height:72px}
 /* ── ADMIN ───────────────────────────────────────────────────────────────── */
 .adm-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:1.25rem}
 .adm-title{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:.85rem 1.1rem;border-bottom:1px solid var(--border);background:var(--surface)}
+/* ── Form Editor ── */
+.fe-row{display:flex;align-items:center;justify-content:space-between;padding:.5rem .75rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.3rem;background:var(--card)}
+.fe-row-left{flex:1;min-width:0;overflow:hidden}
+.fe-row-title{font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fe-row-meta{color:var(--muted);font-size:.73rem;margin-top:1px}
+.fe-break{display:flex;align-items:center;justify-content:space-between;padding:.3rem .75rem;border-top:2px solid var(--teal);margin:.6rem 0 .3rem;background:var(--surface);border-radius:4px}
+.fe-break-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--teal)}
+.fe-btn{padding:.22rem .48rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:.78rem;line-height:1.2;color:var(--text)}
+.fe-btn:hover{background:var(--border)}
+.fe-btn.fe-del{color:#ef4444;border-color:#fecaca}
+.fe-btn.fe-del:hover{background:#fef2f2}
+.fe-edit-panel{padding:.6rem .75rem;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;margin-top:-.3rem;margin-bottom:.3rem}
+.fe-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+@media(max-width:520px){.fe-edit-grid{grid-template-columns:1fr}}
 table.ut{width:100%;border-collapse:collapse}
 table.ut th{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border);background:var(--surface)}
 table.ut td{padding:.75rem .9rem;border-bottom:1px solid #f1f5f9;font-size:.85rem}
@@ -699,6 +713,51 @@ select.q-inp{cursor:pointer}
     </button>
   </div>
   
+  <!-- Service Log Form Editor -->
+  <div class="adm-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Service Log Form</span>
+      <button class="adm-new-btn" onclick="toggleFormEditor(this)">✏️ Edit Form</button>
+    </div>
+    <div id="form-editor-wrap" style="display:none;padding:1rem">
+
+      <!-- Sync actions -->
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+        <button class="adm-new-btn" style="background:#0891b2" onclick="adminSyncPoolDropdown()">🔄 Sync Pool Dropdown</button>
+        <button class="adm-new-btn" style="background:#0891b2" onclick="adminSyncChemicals()">🔄 Sync Chemicals</button>
+        <button class="adm-new-btn" style="background:#475569" onclick="adminLoadFormEditor()">↻ Reload</button>
+      </div>
+
+      <!-- Field list -->
+      <div id="form-field-list" style="margin-bottom:1rem">
+        <div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Click ↻ Reload to load fields</div>
+      </div>
+
+      <!-- Add new field -->
+      <div style="border-top:1px solid var(--border);padding-top:.85rem">
+        <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.5rem">Add Field</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;align-items:end">
+          <div class="dfg" style="margin:0"><label>Title</label><input class="si" id="new-field-title" placeholder="Field name"></div>
+          <div class="dfg" style="margin:0"><label>Type</label>
+            <select class="sl" id="new-field-type">
+              <option value="TEXT">Text / Number</option>
+              <option value="PARAGRAPH_TEXT">Paragraph</option>
+              <option value="LIST">Dropdown</option>
+              <option value="CHECKBOX">Checkboxes</option>
+              <option value="PAGE_BREAK">Section Break</option>
+            </select>
+          </div>
+          <button class="adm-new-btn" onclick="adminAddFormField()">+ Add</button>
+        </div>
+      </div>
+
+      <!-- Save -->
+      <div style="margin-top:1rem;text-align:right">
+        <button class="adm-new-btn" id="fe-save-btn" style="background:#0d4d44;padding:.6rem 1.4rem" onclick="adminSaveFormSchema()">💾 Save Changes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- User table -->
   <div class="adm-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -1621,6 +1680,152 @@ function saveAdHocEvent() {
     });
 }
 
+
+// ── Form Editor (Admin) ──────────────────────────────────────────────────────
+let _formSchema = [];
+
+function toggleFormEditor(btn) {
+  const wrap = document.getElementById('form-editor-wrap');
+  const open = wrap.style.display === 'none';
+  wrap.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? '✕ Close' : '✏️ Edit Form';
+  if (open && _formSchema.length === 0) adminLoadFormEditor();
+}
+
+function adminLoadFormEditor() {
+  const list = document.getElementById('form-field-list');
+  list.innerHTML = '<div style="text-align:center;padding:1.5rem"><div class="spinner" style="margin:0 auto"></div></div>';
+  api({ secret: SEC, action: 'get_portal_schema', token: _s.token }).then(res => {
+    if (!res.ok) { list.innerHTML = '<div style="color:var(--error);padding:1rem">Error: ' + res.error + '</div>'; return; }
+    _formSchema = res.data;
+    renderFormFieldList();
+  }).catch(e => { list.innerHTML = '<div style="color:var(--error);padding:1rem">Network error: ' + e.message + '</div>'; });
+}
+
+function renderFormFieldList() {
+  const el = document.getElementById('form-field-list');
+  if (!_formSchema.length) { el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">No fields. Add one below.</div>'; return; }
+  el.innerHTML = _formSchema.map((item, idx) => {
+    const type = String(item.type || '').trim();
+    if (type === 'PAGE_BREAK') {
+      return `<div class="fe-break">
+        <span class="fe-break-label">── ${item.title || 'Section Break'} ──</span>
+        <div style="display:flex;gap:.25rem">
+          <button class="fe-btn" onclick="feMoveUp(${idx})" title="Move up">↑</button>
+          <button class="fe-btn" onclick="feMoveDown(${idx})" title="Move down">↓</button>
+          <button class="fe-btn fe-del" onclick="feDelete(${idx})" title="Delete">✕</button>
+        </div>
+      </div>`;
+    }
+    const hasChoices = type === 'LIST' || type === 'CHECKBOX';
+    let choicesText = '';
+    if (hasChoices && item.choices) {
+      try { const c = JSON.parse(item.choices); choicesText = c.length + ' choices'; } catch(e) {}
+    }
+    return `<div class="fe-row" id="fe-row-${idx}">
+        <div class="fe-row-left">
+          <div class="fe-row-title">${item.title || '—'}</div>
+          <div class="fe-row-meta">${type}${item.section ? ' · ' + item.section : ''}${item.helpText ? ' · ' + String(item.helpText).slice(0,45) + (item.helpText.length>45?'…':'') : ''}${choicesText ? ' · ' + choicesText : ''}</div>
+        </div>
+        <div style="display:flex;gap:.25rem;flex-shrink:0;margin-left:.5rem">
+          <button class="fe-btn" onclick="feMoveUp(${idx})" title="Move up">↑</button>
+          <button class="fe-btn" onclick="feMoveDown(${idx})" title="Move down">↓</button>
+          <button class="fe-btn" onclick="feToggleEdit(${idx})" title="Edit">✏️</button>
+          <button class="fe-btn fe-del" onclick="feDelete(${idx})" title="Delete">✕</button>
+        </div>
+      </div>
+      <div class="fe-edit-panel" id="fe-edit-${idx}" style="display:none">
+        <div class="fe-edit-grid">
+          <div class="dfg" style="margin:0"><label>Title</label><input class="si" id="fe-t-${idx}" value="${(item.title||'').replace(/"/g,'&quot;')}"></div>
+          <div class="dfg" style="margin:0"><label>Help Text</label><input class="si" id="fe-h-${idx}" value="${(item.helpText||'').replace(/"/g,'&quot;')}"></div>
+          ${hasChoices ? `<div class="dfg" style="margin:0;grid-column:span 2"><label>Choices (one per line)</label><textarea class="si" id="fe-c-${idx}" rows="4" style="resize:vertical">${item.choices?JSON.parse(item.choices||'[]').join('\n'):''}</textarea></div>` : ''}
+          <div class="dfg" style="margin:0;display:flex;align-items:center;gap:.4rem;padding-top:.5rem">
+            <label style="display:flex;align-items:center;gap:.35rem;font-size:.83rem;cursor:pointer">
+              <input type="checkbox" id="fe-r-${idx}" ${(item.required===true||item.required==='TRUE')?'checked':''}> Required
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;align-items:flex-end">
+            <button class="adm-new-btn" style="padding:.38rem .85rem;font-size:.78rem" onclick="feApplyEdit(${idx})">Apply</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function feMoveUp(idx) {
+  if (idx === 0) return;
+  [_formSchema[idx-1], _formSchema[idx]] = [_formSchema[idx], _formSchema[idx-1]];
+  _feReorder(); renderFormFieldList();
+}
+function feMoveDown(idx) {
+  if (idx >= _formSchema.length - 1) return;
+  [_formSchema[idx+1], _formSchema[idx]] = [_formSchema[idx], _formSchema[idx+1]];
+  _feReorder(); renderFormFieldList();
+}
+function _feReorder() { _formSchema.forEach((item, i) => { item.order = i + 1; }); }
+
+function feToggleEdit(idx) {
+  const el = document.getElementById('fe-edit-' + idx);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function feApplyEdit(idx) {
+  const item = _formSchema[idx];
+  item.title    = document.getElementById('fe-t-' + idx).value.trim();
+  item.helpText = document.getElementById('fe-h-' + idx).value.trim();
+  item.required = document.getElementById('fe-r-' + idx).checked;
+  const choicesEl = document.getElementById('fe-c-' + idx);
+  if (choicesEl) {
+    item.choices = JSON.stringify(choicesEl.value.split('\n').map(s => s.trim()).filter(Boolean));
+  }
+  document.getElementById('fe-edit-' + idx).style.display = 'none';
+  renderFormFieldList();
+}
+
+function feDelete(idx) {
+  if (!confirm('Delete "' + (_formSchema[idx].title || 'this field') + '"?')) return;
+  _formSchema.splice(idx, 1);
+  _feReorder(); renderFormFieldList();
+}
+
+function adminAddFormField() {
+  const title = document.getElementById('new-field-title').value.trim();
+  const type  = document.getElementById('new-field-type').value;
+  if (!title && type !== 'PAGE_BREAK') { alert('Title is required.'); return; }
+  const maxOrder = _formSchema.reduce((m, i) => Math.max(m, Number(i.order||0)), 0);
+  _formSchema.push({ order: maxOrder + 1, section: '', title, type, helpText: '', required: false, choices: '' });
+  document.getElementById('new-field-title').value = '';
+  renderFormFieldList();
+  document.getElementById('form-field-list').lastElementChild.scrollIntoView({ behavior: 'smooth' });
+}
+
+function adminSaveFormSchema() {
+  const btn = document.getElementById('fe-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  api({ secret: SEC, action: 'save_portal_schema', token: _s.token, schema: _formSchema })
+    .then(res => {
+      btn.disabled = false;
+      if (res.ok) { btn.textContent = '✅ Saved!'; setTimeout(() => { btn.textContent = '💾 Save Changes'; }, 2500); }
+      else { btn.textContent = '💾 Save Changes'; alert('Error: ' + res.error); }
+    })
+    .catch(e => { btn.disabled = false; btn.textContent = '💾 Save Changes'; alert('Network error: ' + e.message); });
+}
+
+function adminSyncPoolDropdown() {
+  if (!confirm('Rebuild pool dropdown from Signed Customers?')) return;
+  api({ secret: SEC, action: 'sync_pool_dropdown', token: _s.token }).then(res => {
+    if (res.ok) { alert('✅ Pool dropdown synced.'); adminLoadFormEditor(); }
+    else alert('Error: ' + res.error);
+  }).catch(e => alert('Network error: ' + e.message));
+}
+
+function adminSyncChemicals() {
+  if (!confirm('Sync chemical fields from Chem Costs?')) return;
+  api({ secret: SEC, action: 'sync_chemicals', token: _s.token }).then(res => {
+    if (res.ok) { alert('✅ Chemicals synced.'); adminLoadFormEditor(); }
+    else alert('Error: ' + res.error);
+  }).catch(e => alert('Network error: ' + e.message));
+}
 
 function recalculateRoutes() {
   if (!confirm('⚠️ Recalculate ALL routes?\n\nThis will reassign every un-pinned pool. Pinned pools stay put. Locked days are not affected.\n\nContinue?')) return;
