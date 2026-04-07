@@ -588,6 +588,13 @@ select.q-inp{cursor:pointer}
 /* ── Content Locks & Gates ── */
 .tr-item-row.locked { opacity:0.6; cursor:not-allowed; background:#f8f9fa; border-color:#f1f3f4; }
 .tr-item-row.locked:hover { transform:none; box-shadow:none; border-color:#f1f3f4; }
+.tr-item-row.submodule-row{background:#f6fbfa;font-weight:600}
+.tr-item-row.submodule-row .tr-item-icon{font-size:.8rem;color:var(--muted)}
+.tr-sub-items{padding-left:1.5rem;border-left:2px solid #e4ecea;margin-left:1.4rem}
+.tr-add-menu-wrap{position:relative;display:inline-block}
+.tr-add-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:5;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.08);min-width:180px;padding:.35rem}
+.tr-add-menu button{display:block;width:100%;text-align:left;background:transparent;border:none;padding:.45rem .5rem;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:.82rem}
+.tr-add-menu button:hover{background:#f4f7f7}
 .tr-module-row.locked { opacity:0.6; pointer-events:none; }
 .tr-module-row.locked .tr-mod-hdr { background:#f8f9fa; }
 .mod-gate-label { display:flex; align-items:center; gap:.5rem; font-size:13px; font-weight:500; color:#202124; cursor:pointer; }
@@ -1178,6 +1185,7 @@ select.q-inp{cursor:pointer}
         <div class="ct-pill ct-active" data-type="video" onclick="selectContentType('video')">🎬 Video</div>
         <div class="ct-pill" data-type="quiz" onclick="selectContentType('quiz')">📝 Quiz</div>
         <div class="ct-pill" data-type="document" onclick="selectContentType('document')">📄 Document</div>
+        <div class="ct-pill" data-type="submodule" onclick="selectContentType('submodule')">📂 Submodule</div>
       </div>
     </div>
     <div class="mod-dfg">
@@ -1203,6 +1211,10 @@ select.q-inp{cursor:pointer}
         <input type="checkbox" id="content-pass-required" onchange="toggleThresholdVisibility()">
         <span>Must complete/pass to unlock next item</span>
       </label>
+    </div>
+    <div class="mod-dfg">
+      <label>Nest Under Submodule <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+      <select id="content-parent-id"></select>
     </div>
     <div class="mod-dfg" id="content-threshold-group" style="display:none">
       <label>Pass Threshold <span style="font-weight:400;color:var(--muted);font-size:.72rem">(%)</span></label>
@@ -3776,6 +3788,7 @@ let _trLoaded = false;
 let _trModules = [];
 let _trProgress = {};
 let _trOpenModules = new Set();
+let _trOpenSubmodules = new Set();
 let _activeContentType = 'video';
 let _quizQuestions = [];
 
@@ -3842,10 +3855,17 @@ function renderTraining() {
         <button class="mod-act-btn danger" onclick="event.stopPropagation();deleteModule('${mod.id}')">🗑</button>
       </div>` : '';
 
+    const childrenByParent = {};
+    items.forEach(v => {
+      const pid = v.parent_content_id || '';
+      if (!childrenByParent[pid]) childrenByParent[pid] = [];
+      childrenByParent[pid].push(v);
+    });
+
     let prevItemComplete = true; // used for item gating
-    const itemRows = items.map(v => {
+    const renderItemRow = (v, depth = 0) => {
       const completed = isItemCompleted(mod.id, v.id);
-      
+      const isSubmodule = v.content_type === 'submodule';
       let itemLocked = false;
       if (v.pass_required && !isAdm && !prevItemComplete) {
         itemLocked = true;
@@ -3861,6 +3881,7 @@ function renderTraining() {
       let icon = '▶';
       if (v.content_type === 'quiz') icon = '📝';
       if (v.content_type === 'document') icon = '📄';
+      if (isSubmodule) icon = _trOpenSubmodules.has(v.id) ? '▼' : '▶';
 
       if (locked || itemLocked) {
         return `
@@ -3873,8 +3894,17 @@ function renderTraining() {
           </div>`;
       }
 
+      const children = childrenByParent[v.id] || [];
+      const nestedRows = children.map(child => renderItemRow(child, depth + 1)).join('');
+      const nestedWrap = children.length && _trOpenSubmodules.has(v.id)
+        ? `<div class="tr-sub-items">${nestedRows}</div>`
+        : '';
+      const clickAction = isSubmodule
+        ? `toggleSubmodule('${v.id}')`
+        : `openItemDetail('${mod.id}','${v.id}')`;
+
       return `
-        <div class="tr-item-row${completed ? ' done' : ''}" onclick="openItemDetail('${mod.id}','${v.id}')">
+        <div class="tr-item-row${completed ? ' done' : ''}${isSubmodule ? ' submodule-row' : ''}" onclick="${clickAction}" style="${depth ? `padding-left:${(depth*1.2)+1}rem` : ''}">
           <span class="tr-item-icon">${icon}</span>
           <div class="tr-item-info">
             <div class="tr-item-title">${escHtml(v.title)}</div>
@@ -3882,12 +3912,22 @@ function renderTraining() {
           </div>
           ${completed ? `<span class="tr-item-badge">✓ Done</span>` : ''}
           ${adminVBtns}
-        </div>`;
-    }).join('');
+        </div>
+        ${nestedWrap}`;
+    };
+    const itemRows = (childrenByParent[''] || []).map(v => renderItemRow(v)).join('');
 
     const addVideoBtn = isAdm ? `
       <div class="tr-add-video-row">
-        <button class="tr-add-video-btn" onclick="openVideoDrawer('${mod.id}', null)">+ Add Content</button>
+        <div class="tr-add-menu-wrap">
+          <button class="tr-add-video-btn" onclick="toggleAddContentMenu('${mod.id}', event)">+ Add Content</button>
+          <div class="tr-add-menu" id="tr-add-menu-${mod.id}" style="display:none">
+            <button onclick="openVideoDrawerWithType('${mod.id}','video')">🎬 Video</button>
+            <button onclick="openVideoDrawerWithType('${mod.id}','document')">📄 Document</button>
+            <button onclick="openVideoDrawerWithType('${mod.id}','quiz')">📝 Quiz</button>
+            <button onclick="openVideoDrawerWithType('${mod.id}','submodule')">📂 Submodule</button>
+          </div>
+        </div>
       </div>` : '';
 
     const bodyContent = (items.length || isAdm) ? `${itemRows}${addVideoBtn}` : '';
@@ -3940,6 +3980,34 @@ function toggleModule(moduleId) {
   const row = document.getElementById('tr-mod-' + moduleId);
   if (row) row.classList.toggle('open', _trOpenModules.has(moduleId));
 }
+
+function toggleSubmodule(contentId) {
+  if (_trOpenSubmodules.has(contentId)) _trOpenSubmodules.delete(contentId);
+  else _trOpenSubmodules.add(contentId);
+  renderTraining();
+}
+
+function toggleAddContentMenu(moduleId, ev) {
+  ev.stopPropagation();
+  document.querySelectorAll('.tr-add-menu').forEach(el => {
+    if (el.id !== `tr-add-menu-${moduleId}`) el.style.display = 'none';
+  });
+  const menu = document.getElementById(`tr-add-menu-${moduleId}`);
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function openVideoDrawerWithType(moduleId, type) {
+  document.querySelectorAll('.tr-add-menu').forEach(el => { el.style.display = 'none'; });
+  openVideoDrawer(moduleId, null);
+  selectContentType(type);
+}
+
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('.tr-add-menu-wrap')) {
+    document.querySelectorAll('.tr-add-menu').forEach(el => { el.style.display = 'none'; });
+  }
+});
 
 // ── Item Detail View (Video/Document/Quiz) ───────────────────────────────────
 let _currentQuizAnswers = {};
@@ -4177,22 +4245,30 @@ function deleteModule(moduleId) {
 function selectContentType(type) {
   _activeContentType = type;
   document.querySelectorAll('.ct-pill').forEach(el => el.classList.remove('ct-active'));
-  document.querySelector(`.ct-pill[data-type="${type}"]`).classList.add('ct-active');
+  const pill = document.querySelector(`.ct-pill[data-type="${type}"]`);
+  if (pill) pill.classList.add('ct-active');
   
   const urlGroup = document.getElementById('content-url-group');
   const quizGroup = document.getElementById('quiz-builder-group');
-  const thresGroup = document.getElementById('content-threshold-group');
   const passReqCheck = document.getElementById('content-pass-required');
+  const gateGroup = document.getElementById('content-gate-group');
   const urlLabel = document.getElementById('content-url-label');
   const urlHint = document.getElementById('content-url-hint');
 
   if (type === 'quiz') {
     urlGroup.style.display = 'none';
     quizGroup.style.display = 'flex';
+    gateGroup.style.display = 'flex';
     passReqCheck.checked = true; // quizzes usually required to pass
+  } else if (type === 'submodule') {
+    urlGroup.style.display = 'none';
+    quizGroup.style.display = 'none';
+    gateGroup.style.display = 'none';
+    passReqCheck.checked = false;
   } else {
     urlGroup.style.display = 'flex';
     quizGroup.style.display = 'none';
+    gateGroup.style.display = 'flex';
     if (type === 'document') {
       urlLabel.textContent = 'Document/File URL';
       urlHint.textContent = 'Paste a Google Drive share link for PDF, Docs, Excel, etc.';
@@ -4216,6 +4292,7 @@ function openVideoDrawer(moduleId, itemId) {
   document.getElementById('vid-module-id').value = moduleId || '';
   document.getElementById('vid-drawer-msg').className = 'mod-drawer-msg';
   document.getElementById('vid-drawer-msg').textContent = '';
+  populateParentSubmoduleOptions(moduleId, itemId);
   
   if (isEdit) {
     const mod = _trModules.find(m => m.id === moduleId);
@@ -4226,6 +4303,7 @@ function openVideoDrawer(moduleId, itemId) {
     document.getElementById('vid-order').value = item ? (item.order || '') : '';
     document.getElementById('content-pass-required').checked = item ? !!item.pass_required : false;
     document.getElementById('content-pass-threshold').value = item ? (item.pass_threshold || 80) : 80;
+    document.getElementById('content-parent-id').value = item ? (item.parent_content_id || '') : '';
     
     _quizQuestions = [];
     if (item && item.content_type === 'quiz' && item.quiz_data && item.quiz_data.questions) {
@@ -4241,6 +4319,7 @@ function openVideoDrawer(moduleId, itemId) {
     document.getElementById('vid-order').value = mod ? ((mod.items||[]).length + 1) : 1;
     document.getElementById('content-pass-required').checked = false;
     document.getElementById('content-pass-threshold').value = 80;
+    document.getElementById('content-parent-id').value = '';
     _quizQuestions = [];
     updateQuizSummary();
     selectContentType('video');
@@ -4248,6 +4327,15 @@ function openVideoDrawer(moduleId, itemId) {
   
   document.getElementById('vid-backdrop').classList.add('open');
   document.getElementById('vid-drawer').classList.add('open');
+}
+
+function populateParentSubmoduleOptions(moduleId, currentItemId) {
+  const sel = document.getElementById('content-parent-id');
+  const mod = _trModules.find(m => m.id === moduleId);
+  const items = mod ? (mod.items || []) : [];
+  const submodules = items.filter(v => v.content_type === 'submodule' && v.id !== currentItemId);
+  sel.innerHTML = `<option value="">Top level (no parent)</option>` +
+    submodules.map(v => `<option value="${v.id}">${escHtml(v.title)}</option>`).join('');
 }
 
 function closeVideoDrawer() {
@@ -4266,6 +4354,7 @@ function saveVideo() {
   const order = parseInt(document.getElementById('vid-order').value) || 1;
   const passReq = document.getElementById('content-pass-required').checked;
   const passThres = parseInt(document.getElementById('content-pass-threshold').value) || 80;
+  const parentContentId = document.getElementById('content-parent-id').value || '';
   
   if (!title) { showDrawerMsg(msgEl, 'err', 'Title is required.'); return; }
   
@@ -4284,6 +4373,7 @@ function saveVideo() {
     content_id: itemId, module_id: moduleId, title, content_url: url,
     description: desc, order, content_type: _activeContentType,
     pass_required: passReq, pass_threshold: passThres,
+    parent_content_id: parentContentId,
     quiz_data: _activeContentType === 'quiz' ? JSON.stringify({questions: _quizQuestions}) : ''
   };
   
