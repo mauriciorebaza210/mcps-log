@@ -3791,6 +3791,21 @@ let _trOpenModules = new Set();
 let _trOpenSubmodules = new Set();
 let _activeContentType = 'video';
 let _quizQuestions = [];
+const TR_SUBMODULE_URL_MARKER = 'submodule://container';
+
+function trNormalizeItem_(item) {
+  const rawType = String(item && item.content_type || '').toLowerCase();
+  const rawUrl = String((item && (item.content_url || item.drive_url || item.url)) || '');
+  const isMarkedSubmodule = rawType === 'document' && rawUrl.startsWith(TR_SUBMODULE_URL_MARKER);
+  return isMarkedSubmodule ? { ...item, content_type: 'submodule', content_url: '' } : item;
+}
+
+function trNormalizeModules_(modules) {
+  return (modules || []).map(mod => ({
+    ...mod,
+    items: (mod.items || []).map(trNormalizeItem_)
+  }));
+}
 
 function loadTraining() {
   if (_trLoaded) { renderTraining(); return; }
@@ -3803,7 +3818,7 @@ function loadTraining() {
     .then(([res, progRes]) => {
       document.getElementById('tr-loading').style.display = 'none';
       if (res.ok) {
-        _trModules = res.modules || [];
+        _trModules = trNormalizeModules_(res.modules || []);
         _trProgress = (progRes && progRes.ok && progRes.progress) ? progRes.progress : {};
         _trLoaded = true;
         renderTraining();
@@ -4368,10 +4383,13 @@ function saveVideo() {
   btn.disabled = true; btn.textContent = 'Saving...';
   msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
   
+  const backendContentType = _activeContentType === 'submodule' ? 'document' : _activeContentType;
+  const backendContentUrl = _activeContentType === 'submodule' ? TR_SUBMODULE_URL_MARKER : url;
+
   const payload = {
     action: itemId ? 'update_content' : 'create_content', token: _s.token,
-    content_id: itemId, module_id: moduleId, title, content_url: url,
-    description: desc, order, content_type: _activeContentType,
+    content_id: itemId, module_id: moduleId, title, content_url: backendContentUrl,
+    description: desc, order, content_type: backendContentType,
     pass_required: passReq, pass_threshold: passThres,
     parent_content_id: parentContentId,
     quiz_data: _activeContentType === 'quiz' ? JSON.stringify({questions: _quizQuestions}) : ''
@@ -4762,7 +4780,7 @@ function huToast(msg, isErr) {
 .tr-add-btn:hover{background:var(--teal-mid)}
 
 /* Accordion module rows (Canvas-style) */
-.tr-module-row{border:1px solid var(--border);border-radius:12px;margin-bottom:.65rem;overflow:hidden;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.tr-module-row{border:1px solid var(--border);border-radius:12px;margin-bottom:.65rem;overflow:visible;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .tr-mod-hdr{display:flex;align-items:center;gap:.75rem;padding:.85rem 1rem;cursor:pointer;user-select:none;transition:background .15s}
 .tr-mod-hdr:hover{background:var(--surface)}
 .tr-mod-arrow{font-size:.7rem;color:var(--muted);flex-shrink:0;transition:transform .2s;line-height:1}
