@@ -2465,12 +2465,6 @@ function prefillSvcForm_(poolId) {
         }
       }
 
-      // Prefill tablet level pill
-      if (ctx.last_tablet) {
-        const tp = document.querySelector('.tbpill[data-val="' + ctx.last_tablet + '"]');
-        if (tp) { document.querySelectorAll('.tbpill').forEach(p => p.classList.remove('tactive')); tp.classList.add('tactive'); }
-      }
-
       // Trigger recs recalc after prefill
       if (typeof runRecs === 'function') runRecs();
 
@@ -2671,9 +2665,6 @@ function submitSvc(){
 
   const ap = document.querySelector('.cpill.active, .cpill.active-cloudy');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
-  // Include tablet level from portal pill selector
-  const tabletPill = document.querySelector('.tbpill.tactive');
-  if(tabletPill) payload['Tablet Level'] = tabletPill.dataset.val;
   // Inject technician name from portal session
   if(_s && _s.name) payload['Technician'] = _s.name;
   if(hasErr){alert('Fill out all required fields.');return;}
