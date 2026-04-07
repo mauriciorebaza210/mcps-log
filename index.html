@@ -3791,6 +3791,21 @@ let _trOpenModules = new Set();
 let _trOpenSubmodules = new Set();
 let _activeContentType = 'video';
 let _quizQuestions = [];
+const TR_SUBMODULE_URL_MARKER = 'submodule://container';
+
+function trNormalizeItem_(item) {
+  const rawType = String(item && item.content_type || '').toLowerCase();
+  const rawUrl = String((item && (item.content_url || item.drive_url || item.url)) || '');
+  const isMarkedSubmodule = rawType === 'document' && rawUrl.startsWith(TR_SUBMODULE_URL_MARKER);
+  return isMarkedSubmodule ? { ...item, content_type: 'submodule', content_url: '' } : item;
+}
+
+function trNormalizeModules_(modules) {
+  return (modules || []).map(mod => ({
+    ...mod,
+    items: (mod.items || []).map(trNormalizeItem_)
+  }));
+}
 
 function loadTraining() {
   if (_trLoaded) { renderTraining(); return; }
@@ -3803,7 +3818,7 @@ function loadTraining() {
     .then(([res, progRes]) => {
       document.getElementById('tr-loading').style.display = 'none';
       if (res.ok) {
-        _trModules = res.modules || [];
+        _trModules = trNormalizeModules_(res.modules || []);
         _trProgress = (progRes && progRes.ok && progRes.progress) ? progRes.progress : {};
         _trLoaded = true;
         renderTraining();
@@ -4368,10 +4383,13 @@ function saveVideo() {
   btn.disabled = true; btn.textContent = 'Saving...';
   msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
   
+  const backendContentType = _activeContentType === 'submodule' ? 'document' : _activeContentType;
+  const backendContentUrl = _activeContentType === 'submodule' ? TR_SUBMODULE_URL_MARKER : url;
+
   const payload = {
     action: itemId ? 'update_content' : 'create_content', token: _s.token,
-    content_id: itemId, module_id: moduleId, title, content_url: url,
-    description: desc, order, content_type: _activeContentType,
+    content_id: itemId, module_id: moduleId, title, content_url: backendContentUrl,
+    description: desc, order, content_type: backendContentType,
     pass_required: passReq, pass_threshold: passThres,
     parent_content_id: parentContentId,
     quiz_data: _activeContentType === 'quiz' ? JSON.stringify({questions: _quizQuestions}) : ''
