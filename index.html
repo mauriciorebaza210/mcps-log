@@ -592,7 +592,19 @@ select.q-inp{cursor:pointer}
 .tr-item-row.submodule-row .tr-item-icon{font-size:.8rem;color:var(--muted)}
 .tr-sub-items{padding-left:1.5rem;border-left:2px solid #e4ecea;margin-left:1.4rem}
 .tr-add-menu-wrap{position:relative;display:inline-block}
-.tr-add-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:5;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.08);min-width:180px;padding:.35rem}
+.tr-add-menu{
+  position:absolute;
+  left:0;
+  top:auto;
+  bottom:calc(100% + 6px);   /* open upward */
+  z-index:350;               /* above .bottom-nav z-index:200 */
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:10px;
+  box-shadow:0 8px 20px rgba(0,0,0,.08);
+  min-width:180px;
+  padding:.35rem;
+}
 .tr-add-menu button{display:block;width:100%;text-align:left;background:transparent;border:none;padding:.45rem .5rem;border-radius:8px;cursor:pointer;font-family:'Barlow',sans-serif;font-size:.82rem}
 .tr-add-menu button:hover{background:#f4f7f7}
 .tr-module-row.locked { opacity:0.6; pointer-events:none; }
