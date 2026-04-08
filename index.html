@@ -4375,9 +4375,54 @@ function populateParentSubmoduleOptions(moduleId, currentItemId) {
   const sel = document.getElementById('content-parent-id');
   const mod = _trModules.find(m => m.id === moduleId);
   const items = mod ? (mod.items || []) : [];
-  const submodules = items.filter(v => v.content_type === 'submodule' && v.id !== currentItemId);
-  sel.innerHTML = `<option value="">Top level (no parent)</option>` +
-    submodules.map(v => `<option value="${v.id}">${escHtml(v.title)}</option>`).join('');
+
+  const childrenByParent = {};
+  items.forEach((item, idx) => {
+    const parentId = item.parent_content_id || '';
+    if (!childrenByParent[parentId]) childrenByParent[parentId] = [];
+    childrenByParent[parentId].push({ item, idx });
+  });
+
+  const sortSiblings = (a, b) => {
+    const aOrder = Number(a.item.order);
+    const bOrder = Number(b.item.order);
+    const aOrderValid = Number.isFinite(aOrder);
+    const bOrderValid = Number.isFinite(bOrder);
+    if (aOrderValid && bOrderValid && aOrder !== bOrder) return aOrder - bOrder;
+    if (aOrderValid !== bOrderValid) return aOrderValid ? -1 : 1;
+
+    const aTitle = (a.item.title || '').toLowerCase();
+    const bTitle = (b.item.title || '').toLowerCase();
+    if (aTitle !== bTitle) return aTitle.localeCompare(bTitle);
+
+    return a.idx - b.idx;
+  };
+
+  const orderedSubmodules = [];
+  const seen = new Set();
+  const walk = (parentId = '', depth = 0) => {
+    const children = (childrenByParent[parentId] || []).slice().sort(sortSiblings);
+    children.forEach(({ item }) => {
+      if (seen.has(item.id)) return;
+      seen.add(item.id);
+
+      if (item.content_type === 'submodule' && item.id !== currentItemId) {
+        orderedSubmodules.push({ item, depth });
+      }
+
+      walk(item.id, depth + 1);
+    });
+  };
+
+  walk('');
+
+  sel.innerHTML = `<option value="">${escHtml('Top level (no parent)')}</option>` +
+    orderedSubmodules
+      .map(({ item, depth }) => {
+        const indent = depth > 0 ? `${'— '.repeat(depth)}↳ ` : '';
+        return `<option value="${item.id}">${escHtml(`${indent}${item.title || ''}`)}</option>`;
+      })
+      .join('');
 }
 
 function closeVideoDrawer() {
