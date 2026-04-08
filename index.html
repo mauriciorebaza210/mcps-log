@@ -1441,7 +1441,7 @@ function showApp(startPage) {
 }
 
 function buildNav(){
-  document.getElementById('bnav').innerHTML=(_s.pages||[]).map(p=>{
+  document.getElementById('bnav').innerHTML=(_s.pages||[]).filter(p => p !== 'service_log').map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<button class="ni" id="ni-${p}" onclick="navigateTo('${p}')"><span class="ni-icon">${icon}</span><span class="ni-label">${label}</span></button>`;
   }).join('');
