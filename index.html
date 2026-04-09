@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -795,6 +796,31 @@ select.q-inp{cursor:pointer}
     </div>
   </div>
 
+  <!-- New Hire Applications -->
+  <div class="adm-card" id="adm-new-hires-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>New Hire Applications</span>
+      <button class="adm-new-btn" onclick="loadPendingHires()">↻ Refresh</button>
+    </div>
+    <div style="padding:.85rem 1.1rem" id="pending-hires-list">
+      <div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Loading applications…</div>
+    </div>
+  </div>
+
+  <!-- Contractor Records (all submissions) -->
+  <div class="adm-card" id="adm-records-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Contractor Records</span>
+      <button class="adm-new-btn" onclick="loadAllApplications()">↻ Load All</button>
+    </div>
+    <div style="padding:.6rem 1.1rem .3rem">
+      <input class="si" id="records-search" type="text" placeholder="Search by name or username…" oninput="filterRecords(this.value)" style="font-size:.82rem;padding:.5rem .85rem">
+    </div>
+    <div style="padding:.5rem 1.1rem 1rem" id="all-records-list">
+      <div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">Click "Load All" to view contractor records.</div>
+    </div>
+  </div>
+
   <!-- User table -->
   <div class="adm-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -887,6 +913,7 @@ select.q-inp{cursor:pointer}
           <label class="rcb"><input type="checkbox" value="manager"> Manager</label>
           <label class="rcb"><input type="checkbox" value="admin"> Admin</label>
           <label class="rcb"><input type="checkbox" value="trainee"> Trainee</label>
+          <label class="rcb"><input type="checkbox" value="new_hire"> New Hire</label>
         </div>
       </div>
  
@@ -912,7 +939,13 @@ select.q-inp{cursor:pointer}
           <label class="rcb"><input type="radio" name="d-active" value="false"> Deactivated</label>
         </div>
       </div>
- 
+
+      <div class="dfg">
+        <label>Pay Rate <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+        <input class="si" type="text" id="usr-pay-rate" placeholder="$25/pool">
+        <span class="dfg-hint">Contractor pay rate — shown in their onboarding contract.</span>
+      </div>
+
       <div class="im" id="drawer-msg"></div>
  
     </div><!-- /drawer-body -->
@@ -1145,8 +1178,168 @@ select.q-inp{cursor:pointer}
       <div id="tr-detail" style="display:none"></div>
     </div>
 
+    <!-- Onboarding / Get Started -->
+    <div class="pf" id="page-onboarding">
+
+      <!-- Hero -->
+      <div class="onb-hero">
+        <div class="onb-welcome" id="onb-welcome-name">Welcome!</div>
+        <div class="onb-sub">Complete the steps below to activate your account.</div>
+        <div class="onb-progress-bar"><div class="onb-progress-fill" id="onb-fill" style="width:0%"></div></div>
+        <div class="onb-progress-label" id="onb-progress-label">0 of 2 steps complete</div>
+      </div>
+
+      <!-- Task 1 — Personal Information -->
+      <div class="onb-task-card" id="onb-task-info">
+        <div class="onb-task-hdr" onclick="toggleOnbTask('info')">
+          <span class="onb-task-icon" id="onb-icon-info">📋</span>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:.95rem">Personal Information</div>
+            <div style="font-size:.78rem;color:var(--muted)">Legal name, address, tax info &amp; W-9</div>
+          </div>
+          <span class="onb-chevron" id="onb-chev-info">›</span>
+        </div>
+        <div class="onb-task-body" id="onb-body-info" style="display:none">
+
+          <div class="onb-row2">
+            <div class="onb-fg"><label>Legal Full Name</label><input class="onb-inp" id="onb-legal-name" placeholder="First Middle Last"></div>
+            <div class="onb-fg"><label>Date of Birth</label><input class="onb-inp" id="onb-dob" type="date"></div>
+          </div>
+          <div class="onb-fg"><label>Phone Number</label><input class="onb-inp" id="onb-phone" type="tel" placeholder="(555) 555-5555"></div>
+
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Home Address</div>
+          <div class="onb-fg"><label>Street Address</label><input class="onb-inp" id="onb-addr1" placeholder="123 Main St"></div>
+          <div class="onb-row3">
+            <div class="onb-fg"><label>City</label><input class="onb-inp" id="onb-city" placeholder="San Antonio"></div>
+            <div class="onb-fg"><label>State</label><input class="onb-inp" id="onb-state" placeholder="TX" maxlength="2"></div>
+            <div class="onb-fg"><label>ZIP</label><input class="onb-inp" id="onb-zip" placeholder="78201" maxlength="10"></div>
+          </div>
+
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Emergency Contact</div>
+          <div class="onb-row2">
+            <div class="onb-fg"><label>Name</label><input class="onb-inp" id="onb-ec-name" placeholder="Jane Doe"></div>
+            <div class="onb-fg"><label>Phone</label><input class="onb-inp" id="onb-ec-phone" type="tel" placeholder="(555) 555-5555"></div>
+          </div>
+
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Tax Information</div>
+          <div class="onb-fg">
+            <label>Tax ID Type</label>
+            <div style="display:flex;gap:1rem;margin-top:.3rem">
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="SSN" onchange="onbTaxTypeChanged()"> SSN</label>
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="EIN" onchange="onbTaxTypeChanged()"> EIN</label>
+            </div>
+          </div>
+          
+          <div class="onb-fg" id="onb-ein-type-fg" style="display:none">
+            <label>Tax Classification</label>
+            <select class="onb-inp" id="onb-ein-type" style="padding:.6rem 1rem">
+              <option value="ccorp">C Corporation</option>
+              <option value="scorp">S Corporation</option>
+              <option value="partnership">Partnership</option>
+              <option value="llc_c">LLC - C Corporation</option>
+              <option value="llc_s">LLC - S Corporation</option>
+              <option value="llc_p">LLC - Partnership</option>
+              <option value="trust">Trust / Estate</option>
+            </select>
+          </div>
+
+          <div class="onb-fg">
+            <label>Full Tax ID Number</label>
+            <input class="onb-inp" id="onb-tax-full" placeholder="Please select SSN or EIN first" maxlength="11" oninput="onbFormatTaxId(this)" disabled>
+          </div>
+
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">W-9 Form Generation</div>
+          <div class="onb-fg">
+            <div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">Your W-9 will be automatically generated with the info above and seamlessly attached using your legal name as a signature.</div>
+            <input type="hidden" id="onb-w9-base64">
+            <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-w9" onclick="generateAndReviewW9()">Review &amp; Sign W-9 Form</button>
+            <div id="w9-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ W-9 generated and ready.</div>
+          </div>
+
+          <div class="im" id="onb-info-msg" style="margin:.5rem 0 0"></div>
+          <button class="onb-submit-btn" onclick="submitPersonalInfo()">Save &amp; Continue →</button>
+        </div>
+      </div>
+
+      <!-- Task 2 — Contractor Agreement -->
+      <div class="onb-task-card" id="onb-task-contract">
+        <div class="onb-task-hdr" onclick="toggleOnbTask('contract')">
+          <span class="onb-task-icon" id="onb-icon-contract">📄</span>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:.95rem">Contractor Agreement</div>
+            <div style="font-size:.78rem;color:var(--muted)">Read and sign your independent contractor agreement</div>
+          </div>
+          <span class="onb-chevron" id="onb-chev-contract">›</span>
+        </div>
+        <div class="onb-task-body" id="onb-body-contract" style="display:none">
+          <div class="onb-contract-scroll" id="onb-contract-html">
+            <div style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem">Loading agreement…</div>
+          </div>
+          <div class="onb-fg" style="margin-top:.85rem">
+            <label class="onb-agree-label">
+              <input type="checkbox" id="onb-agree-cb">
+              <span>I have read and agree to the terms of this agreement</span>
+            </label>
+          </div>
+          <div class="onb-fg">
+            <label>Type your full legal name to sign</label>
+            <input class="onb-inp" id="onb-signed-name" placeholder="Full Legal Name">
+          </div>
+          <div class="onb-fg">
+            <label>Date</label>
+            <input class="onb-inp" id="onb-signed-date" readonly>
+          </div>
+          <div class="im" id="onb-contract-msg" style="margin:.5rem 0 0"></div>
+          <button class="onb-submit-btn" onclick="submitContract()">Submit Signature →</button>
+        </div>
+      </div>
+
+      <!-- Pending state (shown when both tasks complete) -->
+      <div class="onb-pending-state" id="onb-pending-state" style="display:none">
+        <div style="font-size:2rem;margin-bottom:.5rem">🎉</div>
+        <div style="font-weight:700;font-size:1.05rem;margin-bottom:.3rem">Application Submitted!</div>
+        <div style="font-size:.88rem;color:var(--muted);line-height:1.5">Your information is under review. You'll be notified once an admin approves your account.</div>
+        <span class="onb-pending-badge">Pending Review</span>
+      </div>
+
+    </div><!-- /page-onboarding -->
+
   </div><!-- /page-wrap -->
   <nav class="bottom-nav" id="bnav"></nav>
+</div>
+
+<!-- ── Docs viewer modal ── -->
+<div class="csv-modal-backdrop" id="docs-modal" onclick="closeDocsModal()">
+  <div class="csv-modal" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="csv-modal-hdr">
+      <div class="csv-modal-title">Applicant Documents</div>
+      <button class="drawer-close" onclick="closeDocsModal()">✕</button>
+    </div>
+    <div class="csv-modal-body" id="docs-modal-body"></div>
+    <div class="csv-modal-foot">
+      <button class="csv-cancel-btn" onclick="closeDocsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── W-9 Review Modal ── -->
+<div class="conf-modal-backdrop" id="w9-modal-backdrop" onclick="closeW9Modal(event)" style="display:none;z-index:9999">
+  <div class="conf-modal" onclick="event.stopPropagation()" style="max-width:800px;width:95%;height:90vh;display:flex;flex-direction:column">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Review &amp; Sign W-9</div>
+      <button class="drawer-close" onclick="closeW9Modal()">✕</button>
+    </div>
+    <div class="conf-modal-body" style="flex:1;padding:0;overflow:hidden">
+      <iframe id="w9-preview-frame" style="width:100%;height:100%;border:none;background:#f1f5f9"></iframe>
+    </div>
+    <div class="conf-modal-foot" style="justify-content:space-between">
+      <div style="font-size:.85rem;color:var(--muted)">By confirming, you electronically sign this W-9 using the name provided.</div>
+      <div style="display:flex;gap:.5rem">
+        <button class="conf-cancel-btn" onclick="closeW9Modal()">Cancel</button>
+        <button class="conf-submit-btn" onclick="confirmW9()">Looks Good &amp; Sign</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Module Drawer (add/edit module) ── -->
@@ -1176,6 +1369,13 @@ select.q-inp{cursor:pointer}
         <span>Require previous module to be 100% complete</span>
       </label>
       <div class="hint">When enabled, trainees must finish the module above this one before accessing it.</div>
+    </div>
+    <div class="mod-dfg">
+      <label class="mod-gate-label">
+        <input type="checkbox" id="mod-is-graduation">
+        <span>Graduation Module <span style="font-weight:400;color:var(--muted)">(auto-promote Trainee → Technician on 100% completion)</span></span>
+      </label>
+      <div class="hint">When all items in this module are completed, the trainee is automatically promoted to Technician.</div>
     </div>
     <div class="mod-drawer-msg" id="mod-drawer-msg"></div>
   </div>
@@ -1347,8 +1547,9 @@ const AS = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_Qbs
 const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
-  home:'🏠|Home', live_map:'🗺️|Map', service_log:'📝|Service Log',
-  inventory:'📦|Inventory', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin'
+  home:'🏠|Home', live_map:'🛟|Technician Hub', service_log:'📝|Service Log',
+  inventory:'📦|Inventory', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin',
+  onboarding:'📋|Get Started'
 };
 
 // Pages per role — additive
@@ -1356,12 +1557,13 @@ const ROLE_PAGES = {
   technician:['home','live_map','service_log','training'],
   lead:['home','live_map','service_log','training'],
   trainee:['home','training'],
+  new_hire:['onboarding'],
   office:['home','quotes','inventory'],
   manager:['home','live_map','service_log','inventory','quotes','training'],
   admin:['home','live_map','service_log','inventory','quotes','training','admin'],
 };
 
-const ALL_ROLES = ['technician','lead','office','manager','admin','trainee'];
+const ALL_ROLES = ['technician','lead','office','manager','admin','trainee','new_hire'];
 const ALL_DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 let _editingUsername = null;
 let _usersCache = [];
@@ -1421,7 +1623,7 @@ function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch
 
 function unionPages_(roles) {
   const set = new Set();
-  const order = ['home','live_map','service_log','inventory','quotes','training','admin'];
+  const order = ['home','onboarding','live_map','service_log','inventory','quotes','training','admin'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }
@@ -1438,7 +1640,7 @@ function showApp(startPage) {
   rb.textContent=(_s.roles||[]).join(', '); rb.className='r-badge '+(_s.roles||[])[0];
   document.getElementById('home-name').textContent=_s.name.split(' ')[0];
   buildNav(); buildHomeCards();
-  if((_s.pages||[]).includes('admin')) loadUsers();
+  if((_s.pages||[]).includes('admin')) { loadUsers(); loadPendingHires(); }
   const pg = (_s.pages||[]).includes(startPage)?startPage:'home';
   navigateTo(pg);
 }
@@ -1451,7 +1653,7 @@ function buildNav(){
 }
 
 function buildHomeCards(){
-  const descs={live_map:'View your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical inventory levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
+  const descs={onboarding:'Complete your onboarding to get started',live_map:'View and manage your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical inventory levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
   document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
@@ -1473,6 +1675,7 @@ function navigateTo(page){
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
   if(page==='training') loadTraining();
+  if(page==='onboarding') loadOnboarding();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2849,14 +3052,16 @@ function openUserDrawer(username) {
   document.querySelectorAll('#day-checkboxes input').forEach(cb => cb.checked = false);
   document.querySelector('input[name="d-active"][value="true"]').checked = true;
  
+  document.getElementById('usr-pay-rate').value = '';
+
   if (isNew) {
     document.getElementById('drawer-title').textContent = 'Add New User';
     document.getElementById('drawer-sub').textContent   = 'Fill in the details to create an account.';
     document.getElementById('d-uname').disabled         = false;
     document.getElementById('uname-hint').style.display = 'none';
     document.getElementById('d-pass-optional').style.display = 'none';
-    // Default: technician + all days
-    document.querySelector('#role-checkboxes input[value="technician"]').checked = true;
+    // Default: new_hire
+    document.querySelector('#role-checkboxes input[value="new_hire"]').checked = true;
     ALL_DAYS.forEach(day => {
       const cb = document.querySelector(`#day-checkboxes input[value="${day}"]`);
       if (cb) cb.checked = true;
@@ -2865,7 +3070,7 @@ function openUserDrawer(username) {
     // Load existing user data
     const user = _usersCache.find(u => u.username === username);
     if (!user) return;
- 
+
     document.getElementById('drawer-title').textContent = 'Edit User';
     document.getElementById('drawer-sub').textContent   = '@' + username;
     document.getElementById('d-name').value             = user.name || '';
@@ -2873,15 +3078,16 @@ function openUserDrawer(username) {
     document.getElementById('d-uname').disabled         = true; // username immutable
     document.getElementById('uname-hint').style.display = 'block';
     document.getElementById('d-pass-optional').style.display = 'inline';
+    document.getElementById('usr-pay-rate').value       = user.pay_rate || '';
 
- 
+
     // Set roles
     const roles = Array.isArray(user.roles) ? user.roles : String(user.roles||'').split(',').map(r=>r.trim());
     roles.forEach(role => {
       const cb = document.querySelector(`#role-checkboxes input[value="${role}"]`);
       if (cb) cb.checked = true;
     });
- 
+
     // Set available days
     if (user.available_days) {
       const days = String(user.available_days).split(',').map(d=>d.trim());
@@ -2890,7 +3096,7 @@ function openUserDrawer(username) {
         if (cb) cb.checked = true;
       });
     }
- 
+
     // Set active status
     const active = user.active === true || String(user.active).toUpperCase() === 'TRUE';
     document.querySelector(`input[name="d-active"][value="${active}"]`).checked = true;
@@ -2917,6 +3123,7 @@ function saveUser() {
     ? document.getElementById('d-uname').value.trim().toLowerCase()
     : _editingUsername;
   const password = document.getElementById('d-pass').value.trim();
+  const payRate  = document.getElementById('usr-pay-rate').value.trim();
 
  
   // Collect roles
@@ -2950,6 +3157,7 @@ function saveUser() {
       name,
       roles   : roles.join(','),
       available_days : days.join(','),
+      pay_rate: payRate,
     }).then(res => {
       btn.disabled = false; btn.textContent = 'Save User';
       if (res.ok) {
@@ -2967,6 +3175,7 @@ function saveUser() {
       roles          : roles.join(','),
       available_days : days.join(','),
       active,
+      pay_rate       : payRate,
     };
     if (password) fields.password = password;
  
@@ -4185,6 +4394,7 @@ function submitQuizTaking(moduleId, itemId) {
     if (res.passed) {
       msg = `<span style="color:var(--ok)">✓ Passed! ${msg}</span>`;
       document.getElementById('quiz-result-msg').innerHTML = msg;
+      checkGraduation(moduleId);
       setTimeout(() => closeVideoDetail(), 2000); // auto close on pass
     } else {
       msg = `<span style="color:var(--severe)">❌ Failed. Pass threshold is ${res.pass_threshold}%. ${msg} Please try again.</span>`;
@@ -4215,6 +4425,7 @@ function markItemCompleteDetail(moduleId, itemId) {
       span.textContent = '✓ Completed';
       btn.replaceWith(span);
     }
+    checkGraduation(moduleId);
   }).catch(() => alert('Network error while saving progress.'));
 }
 
@@ -4253,11 +4464,13 @@ function openModuleDrawer(moduleId) {
     document.getElementById('mod-desc').value = mod ? (mod.description || '') : '';
     document.getElementById('mod-order').value = mod ? (mod.order || '') : '';
     document.getElementById('mod-require-prev').checked = mod ? !!mod.require_prev_module : false;
+    document.getElementById('mod-is-graduation').checked = mod ? !!mod.is_graduation_module : false;
   } else {
     document.getElementById('mod-title').value = '';
     document.getElementById('mod-desc').value = '';
     document.getElementById('mod-order').value = (_trModules.length + 1);
     document.getElementById('mod-require-prev').checked = false;
+    document.getElementById('mod-is-graduation').checked = false;
   }
   document.getElementById('mod-backdrop').classList.add('open');
   document.getElementById('mod-drawer').classList.add('open');
@@ -4276,13 +4489,15 @@ function saveModule() {
   const desc = document.getElementById('mod-desc').value.trim();
   const order = parseInt(document.getElementById('mod-order').value) || (_trModules.length + 1);
   const reqPrev = document.getElementById('mod-require-prev').checked;
+  const isGrad  = document.getElementById('mod-is-graduation').checked;
   if (!title) { showDrawerMsg(msgEl, 'err', 'Title is required.'); return; }
   btn.disabled = true; btn.textContent = 'Saving...';
   msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
-  
+
   api({
     action: modId ? 'update_module' : 'create_module', token: _s.token,
-    module_id: modId, title, description: desc, order, require_prev_module: reqPrev
+    module_id: modId, title, description: desc, order, require_prev_module: reqPrev,
+    is_graduation_module: isGrad
   }).then(res => {
     btn.disabled = false; btn.textContent = 'Save Module';
     if (res.ok) { _trLoaded = false; closeModuleDrawer(); loadTraining(); }
@@ -4691,6 +4906,487 @@ function huToast(msg, isErr) {
   }, 4000);
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════════════════════════════════════════
+function loadOnboarding() {
+  const nameEl = document.getElementById('onb-welcome-name');
+  if (nameEl) nameEl.textContent = 'Welcome, ' + (_s.name ? _s.name.split(' ')[0] : '') + '!';
+
+  const authHdr = { 'Authorization': 'Bearer ' + _s.token, 'Content-Type': 'application/json' };
+
+  // Fetch status and contract context in parallel
+  Promise.all([
+    apiGet({ action: 'onboarding_get_status', token: _s.token }).then(r => r),
+    apiGet({ action: 'onboarding_get_context', token: _s.token }).then(r => r)
+  ]).then(([status, ctx]) => {
+    // Render contract HTML
+    if (ctx && ctx.contract_html) {
+      document.getElementById('onb-contract-html').innerHTML = ctx.contract_html;
+    }
+    // Pre-fill signed date
+    const dateEl = document.getElementById('onb-signed-date');
+    if (dateEl) dateEl.value = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+    updateOnbProgress(status || {});
+
+    // Update task icons based on completion
+    if (status && status.info_done) {
+      document.getElementById('onb-icon-info').textContent = '✅';
+    }
+    if (status && status.contract_done) {
+      document.getElementById('onb-icon-contract').textContent = '✅';
+    }
+  }).catch(() => {
+    const dateEl = document.getElementById('onb-signed-date');
+    if (dateEl) dateEl.value = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  });
+}
+
+function toggleOnbTask(task) {
+  const body = document.getElementById('onb-body-' + task);
+  const chev = document.getElementById('onb-chev-' + task);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+function submitPersonalInfo() {
+  const msgEl = document.getElementById('onb-info-msg');
+  const fields = {
+    legal_name     : document.getElementById('onb-legal-name').value.trim(),
+    dob            : document.getElementById('onb-dob').value,
+    phone          : document.getElementById('onb-phone').value.trim(),
+    address_line1  : document.getElementById('onb-addr1').value.trim(),
+    address_city   : document.getElementById('onb-city').value.trim(),
+    address_state  : document.getElementById('onb-state').value.trim(),
+    address_zip    : document.getElementById('onb-zip').value.trim(),
+    emergency_name : document.getElementById('onb-ec-name').value.trim(),
+    emergency_phone: document.getElementById('onb-ec-phone').value.trim(),
+    tax_type       : (document.querySelector('input[name="onb-tax-type"]:checked') || {}).value || '',
+    tax_ein_type   : document.getElementById('onb-ein-type').value,
+    tax_id_full    : document.getElementById('onb-tax-full').value.trim(),
+  };
+
+  if (!fields.legal_name) { showMsg(msgEl, 'Legal name is required.', false); return; }
+  if (!fields.dob) { showMsg(msgEl, 'Date of birth is required.', false); return; }
+  if (!fields.phone) { showMsg(msgEl, 'Phone number is required.', false); return; }
+  if (!fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) {
+    showMsg(msgEl, 'Complete address is required.', false); return;
+  }
+  if (!fields.emergency_name || !fields.emergency_phone) { showMsg(msgEl, 'Emergency contact is required.', false); return; }
+  if (!fields.tax_type) { showMsg(msgEl, 'Select SSN or EIN.', false); return; }
+  if (!fields.tax_id_full || fields.tax_id_full.length < 10) { showMsg(msgEl, 'Enter full Tax ID.', false); return; }
+
+  const w9b64 = document.getElementById('onb-w9-base64').value;
+  const doSave = (b64) => {
+    const body = Object.assign({ action: 'save_info' }, fields);
+    if (b64) body.w9_base64 = b64;
+
+    body.token = _s.token;
+    body.secret = SEC;
+    
+    api(body).then(res => {
+      if (res.ok) {
+        showMsg(msgEl, 'Saved!', true);
+        document.getElementById('onb-icon-info').textContent = '✅';
+        updateOnbProgress({ info_done: true, contract_done: !!res.contract_done });
+      } else {
+        showMsg(msgEl, res.error || 'Failed to save.', false);
+      }
+    }).catch(() => showMsg(msgEl, 'Network error.', false));
+  };
+
+  if (w9b64) {
+    doSave(w9b64);
+  } else {
+    showMsg(msgEl, 'Please generate and review your W-9 Form before saving.', false);
+  }
+}
+
+function onbTaxTypeChanged() {
+  const type = (document.querySelector('input[name="onb-tax-type"]:checked') || {}).value;
+  const inp = document.getElementById('onb-tax-full');
+  const einTypeDiv = document.getElementById('onb-ein-type-fg');
+  inp.disabled = false;
+  inp.value = '';
+  
+  if (type === 'SSN') {
+    inp.placeholder = '___-__-____';
+    inp.maxLength = 11;
+    einTypeDiv.style.display = 'none';
+  } else if (type === 'EIN') {
+    inp.placeholder = '__-_______';
+    inp.maxLength = 10;
+    einTypeDiv.style.display = 'block';
+  }
+}
+
+function onbFormatTaxId(inp) {
+  const type = (document.querySelector('input[name="onb-tax-type"]:checked') || {}).value;
+  let val = inp.value.replace(/\D/g, '');
+  if (type === 'SSN') {
+    let formatted = '';
+    if (val.length > 0) formatted += val.substring(0, 3);
+    if (val.length > 3) formatted += '-' + val.substring(3, 5);
+    if (val.length > 5) formatted += '-' + val.substring(5, 9);
+    inp.value = formatted;
+  } else if (type === 'EIN') {
+    let formatted = '';
+    if (val.length > 0) formatted += val.substring(0, 2);
+    if (val.length > 2) formatted += '-' + val.substring(2, 9);
+    inp.value = formatted;
+  }
+}
+
+let _pendingW9PdfBytes = null;
+
+async function generateAndReviewW9() {
+  const btn = document.getElementById('btn-gen-w9');
+  btn.textContent = 'Generating...';
+  btn.disabled = true;
+
+  try {
+    const rawForm = await fetch('/fw9.pdf').then(res => res.arrayBuffer());
+    const pdfDoc = await PDFLib.PDFDocument.load(rawForm);
+    const form = pdfDoc.getForm();
+    
+    // Fill fields
+    const nameStr = document.getElementById('onb-legal-name').value.trim();
+    const addr1 = document.getElementById('onb-addr1').value.trim();
+    const city = document.getElementById('onb-city').value.trim();
+    const state = document.getElementById('onb-state').value.trim();
+    const zip = document.getElementById('onb-zip').value.trim();
+    const taxType = (document.querySelector('input[name="onb-tax-type"]:checked') || {}).value;
+    const einType = document.getElementById('onb-ein-type').value;
+    const taxIdFilled = document.getElementById('onb-tax-full').value.replace(/\D/g, '');
+
+    if (!nameStr || !addr1 || !city || !state || !zip || !taxType || taxIdFilled.length < 9) {
+      alert("Please completely fill out your Personal Information, Home Address, and Full Tax ID before generating the W-9.");
+      btn.textContent = 'Review & Sign W-9 Form';
+      btn.disabled = false;
+      return;
+    }
+
+    // Name and address mapping
+    try { form.getField('topmostSubform[0].Page1[0].f1_01[0]').setText(nameStr); } catch(e){}
+    try { form.getField('topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_07[0]').setText(addr1); } catch(e){}
+    try { form.getField('topmostSubform[0].Page1[0].Address_ReadOrder[0].f1_08[0]').setText(city + ', ' + state + ' ' + zip); } catch(e){}
+    
+    // Checkboxes
+    // c1_1[0] = Individual/Sole prop
+    // c1_1[1] = C Corp
+    // c1_1[2] = S Corp
+    // c1_1[3] = Partnership
+    // c1_1[4] = Trust/estate
+    // c1_1[5] = LLC (with text field f1_03 for type: C/S/P)
+    let c1 = form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].c1_1[0]'); // Individual
+    
+    if (taxType === 'EIN') {
+      try {
+        if (einType === 'ccorp') c1 = form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].c1_1[1]');
+        else if (einType === 'scorp') c1 = form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].c1_1[2]');
+        else if (einType === 'partnership') c1 = form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].c1_1[3]');
+        else if (einType === 'trust') c1 = form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].c1_1[4]');
+        else if (einType.startsWith('llc_')) {
+          c1 = form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].c1_1[5]');
+          const subtype = einType.split('_')[1].toUpperCase();
+          form.getField('topmostSubform[0].Page1[0].Boxes3a-b_ReadOrder[0].f1_03[0]').setText(subtype);
+        }
+      } catch(e) {}
+    }
+    if (c1) { try { c1.check(); } catch(e){} }
+    
+    // Tax ID mapping
+    if (taxType === 'SSN') {
+      try { form.getField('topmostSubform[0].Page1[0].f1_11[0]').setText(taxIdFilled.slice(0,3)); } catch(e){}
+      try { form.getField('topmostSubform[0].Page1[0].f1_12[0]').setText(taxIdFilled.slice(3,5)); } catch(e){}
+      try { form.getField('topmostSubform[0].Page1[0].f1_13[0]').setText(taxIdFilled.slice(5,9)); } catch(e){}
+    } else if (taxType === 'EIN') {
+      try { form.getField('topmostSubform[0].Page1[0].f1_14[0]').setText(taxIdFilled.slice(0,2)); } catch(e){}
+      try { form.getField('topmostSubform[0].Page1[0].f1_15[0]').setText(taxIdFilled.slice(2,9)); } catch(e){}
+    }
+    
+    // E-Signature and Date (drawn onto the PDF since signature fields might be locked forms)
+    const pages = pdfDoc.getPages();
+    const page = pages[0];
+    const signatureText = nameStr + ' (e-signed)';
+    const dateText = new Date().toLocaleDateString();
+    
+    page.drawText(signatureText, { x: 140, y: 198, size: 14 });
+    page.drawText(dateText, { x: 450, y: 198, size: 14 });
+
+    const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    form.updateFieldAppearances(helveticaFont);
+    
+    // Do not form.flatten(); as IRS W-9 Acroform appearances break upon flattening with pdf-lib
+    const pdfBytes = await pdfDoc.save();
+    
+    _pendingW9PdfBytes = pdfBytes;
+    
+    // Convert to ObjectURL to view in iframe
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    document.getElementById('w9-preview-frame').src = url;
+    document.getElementById('w9-modal-backdrop').style.display = 'flex';
+  } catch (err) {
+    console.error(err);
+    alert('Failed to generate W-9: ' + err.message);
+  } finally {
+    btn.textContent = 'Review & Sign W-9 Form';
+    btn.disabled = false;
+  }
+}
+
+function closeW9Modal() {
+  document.getElementById('w9-modal-backdrop').style.display = 'none';
+  document.getElementById('w9-preview-frame').src = '';
+  _pendingW9PdfBytes = null;
+}
+
+function confirmW9() {
+  if (!_pendingW9PdfBytes) return;
+  // Convert bytes to base64
+  let binary = '';
+  for (let i = 0; i < _pendingW9PdfBytes.byteLength; i++) {
+    binary += String.fromCharCode(_pendingW9PdfBytes[i]);
+  }
+  const base64 = btoa(binary);
+  document.getElementById('onb-w9-base64').value = base64;
+  document.getElementById('w9-status-msg').style.display = 'block';
+  closeW9Modal();
+}
+
+
+function submitContract() {
+  const msgEl = document.getElementById('onb-contract-msg');
+  const agreed = document.getElementById('onb-agree-cb').checked;
+  const signedName = document.getElementById('onb-signed-name').value.trim();
+
+  if (!agreed) { showMsg(msgEl, 'You must check the agreement box.', false); return; }
+  if (!signedName) { showMsg(msgEl, 'Type your full name to sign.', false); return; }
+
+  api({ action: 'onboarding_save_contract', signed_name: signedName, signed_at: new Date().toISOString(), token: _s.token, secret: SEC })
+  .then(res => {
+    if (res.ok) {
+      showMsg(msgEl, 'Signature saved!', true);
+      document.getElementById('onb-icon-contract').textContent = '✅';
+      updateOnbProgress({ info_done: !!res.info_done, contract_done: true });
+    } else {
+      showMsg(msgEl, res.error || 'Failed to save signature.', false);
+    }
+  }).catch(() => showMsg(msgEl, 'Network error.', false));
+}
+
+function updateOnbProgress(status) {
+  const done = (status.info_done ? 1 : 0) + (status.contract_done ? 1 : 0);
+  const pct  = (done / 2) * 100;
+  const fill = document.getElementById('onb-fill');
+  const label = document.getElementById('onb-progress-label');
+  if (fill) fill.style.width = pct + '%';
+  if (label) label.textContent = done + ' of 2 steps complete';
+
+  if (status.info_done && status.contract_done) {
+    const pending = document.getElementById('onb-pending-state');
+    if (pending) pending.style.display = 'block';
+  }
+}
+
+// ── Admin: New Hire Applications ──────────────────────────────────────────────
+function loadPendingHires() {
+  const container = document.getElementById('pending-hires-list');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Loading…</div>';
+
+  apiGet({ action: 'onboarding_list_pending', token: _s.token }).then(res => {
+    if (!res.ok || !res.applications || !res.applications.length) {
+      container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">' +
+        (res.error || 'No pending applications.') + '</div>';
+      return;
+    }
+    container.innerHTML = res.applications.map(a => `
+      <div class="pend-card" id="hire-card-${a.username}">
+        <div class="pend-sku">${a.username}</div>
+        <div class="pend-desc">${a.full_name || '—'}</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">
+          Submitted: ${a.info_submitted_at ? new Date(a.info_submitted_at).toLocaleDateString() : '—'}
+        </div>
+        <div class="pend-ai" style="margin-bottom:.65rem">
+          <span class="pend-ai-pill ${a.info_done ? 'conf-high' : 'conf-low'}">${a.info_done ? '✓ Info' : '✗ Info'}</span>
+          <span class="pend-ai-pill ${a.contract_done ? 'conf-high' : 'conf-low'}">${a.contract_done ? '✓ Contract' : '✗ Contract'}</span>
+        </div>
+        <div class="pend-btns" style="flex-wrap:wrap;gap:.4rem">
+          <button class="pend-approve" onclick="approveNewHire('${a.username}')">Approve → Trainee</button>
+          <button class="pend-reject" onclick="rejectNewHire('${a.username}')">Request Changes</button>
+          <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid)" onclick="viewHireDocs('${a.username}')">📄 View Docs</button>
+        </div>
+      </div>`).join('');
+  }).catch(() => {
+    container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Network error.</div>';
+  });
+}
+
+function approveNewHire(username) {
+  api({ action: 'onboarding_approve', username, token: _s.token, secret: SEC }).then(res => {
+    if (!res.ok) { alert(res.error || 'Failed to approve.'); return; }
+    // Promote role to trainee via GAS
+    api({ action: 'update_user', secret: SEC, token: _s.token, username, fields: { roles: 'trainee', active: true } })
+      .then(() => {
+        const card = document.getElementById('hire-card-' + username);
+        if (card) card.innerHTML = `<div style="padding:.5rem 0;color:var(--success);font-weight:600">✓ ${username} approved as Trainee</div>`;
+      });
+  }).catch(() => alert('Network error.'));
+}
+
+let _allRecordsCache = [];
+
+function loadAllApplications() {
+  const container = document.getElementById('all-records-list');
+  container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">Loading…</div>';
+
+  apiGet({ action: 'onboarding_list_all', token: _s.token }).then(res => {
+    if (!res.ok) { container.innerHTML = `<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">${res.error || 'Failed to load.'}</div>`; return; }
+    _allRecordsCache = res.applications || [];
+    renderRecords(_allRecordsCache);
+  }).catch(() => {
+    container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">Network error.</div>';
+  });
+}
+
+function filterRecords(q) {
+  const lower = q.toLowerCase();
+  const filtered = _allRecordsCache.filter(a =>
+    (a.username || '').toLowerCase().includes(lower) ||
+    (a.full_name || '').toLowerCase().includes(lower)
+  );
+  renderRecords(filtered);
+}
+
+function renderRecords(list) {
+  const container = document.getElementById('all-records-list');
+  if (!list.length) { container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">No records found.</div>'; return; }
+
+  const statusColor = { approved:'#dcfce7|#15803d', pending_review:'#fef3c7|#92400e', rejected:'#fee2e2|#b91c1c', in_progress:'#f1f5f9|#475569' };
+  container.innerHTML = list.map(a => {
+    const [bg, color] = (statusColor[a.status] || '#f1f5f9|#475569').split('|');
+    const approvedLine = a.approved_at ? `<span style="font-size:.75rem;color:var(--muted)">Approved: ${new Date(a.approved_at).toLocaleDateString()}</span>` : '';
+    return `<div class="pend-card" style="margin-bottom:.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.25rem">
+        <div>
+          <div class="pend-sku">${a.username}</div>
+          <div class="pend-desc" style="margin:.1rem 0 0">${a.full_name || '—'}</div>
+          ${approvedLine}
+        </div>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;padding:.2rem .6rem;border-radius:99px;background:${bg};color:${color};text-transform:capitalize;letter-spacing:.04em">${(a.status||'').replace('_',' ')}</span>
+      </div>
+      <div class="pend-ai" style="margin-bottom:.5rem">
+        <span class="pend-ai-pill ${a.info_done?'conf-high':'conf-low'}">${a.info_done?'✓ Info':'✗ Info'}</span>
+        <span class="pend-ai-pill ${a.contract_done?'conf-high':'conf-low'}">${a.contract_done?'✓ Contract':'✗ Contract'}</span>
+      </div>
+      <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid);width:100%" onclick="viewHireDocs('${a.username}')">📄 View Docs & W-9</button>
+    </div>`;
+  }).join('');
+}
+
+function viewHireDocs(username) {
+  const modal = document.getElementById('docs-modal');
+  const body  = document.getElementById('docs-modal-body');
+  body.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--muted)"><div class="spinner"></div></div>';
+  modal.classList.add('open');
+
+  apiGet({ action: 'onboarding_get_documents', username, token: _s.token }).then(d => {
+    if (!d.ok) { body.innerHTML = `<p style="color:var(--error)">${d.error}</p>`; return; }
+    body.innerHTML = `
+      <div style="margin-bottom:1.25rem">
+        <div class="docs-section-title">Personal Information</div>
+        <div class="docs-row"><span>Full Name</span><span>${d.full_name || '—'}</span></div>
+        <div class="docs-row"><span>Date of Birth</span><span>${d.dob || '—'}</span></div>
+        <div class="docs-row"><span>Phone</span><span>${d.phone || '—'}</span></div>
+        <div class="docs-row"><span>Address</span><span>${[d.address_line1, d.address_city, d.address_state, d.address_zip].filter(Boolean).join(', ') || '—'}</span></div>
+        <div class="docs-row"><span>Emergency Contact</span><span>${d.emergency_name || '—'} ${d.emergency_phone ? '· ' + d.emergency_phone : ''}</span></div>
+        <div class="docs-row"><span>Tax ID Type</span><span>${d.tax_type || '—'}</span></div>
+        <div class="docs-row"><span>Last 4 Digits</span><span>${d.tax_id_last4 ? '••••' + d.tax_id_last4 : '—'}</span></div>
+      </div>
+      <div style="margin-bottom:1.25rem">
+        <div class="docs-section-title">Contract Signature</div>
+        <div class="docs-row"><span>Signed Name</span><span>${d.contract_signed_name || '—'}</span></div>
+        <div class="docs-row"><span>Signed At</span><span>${d.contract_signed_at ? new Date(d.contract_signed_at).toLocaleString() : '—'}</span></div>
+      </div>
+      <div>
+        <div class="docs-section-title">W-9 Document</div>
+        ${d.w9_signed_url
+          ? `<a href="${d.w9_signed_url}" target="_blank" class="docs-w9-btn">⬇ Open W-9 PDF</a><div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Link expires in 1 hour</div>`
+          : '<span style="color:var(--muted);font-size:.85rem">No W-9 uploaded</span>'}
+      </div>`;
+  }).catch(() => { body.innerHTML = '<p style="color:var(--error)">Network error.</p>'; });
+}
+
+function closeDocsModal() {
+  document.getElementById('docs-modal').classList.remove('open');
+}
+
+function rejectNewHire(username) {
+  const note = prompt('Enter a note for the applicant (required):');
+  if (!note) return;
+  api({ action: 'onboarding_reject', username, note, token: _s.token, secret: SEC }).then(res => {
+    if (!res.ok) { alert(res.error || 'Failed.'); return; }
+    const card = document.getElementById('hire-card-' + username);
+    if (card) card.innerHTML = `<div style="padding:.5rem 0;color:var(--warn);font-weight:600">⚠ Changes requested for ${username}</div>`;
+  }).catch(() => alert('Network error.'));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GRADUATION
+// ══════════════════════════════════════════════════════════════════════════════
+function checkGraduation(moduleId) {
+  if (!moduleId || !_s) return;
+  if (!(_s.roles || []).includes('trainee')) return;
+
+  const mod = (_trModules || []).find(m => m.id === moduleId);
+  if (!mod || !mod.is_graduation_module) return;
+
+  const items = (mod.items || []).filter(i => i.type !== 'submodule');
+  if (!items.length) return;
+
+  const allDone = items.every(i => {
+    const key = `${moduleId}::${i.id}`;
+    return _trProgress[key] && _trProgress[key].status === 'completed';
+  });
+
+  if (allDone) triggerGraduation();
+}
+
+function triggerGraduation() {
+  api({ action: 'update_user', secret: SEC, token: _s.token, username: _s.username || _s.name,
+        fields: { roles: 'technician', active: true } })
+    .then(res => {
+      if (!res.ok) return;
+      _s.roles = ['technician'];
+      _s.pages = unionPages_(['technician']);
+      localStorage.setItem('mcps_s', JSON.stringify(_s));
+      showGraduationModal();
+      setTimeout(() => { buildNav(); navigateTo('home'); }, 3000);
+    }).catch(() => {});
+}
+
+function showGraduationModal() {
+  let el = document.getElementById('grad-modal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'grad-modal';
+    el.className = 'grad-modal';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div class="grad-modal-inner">
+    <div style="font-size:3.5rem;margin-bottom:.75rem">🎉</div>
+    <div style="font-family:'Oswald',sans-serif;font-size:1.75rem;font-weight:700;letter-spacing:.02em">You're now a Technician!</div>
+    <div style="font-size:.95rem;color:rgba(255,255,255,.75);margin-top:.5rem">Your account has been upgraded. Redirecting…</div>
+  </div>`;
+  el.style.display = 'flex';
+  setTimeout(() => { el.style.display = 'none'; }, 3200);
+}
+
 </script>
   <!-- ════════════════════════════════════════════════════════
      ADD THESE STYLES to the <style> block in index.html
@@ -4947,6 +5643,47 @@ function huToast(msg, isErr) {
 .mod-drawer-msg{font-size:.82rem;margin-top:.65rem;padding:.55rem .8rem;border-radius:8px;display:none}
 .mod-drawer-msg.err{background:#fef2f2;color:var(--error);display:block}
 .mod-drawer-msg.ok{background:#f0fdf4;color:var(--success);display:block}
+
+/* ── ONBOARDING ──────────────────────────────────────────────────────────── */
+.onb-hero{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:1.4rem 1.25rem 1.1rem;margin-bottom:1rem;font-family:'Barlow Condensed',sans-serif}
+.onb-welcome{font-family:'Oswald',sans-serif;font-size:1.55rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.2rem}
+.onb-sub{font-size:.88rem;color:var(--muted);margin-bottom:.85rem}
+.onb-progress-bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:.4rem}
+.onb-progress-fill{height:100%;background:var(--teal-light);border-radius:99px;transition:width .5s ease}
+.onb-progress-label{font-size:.75rem;font-weight:600;color:var(--muted)}
+.onb-task-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:.85rem}
+.onb-task-hdr{display:flex;align-items:center;gap:.85rem;padding:1rem 1.1rem;cursor:pointer;user-select:none;transition:background .12s}
+.onb-task-hdr:hover{background:var(--surface)}
+.onb-task-body{padding:.1rem 1.1rem 1.1rem;border-top:1px solid var(--border)}
+.onb-task-icon{font-size:1.4rem;flex-shrink:0}
+.onb-chevron{font-size:1.2rem;color:var(--muted);transition:transform .2s;flex-shrink:0}
+.onb-fg{margin-bottom:.85rem}
+.onb-fg label{display:block;font-size:.85rem;font-weight:600;margin-bottom:.35rem}
+.onb-inp{width:100%;padding:.72rem 1rem;border:1.5px solid var(--border);border-radius:11px;font-size:.9rem;font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:all .2s}
+.onb-inp:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.12)}
+.onb-row2{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
+.onb-row3{display:grid;grid-template-columns:1fr .55fr .65fr;gap:.65rem}
+@media(max-width:460px){.onb-row2,.onb-row3{grid-template-columns:1fr}}
+.onb-contract-scroll{max-height:260px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:1rem;font-size:.83rem;line-height:1.65;color:var(--text);white-space:pre-wrap;margin-bottom:.5rem}
+.onb-agree-label{display:flex;align-items:flex-start;gap:.55rem;font-size:.9rem;font-weight:500;cursor:pointer;line-height:1.4}
+.onb-agree-label input{margin-top:.15rem;flex-shrink:0;accent-color:var(--teal-mid)}
+.onb-submit-btn{width:100%;margin-top:.75rem;padding:.9rem;background:var(--teal);color:#fff;border:none;border-radius:12px;font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+.onb-submit-btn:hover{background:var(--teal-mid)}
+.onb-pending-state{background:var(--card);border:1.5px solid var(--teal-light);border-radius:16px;padding:1.5rem;text-align:center;margin-top:.85rem;animation:fadeUp .3s ease}
+.onb-pending-badge{display:inline-block;margin-top:.75rem;font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.25rem .75rem;border-radius:99px;background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+
+/* ── DOCS VIEWER MODAL ───────────────────────────────────────────────────── */
+.docs-section-title{font-family:'Barlow Condensed',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.docs-row{display:flex;justify-content:space-between;align-items:flex-start;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.85rem;gap:1rem}
+.docs-row:last-child{border-bottom:none}
+.docs-row span:first-child{font-weight:600;color:var(--text);flex-shrink:0}
+.docs-row span:last-child{color:var(--muted);text-align:right;word-break:break-word}
+.docs-w9-btn{display:inline-block;margin-top:.4rem;padding:.55rem 1.1rem;background:var(--teal);color:#fff;border-radius:10px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;letter-spacing:.06em;text-decoration:none;transition:background .15s}
+.docs-w9-btn:hover{background:var(--teal-mid)}
+
+/* ── GRADUATION MODAL ────────────────────────────────────────────────────── */
+.grad-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:none;align-items:center;justify-content:center;text-align:center;padding:2rem}
+.grad-modal-inner{color:#fff;animation:fadeUp .4s ease}
 </style>
 </body>
 </html>
