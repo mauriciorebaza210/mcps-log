@@ -796,6 +796,17 @@ select.q-inp{cursor:pointer}
     </div>
   </div>
 
+  <!-- Internal Notes -->
+  <div class="adm-card" id="adm-internal-notes-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Internal Notes from Submissions</span>
+      <button class="adm-new-btn" onclick="loadInternalNotes()">↻ Refresh</button>
+    </div>
+    <div style="padding:.85rem 1.1rem" id="internal-notes-list">
+      <div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Click ↻ Refresh to load internal notes.</div>
+    </div>
+  </div>
+
   <!-- New Hire Applications -->
   <div class="adm-card" id="adm-new-hires-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -1640,7 +1651,7 @@ function showApp(startPage) {
   rb.textContent=(_s.roles||[]).join(', '); rb.className='r-badge '+(_s.roles||[])[0];
   document.getElementById('home-name').textContent=_s.name.split(' ')[0];
   buildNav(); buildHomeCards();
-  if((_s.pages||[]).includes('admin')) { loadUsers(); loadPendingHires(); }
+  if((_s.pages||[]).includes('admin')) { loadUsers(); loadPendingHires(); loadInternalNotes(); }
   const pg = (_s.pages||[]).includes(startPage)?startPage:'home';
   navigateTo(pg);
 }
@@ -1671,7 +1682,8 @@ function navigateTo(page){
   _curPage=page;
   location.hash=page==='home'?'':page;
   if(page==='live_map'&&!_routeData) loadRoutes();
-  if(page==='service_log'&&!_formItems.length) loadServiceLog();
+  // Always reload service log state. Pass any pending prefill ID if applicable.
+  if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
   if(page==='training') loadTraining();
@@ -2169,14 +2181,12 @@ function renderRoutePage(){
     </div>`;
   }).join('');
 
-  // Auto-select today if has pools, else first day with pools, else Monday
-  let autoDay = null;
-  const todayData = days.find(d=>d.day===today);
-  if(todayData && (todayData.pools || []).length > 0) autoDay=today;
-  if(!autoDay) { const fd=days.find(d=>(d.pools || []).length > 0); if(fd)autoDay=fd.day; }
-  if(!autoDay) autoDay=days[0]&&days[0].day;
+  // Load the current weekday locally, fallback to Monday if Sunday
+  const jsDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  let autoDay = jsDays[new Date().getDay()];
+  if (autoDay === 'Sunday') autoDay = 'Monday';
 
-  selectDay(autoDay || today);
+  selectDay(autoDay);
 }
 
 function switchOp(op){
@@ -2533,17 +2543,74 @@ const TF={FC:"Chlorine (Cl)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium Hard
 const SG={small:12000,medium:17500,large:25000};
 const SM=[6,7,8,9];
 
-function loadServiceLog(){
-  api({secret:SEC,action:'get_metadata'}).then(res=>{
-    document.getElementById('svc-loading').style.display='none';
-    if(res.ok){document.getElementById('svc-root').style.display='block';renderSvcForm(res.data);}
-    else{document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">'+res.error+'</div>';document.getElementById('svc-root').style.display='block';}
-  }).catch(e=>{document.getElementById('svc-loading').style.display='none';document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">Failed: '+e.message+'</div>';document.getElementById('svc-root').style.display='block';});
+function loadServiceLog(prefillPoolId){
+  window._lastLoadedPoolId = null; 
+  window._svcLoadCounter = (window._svcLoadCounter||0) + 1;
+  const thisRequest = window._svcLoadCounter;
+
+  // 1. Try to render INSTANTLY from cache if we have it
+  const cached = localStorage.getItem('svc_meta_cache');
+  if (cached) {
+    try {
+      const meta = JSON.parse(cached);
+      document.getElementById('svc-loading').style.display = 'none';
+      document.getElementById('svc-root').style.display = 'block';
+      renderSvcForm(meta, prefillPoolId);
+    } catch(e) {}
+  }
+  
+  // 2. Start both requests in parallel for maximum speed
+  const metaReq = api({secret:SEC,action:'get_metadata'});
+  const ctxReq  = prefillPoolId ? api({ secret: SEC, action: 'get_pool_context', token: _s.token, pool_id: prefillPoolId }) : Promise.resolve(null);
+
+  metaReq.then(res=>{
+    if (thisRequest !== window._svcLoadCounter) return;
+    if(res.ok){
+      localStorage.setItem('svc_meta_cache', JSON.stringify(res.data));
+      // Only re-render if we didn't have a cache or if metadata is different
+      if (!cached || JSON.stringify(JSON.parse(cached)) !== JSON.stringify(res.data)) {
+        document.getElementById('svc-loading').style.display='none';
+        document.getElementById('svc-root').style.display='block';
+        renderSvcForm(res.data, prefillPoolId);
+      }
+    } else if (!cached) {
+      document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">'+res.error+'</div>';
+      document.getElementById('svc-root').style.display='block';
+    }
+  }).catch(e=>{
+    if (!cached) {
+      document.getElementById('svc-loading').style.display='none';
+      document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">Failed: '+e.message+'</div>';
+      document.getElementById('svc-root').style.display='block';
+    }
+  });
+
+  // 3. Handle the context (specs/notes) as soon as it arrives
+  ctxReq.then(res => {
+    if (thisRequest !== window._svcLoadCounter) return;
+    if (res && res.ok && res.data && res.data.found) {
+      // Use a small delay to ensure the form has been rendered by the metaReq
+      setTimeout(() => applyPoolContext_(res.data, prefillPoolId), 20);
+    }
+  });
 }
 
-function renderSvcForm(meta){
+function renderSvcForm(meta, prefillPoolId){
   _formItems=meta;
   const root=document.getElementById('svc-root');root.innerHTML='';
+  window._pendingSvcPoolId = null; // Consume it
+
+  // ── Back Button / Header ──────────────────────────────────────────────────
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:0 4px';
+  hdr.innerHTML = `
+    <button onclick="navigateTo('live_map')" style="background:var(--teal);color:#fff;border:none;padding:8px 14px;border-radius:10px;font-family:Oswald;font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      BACK TO HUB
+    </button>
+  `;
+  root.appendChild(hdr);
+
   let card=mkCard('Visit Details');root.appendChild(card);
   meta.forEach(item=>{
     if(item.isSectionBreak){
@@ -2556,12 +2623,14 @@ function renderSvcForm(meta){
       return;
     }
     const grp=document.createElement('div');grp.className='sfg';
-    const lbl=item.title+(item.isRequired?" <span style='color:red'>*</span>":'');
-    grp.innerHTML='<label>'+lbl+'</label>'+(item.helpText?'<span class="sh">'+item.helpText+'</span>':'');
     const te=item.title.replace(/"/g,'&quot;');
+    const isHardMandatory = (te.toLowerCase() === 'pool_id' || te === 'pH' || te === 'Chlorine (Cl)' || te === 'Total Alkalinity (TA)');
+    const lbl=item.title+((item.isRequired || isHardMandatory)?" <span style='color:red'>*</span>":'');
+    grp.innerHTML='<label>'+lbl+'</label>'+(item.helpText?'<span class="sh">'+item.helpText+'</span>':'');
     let inp='';
     if(item.type==='LIST'||item.type==='MULTIPLE_CHOICE'){
-      inp='<select class="si" name="'+te+'" '+(item.isRequired?'required':'')+' onchange="runRecs()"><option value="">Select...</option>'+item.choices.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>').join('')+'</select>';
+      const isPoolId = item.title && item.title.trim().toLowerCase() === 'pool_id';
+      inp='<select class="si" name="'+te+'" '+(item.isRequired?'required':'')+' onchange="'+(isPoolId?'handlePoolChange()':'runRecs()')+'"><option value="">Select...</option>'+item.choices.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>').join('')+'</select>';
     }else if(item.type==='CHECKBOX'){
       inp=item.choices.map(c=>'<label class="scb"><input type="checkbox" name="'+te+'" value="'+c.replace(/"/g,'&quot;')+'" onchange="runRecs()"><span style="font-weight:400">'+c+'</span></label>').join('');
     }else if(item.type==='PARAGRAPH_TEXT'){
@@ -2578,16 +2647,19 @@ function renderSvcForm(meta){
       card.appendChild(tg);
     }
     if(item.title&&item.title.trim().toLowerCase()==='pool_id'){
-      const mg=document.createElement('div');mg.className='sfg';
-      mg.innerHTML='<label>Pool Material</label><span class="sh">Affects acid dose — fiberglass gets reduced amount.</span><select class="si" id="svc-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
       const pg=document.createElement('div');pg.className='sfg';
       pg.innerHTML='<label>Pool Size</label><span class="sh">Used for chemical dosing calculations.</span><select class="si" id="svc-size" onchange="runRecs()"><option value="small">Small (&lt;15k gal)</option><option value="medium">Medium (15k–20k gal)</option><option value="large">Large (20k+ gal)</option></select>';
+      const mg=document.createElement('div');mg.className='sfg';
+      mg.innerHTML='<label>Pool Material</label><span class="sh">Affects acid dose — fiberglass gets reduced amount.</span><select class="si" id="svc-mat" onchange="runRecs()"><option value="plaster">Plaster</option><option value="fiberglass">Fiberglass</option><option value="vinyl">Vinyl</option></select>';
       card.appendChild(pg);
       card.appendChild(mg);
       const cg=document.createElement('div');cg.className='sfg';
       cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,\'green\')" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,\'cloudy\')" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,\'clear\')" data-val="clear">Clear</div></div>';
       card.appendChild(cg);
-      card.appendChild(cg);
+
+      const ng = document.createElement('div'); ng.className = 'sfg';
+      ng.innerHTML = '<label>Internal Notes</label><span class="sh">Admin-only notes. These do NOT go to the customer report email.</span><textarea class="si" id="svc-internal-notes" name="Internal Notes" oninput="runRecs()"></textarea>';
+      card.appendChild(ng);
     }
   });
   // ── Photo upload card ──────────────────────────────────────────────────────
@@ -2633,11 +2705,24 @@ function renderSvcForm(meta){
     }
   }, 100);
 
-  // ── Prefill from map "Submit Log" button ───────────────────────────────────
-  if (window._prefillPoolId) {
-    const pid = window._prefillPoolId;
-    window._prefillPoolId = null;
-    setTimeout(() => prefillSvcForm_(pid), 160);
+  if (prefillPoolId) {
+    // Select the pool ID in the dropdown immediately
+    setTimeout(() => {
+      const poolSel = document.querySelector('[name="pool_id"]');
+      if (poolSel) {
+        const mcpsId = prefillPoolId.match(/(MCPS-\d{4,})\s*$/i);
+        let matched = false;
+        for (let i = 0; i < poolSel.options.length; i++) {
+          const opt = poolSel.options[i].value;
+          if (opt === prefillPoolId || (mcpsId && opt.toUpperCase().includes(mcpsId[1].toUpperCase()))) {
+            poolSel.selectedIndex = i;
+            matched = true;
+            break;
+          }
+        }
+        if (matched) poolSel.dispatchEvent(new Event('change'));
+      }
+    }, 10);
   }
 }
 
@@ -2646,62 +2731,60 @@ function mkCard(t){const d=document.createElement('div');d.className='svc-card';
 // ── Map → Service Log flow ────────────────────────────────────────────────────
 function goToSvcLog(poolId, customerName) {
   if (!poolId) return;
-  window._prefillPoolId = poolId;
+  window._pendingSvcPoolId = poolId;
   window._prefillCustomer = customerName || '';
   navigateTo('service_log');
 }
 
 function prefillSvcForm_(poolId) {
-  // 1. Set pool_id select
-  const poolSel = document.querySelector('[name="pool_id"]');
-  if (poolSel) {
-    // Try exact match first, then partial (MCPS-XXXX suffix)
-    const mcpsId = poolId.match(/(MCPS-\d{4,})\s*$/i);
-    let matched = false;
-    for (let i = 0; i < poolSel.options.length; i++) {
-      const opt = poolSel.options[i].value;
-      if (opt === poolId || (mcpsId && opt.toUpperCase().includes(mcpsId[1].toUpperCase()))) {
-        poolSel.selectedIndex = i;
-        matched = true;
-        break;
+  // This legacy function is now partially absorbed by loadServiceLog parallel flow
+  // but kept for compatibility with other triggers
+}
+
+function applyPoolContext_(ctx, poolId) {
+  // Prefill pool size
+  if (ctx.last_size) {
+    const sizeSel = document.getElementById('svc-size');
+    if (sizeSel) {
+      for (let i = 0; i < sizeSel.options.length; i++) {
+        if (sizeSel.options[i].value === ctx.last_size) { sizeSel.selectedIndex = i; break; }
       }
     }
-    if (matched) poolSel.dispatchEvent(new Event('change'));
   }
 
-  // 2. Fetch history context (size, material, trends) from backend
-  api({ secret: SEC, action: 'get_pool_context', token: _s.token, pool_id: poolId })
-    .then(res => {
-      if (!res.ok || !res.data || !res.data.found) return;
-      const ctx = res.data;
-
-      // Prefill pool size
-      if (ctx.last_size) {
-        const sizeSel = document.getElementById('svc-size');
-        if (sizeSel) {
-          for (let i = 0; i < sizeSel.options.length; i++) {
-            if (sizeSel.options[i].value === ctx.last_size) { sizeSel.selectedIndex = i; break; }
-          }
-        }
+  // Prefill pool material
+  if (ctx.last_material) {
+    const matSel = document.getElementById('svc-mat');
+    if (matSel) {
+      for (let i = 0; i < matSel.options.length; i++) {
+        if (matSel.options[i].value === ctx.last_material) { matSel.selectedIndex = i; break; }
       }
+    }
+  }
 
-      // Prefill pool material
-      if (ctx.last_material) {
-        const matSel = document.getElementById('svc-mat');
-        if (matSel) {
-          for (let i = 0; i < matSel.options.length; i++) {
-            if (matSel.options[i].value === ctx.last_material) { matSel.selectedIndex = i; break; }
-          }
-        }
-      }
+  // Trigger recs recalc after prefill
+  if (typeof runRecs === 'function') runRecs();
 
-      // Trigger recs recalc after prefill
-      if (typeof runRecs === 'function') runRecs();
+  // Show trend banner
+  if (ctx.trends && ctx.trends.length) renderTrendBanner_(ctx.trends, ctx.visit_count || 0);
 
-      // Show trend banner
-      if (ctx.trends && ctx.trends.length) renderTrendBanner_(ctx.trends, ctx.visit_count || 0);
-    })
-    .catch(() => {}); // non-critical — fail silently
+  // Show notes from last visit
+  const lastNotes = ctx.internal_notes || ctx.last_notes || null;
+  if (lastNotes) {
+    const existing = document.getElementById('pool-last-notes-banner');
+    if (existing) existing.remove();
+    const root = document.getElementById('svc-root');
+    if (root) {
+      const banner = document.createElement('div');
+      banner.id = 'pool-last-notes-banner';
+      banner.className = 'pool-trend-banner';
+      banner.style.background = '#fffbeb';
+      banner.style.color = '#92400e';
+      banner.style.borderLeft = '4px solid #f59e0b';
+      banner.innerHTML = '<strong>📝 Notes from last visit:</strong> ' + lastNotes;
+      root.insertBefore(banner, root.firstChild);
+    }
+  }
 }
 
 function renderTrendBanner_(trends, visitCount) {
@@ -2738,9 +2821,90 @@ function runRecs(){
   const recs=buildRecs(fc,ph,ta,ch,gal,mat,isG);
   const vb=document.getElementById('rb-vol');if(vb)vb.textContent=(gal/1000).toFixed(0)+'K gal';
   const fe=document.getElementById('rb-flags');if(fe)fe.innerHTML=(isS?'<span class="rf summer">Summer +50% Cl</span>':'')+(isG?'<span class="rf green">Algae Protocol</span>':'')+(mat==='fiberglass'?'<span class="rf fiber">Fiberglass</span>':'')+(mat==='plaster'?'<span class="rf plstr">Plaster</span>':'');
-  if(!recs.length){rb.style.display='none';return;}
-  rb.style.display='block';
-  document.getElementById('rb-list').innerHTML=recs.map(r=>'<div class="ri '+r.status+'"><div class="ri-top"><span class="ri-name">'+r.name+'</span><span class="ri-amt">'+r.amt+'</span></div><div class="ri-why">↳ '+r.reason+'</div></div>').join('');
+  if(!recs.length){rb.style.display='none';} else {
+    rb.style.display='block';
+    document.getElementById('rb-list').innerHTML=recs.map(r=>'<div class="ri '+r.status+'"><div class="ri-top"><span class="ri-name">'+r.name+'</span><span class="ri-amt">'+r.amt+'</span></div><div class="ri-why">↳ '+r.reason+'</div></div>').join('');
+  }
+  
+  if (pe && pe.value) {
+    saveDraft(pe.value);
+  }
+}
+
+function saveDraft(poolId) {
+  if(!poolId) return;
+  const draft = {};
+  _formItems.forEach(item => {
+    if(!item.title) return;
+    let val;
+    if(item.type==='CHECKBOX') {
+      const bs=document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');
+      val=Array.from(bs).map(b=>b.value);
+    } else {
+      const el=document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+      if(el) val=el.value;
+    }
+    draft[item.title] = val;
+  });
+  
+  const sizeSel = document.getElementById('svc-size');
+  if (sizeSel) draft['svc_size'] = sizeSel.value;
+  const matSel = document.getElementById('svc-mat');
+  if (matSel) draft['svc_mat'] = matSel.value;
+  
+  const condPill = document.querySelector('.cpill.active, .cpill.active-cloudy, .cpill.active-ok');
+  if(condPill) draft['svc_cond'] = condPill.dataset.val;
+
+  const tabPill = document.querySelector('.tbpill.tactive');
+  if(tabPill) draft['svc_tab'] = tabPill.dataset.val;
+
+  localStorage.setItem('svc_draft_' + poolId, JSON.stringify(draft));
+}
+
+function loadDraft(poolId) {
+  if(!poolId) return;
+  const stored = localStorage.getItem('svc_draft_' + poolId);
+  if(!stored) return;
+  try {
+    const draft = JSON.parse(stored);
+    _formItems.forEach(item => {
+      if(!item.title || draft[item.title] === undefined) return;
+      let val = draft[item.title];
+      if(val === '' || (Array.isArray(val) && !val.length)) return;
+      if(item.title.trim().toLowerCase() === 'pool_id') return; // Do not overwrite pool_id
+      
+      if(item.type === 'CHECKBOX') {
+        const bs = document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+        bs.forEach(b => b.checked = (val || []).includes(b.value));
+      } else {
+        const el = document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+        if(el) el.value = val;
+      }
+    });
+
+    if (draft['svc_size']) { let el = document.getElementById('svc-size'); if (el) el.value = draft['svc_size']; }
+    if (draft['svc_mat']) { let el = document.getElementById('svc-mat'); if (el) el.value = draft['svc_mat']; }
+    if (draft['svc_cond']) { 
+       let pill = document.querySelector(`.cpill:not(.tbpill)[data-val="${draft['svc_cond']}"]`);
+       if(pill) tCond(pill, draft['svc_cond']);
+    }
+    if (draft['svc_tab']) {
+       let pill = document.querySelector(`.tbpill[data-val="${draft['svc_tab']}"]`);
+       if(pill) tTablet(pill, draft['svc_tab']);
+    }
+  } catch(e) { console.error('Error loading draft', e); }
+}
+
+function handlePoolChange() {
+  const pe = document.querySelector('[name="pool_id"]');
+  const poolId = pe ? pe.value : null;
+  if (poolId && window._lastLoadedPoolId !== poolId) {
+    window._lastLoadedPoolId = poolId;
+    loadDraft(poolId);
+  } else if (!poolId) {
+    window._lastLoadedPoolId = null;
+  }
+  runRecs();
 }
 
 function roundQ(v){return v===0?0:Math.round(v*4)/4;}  // nearest 0.25 gal (liquids)
@@ -2874,13 +3038,27 @@ function submitSvc(){
     if(val)payload[item.title]=val;
   });
 
-  // ── Mandatory water chemistry (always required regardless of schema) ────────
-  const requiredChemFields = ['Chlorine (Cl)', 'pH', 'Total Alkalinity (TA)'];
-  const missingChem = requiredChemFields.filter(f => !payload[f] || payload[f].trim() === '');
-  if (missingChem.length) {
-    alert('Please fill in: ' + missingChem.join(', '));
-    // Highlight the missing fields
-    missingChem.forEach(f => {
+  // ── Mandatory test results & pool_id ────────
+  const missingFields = [];
+  _formItems.forEach(i => {
+    if (!i.title) return;
+    const t = i.title.trim();
+    const tLower = t.toLowerCase();
+    
+    // Only these 4 are strictly mandatory by code request
+    const isMainMandatory = (t === 'pH' || t === 'Chlorine (Cl)' || t === 'Total Alkalinity (TA)' || tLower === 'pool_id');
+    
+    if (isMainMandatory || i.isRequired) {
+      if (!payload[i.title] || (Array.isArray(payload[i.title]) && !payload[i.title].length) || payload[i.title].toString().trim() === '') {
+        missingFields.push(i.title);
+      }
+    }
+  });
+
+  if (missingFields.length || hasErr) {
+    let errStr = missingFields.length ? ('Please fill in required fields:\n' + missingFields.join(', ')) : 'Fill out all required fields.';
+    alert(errStr);
+    missingFields.forEach(f => {
       const el = document.querySelector('[name="' + f.replace(/"/g,'&quot;') + '"]');
       if (el) { el.style.borderColor = 'var(--error)'; el.focus(); el.addEventListener('input', () => { el.style.borderColor = ''; }, { once: true }); }
     });
@@ -2893,11 +3071,14 @@ function submitSvc(){
   const matSel = document.getElementById('svc-mat');
   if (matSel && matSel.value) payload['Pool Material'] = matSel.value;
 
-  const ap = document.querySelector('.cpill.active, .cpill.active-cloudy');
+  const internalNotes = document.getElementById('svc-internal-notes');
+  if (internalNotes && internalNotes.value) payload['Internal Notes'] = internalNotes.value;
+
+  const ap = document.querySelector('.cpill.active, .cpill.active-cloudy, .cpill.active-ok');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
   // Inject technician name from portal session
   if(_s && _s.name) payload['Technician'] = _s.name;
-  if(hasErr){alert('Fill out all required fields.');return;}
+  
   showSvcConfirm(payload);
 }
 function showSvcConfirm(payload){
@@ -2923,6 +3104,13 @@ function confirmAndSubmit(){
     :'Submitting...';
   api({secret:SEC,action:'submit_form',token:_s.token,data:window._svcPayload,photos:window._svcPhotos||[]}).then(res=>{
     if(res.ok){
+      if (window._svcPayload) {
+        const poolIdKey = Object.keys(window._svcPayload).find(k => k.trim().toLowerCase() === 'pool_id');
+        if (poolIdKey && window._svcPayload[poolIdKey]) {
+          localStorage.removeItem('svc_draft_' + window._svcPayload[poolIdKey]);
+        }
+        window._lastLoadedPoolId = null;
+      }
       const pc=(window._svcPhotos||[]).length;
       document.getElementById('svc-root').innerHTML='<div style="text-align:center;padding:3rem 1rem">'
         +'<div style="font-size:3.5rem;margin-bottom:1rem">✅</div>'
@@ -3004,6 +3192,31 @@ function resetSvc(){
 // ══════════════════════════════════════════════════════════════════════════════
 // ADMIN
 // ══════════════════════════════════════════════════════════════════════════════
+function loadInternalNotes() {
+  const list = document.getElementById('internal-notes-list');
+  if(!list) return;
+  list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Loading...</div>';
+  apiGet({ action:'get_internal_notes', token:_s.token }).then(res => {
+    if(res.ok) {
+      if(!res.notes || !res.notes.length) {
+        list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">No internal notes found.</div>';
+        return;
+      }
+      list.innerHTML = res.notes.map(n => `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:.5rem;background:#fff">
+          <div style="font-weight:600;margin-bottom:.25rem">${n.pool_id || n.customer} <span style="float:right;color:var(--muted);font-weight:400;font-size:.8rem">${n.date}</span></div>
+          <div style="font-size:.85rem;color:var(--text);margin-bottom:.25rem"><strong>Tech:</strong> ${n.tech || '—'}</div>
+          <div style="font-size:.9rem;color:var(--teal)">${n.note}</div>
+        </div>
+      `).join('');
+    } else {
+      list.innerHTML = '<div style="color:var(--error);text-align:center;padding:1.5rem;font-size:.85rem">Error: ' + res.error + ' (Requires backend endpoint get_internal_notes)</div>';
+    }
+  }).catch(e => {
+    list.innerHTML = '<div style="color:var(--error);text-align:center;padding:1.5rem;font-size:.85rem">Network error: ' + e.message + '</div>';
+  });
+}
+
 function loadUsers() {
   api({ secret:SEC, action:'list_users', token:_s.token }).then(res => {
     if (!res.ok) return;
