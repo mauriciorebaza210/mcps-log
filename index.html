@@ -630,6 +630,48 @@ select.q-inp{cursor:pointer}
 .qz-option-label:hover { background:#f1f3f4; border-color:#dadce0; }
 .qz-option-label input { margin-top:4px; accent-color:#1a73e8; cursor:pointer; }
 .qz-option-label span { font-size:14px; color:#3c4043; line-height:1.4; }
+/* ── Step-by-step quiz wizard ── */
+.qz-progress-bar-wrap { margin-bottom:1.25rem; }
+.qz-progress-label { font-size:12px; color:#5f6368; margin-bottom:.4rem; display:flex; justify-content:space-between; }
+.qz-progress-track { height:6px; background:#e8eaed; border-radius:3px; overflow:hidden; }
+.qz-progress-fill { height:100%; background:linear-gradient(90deg,#1a73e8,#34a853); border-radius:3px; transition:width 0.4s cubic-bezier(0.4,0,0.2,1); }
+.qz-step-card { animation:qzStepIn 0.25s ease-out; }
+@keyframes qzStepIn { from { opacity:0; transform:translateX(18px); } to { opacity:1; transform:translateX(0); } }
+.qz-option-label.qz-selected { background:#e8f0fe; border-color:#1a73e8; box-shadow:0 0 0 2px rgba(26,115,232,0.18); }
+.qz-option-label.qz-selected span { color:#1a73e8; font-weight:500; }
+.qz-step-nav { display:flex; align-items:center; justify-content:space-between; margin-top:1.25rem; gap:.75rem; }
+.qz-nav-btn { padding:.55rem 1.4rem; border-radius:6px; font-size:14px; font-weight:500; cursor:pointer; border:1px solid #dadce0; background:#fff; color:#3c4043; transition:all 0.15s; }
+.qz-nav-btn:hover:not(:disabled) { background:#f1f3f4; border-color:#adb5bd; }
+.qz-nav-btn:disabled { opacity:.4; cursor:default; }
+.qz-nav-btn.primary { background:#1a73e8; color:#fff; border-color:#1a73e8; }
+.qz-nav-btn.primary:hover:not(:disabled) { background:#1765cc; }
+.qz-type-badge { font-size:11px; font-weight:600; padding:.2rem .55rem; border-radius:20px; background:#fce8b2; color:#b06000; letter-spacing:.3px; margin-left:.5rem; }
+/* ── Multi-select checkboxes ── */
+.qz-option-label input[type=checkbox] { accent-color:#1a73e8; width:16px; height:16px; flex-shrink:0; }
+/* ── Post-quiz review ── */
+.qz-review { margin-top:1rem; }
+.qz-review-header { font-size:16px; font-weight:700; margin-bottom:1rem; padding-bottom:.75rem; border-bottom:2px solid #e8eaed; }
+.qz-review-item { padding:1rem; border-radius:8px; border:1px solid #e8eaed; margin-bottom:.75rem; }
+.qz-review-item.correct { border-color:#34a853; background:#f6fef8; }
+.qz-review-item.incorrect { border-color:#ea4335; background:#fef7f6; }
+.qz-review-qnum { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:.3rem; }
+.qz-review-item.correct .qz-review-qnum { color:#34a853; }
+.qz-review-item.incorrect .qz-review-qnum { color:#ea4335; }
+.qz-review-qtext { font-size:14px; font-weight:600; color:#202124; margin-bottom:.6rem; }
+.qz-review-answer { font-size:13px; color:#5f6368; }
+.qz-review-answer .lbl { font-weight:600; }
+.qz-review-answer .val-correct { color:#34a853; font-weight:500; }
+.qz-review-answer .val-wrong { color:#ea4335; text-decoration:line-through; }
+.qz-explanation { margin-top:.6rem; padding:.6rem .75rem; background:rgba(26,115,232,0.07); border-left:3px solid #1a73e8; border-radius:0 4px 4px 0; font-size:13px; color:#3c4043; line-height:1.5; }
+.qz-explanation .exp-label { font-weight:700; color:#1a73e8; font-size:11px; text-transform:uppercase; letter-spacing:.4px; display:block; margin-bottom:.2rem; }
+/* ── Builder: explanation + type ── */
+.qw-type-row { display:flex; align-items:center; gap:.75rem; margin-bottom:.5rem; }
+.qw-type-label { font-size:12px; color:#5f6368; font-weight:600; }
+.qw-type-toggle { display:flex; gap:.35rem; }
+.qw-type-btn { padding:.25rem .75rem; border-radius:20px; font-size:12px; font-weight:500; cursor:pointer; border:1px solid #dadce0; background:#f8f9fa; color:#5f6368; transition:all 0.15s; }
+.qw-type-btn.active { background:#1a73e8; color:#fff; border-color:#1a73e8; }
+.qw-exp-input { width:100%; padding:.4rem .5rem; border:1px dashed #dadce0; border-radius:4px; font-size:12px; color:#5f6368; margin-top:.5rem; resize:none; font-family:inherit; }
+.qw-exp-input:focus { outline:none; border-color:#1a73e8; border-style:solid; }
 
 /* ── Quiz Wizard (Admin Side) ── */
 .quiz-summary { padding:.5rem .75rem; background:#f8f9fa; border:1px solid #dadce0; border-radius:4px; font-size:13px; color:#5f6368; margin-top:.25rem; font-family:monospace; }
@@ -4228,7 +4270,34 @@ let _trOpenModules = new Set();
 let _trOpenSubmodules = new Set();
 let _activeContentType = 'video';
 let _quizQuestions = [];
+let _quizCurrentStep = 0;        // which question the technician is on
+let _quizShuffledData = null;    // shuffled copy of questions for the current attempt
 const TR_SUBMODULE_URL_MARKER = 'submodule://container';
+
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Build a shuffled copy of quiz questions (shuffles question order and each
+// question's options while keeping the correct-answer mapping intact).
+function buildShuffledQuiz(questions) {
+  const shuffledQs = shuffleArray(questions).map(q => {
+    const correctAnswers = Array.isArray(q.correct) ? q.correct : [q.correct];
+    const indices = q.options.map((_, i) => i);
+    const newOrder = shuffleArray(indices);
+    const newOptions = newOrder.map(i => q.options[i]);
+    const newCorrect = Array.isArray(q.correct)
+      ? q.correct.map(c => newOrder.indexOf(c))
+      : newOrder.indexOf(q.correct);
+    return { ...q, options: newOptions, correct: newCorrect, _originalOrder: newOrder };
+  });
+  return shuffledQs;
+}
 const TR_PARENT_META_RE = /\n?\[\[parent:([a-zA-Z0-9_-]+)\]\]\s*$/;
 
 function trExtractParentMeta_(item) {
@@ -4522,21 +4591,11 @@ function openItemDetail(moduleId, itemId) {
     viewerHtml = `<div class="tr-detail-frame-wrap"><iframe src="${embedSrc}" allow="autoplay" allowfullscreen></iframe></div>`;
   } else if (item.content_type === 'quiz') {
     _currentQuizAnswers = {}; // reset
+    _quizCurrentStep = 0;
     const quizData = typeof item.quiz_data === 'string' ? null : item.quiz_data; // JSON parsed in get_modules
     if (quizData && quizData.questions && quizData.questions.length) {
-      const qHTML = quizData.questions.map((q, qIdx) => `
-        <div class="qz-question">
-          <div class="qz-qtext">${qIdx + 1}. ${escHtml(q.question)}</div>
-          <div class="qz-options">
-            ${q.options.map((opt, oIdx) => `
-              <label class="qz-option-label">
-                <input type="radio" name="qz_${qIdx}" value="${oIdx}" onchange="setQuizAnswer('${qIdx}', ${oIdx})">
-                <span>${escHtml(opt)}</span>
-              </label>
-            `).join('')}
-          </div>
-        </div>
-      `).join('');
+      // Shuffle questions and options for each new attempt
+      _quizShuffledData = buildShuffledQuiz(quizData.questions);
 
       let progressHtml = '';
       const key = `${moduleId}::${itemId}`;
@@ -4544,19 +4603,20 @@ function openItemDetail(moduleId, itemId) {
       if (prog && prog.quiz_attempts > 0) {
         progressHtml = `<div class="mod-drawer-msg ${prog.status==='completed' ? 'ok' : 'warn'}" style="margin-bottom:1rem">
           Previous Score: ${prog.quiz_score}% (Attempts: ${prog.quiz_attempts})
-          ${prog.status==='completed' ? ' - Passed!' : ''}
+          ${prog.status==='completed' ? ' — Passed!' : ''}
         </div>`;
       }
 
       viewerHtml = `
-        <div class="qz-viewer">
+        <div class="qz-viewer" id="qz-viewer-wrap">
           ${progressHtml}
-          ${qHTML}
-          <div style="margin-top:20px; text-align:center;">
-             <button class="tr-add-video-btn" style="padding:10px 30px" onclick="submitQuizTaking('${moduleId}', '${itemId}')">Submit Quiz</button>
-             <div id="quiz-result-msg" style="margin-top:10px;font-weight:bold;"></div>
-          </div>
+          <div id="qz-step-content"></div>
+          <div id="quiz-result-msg" style="margin-top:10px;font-weight:bold;"></div>
         </div>`;
+
+      // Step renderer will be called after the HTML is injected into the DOM
+      // We store these for the deferred call
+      window._qzPendingRender = { moduleId, itemId };
     } else {
       viewerHtml = `<div class="tr-empty">No questions found in this quiz.</div>`;
     }
@@ -4572,48 +4632,229 @@ function openItemDetail(moduleId, itemId) {
     ${item.description ? `<div class="tr-detail-desc">${escHtml(item.description)}</div>` : ''}
     ${viewerHtml}
     <div class="tr-detail-actions">${completeAction}${adminActions}</div>`;
+
+  // If we have a pending quiz step render, execute it now that the DOM is ready
+  if (window._qzPendingRender) {
+    const { moduleId: mid, itemId: iid } = window._qzPendingRender;
+    window._qzPendingRender = null;
+    renderQuizStep(mid, iid);
+  }
 }
 
-function setQuizAnswer(qIdx, optIdx) { _currentQuizAnswers['q' + qIdx] = optIdx; }
+function setQuizAnswer(qIdx, optIdx, isMulti) {
+  const key = 'q' + qIdx;
+  if (isMulti) {
+    if (!Array.isArray(_currentQuizAnswers[key])) _currentQuizAnswers[key] = [];
+    const arr = _currentQuizAnswers[key];
+    const pos = arr.indexOf(optIdx);
+    if (pos === -1) arr.push(optIdx); else arr.splice(pos, 1);
+    if (arr.length === 0) delete _currentQuizAnswers[key];
+  } else {
+    _currentQuizAnswers[key] = optIdx;
+  }
+  // Refresh option highlight states without re-rendering the whole step
+  const stepEl = document.getElementById('qz-step-content');
+  if (stepEl) {
+    stepEl.querySelectorAll('.qz-option-label').forEach(lbl => {
+      const inp = lbl.querySelector('input');
+      if (!inp) return;
+      const selected = Array.isArray(_currentQuizAnswers[key])
+        ? _currentQuizAnswers[key].includes(parseInt(inp.value))
+        : _currentQuizAnswers[key] === parseInt(inp.value);
+      lbl.classList.toggle('qz-selected', selected);
+    });
+  }
+}
+
+// Render the current step of the step-by-step quiz.
+function renderQuizStep(moduleId, itemId) {
+  const questions = _quizShuffledData;
+  if (!questions) return;
+  const total = questions.length;
+  const step = _quizCurrentStep;
+  const q = questions[step];
+  const isMulti = q.type === 'multi';
+  const pct = Math.round(((step) / total) * 100);
+
+  const answerKey = 'q' + step;
+  const currentAns = _currentQuizAnswers[answerKey];
+
+  const optionsHtml = q.options.map((opt, oIdx) => {
+    const isSelected = isMulti
+      ? (Array.isArray(currentAns) && currentAns.includes(oIdx))
+      : (currentAns === oIdx);
+    const inputType = isMulti ? 'checkbox' : 'radio';
+    return `<label class="qz-option-label${isSelected ? ' qz-selected' : ''}">
+      <input type="${inputType}" name="qz_${step}" value="${oIdx}"
+        ${isSelected ? 'checked' : ''}
+        onchange="setQuizAnswer(${step}, ${oIdx}, ${isMulti})">
+      <span>${escHtml(opt)}</span>
+    </label>`;
+  }).join('');
+
+  const isLast = step === total - 1;
+  const navHtml = `
+    <div class="qz-step-nav">
+      <button class="qz-nav-btn" onclick="quizStepBack('${moduleId}','${itemId}')" ${step === 0 ? 'disabled' : ''}>← Back</button>
+      <span style="font-size:13px;color:#5f6368">${step + 1} / ${total}</span>
+      ${isLast
+        ? `<button class="qz-nav-btn primary" onclick="submitQuizTaking('${moduleId}','${itemId}')">Submit Quiz</button>`
+        : `<button class="qz-nav-btn primary" onclick="quizStepNext('${moduleId}','${itemId}')">Next →</button>`}
+    </div>`;
+
+  const typeBadge = isMulti ? `<span class="qz-type-badge">Select all that apply</span>` : '';
+
+  document.getElementById('qz-step-content').innerHTML = `
+    <div class="qz-progress-bar-wrap">
+      <div class="qz-progress-label">
+        <span>Question ${step + 1} of ${total}</span>
+        <span>${pct}% complete</span>
+      </div>
+      <div class="qz-progress-track"><div class="qz-progress-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="qz-step-card">
+      <div class="qz-question">
+        <div class="qz-qtext">${escHtml(q.question)}${typeBadge}</div>
+        <div class="qz-options">${optionsHtml}</div>
+      </div>
+    </div>
+    ${navHtml}`;
+}
+
+function quizStepNext(moduleId, itemId) {
+  const questions = _quizShuffledData;
+  if (!questions) return;
+  const ansKey = 'q' + _quizCurrentStep;
+  const ans = _currentQuizAnswers[ansKey];
+  const hasAnswer = ans !== undefined && !(Array.isArray(ans) && ans.length === 0);
+  if (!hasAnswer) {
+    document.getElementById('quiz-result-msg').innerHTML =
+      '<span style="color:red">Please select an answer before continuing.</span>';
+    return;
+  }
+  document.getElementById('quiz-result-msg').innerHTML = '';
+  _quizCurrentStep++;
+  renderQuizStep(moduleId, itemId);
+}
+
+function quizStepBack(moduleId, itemId) {
+  if (_quizCurrentStep === 0) return;
+  document.getElementById('quiz-result-msg').innerHTML = '';
+  _quizCurrentStep--;
+  renderQuizStep(moduleId, itemId);
+}
+
+// Grade answer for one question. Returns true if correct.
+function gradeAnswer(q, answer) {
+  const correct = q.correct;
+  if (q.type === 'multi') {
+    const correctSet = Array.isArray(correct) ? correct.slice().sort() : [correct];
+    const givenSet = Array.isArray(answer) ? answer.slice().sort() : [];
+    return correctSet.length === givenSet.length && correctSet.every((v, i) => v === givenSet[i]);
+  }
+  return parseInt(answer) === correct;
+}
 
 function submitQuizTaking(moduleId, itemId) {
   const mod = _trModules.find(m => m.id === moduleId);
   if (!mod) return;
   const item = (mod.items || []).find(v => v.id === itemId);
   if (!item || !item.quiz_data || !item.quiz_data.questions) return;
-  
-  if (Object.keys(_currentQuizAnswers).length < item.quiz_data.questions.length) {
-    document.getElementById('quiz-result-msg').innerHTML = '<span style="color:red">Please answer all questions before submitting.</span>';
+
+  const questions = _quizShuffledData || item.quiz_data.questions;
+
+  // Validate last question is answered
+  const lastKey = 'q' + (questions.length - 1);
+  const lastAns = _currentQuizAnswers[lastKey];
+  const lastAnswered = lastAns !== undefined && !(Array.isArray(lastAns) && lastAns.length === 0);
+  if (!lastAnswered) {
+    document.getElementById('quiz-result-msg').innerHTML =
+      '<span style="color:red">Please select an answer before submitting.</span>';
     return;
   }
 
-  document.getElementById('quiz-result-msg').innerHTML = 'Grading quiz...';
-  api({
-    action: 'submit_quiz', token: _s.token,
-    module_id: moduleId, content_id: itemId, answers: _currentQuizAnswers
-  }).then(res => {
-    if (!res.ok) { document.getElementById('quiz-result-msg').innerHTML = '<span style="color:red">Error: ' + (res.error||'Failed') + '</span>'; return; }
-    
-    // Update local progress state
-    const key = `${moduleId}::${itemId}`;
-    _trProgress[key] = {
-      status: res.passed ? 'completed' : 'in_progress',
-      quiz_score: res.score,
-      quiz_attempts: (_trProgress[key] ? (_trProgress[key].quiz_attempts || 0) : 0) + 1,
-      updated_at: new Date().toISOString()
-    };
-    
-    let msg = `You scored ${res.score}% (${res.correct}/${res.total}). `;
-    if (res.passed) {
-      msg = `<span style="color:var(--ok)">✓ Passed! ${msg}</span>`;
-      document.getElementById('quiz-result-msg').innerHTML = msg;
-      checkGraduation(moduleId);
-      setTimeout(() => closeVideoDetail(), 2000); // auto close on pass
-    } else {
-      msg = `<span style="color:var(--severe)">❌ Failed. Pass threshold is ${res.pass_threshold}%. ${msg} Please try again.</span>`;
-      document.getElementById('quiz-result-msg').innerHTML = msg;
-    }
-  }).catch(() => { document.getElementById('quiz-result-msg').innerHTML = '<span style="color:red">Network error.</span>'; });
+  // Client-side grading (correct answers are already in the loaded quiz data)
+  let numCorrect = 0;
+  const reviewItems = questions.map((q, qIdx) => {
+    const answer = _currentQuizAnswers['q' + qIdx];
+    const correct = gradeAnswer(q, answer);
+    if (correct) numCorrect++;
+    return { q, answer, correct };
+  });
+  const total = questions.length;
+  const score = Math.round((numCorrect / total) * 100);
+  const passThreshold = item.pass_threshold || 80;
+  const passed = score >= passThreshold;
+
+  // Update local progress
+  const key = `${moduleId}::${itemId}`;
+  const prevAttempts = _trProgress[key] ? (_trProgress[key].quiz_attempts || 0) : 0;
+  _trProgress[key] = {
+    status: passed ? 'completed' : 'in_progress',
+    quiz_score: score,
+    quiz_attempts: prevAttempts + 1,
+    updated_at: new Date().toISOString()
+  };
+
+  // Persist completion to backend
+  if (passed) {
+    api({ action: 'upsert_training_progress', secret: SEC, token: _s.token,
+          module_id: moduleId, content_id: itemId, status: 'completed' }).catch(() => {});
+    checkGraduation(moduleId);
+  } else {
+    api({ action: 'upsert_training_progress', secret: SEC, token: _s.token,
+          module_id: moduleId, content_id: itemId, status: 'in_progress' }).catch(() => {});
+  }
+
+  // Build review HTML
+  const reviewHtml = reviewItems.map((ri, i) => {
+    const q = ri.q;
+    const isMulti = q.type === 'multi';
+    const correctAnswers = Array.isArray(q.correct) ? q.correct : [q.correct];
+    const correctLabels = correctAnswers.map(c => escHtml(q.options[c])).join(', ');
+    const givenIndices = Array.isArray(ri.answer) ? ri.answer : (ri.answer !== undefined ? [ri.answer] : []);
+    const givenLabels = givenIndices.map(c => escHtml(q.options[c])).join(', ') || '(no answer)';
+    const expHtml = q.explanation
+      ? `<div class="qz-explanation"><span class="exp-label">Why?</span>${escHtml(q.explanation)}</div>` : '';
+    return `
+      <div class="qz-review-item ${ri.correct ? 'correct' : 'incorrect'}">
+        <div class="qz-review-qnum">${ri.correct ? '✓ Correct' : '✗ Incorrect'} — Q${i + 1}</div>
+        <div class="qz-review-qtext">${escHtml(q.question)}</div>
+        ${!ri.correct ? `<div class="qz-review-answer"><span class="lbl">Your answer: </span><span class="val-wrong">${givenLabels}</span></div>` : ''}
+        <div class="qz-review-answer"><span class="lbl">Correct answer: </span><span class="val-correct">${correctLabels}</span></div>
+        ${expHtml}
+      </div>`;
+  }).join('');
+
+  const resultColor = passed ? 'var(--ok)' : 'var(--severe)';
+  const resultIcon = passed ? '✓ Passed!' : '✗ Failed.';
+
+  document.getElementById('qz-step-content').innerHTML = `
+    <div class="qz-review">
+      <div class="qz-review-header">
+        <span style="color:${resultColor};font-size:18px">${resultIcon}</span>
+        &nbsp; You scored <strong>${score}%</strong> (${numCorrect}/${total} correct).
+        ${!passed ? `<div style="font-size:13px;color:#5f6368;font-weight:400;margin-top:.3rem">Pass threshold is ${passThreshold}%. Please review and try again.</div>` : ''}
+      </div>
+      ${reviewHtml}
+      ${!passed ? `<div style="text-align:center;margin-top:1rem">
+        <button class="qz-nav-btn primary" onclick="retryQuizTaking('${moduleId}','${itemId}')">Try Again</button>
+      </div>` : ''}
+    </div>`;
+  document.getElementById('quiz-result-msg').innerHTML = '';
+
+  if (passed) setTimeout(() => closeVideoDetail(), 3500);
+}
+
+function retryQuizTaking(moduleId, itemId) {
+  const mod = _trModules.find(m => m.id === moduleId);
+  if (!mod) return;
+  const item = (mod.items || []).find(v => v.id === itemId);
+  if (!item || !item.quiz_data) return;
+  _currentQuizAnswers = {};
+  _quizCurrentStep = 0;
+  _quizShuffledData = buildShuffledQuiz(item.quiz_data.questions);
+  renderQuizStep(moduleId, itemId);
 }
 
 function closeVideoDetail() {
@@ -4951,17 +5192,28 @@ function saveQuizFromWizard() {
   qDivs.forEach((div, idx) => {
     const qText = div.querySelector('.qw-q-text').value.trim();
     if (!qText) return;
+    const isMulti = _quizQuestions[idx] && _quizQuestions[idx].type === 'multi';
     const opts = [];
-    let correct = 0;
+    let correct = isMulti ? [] : 0;
+    let optOrigIdx = 0;  // track which option index in the final opts[] list
     div.querySelectorAll('.qw-o-text').forEach((inp, oIdx) => {
       const txt = inp.value.trim();
-      if (txt) opts.push(txt);
-      if (div.querySelector(`input[name="qw-r-${idx}"]:checked`)?.value == oIdx) correct = opts.length - 1;
+      if (!txt) return;
+      const inpChecked = div.querySelector(`input[name="qw-r-${idx}"][value="${oIdx}"]`);
+      if (isMulti) {
+        if (inpChecked && inpChecked.checked) correct.push(optOrigIdx);
+      } else {
+        if (inpChecked && inpChecked.checked) correct = optOrigIdx;
+      }
+      opts.push(txt);
+      optOrigIdx++;
     });
-    if (opts.length < 2) valid = false;
-    tempArr.push({ question: qText, options: opts, correct: correct });
+    if (opts.length < 2) { valid = false; return; }
+    const explanation = div.querySelector('.qw-exp-input') ? div.querySelector('.qw-exp-input').value.trim() : '';
+    const type = isMulti ? 'multi' : 'single';
+    tempArr.push({ question: qText, options: opts, correct: correct, type: type, explanation: explanation });
   });
-  
+
   if (!valid) { alert('Each question needs at least 2 options.'); return; }
   _quizQuestions = tempArr;
   closeQuizWizard();
@@ -4971,31 +5223,57 @@ function renderQuizWizard() {
   const cont = document.getElementById('qw-questions');
   if (!_quizQuestions.length) _quizQuestions.push({ question: '', options: ['',''], correct: 0 }); // init with 1 blank
   
-  cont.innerHTML = _quizQuestions.map((q, qIdx) => `
+  cont.innerHTML = _quizQuestions.map((q, qIdx) => {
+    const qType = q.type || 'single';
+    const isMulti = qType === 'multi';
+    const correctArr = Array.isArray(q.correct) ? q.correct : [q.correct];
+    return `
     <div class="qw-q-card">
       <div style="display:flex;justify-content:space-between;margin-bottom:.5rem;">
         <strong>Question ${qIdx + 1}</strong>
         <button class="v-act-btn danger" onclick="removeQuizQuestion(${qIdx})">🗑</button>
       </div>
       <input type="text" class="qw-q-text" value="${escHtml(q.question)}" placeholder="Enter your question here..." style="width:100%;padding:.5rem;margin-bottom:.5rem;">
-      <div style="font-size:.8rem;color:#666;margin-bottom:.25rem;">Select the radio button next to the correct answer:</div>
+      <div class="qw-type-row">
+        <span class="qw-type-label">Answer type:</span>
+        <div class="qw-type-toggle">
+          <button class="qw-type-btn${!isMulti ? ' active' : ''}" onclick="setQwType(${qIdx},'single')">Single choice</button>
+          <button class="qw-type-btn${isMulti ? ' active' : ''}" onclick="setQwType(${qIdx},'multi')">Multiple choice</button>
+        </div>
+      </div>
+      <div style="font-size:.8rem;color:#666;margin-bottom:.25rem;">${isMulti ? 'Check all correct answers:' : 'Select the radio button next to the correct answer:'}</div>
       <div id="qw-opts-${qIdx}">
-        ${q.options.map((opt, oIdx) => `
+        ${q.options.map((opt, oIdx) => {
+          const isCorrect = isMulti ? correctArr.includes(oIdx) : q.correct == oIdx;
+          return `
           <div style="display:flex;align-items:center;margin-bottom:.25rem;gap:.5rem;">
-            <input type="radio" name="qw-r-${qIdx}" value="${oIdx}" ${q.correct == oIdx ? 'checked' : ''}>
+            <input type="${isMulti ? 'checkbox' : 'radio'}" name="qw-r-${qIdx}" value="${oIdx}" ${isCorrect ? 'checked' : ''}>
             <input type="text" class="qw-o-text" value="${escHtml(opt)}" placeholder="Option ${oIdx+1}" style="flex:1;padding:.4rem;">
             <button class="v-act-btn" onclick="removeQuizOption(${qIdx}, ${oIdx})">✕</button>
-          </div>
-        `).join('')}
+          </div>`;
+        }).join('')}
       </div>
       <button class="mod-act-btn" style="margin-top:.5rem" onclick="addQuizOption(${qIdx})">+ Add Option</button>
-    </div>
-  `).join('');
+      <textarea class="qw-exp-input" rows="2" placeholder="Optional: Explain why the correct answer is right (shown to technicians after they complete the quiz)...">${escHtml(q.explanation || '')}</textarea>
+    </div>`;
+  }).join('');
+}
+
+function setQwType(qIdx, type) {
+  savePartialQuizState();
+  _quizQuestions[qIdx].type = type;
+  // Reset correct to appropriate default when switching types
+  if (type === 'multi') {
+    if (!Array.isArray(_quizQuestions[qIdx].correct)) _quizQuestions[qIdx].correct = [0];
+  } else {
+    if (Array.isArray(_quizQuestions[qIdx].correct)) _quizQuestions[qIdx].correct = _quizQuestions[qIdx].correct[0] || 0;
+  }
+  renderQuizWizard();
 }
 
 function addQuizQuestion() {
   savePartialQuizState();
-  _quizQuestions.push({ question: '', options: ['',''], correct: 0 });
+  _quizQuestions.push({ question: '', options: ['',''], correct: 0, type: 'single', explanation: '' });
   renderQuizWizard();
 }
 
@@ -5025,13 +5303,21 @@ function savePartialQuizState() {
   const qDivs = document.querySelectorAll('.qw-q-card');
   qDivs.forEach((div, idx) => {
     const qText = div.querySelector('.qw-q-text').value;
+    const isMulti = _quizQuestions[idx] && _quizQuestions[idx].type === 'multi';
     const opts = [];
-    let correct = 0;
+    let correct = isMulti ? [] : 0;
     div.querySelectorAll('.qw-o-text').forEach((inp, oIdx) => {
       opts.push(inp.value);
-      if (div.querySelector(`input[name="qw-r-${idx}"]:checked`)?.value == oIdx) correct = oIdx;
+      const inpChecked = div.querySelector(`input[name="qw-r-${idx}"][value="${oIdx}"]`);
+      if (isMulti) {
+        if (inpChecked && inpChecked.checked) correct.push(oIdx);
+      } else {
+        if (inpChecked && inpChecked.checked) correct = oIdx;
+      }
     });
-    tempArr.push({ question: qText, options: opts, correct: correct });
+    const explanation = div.querySelector('.qw-exp-input') ? div.querySelector('.qw-exp-input').value : '';
+    tempArr.push({ question: qText, options: opts, correct: correct,
+                   type: isMulti ? 'multi' : 'single', explanation: explanation });
   });
   _quizQuestions = tempArr;
 }
@@ -5047,20 +5333,27 @@ function toggleQuizPreview() {
     bdy.style.display = 'none';
     pre.style.display = 'block';
     pre.innerHTML = `
-      <div style="font-weight:600;margin-bottom:1rem;color:var(--mcps-blue);">Student Preview:</div>
-      ${_quizQuestions.map((q, qIdx) => `
+      <div style="font-weight:600;margin-bottom:1rem;color:var(--mcps-blue);">Student Preview (correct answers highlighted):</div>
+      ${_quizQuestions.map((q, qIdx) => {
+        const isMulti = q.type === 'multi';
+        const correctArr = Array.isArray(q.correct) ? q.correct : [q.correct];
+        const typeBadge = isMulti ? `<span class="qz-type-badge">Select all that apply</span>` : '';
+        const expHtml = q.explanation ? `<div class="qz-explanation"><span class="exp-label">Why?</span>${escHtml(q.explanation)}</div>` : '';
+        return `
         <div class="qz-question" style="background:#f1f3f4;padding:1rem;border-radius:4px;margin-bottom:1rem;">
-          <div class="qz-qtext">${qIdx + 1}. ${escHtml(q.question) || '<i>[Empty Question]</i>'}</div>
+          <div class="qz-qtext">${qIdx + 1}. ${escHtml(q.question) || '<i>[Empty Question]</i>'}${typeBadge}</div>
           <div class="qz-options">
-            ${q.options.map((opt, oIdx) => `
-              <label class="qz-option-label">
-                <input type="radio" disabled ${q.correct == oIdx ? 'checked' : ''}>
-                <span style="${q.correct == oIdx ? 'color:var(--ok);font-weight:bold;' : ''}">${escHtml(opt) || '<i>[Empty Option]</i>'}</span>
-              </label>
-            `).join('')}
+            ${q.options.map((opt, oIdx) => {
+              const isCorrect = correctArr.includes(oIdx);
+              return `<label class="qz-option-label${isCorrect ? ' qz-selected' : ''}">
+                <input type="${isMulti ? 'checkbox' : 'radio'}" disabled ${isCorrect ? 'checked' : ''}>
+                <span style="${isCorrect ? 'color:var(--ok);font-weight:bold;' : ''}">${escHtml(opt) || '<i>[Empty Option]</i>'}</span>
+              </label>`;
+            }).join('')}
           </div>
-        </div>
-      `).join('')}
+          ${expHtml}
+        </div>`;
+      }).join('')}
     `;
   } else {
     btn.innerHTML = '👁 Preview Quiz';
