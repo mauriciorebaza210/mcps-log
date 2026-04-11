@@ -4565,6 +4565,10 @@ function openItemDetail(moduleId, itemId) {
   if (!mod) return;
   const item = (mod.items || []).find(v => v.id === itemId);
   if (!item) return;
+  const navigableItems = (mod.items || []).filter(v => v.content_type !== 'submodule');
+  const currentIndex = navigableItems.findIndex(v => v.id === itemId);
+  const prevItem = currentIndex > 0 ? navigableItems[currentIndex - 1] : null;
+  const nextItem = currentIndex >= 0 && currentIndex < navigableItems.length - 1 ? navigableItems[currentIndex + 1] : null;
 
   if (item.content_type !== 'quiz') {
     markItemInProgress(moduleId, itemId);
@@ -4631,6 +4635,10 @@ function openItemDetail(moduleId, itemId) {
     <div class="tr-detail-title">${escHtml(item.title)}</div>
     ${item.description ? `<div class="tr-detail-desc">${escHtml(item.description)}</div>` : ''}
     ${viewerHtml}
+    <div class="tr-detail-nav">
+      <button class="tr-detail-nav-btn" ${prevItem ? `onclick="openItemDetail('${moduleId}','${prevItem.id}')"` : 'disabled'}>← Previous</button>
+      <button class="tr-detail-nav-btn" ${nextItem ? `onclick="openItemDetail('${moduleId}','${nextItem.id}')"` : 'disabled'}>Next →</button>
+    </div>
     <div class="tr-detail-actions">${completeAction}${adminActions}</div>`;
 
   // If we have a pending quiz step render, execute it now that the DOM is ready
@@ -6124,6 +6132,10 @@ function showGraduationModal() {
 .tr-detail-desc{font-size:.9rem;color:var(--muted);line-height:1.6;margin-bottom:1.1rem}
 .tr-detail-frame-wrap{position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;background:#000;margin-bottom:1.1rem;box-shadow:0 4px 24px rgba(0,0,0,.15)}
 .tr-detail-frame-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
+.tr-detail-nav{display:flex;justify-content:space-between;gap:.5rem;margin:.75rem 0 1rem}
+.tr-detail-nav-btn{padding:.55rem 1rem;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.04em;border:1.5px solid #dadce0;background:#fff;color:#3c4043;cursor:pointer;transition:all .15s}
+.tr-detail-nav-btn:hover:not(:disabled){background:#f1f3f4;border-color:#adb5bd}
+.tr-detail-nav-btn:disabled{opacity:.45;cursor:default}
 .tr-detail-actions{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
 .tr-complete-btn{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.05em;border:1.5px solid var(--success);color:var(--success);background:#fff;padding:.4rem .9rem;border-radius:8px;cursor:pointer;transition:all .15s}
 .tr-complete-btn:hover{background:#f0fdf4}
