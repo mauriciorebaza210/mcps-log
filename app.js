@@ -4090,11 +4090,13 @@ function loadOnboarding() {
       document.getElementById('onb-w4-module').style.display = 'block';
       document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Employment Agreement';
       document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your W2 employment agreement';
+      document.querySelector('#onb-task-info .onb-task-hdr div div:nth-child(2)').textContent = 'Legal name, address, tax info & W-4';
     } else {
       document.getElementById('onb-w9-module').style.display = 'block';
       document.getElementById('onb-w4-module').style.display = 'none';
       document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Contractor Agreement';
       document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your independent contractor agreement';
+      document.querySelector('#onb-task-info .onb-task-hdr div div:nth-child(2)').textContent = 'Legal name, address, tax info & W-9';
     }
 
     // Pre-fill signed date
