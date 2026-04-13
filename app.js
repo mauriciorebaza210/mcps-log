@@ -2689,12 +2689,16 @@ function shuffleArray(arr) {
 }
 
 // Returns a stable string key for a question based on its content.
-// Using question text + sorted options means it survives admin reordering
-// and is safe to use as a persistent wrong-answer identifier.
+// Includes type and normalized correct answer(s) so questions with the same
+// text/options but different answers or types don't collide.
 function questionKey_(q) {
   const text = String(q.question || '').trim().toLowerCase();
   const opts = (q.options || []).map(o => String(o || '').trim().toLowerCase()).sort().join('|');
-  return text + '\x00' + opts;
+  const type = String(q.type || 'single');
+  const correct = Array.isArray(q.correct)
+    ? q.correct.slice().sort().join(',')
+    : String(q.correct ?? '');
+  return text + '\x00' + opts + '\x00' + type + '\x00' + correct;
 }
 
 // Build a shuffled copy of quiz questions (shuffles question order and each
@@ -3000,8 +3004,9 @@ function buildFinalQuizQuestions(finalQuizItem) {
       const progressKey = `${mod.id}::${it.id}`;
       const prog = _trProgress[progressKey] || {};
       if ((prog.quiz_attempts || 0) > 0) hasAnyAttempt = true;
-      // wrong_question_ids are stable content-based keys (not positional indices)
-      const wrongKeys = new Set(prog.wrong_question_ids || []);
+      // wrong_question_ids are stable content-based string keys; filter out any
+      // legacy numeric values from before the stable-key migration.
+      const wrongKeys = new Set((prog.wrong_question_ids || []).filter(k => typeof k === 'string'));
       it.quiz_data.questions.forEach(q => {
         const key = questionKey_(q);
         const tagged = { ...q, _qkey: key, _sourceQuizId: it.id };
@@ -3317,7 +3322,10 @@ function submitQuizTaking(moduleId, itemId) {
   const key = `${moduleId}::${itemId}`;
   const prevAttempts = _trProgress[key] ? (_trProgress[key].quiz_attempts || 0) : 0;
   // Merge (union) wrong indices across all attempts so Final Quiz targets all-time weak spots
-  const prevWrong = _trProgress[key] ? (_trProgress[key].wrong_question_ids || []) : [];
+  // Filter out legacy numeric indices (pre-stable-key era) — they can't be
+  // matched to questions anymore and will be replaced by string keys on this attempt.
+  const prevWrong = (_trProgress[key] ? (_trProgress[key].wrong_question_ids || []) : [])
+    .filter(k => typeof k === 'string');
   const mergedWrong = [...new Set([...prevWrong, ...wrongSourceIndices])];
   _trProgress[key] = {
     status: passed ? 'completed' : 'in_progress',
