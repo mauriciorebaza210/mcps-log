@@ -625,6 +625,8 @@ select.q-inp{cursor:pointer}
 .qz-question { margin-bottom:1.5rem; padding-bottom:1.5rem; border-bottom:1px solid #f1f3f4; }
 .qz-question:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
 .qz-qtext { font-size:15px; font-weight:600; color:#202124; margin-bottom:1rem; }
+.qz-question-image-wrap { margin-bottom:.85rem; }
+.qz-question-image { width:100%; max-height:260px; object-fit:contain; border:1px solid #e8eaed; border-radius:8px; background:#fff; }
 .qz-options { display:flex; flex-direction:column; gap:.5rem; }
 .qz-option-label { display:flex; align-items:flex-start; gap:.75rem; padding:.75rem 1rem; background:#f8f9fa; border:1px solid #e8eaed; border-radius:6px; cursor:pointer; transition:all 0.2s; }
 .qz-option-label:hover { background:#f1f3f4; border-color:#dadce0; }
@@ -672,6 +674,7 @@ select.q-inp{cursor:pointer}
 .qw-type-btn.active { background:#1a73e8; color:#fff; border-color:#1a73e8; }
 .qw-exp-input { width:100%; padding:.4rem .5rem; border:1px dashed #dadce0; border-radius:4px; font-size:12px; color:#5f6368; margin-top:.5rem; resize:none; font-family:inherit; }
 .qw-exp-input:focus { outline:none; border-color:#1a73e8; border-style:solid; }
+.qw-img-input { width:100%; padding:.4rem .5rem; border:1px solid #dadce0; border-radius:4px; font-size:12px; color:#3c4043; margin-bottom:.5rem; font-family:inherit; }
 
 /* ── Quiz Wizard (Admin Side) ── */
 .quiz-summary { padding:.5rem .75rem; background:#f8f9fa; border:1px solid #dadce0; border-radius:4px; font-size:13px; color:#5f6368; margin-top:.25rem; font-family:monospace; }
@@ -4711,6 +4714,8 @@ function renderQuizStep(moduleId, itemId) {
     </div>`;
 
   const typeBadge = isMulti ? `<span class="qz-type-badge">Select all that apply</span>` : '';
+  const imageSrc = getQuizImageSrc(q.image_url || '');
+  const imageHtml = imageSrc ? `<div class="qz-question-image-wrap"><img class="qz-question-image" src="${escHtml(imageSrc)}" alt="Quiz question image"></div>` : '';
 
   document.getElementById('qz-step-content').innerHTML = `
     <div class="qz-progress-bar-wrap">
@@ -4723,6 +4728,7 @@ function renderQuizStep(moduleId, itemId) {
     <div class="qz-step-card">
       <div class="qz-question">
         <div class="qz-qtext">${escHtml(q.question)}${typeBadge}</div>
+        ${imageHtml}
         <div class="qz-options">${optionsHtml}</div>
       </div>
     </div>
@@ -4824,10 +4830,13 @@ function submitQuizTaking(moduleId, itemId) {
     const givenLabels = givenIndices.map(c => escHtml(q.options[c])).join(', ') || '(no answer)';
     const expHtml = q.explanation
       ? `<div class="qz-explanation"><span class="exp-label">Why?</span>${escHtml(q.explanation)}</div>` : '';
+    const imageSrc = getQuizImageSrc(q.image_url || '');
+    const imageHtml = imageSrc ? `<div class="qz-question-image-wrap"><img class="qz-question-image" src="${escHtml(imageSrc)}" alt="Question ${i + 1} image"></div>` : '';
     return `
       <div class="qz-review-item ${ri.correct ? 'correct' : 'incorrect'}">
         <div class="qz-review-qnum">${ri.correct ? '✓ Correct' : '✗ Incorrect'} — Q${i + 1}</div>
         <div class="qz-review-qtext">${escHtml(q.question)}</div>
+        ${imageHtml}
         ${!ri.correct ? `<div class="qz-review-answer"><span class="lbl">Your answer: </span><span class="val-wrong">${givenLabels}</span></div>` : ''}
         <div class="qz-review-answer"><span class="lbl">Correct answer: </span><span class="val-correct">${correctLabels}</span></div>
         ${expHtml}
@@ -4911,6 +4920,13 @@ function extractDriveId(url) {
   if (!url) return null;
   const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   return m ? m[1] : null;
+}
+
+function getQuizImageSrc(url) {
+  const clean = String(url || '').trim();
+  if (!clean) return '';
+  const driveId = extractDriveId(clean);
+  return driveId ? `https://drive.google.com/uc?export=view&id=${driveId}` : clean;
 }
 
 // ── Module Drawer ─────────────────────────────────────────────────────────────
@@ -5200,6 +5216,7 @@ function saveQuizFromWizard() {
   qDivs.forEach((div, idx) => {
     const qText = div.querySelector('.qw-q-text').value.trim();
     if (!qText) return;
+    const imageUrl = div.querySelector('.qw-img-input') ? div.querySelector('.qw-img-input').value.trim() : '';
     const isMulti = _quizQuestions[idx] && _quizQuestions[idx].type === 'multi';
     const opts = [];
     let correct = isMulti ? [] : 0;
@@ -5219,7 +5236,7 @@ function saveQuizFromWizard() {
     if (opts.length < 2) { valid = false; return; }
     const explanation = div.querySelector('.qw-exp-input') ? div.querySelector('.qw-exp-input').value.trim() : '';
     const type = isMulti ? 'multi' : 'single';
-    tempArr.push({ question: qText, options: opts, correct: correct, type: type, explanation: explanation });
+    tempArr.push({ question: qText, image_url: imageUrl, options: opts, correct: correct, type: type, explanation: explanation });
   });
 
   if (!valid) { alert('Each question needs at least 2 options.'); return; }
@@ -5229,7 +5246,7 @@ function saveQuizFromWizard() {
 
 function renderQuizWizard() {
   const cont = document.getElementById('qw-questions');
-  if (!_quizQuestions.length) _quizQuestions.push({ question: '', options: ['',''], correct: 0 }); // init with 1 blank
+  if (!_quizQuestions.length) _quizQuestions.push({ question: '', image_url: '', options: ['',''], correct: 0 }); // init with 1 blank
   
   cont.innerHTML = _quizQuestions.map((q, qIdx) => {
     const qType = q.type || 'single';
@@ -5242,6 +5259,7 @@ function renderQuizWizard() {
         <button class="v-act-btn danger" onclick="removeQuizQuestion(${qIdx})">🗑</button>
       </div>
       <input type="text" class="qw-q-text" value="${escHtml(q.question)}" placeholder="Enter your question here..." style="width:100%;padding:.5rem;margin-bottom:.5rem;">
+      <input type="text" class="qw-img-input" value="${escHtml(q.image_url || '')}" placeholder="Optional image URL (Google Drive or direct image link)">
       <div class="qw-type-row">
         <span class="qw-type-label">Answer type:</span>
         <div class="qw-type-toggle">
@@ -5281,7 +5299,7 @@ function setQwType(qIdx, type) {
 
 function addQuizQuestion() {
   savePartialQuizState();
-  _quizQuestions.push({ question: '', options: ['',''], correct: 0, type: 'single', explanation: '' });
+  _quizQuestions.push({ question: '', image_url: '', options: ['',''], correct: 0, type: 'single', explanation: '' });
   renderQuizWizard();
 }
 
@@ -5311,6 +5329,7 @@ function savePartialQuizState() {
   const qDivs = document.querySelectorAll('.qw-q-card');
   qDivs.forEach((div, idx) => {
     const qText = div.querySelector('.qw-q-text').value;
+    const imageUrl = div.querySelector('.qw-img-input') ? div.querySelector('.qw-img-input').value : '';
     const isMulti = _quizQuestions[idx] && _quizQuestions[idx].type === 'multi';
     const opts = [];
     let correct = isMulti ? [] : 0;
@@ -5324,7 +5343,7 @@ function savePartialQuizState() {
       }
     });
     const explanation = div.querySelector('.qw-exp-input') ? div.querySelector('.qw-exp-input').value : '';
-    tempArr.push({ question: qText, options: opts, correct: correct,
+    tempArr.push({ question: qText, image_url: imageUrl, options: opts, correct: correct,
                    type: isMulti ? 'multi' : 'single', explanation: explanation });
   });
   _quizQuestions = tempArr;
@@ -5347,9 +5366,12 @@ function toggleQuizPreview() {
         const correctArr = Array.isArray(q.correct) ? q.correct : [q.correct];
         const typeBadge = isMulti ? `<span class="qz-type-badge">Select all that apply</span>` : '';
         const expHtml = q.explanation ? `<div class="qz-explanation"><span class="exp-label">Why?</span>${escHtml(q.explanation)}</div>` : '';
+        const imgSrc = getQuizImageSrc(q.image_url || '');
+        const imgHtml = imgSrc ? `<div class="qz-question-image-wrap"><img class="qz-question-image" src="${escHtml(imgSrc)}" alt="Question ${qIdx + 1} reference image"></div>` : '';
         return `
         <div class="qz-question" style="background:#f1f3f4;padding:1rem;border-radius:4px;margin-bottom:1rem;">
           <div class="qz-qtext">${qIdx + 1}. ${escHtml(q.question) || '<i>[Empty Question]</i>'}${typeBadge}</div>
+          ${imgHtml}
           <div class="qz-options">
             ${q.options.map((opt, oIdx) => {
               const isCorrect = correctArr.includes(oIdx);
