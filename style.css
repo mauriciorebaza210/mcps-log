@@ -677,6 +677,17 @@ select.q-inp{cursor:pointer}
 .qw-preview { padding:1.5rem; flex:1; overflow-y:auto; background:#fff; }
 
 
+/* ── Final Quiz source selector ─────────────────────────── */
+.final-quiz-source-list { border:1px solid #dadce0; border-radius:8px; max-height:220px; overflow-y:auto; background:#fff; padding:.5rem; }
+.fq-module-group { margin-bottom:.5rem; }
+.fq-module-group:last-child { margin-bottom:0; }
+.fq-module-label { font-size:.7rem; font-weight:700; color:#5f6368; text-transform:uppercase; letter-spacing:.05em; padding:.25rem .25rem .15rem; }
+.fq-source-item { display:flex; align-items:center; gap:.5rem; padding:.3rem .4rem; border-radius:5px; cursor:pointer; font-size:.83rem; color:#202124; transition:background .12s; }
+.fq-source-item:hover { background:#f0f4ff; }
+.fq-source-item input[type="checkbox"] { accent-color:#1a73e8; width:14px; height:14px; flex-shrink:0; }
+.fq-blocked { text-align:center; padding:2rem 1rem; color:#5f6368; font-size:.9rem; }
+.fq-blocked ul { list-style:disc; padding-left:1.5rem; color:#3c4043; font-size:.85rem; margin-top:.5rem; }
+
 .adm-new-btn {
   font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
   letter-spacing:.06em;padding:.3rem .85rem;border-radius:8px;

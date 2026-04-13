@@ -778,6 +778,7 @@
         <div class="ct-pill" data-type="quiz" onclick="selectContentType('quiz')">📝 Quiz</div>
         <div class="ct-pill" data-type="document" onclick="selectContentType('document')">📄 Document</div>
         <div class="ct-pill" data-type="submodule" onclick="selectContentType('submodule')">📂 Submodule</div>
+        <div class="ct-pill" data-type="final_quiz" onclick="selectContentType('final_quiz')">🏁 Final Quiz</div>
       </div>
     </div>
     <div class="mod-dfg">
@@ -793,6 +794,18 @@
       <label>Quiz Questions</label>
       <div id="quiz-summary" class="quiz-summary">No questions added yet.</div>
       <button class="tr-add-video-btn" style="margin-top:.5rem" onclick="openQuizWizard()">📝 Open Quiz Builder</button>
+    </div>
+    <div class="mod-dfg" id="final-quiz-config-group" style="display:none;flex-direction:column;gap:.75rem">
+      <div>
+        <label>Source Quizzes</label>
+        <div class="hint" style="margin-bottom:.5rem">Select quizzes whose questions will feed this Final Quiz. Each user gets a personalized set based on their wrong answers.</div>
+        <div id="final-quiz-source-list" class="final-quiz-source-list"></div>
+      </div>
+      <div>
+        <label>Total Questions per User</label>
+        <input type="number" id="final-quiz-question-count" min="1" placeholder="20" value="20" style="width:100px">
+        <div class="hint">Wrong answers from selected quizzes appear first; remaining slots are filled randomly.</div>
+      </div>
     </div>
     <div class="mod-dfg">
       <label>Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>

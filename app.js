@@ -2691,8 +2691,10 @@ function shuffleArray(arr) {
 // Build a shuffled copy of quiz questions (shuffles question order and each
 // question's options while keeping the correct-answer mapping intact).
 function buildShuffledQuiz(questions) {
-  const shuffledQs = shuffleArray(questions).map(q => {
-    const correctAnswers = Array.isArray(q.correct) ? q.correct : [q.correct];
+  // Tag each question with its original index before shuffling so wrong-answer
+  // tracking can reference back to the source quiz's question array.
+  const indexed = questions.map((q, i) => ({ ...q, _sourceIndex: q._sourceIndex !== undefined ? q._sourceIndex : i }));
+  const shuffledQs = shuffleArray(indexed).map(q => {
     const indices = q.options.map((_, i) => i);
     const newOrder = shuffleArray(indices);
     const newOptions = newOrder.map(i => q.options[i]);
@@ -2733,7 +2735,12 @@ function trNormalizeItem_(item) {
     parent_content_id: parentMeta.parent_content_id,
     description: parentMeta.description
   };
-  return isMarkedSubmodule ? { ...normalized, content_type: 'submodule', content_url: '' } : normalized;
+  if (isMarkedSubmodule) return { ...normalized, content_type: 'submodule', content_url: '' };
+  // If quiz_data flags this as a final quiz, expose it with its own content_type
+  if (normalized.content_type === 'quiz' && normalized.quiz_data && normalized.quiz_data.is_final_quiz) {
+    return { ...normalized, content_type: 'final_quiz' };
+  }
+  return normalized;
 }
 
 function trNormalizeModules_(modules) {
@@ -2831,6 +2838,7 @@ function renderTraining() {
 
       let icon = '▶';
       if (v.content_type === 'quiz') icon = '📝';
+      if (v.content_type === 'final_quiz') icon = '🏁';
       if (v.content_type === 'document') icon = '📄';
       if (isSubmodule) icon = _trOpenSubmodules.has(v.id) ? '▼' : '▶';
 
@@ -2962,6 +2970,58 @@ document.addEventListener('click', (ev) => {
   }
 });
 
+// ── Final Quiz generation helpers ────────────────────────────────────────────
+
+// Returns array of question objects for the given final quiz item, personalized
+// for the current user. Returns null if the user hasn't attempted any source quiz yet.
+function buildFinalQuizQuestions(finalQuizItem) {
+  const qd = finalQuizItem.quiz_data || {};
+  const sourceIds = qd.source_quiz_ids || [];
+  const targetCount = qd.question_count || 20;
+
+  const allSourceQuestions = [];
+  const wrongQuestions = [];
+  let hasAnyAttempt = false;
+
+  for (const mod of (_trModules || [])) {
+    for (const it of (mod.items || [])) {
+      if (!sourceIds.includes(it.id)) continue;
+      if (!it.quiz_data || !it.quiz_data.questions) continue;
+      const progressKey = `${mod.id}::${it.id}`;
+      const prog = _trProgress[progressKey] || {};
+      if ((prog.quiz_attempts || 0) > 0) hasAnyAttempt = true;
+      const wrongIds = new Set(prog.wrong_question_ids || []);
+      it.quiz_data.questions.forEach((q, idx) => {
+        const tagged = { ...q, _sourceIndex: idx, _sourceQuizId: it.id };
+        allSourceQuestions.push(tagged);
+        if (wrongIds.has(idx)) wrongQuestions.push(tagged);
+      });
+    }
+  }
+
+  if (!hasAnyAttempt) return null; // block access
+
+  // Deduplicate by question text (safety guard against the same question appearing in multiple source quizzes)
+  const uniqueWrong = deduplicateByQuestionText_(wrongQuestions);
+  const wrongSet = new Set(uniqueWrong.map(q => q.question));
+  const remainingPool = shuffleArray(allSourceQuestions.filter(q => !wrongSet.has(q.question)));
+  const fillCount = Math.max(0, targetCount - uniqueWrong.length);
+  const fillQuestions = remainingPool.slice(0, fillCount);
+  const combined = uniqueWrong.length > targetCount
+    ? shuffleArray(uniqueWrong).slice(0, targetCount)
+    : [...uniqueWrong, ...fillQuestions];
+  return combined.slice(0, targetCount);
+}
+
+function deduplicateByQuestionText_(questions) {
+  const seen = new Set();
+  return questions.filter(q => {
+    if (seen.has(q.question)) return false;
+    seen.add(q.question);
+    return true;
+  });
+}
+
 // ── Item Detail View (Video/Document/Quiz) ───────────────────────────────────
 let _currentQuizAnswers = {};
 
@@ -2975,13 +3035,13 @@ function openItemDetail(moduleId, itemId) {
   const prevItem = currentIndex > 0 ? navigableItems[currentIndex - 1] : null;
   const nextItem = currentIndex >= 0 && currentIndex < navigableItems.length - 1 ? navigableItems[currentIndex + 1] : null;
 
-  if (item.content_type !== 'quiz') {
+  if (item.content_type !== 'quiz' && item.content_type !== 'final_quiz') {
     markItemInProgress(moduleId, itemId);
   }
 
   const completed = isItemCompleted(moduleId, itemId);
   let completeAction = '';
-  if (item.content_type !== 'quiz') {
+  if (item.content_type !== 'quiz' && item.content_type !== 'final_quiz') {
     completeAction = completed
       ? `<span class="tr-complete-tag">✓ Completed</span>`
       : `<button class="tr-complete-btn" id="tr-detail-complete-btn" onclick="markItemCompleteDetail('${moduleId}','${itemId}')">✓ Mark Complete</button>`;
@@ -2998,13 +3058,45 @@ function openItemDetail(moduleId, itemId) {
     const driveId = extractDriveId(item.content_url || item.drive_url || item.url || '');
     const embedSrc = driveId ? `https://drive.google.com/file/d/${driveId}/preview` : (item.content_url || item.drive_url || item.url || '');
     viewerHtml = `<div class="tr-detail-frame-wrap"><iframe src="${embedSrc}" allow="autoplay" allowfullscreen></iframe></div>`;
-  } else if (item.content_type === 'quiz') {
+  } else if (item.content_type === 'quiz' || item.content_type === 'final_quiz') {
     _currentQuizAnswers = {}; // reset
     _quizCurrentStep = 0;
-    const quizData = typeof item.quiz_data === 'string' ? null : item.quiz_data; // JSON parsed in get_modules
-    if (quizData && quizData.questions && quizData.questions.length) {
-      // Shuffle questions and options for each new attempt
-      _quizShuffledData = buildShuffledQuiz(quizData.questions);
+
+    let quizQuestions = null;
+
+    if (item.content_type === 'final_quiz') {
+      const generated = buildFinalQuizQuestions(item);
+      if (generated === null) {
+        // User hasn't attempted any source quiz yet — list which ones are needed
+        const sourceIds = (item.quiz_data && item.quiz_data.source_quiz_ids) || [];
+        const notAttempted = [];
+        for (const mod of (_trModules || [])) {
+          for (const it of (mod.items || [])) {
+            if (!sourceIds.includes(it.id)) continue;
+            const prog = _trProgress[`${mod.id}::${it.id}`] || {};
+            if ((prog.quiz_attempts || 0) === 0) notAttempted.push(it.title);
+          }
+        }
+        const listHtml = notAttempted.map(t => `<li>${escHtml(t)}</li>`).join('');
+        viewerHtml = `<div class="tr-empty fq-blocked">
+          <div style="font-size:1.5rem;margin-bottom:.5rem">🏁</div>
+          <strong>Complete the required quizzes first before taking this Final Quiz.</strong>
+          ${notAttempted.length ? `<ul style="margin-top:.75rem;text-align:left">${listHtml}</ul>` : ''}
+        </div>`;
+      } else if (!generated.length) {
+        viewerHtml = `<div class="tr-empty">No questions available in the selected source quizzes.</div>`;
+      } else {
+        quizQuestions = generated;
+      }
+    } else {
+      const quizData = typeof item.quiz_data === 'string' ? null : item.quiz_data; // JSON parsed in get_modules
+      if (quizData && quizData.questions && quizData.questions.length) {
+        quizQuestions = quizData.questions;
+      }
+    }
+
+    if (quizQuestions) {
+      _quizShuffledData = buildShuffledQuiz(quizQuestions);
 
       let progressHtml = '';
       const key = `${moduleId}::${itemId}`;
@@ -3023,10 +3115,8 @@ function openItemDetail(moduleId, itemId) {
           <div id="quiz-result-msg" style="margin-top:10px;font-weight:bold;"></div>
         </div>`;
 
-      // Step renderer will be called after the HTML is injected into the DOM
-      // We store these for the deferred call
       window._qzPendingRender = { moduleId, itemId };
-    } else {
+    } else if (!viewerHtml) {
       viewerHtml = `<div class="tr-empty">No questions found in this quiz.</div>`;
     }
   }
@@ -3038,6 +3128,7 @@ function openItemDetail(moduleId, itemId) {
     <button class="tr-detail-back" onclick="closeVideoDetail()">← Back to Modules</button>
     <div class="tr-detail-breadcrumb">${escHtml(mod.title)}</div>
     <div class="tr-detail-title">${escHtml(item.title)}</div>
+    ${item.content_type === 'final_quiz' ? `<div class="tr-detail-desc fq-subtitle">🏁 Final Quiz — personalized for you based on your previous answers.</div>` : ''}
     ${item.description ? `<div class="tr-detail-desc">${escHtml(item.description)}</div>` : ''}
     ${viewerHtml}
     <div class="tr-detail-nav">
@@ -3202,24 +3293,39 @@ function submitQuizTaking(moduleId, itemId) {
   const passThreshold = item.pass_threshold || 80;
   const passed = score >= passThreshold;
 
+  // Collect original indices of wrong answers for Final Quiz tracking
+  const wrongSourceIndices = reviewItems
+    .filter(ri => !ri.correct)
+    .map(ri => ri.q._sourceIndex)
+    .filter(i => i !== undefined);
+
   // Update local progress
   const key = `${moduleId}::${itemId}`;
   const prevAttempts = _trProgress[key] ? (_trProgress[key].quiz_attempts || 0) : 0;
+  // Merge (union) wrong indices across all attempts so Final Quiz targets all-time weak spots
+  const prevWrong = _trProgress[key] ? (_trProgress[key].wrong_question_ids || []) : [];
+  const mergedWrong = [...new Set([...prevWrong, ...wrongSourceIndices])];
   _trProgress[key] = {
     status: passed ? 'completed' : 'in_progress',
     quiz_score: score,
     quiz_attempts: prevAttempts + 1,
+    wrong_question_ids: mergedWrong,
     updated_at: new Date().toISOString()
   };
 
   // Persist completion to backend
+  const newAttempts = prevAttempts + 1;
   if (passed) {
     api({ action: 'upsert_training_progress', secret: SEC, token: _s.token,
-          module_id: moduleId, content_id: itemId, status: 'completed' }).catch(() => {});
+          module_id: moduleId, content_id: itemId, status: 'completed',
+          quiz_score: score, quiz_attempts: newAttempts,
+          wrong_question_ids: mergedWrong }).catch(() => {});
     checkGraduation(moduleId);
   } else {
     api({ action: 'upsert_training_progress', secret: SEC, token: _s.token,
-          module_id: moduleId, content_id: itemId, status: 'in_progress' }).catch(() => {});
+          module_id: moduleId, content_id: itemId, status: 'in_progress',
+          quiz_score: score, quiz_attempts: newAttempts,
+          wrong_question_ids: mergedWrong }).catch(() => {});
   }
 
   // Build review HTML
@@ -3272,7 +3378,14 @@ function retryQuizTaking(moduleId, itemId) {
   if (!item || !item.quiz_data) return;
   _currentQuizAnswers = {};
   _quizCurrentStep = 0;
-  _quizShuffledData = buildShuffledQuiz(item.quiz_data.questions);
+  // For final quizzes, regenerate the personalized question set on retry
+  if (item.content_type === 'final_quiz') {
+    const generated = buildFinalQuizQuestions(item);
+    if (!generated || !generated.length) return;
+    _quizShuffledData = buildShuffledQuiz(generated);
+  } else {
+    _quizShuffledData = buildShuffledQuiz(item.quiz_data.questions);
+  }
   renderQuizStep(moduleId, itemId);
 }
 
@@ -3399,27 +3512,34 @@ function selectContentType(type) {
   document.querySelectorAll('.ct-pill').forEach(el => el.classList.remove('ct-active'));
   const pill = document.querySelector(`.ct-pill[data-type="${type}"]`);
   if (pill) pill.classList.add('ct-active');
-  
+
   const urlGroup = document.getElementById('content-url-group');
   const quizGroup = document.getElementById('quiz-builder-group');
+  const finalQuizGroup = document.getElementById('final-quiz-config-group');
   const passReqCheck = document.getElementById('content-pass-required');
   const gateGroup = document.getElementById('content-gate-group');
   const urlLabel = document.getElementById('content-url-label');
   const urlHint = document.getElementById('content-url-hint');
 
+  // Hide all type-specific groups first, then show the relevant one
+  urlGroup.style.display = 'none';
+  quizGroup.style.display = 'none';
+  finalQuizGroup.style.display = 'none';
+
   if (type === 'quiz') {
-    urlGroup.style.display = 'none';
     quizGroup.style.display = 'flex';
     gateGroup.style.display = 'flex';
-    passReqCheck.checked = true; // quizzes usually required to pass
+    passReqCheck.checked = true;
+  } else if (type === 'final_quiz') {
+    finalQuizGroup.style.display = 'flex';
+    gateGroup.style.display = 'flex';
+    passReqCheck.checked = true;
+    renderFinalQuizSourceList();
   } else if (type === 'submodule') {
-    urlGroup.style.display = 'none';
-    quizGroup.style.display = 'none';
     gateGroup.style.display = 'none';
     passReqCheck.checked = false;
   } else {
     urlGroup.style.display = 'flex';
-    quizGroup.style.display = 'none';
     gateGroup.style.display = 'flex';
     if (type === 'document') {
       urlLabel.textContent = 'Document/File URL';
@@ -3433,8 +3553,42 @@ function selectContentType(type) {
 }
 
 function toggleThresholdVisibility() {
-  const showThres = document.getElementById('content-pass-required').checked && _activeContentType === 'quiz';
+  const showThres = document.getElementById('content-pass-required').checked &&
+    (_activeContentType === 'quiz' || _activeContentType === 'final_quiz');
   document.getElementById('content-threshold-group').style.display = showThres ? 'flex' : 'none';
+}
+
+// Render a grouped checklist of all available quizzes (from all modules) for the Final Quiz source selector.
+// preSelected is an array of content IDs that should be pre-checked (for editing).
+function renderFinalQuizSourceList(preSelected) {
+  const container = document.getElementById('final-quiz-source-list');
+  if (!container) return;
+  const selected = preSelected || getSelectedFinalQuizSourceIds();
+
+  let html = '';
+  (_trModules || []).forEach(mod => {
+    const quizItems = (mod.items || []).filter(it => it.content_type === 'quiz');
+    if (!quizItems.length) return;
+    html += `<div class="fq-module-group">
+      <div class="fq-module-label">${escHtml(mod.title)}</div>`;
+    quizItems.forEach(it => {
+      const checked = selected.includes(it.id) ? 'checked' : '';
+      html += `<label class="fq-source-item">
+        <input type="checkbox" class="fq-source-cb" value="${escHtml(it.id)}" ${checked}>
+        <span>${escHtml(it.title)}</span>
+      </label>`;
+    });
+    html += `</div>`;
+  });
+
+  if (!html) html = '<div class="hint">No quizzes found. Create regular quizzes first.</div>';
+  container.innerHTML = html;
+}
+
+// Returns array of currently checked source quiz IDs from the Final Quiz config group.
+function getSelectedFinalQuizSourceIds() {
+  return Array.from(document.querySelectorAll('#final-quiz-source-list .fq-source-cb:checked'))
+    .map(cb => cb.value);
 }
 
 function openVideoDrawer(moduleId, itemId) {
@@ -3463,6 +3617,12 @@ function openVideoDrawer(moduleId, itemId) {
     }
     updateQuizSummary();
     selectContentType(item ? (item.content_type || 'video') : 'video');
+    // For final quiz editing: pre-populate source IDs and question count after the type is selected
+    if (item && item.content_type === 'final_quiz' && item.quiz_data) {
+      const preSelected = item.quiz_data.source_quiz_ids || [];
+      renderFinalQuizSourceList(preSelected);
+      document.getElementById('final-quiz-question-count').value = item.quiz_data.question_count || 20;
+    }
   } else {
     document.getElementById('vid-title').value = '';
     document.getElementById('vid-url').value = '';
@@ -3560,13 +3720,27 @@ function saveVideo() {
     if (!extractDriveId(url)) { showDrawerMsg(msgEl, 'err', 'Could not parse a Google Drive file ID from this URL.'); return; }
   } else if (_activeContentType === 'quiz') {
     if (_quizQuestions.length === 0) { showDrawerMsg(msgEl, 'err', 'Add at least one quiz question.'); return; }
+  } else if (_activeContentType === 'final_quiz') {
+    if (getSelectedFinalQuizSourceIds().length === 0) { showDrawerMsg(msgEl, 'err', 'Select at least one source quiz.'); return; }
   }
 
   btn.disabled = true; btn.textContent = 'Saving...';
   msgEl.className = 'mod-drawer-msg'; msgEl.textContent = '';
-  
-  const backendContentType = _activeContentType === 'submodule' ? 'document' : _activeContentType;
+
+  // final_quiz is stored as 'quiz' in the backend; the is_final_quiz flag inside quiz_data distinguishes it
+  const backendContentType = _activeContentType === 'final_quiz' ? 'quiz'
+    : _activeContentType === 'submodule' ? 'document'
+    : _activeContentType;
   const backendContentUrl = _activeContentType === 'submodule' ? TR_SUBMODULE_URL_MARKER : url;
+
+  let quizDataPayload = '';
+  if (_activeContentType === 'quiz') {
+    quizDataPayload = JSON.stringify({ questions: _quizQuestions });
+  } else if (_activeContentType === 'final_quiz') {
+    const sourceIds = getSelectedFinalQuizSourceIds();
+    const questionCount = parseInt(document.getElementById('final-quiz-question-count').value) || 20;
+    quizDataPayload = JSON.stringify({ is_final_quiz: true, source_quiz_ids: sourceIds, question_count: questionCount });
+  }
 
   const payload = {
     action: itemId ? 'update_content' : 'create_content', token: _s.token,
@@ -3574,7 +3748,7 @@ function saveVideo() {
     description: trComposeDescriptionWithParent_(desc, parentContentId), order, content_type: backendContentType,
     pass_required: passReq, pass_threshold: passThres,
     parent_content_id: parentContentId,
-    quiz_data: _activeContentType === 'quiz' ? JSON.stringify({questions: _quizQuestions}) : ''
+    quiz_data: quizDataPayload
   };
   
   api(payload).then(res => {
