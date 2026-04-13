@@ -2688,12 +2688,21 @@ function shuffleArray(arr) {
   return a;
 }
 
+// Returns a stable string key for a question based on its content.
+// Using question text + sorted options means it survives admin reordering
+// and is safe to use as a persistent wrong-answer identifier.
+function questionKey_(q) {
+  const text = String(q.question || '').trim().toLowerCase();
+  const opts = (q.options || []).map(o => String(o || '').trim().toLowerCase()).sort().join('|');
+  return text + '\x00' + opts;
+}
+
 // Build a shuffled copy of quiz questions (shuffles question order and each
 // question's options while keeping the correct-answer mapping intact).
 function buildShuffledQuiz(questions) {
-  // Tag each question with its original index before shuffling so wrong-answer
-  // tracking can reference back to the source quiz's question array.
-  const indexed = questions.map((q, i) => ({ ...q, _sourceIndex: q._sourceIndex !== undefined ? q._sourceIndex : i }));
+  // Tag each question with a stable content-based key before shuffling.
+  // This key is used for wrong-answer tracking and survives question reordering.
+  const indexed = questions.map(q => ({ ...q, _qkey: q._qkey || questionKey_(q) }));
   const shuffledQs = shuffleArray(indexed).map(q => {
     const indices = q.options.map((_, i) => i);
     const newOrder = shuffleArray(indices);
@@ -2990,21 +2999,23 @@ function buildFinalQuizQuestions(finalQuizItem) {
       const progressKey = `${mod.id}::${it.id}`;
       const prog = _trProgress[progressKey] || {};
       if ((prog.quiz_attempts || 0) > 0) hasAnyAttempt = true;
-      const wrongIds = new Set(prog.wrong_question_ids || []);
-      it.quiz_data.questions.forEach((q, idx) => {
-        const tagged = { ...q, _sourceIndex: idx, _sourceQuizId: it.id };
+      // wrong_question_ids are stable content-based keys (not positional indices)
+      const wrongKeys = new Set(prog.wrong_question_ids || []);
+      it.quiz_data.questions.forEach(q => {
+        const key = questionKey_(q);
+        const tagged = { ...q, _qkey: key, _sourceQuizId: it.id };
         allSourceQuestions.push(tagged);
-        if (wrongIds.has(idx)) wrongQuestions.push(tagged);
+        if (wrongKeys.has(key)) wrongQuestions.push(tagged);
       });
     }
   }
 
   if (!hasAnyAttempt) return null; // block access
 
-  // Deduplicate by question text (safety guard against the same question appearing in multiple source quizzes)
-  const uniqueWrong = deduplicateByQuestionText_(wrongQuestions);
-  const wrongSet = new Set(uniqueWrong.map(q => q.question));
-  const remainingPool = shuffleArray(allSourceQuestions.filter(q => !wrongSet.has(q.question)));
+  // Deduplicate by stable content key (handles the same question appearing in multiple source quizzes)
+  const uniqueWrong = deduplicateByKey_(wrongQuestions);
+  const wrongKeySet = new Set(uniqueWrong.map(q => q._qkey));
+  const remainingPool = shuffleArray(allSourceQuestions.filter(q => !wrongKeySet.has(q._qkey)));
   const fillCount = Math.max(0, targetCount - uniqueWrong.length);
   const fillQuestions = remainingPool.slice(0, fillCount);
   const combined = uniqueWrong.length > targetCount
@@ -3013,11 +3024,12 @@ function buildFinalQuizQuestions(finalQuizItem) {
   return combined.slice(0, targetCount);
 }
 
-function deduplicateByQuestionText_(questions) {
+function deduplicateByKey_(questions) {
   const seen = new Set();
   return questions.filter(q => {
-    if (seen.has(q.question)) return false;
-    seen.add(q.question);
+    const k = q._qkey || questionKey_(q);
+    if (seen.has(k)) return false;
+    seen.add(k);
     return true;
   });
 }
@@ -3293,11 +3305,12 @@ function submitQuizTaking(moduleId, itemId) {
   const passThreshold = item.pass_threshold || 80;
   const passed = score >= passThreshold;
 
-  // Collect original indices of wrong answers for Final Quiz tracking
+  // Collect stable content-based keys for wrong answers so Final Quiz tracking
+  // survives admin edits or question reordering in the source quiz.
   const wrongSourceIndices = reviewItems
     .filter(ri => !ri.correct)
-    .map(ri => ri.q._sourceIndex)
-    .filter(i => i !== undefined);
+    .map(ri => ri.q._qkey || questionKey_(ri.q))
+    .filter(Boolean);
 
   // Update local progress
   const key = `${moduleId}::${itemId}`;
@@ -3560,14 +3573,19 @@ function toggleThresholdVisibility() {
 
 // Render a grouped checklist of all available quizzes (from all modules) for the Final Quiz source selector.
 // preSelected is an array of content IDs that should be pre-checked (for editing).
+// Automatically excludes the item currently being edited (self-reference guard) and
+// any final_quiz items (prevents nested final quizzes).
 function renderFinalQuizSourceList(preSelected) {
   const container = document.getElementById('final-quiz-source-list');
   if (!container) return;
   const selected = preSelected || getSelectedFinalQuizSourceIds();
+  // Exclude the item being edited to prevent self-reference
+  const selfId = document.getElementById('vid-id') ? document.getElementById('vid-id').value : '';
 
   let html = '';
   (_trModules || []).forEach(mod => {
-    const quizItems = (mod.items || []).filter(it => it.content_type === 'quiz');
+    // Only regular quizzes — final_quiz items are excluded to prevent nesting
+    const quizItems = (mod.items || []).filter(it => it.content_type === 'quiz' && it.id !== selfId);
     if (!quizItems.length) return;
     html += `<div class="fq-module-group">
       <div class="fq-module-label">${escHtml(mod.title)}</div>`;
