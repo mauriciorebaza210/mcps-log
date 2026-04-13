@@ -323,6 +323,15 @@
         <span class="dfg-hint">Contractor pay rate — shown in their onboarding contract.</span>
       </div>
 
+      <div class="dfg" id="d-worker-type-wrap">
+        <label>Worker Type</label>
+        <div class="status-toggle">
+          <label class="rcb"><input type="radio" id="wt-1099" name="worker-type" value="1099_contractor" checked> 1099 Contractor</label>
+          <label class="rcb"><input type="radio" id="wt-w2" name="worker-type" value="w2_employee"> W2 Employee</label>
+        </div>
+        <span class="dfg-hint">Determines onboarding flow (W-9 vs W-4). Only visible/editable for new hires.</span>
+      </div>
+
       <div class="im" id="drawer-msg"></div>
  
     </div><!-- /drawer-body -->
@@ -598,39 +607,94 @@
             <div class="onb-fg"><label>Phone</label><input class="onb-inp" id="onb-ec-phone" type="tel" placeholder="(555) 555-5555"></div>
           </div>
 
-          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Tax Information</div>
-          <div class="onb-fg">
-            <label>Tax ID Type</label>
-            <div style="display:flex;gap:1rem;margin-top:.3rem">
-              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="SSN" onchange="onbTaxTypeChanged()"> SSN</label>
-              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="EIN" onchange="onbTaxTypeChanged()"> EIN</label>
+          <div id="onb-w9-module">
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Tax Information (W-9)</div>
+            <div class="onb-fg">
+              <label>Tax ID Type</label>
+              <div style="display:flex;gap:1rem;margin-top:.3rem">
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="SSN" onchange="onbTaxTypeChanged()"> SSN</label>
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="EIN" onchange="onbTaxTypeChanged()"> EIN</label>
+              </div>
+            </div>
+            
+            <div class="onb-fg" id="onb-ein-type-fg" style="display:none">
+              <label>Tax Classification</label>
+              <select class="onb-inp" id="onb-ein-type" style="padding:.6rem 1rem">
+                <option value="ccorp">C Corporation</option>
+                <option value="scorp">S Corporation</option>
+                <option value="partnership">Partnership</option>
+                <option value="llc_c">LLC - C Corporation</option>
+                <option value="llc_s">LLC - S Corporation</option>
+                <option value="llc_p">LLC - Partnership</option>
+                <option value="trust">Trust / Estate</option>
+              </select>
+            </div>
+
+            <div class="onb-fg">
+              <label>Full Tax ID Number</label>
+              <input class="onb-inp" id="onb-tax-full" placeholder="Please select SSN or EIN first" maxlength="11" oninput="onbFormatTaxId(this)" disabled>
+            </div>
+
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">W-9 Form Generation</div>
+            <div class="onb-fg">
+              <div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">Your W-9 will be automatically generated with the info above and seamlessly attached using your legal name as a signature.</div>
+              <input type="hidden" id="onb-w9-base64">
+              <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-w9" onclick="generateAndReviewW9()">Review &amp; Sign W-9 Form</button>
+              <div id="w9-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ W-9 generated and ready.</div>
             </div>
           </div>
-          
-          <div class="onb-fg" id="onb-ein-type-fg" style="display:none">
-            <label>Tax Classification</label>
-            <select class="onb-inp" id="onb-ein-type" style="padding:.6rem 1rem">
-              <option value="ccorp">C Corporation</option>
-              <option value="scorp">S Corporation</option>
-              <option value="partnership">Partnership</option>
-              <option value="llc_c">LLC - C Corporation</option>
-              <option value="llc_s">LLC - S Corporation</option>
-              <option value="llc_p">LLC - Partnership</option>
-              <option value="trust">Trust / Estate</option>
-            </select>
-          </div>
 
-          <div class="onb-fg">
-            <label>Full Tax ID Number</label>
-            <input class="onb-inp" id="onb-tax-full" placeholder="Please select SSN or EIN first" maxlength="11" oninput="onbFormatTaxId(this)" disabled>
-          </div>
+          <div id="onb-w4-module" style="display:none;">
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Tax Information (W-4)</div>
+            
+            <div class="onb-fg">
+              <label>Full SSN Number</label>
+              <input class="onb-inp" id="onb-w4-ssn" placeholder="___-__-____" maxlength="11" oninput="onbFormatW4Ssn(this)">
+            </div>
 
-          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">W-9 Form Generation</div>
-          <div class="onb-fg">
-            <div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">Your W-9 will be automatically generated with the info above and seamlessly attached using your legal name as a signature.</div>
-            <input type="hidden" id="onb-w9-base64">
-            <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-w9" onclick="generateAndReviewW9()">Review &amp; Sign W-9 Form</button>
-            <div id="w9-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ W-9 generated and ready.</div>
+            <div class="onb-fg">
+              <label>Filing Status (Step 1c)</label>
+              <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.3rem">
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-w4-status" value="single" checked> Single or Married filing separately</label>
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-w4-status" value="married"> Married filing jointly (or Qualifying surviving spouse)</label>
+                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-w4-status" value="head"> Head of household</label>
+              </div>
+            </div>
+
+            <div class="onb-fg">
+              <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer">
+                <input type="checkbox" id="onb-w4-step2" style="margin-top:.2rem">
+                <div>
+                  <div style="font-weight:600;font-size:.9rem">Multiple Jobs or Spouse Works (Step 2)</div>
+                  <div style="font-size:.8rem;color:var(--muted)">Check only if you have another job or your spouse works.</div>
+                </div>
+              </label>
+            </div>
+
+            <div class="onb-fg">
+              <label>Claim Dependents (Step 3)</label>
+              <div style="display:flex;gap:1rem;margin-top:.3rem">
+                <div style="flex:1"><input class="onb-inp" type="number" id="onb-w4-dep1" placeholder="Qualifying children &lt; 17"><div style="font-size:.7rem;color:var(--muted)">Will be multiplied by $2,000</div></div>
+                <div style="flex:1"><input class="onb-inp" type="number" id="onb-w4-dep2" placeholder="Other dependents"><div style="font-size:.7rem;color:var(--muted)">Will be multiplied by $500</div></div>
+              </div>
+            </div>
+
+            <div class="onb-fg">
+              <label>Other Adjustments (Step 4)</label>
+              <div style="display:flex;gap:1rem;margin-top:.3rem;flex-wrap:wrap">
+                <div style="flex:1;min-width:140px"><label style="font-size:.8rem">Other Income (4a)</label><input class="onb-inp" type="number" id="onb-w4-4a" placeholder="$0"></div>
+                <div style="flex:1;min-width:140px"><label style="font-size:.8rem">Deductions (4b)</label><input class="onb-inp" type="number" id="onb-w4-4b" placeholder="$0"></div>
+                <div style="flex:1;min-width:140px"><label style="font-size:.8rem">Extra Withholding (4c)</label><input class="onb-inp" type="number" id="onb-w4-4c" placeholder="$0"></div>
+              </div>
+            </div>
+
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">W-4 Form Generation</div>
+            <div class="onb-fg">
+              <div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">Your W-4 will be automatically generated with the info above and seamlessly attached using your legal name as a signature.</div>
+              <input type="hidden" id="onb-w4-base64">
+              <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-w4" onclick="generateAndReviewW4()">Review &amp; Sign W-4 Form</button>
+              <div id="w4-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ W-4 generated and ready.</div>
+            </div>
           </div>
 
           <div class="im" id="onb-info-msg" style="margin:.5rem 0 0"></div>
@@ -714,6 +778,26 @@
       <div style="display:flex;gap:.5rem">
         <button class="conf-cancel-btn" onclick="closeW9Modal()">Cancel</button>
         <button class="conf-submit-btn" onclick="confirmW9()">Looks Good &amp; Sign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── W-4 Review Modal ── -->
+<div class="conf-modal-backdrop" id="w4-modal-backdrop" onclick="closeW4Modal(event)" style="display:none;z-index:9999">
+  <div class="conf-modal" onclick="event.stopPropagation()" style="max-width:800px;width:95%;height:90vh;display:flex;flex-direction:column">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Review &amp; Sign W-4</div>
+      <button class="drawer-close" onclick="closeW4Modal()">✕</button>
+    </div>
+    <div class="conf-modal-body" style="flex:1;padding:0;overflow:hidden">
+      <iframe id="w4-preview-frame" style="width:100%;height:100%;border:none;background:#f1f5f9"></iframe>
+    </div>
+    <div class="conf-modal-foot" style="justify-content:space-between">
+      <div style="font-size:.85rem;color:var(--muted)">By confirming, you electronically sign this W-4 using the name provided.</div>
+      <div style="display:flex;gap:.5rem">
+        <button class="conf-cancel-btn" onclick="closeW4Modal()">Cancel</button>
+        <button class="conf-submit-btn" onclick="confirmW4()">Looks Good &amp; Sign</button>
       </div>
     </div>
   </div>

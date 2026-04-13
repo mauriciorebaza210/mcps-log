@@ -1722,6 +1722,8 @@ function openUserDrawer(username) {
     document.getElementById('d-pass-optional').style.display = 'none';
     // Default: new_hire
     document.querySelector('#role-checkboxes input[value="new_hire"]').checked = true;
+    document.getElementById('d-worker-type-wrap').style.display = 'block';
+    document.getElementById('wt-1099').checked = true;
     ALL_DAYS.forEach(day => {
       const cb = document.querySelector(`#day-checkboxes input[value="${day}"]`);
       if (cb) cb.checked = true;
@@ -1739,6 +1741,18 @@ function openUserDrawer(username) {
     document.getElementById('uname-hint').style.display = 'block';
     document.getElementById('d-pass-optional').style.display = 'inline';
     document.getElementById('usr-pay-rate').value       = user.pay_rate || '';
+    
+    // Hide worker type for existing non-new-hire users
+    const rolesStr = String(user.roles||'');
+    if (!rolesStr.includes('new_hire')) {
+      document.getElementById('d-worker-type-wrap').style.display = 'none';
+    } else {
+      document.getElementById('d-worker-type-wrap').style.display = 'block';
+      const wt = user.worker_type || '1099_contractor';
+      const wtRadio = document.querySelector(`input[name="worker-type"][value="${wt}"]`);
+      if (wtRadio) wtRadio.checked = true;
+    }
+
 
 
     // Set roles
@@ -1784,6 +1798,7 @@ function saveUser() {
     : _editingUsername;
   const password = document.getElementById('d-pass').value.trim();
   const payRate  = document.getElementById('usr-pay-rate').value.trim();
+  const workerType = (document.querySelector('input[name="worker-type"]:checked') || {}).value || '1099_contractor';
 
  
   // Collect roles
@@ -1818,6 +1833,7 @@ function saveUser() {
       roles   : roles.join(','),
       available_days : days.join(','),
       pay_rate: payRate,
+      worker_type: workerType,
     }).then(res => {
       btn.disabled = false; btn.textContent = 'Save User';
       if (res.ok) {
@@ -1837,6 +1853,9 @@ function saveUser() {
       active,
       pay_rate       : payRate,
     };
+    if (roles.join(',').includes('new_hire')) {
+      fields.worker_type = workerType;
+    }
     if (password) fields.password = password;
  
     api({
@@ -4063,6 +4082,21 @@ function loadOnboarding() {
     if (ctx && ctx.contract_html) {
       document.getElementById('onb-contract-html').innerHTML = ctx.contract_html;
     }
+    
+    // Branch on worker type
+    const isW2 = status && status.worker_type === 'w2_employee';
+    if (isW2) {
+      document.getElementById('onb-w9-module').style.display = 'none';
+      document.getElementById('onb-w4-module').style.display = 'block';
+      document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Employment Agreement';
+      document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your W2 employment agreement';
+    } else {
+      document.getElementById('onb-w9-module').style.display = 'block';
+      document.getElementById('onb-w4-module').style.display = 'none';
+      document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Contractor Agreement';
+      document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your independent contractor agreement';
+    }
+
     // Pre-fill signed date
     const dateEl = document.getElementById('onb-signed-date');
     if (dateEl) dateEl.value = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
@@ -4115,13 +4149,29 @@ function submitPersonalInfo() {
     showMsg(msgEl, 'Complete address is required.', false); return;
   }
   if (!fields.emergency_name || !fields.emergency_phone) { showMsg(msgEl, 'Emergency contact is required.', false); return; }
-  if (!fields.tax_type) { showMsg(msgEl, 'Select SSN or EIN.', false); return; }
-  if (!fields.tax_id_full || fields.tax_id_full.length < 10) { showMsg(msgEl, 'Enter full Tax ID.', false); return; }
+  const isW2 = document.getElementById('onb-w4-module').style.display !== 'none';
+  if (!isW2) {
+    if (!fields.tax_type) { showMsg(msgEl, 'Select SSN or EIN.', false); return; }
+    if (!fields.tax_id_full || fields.tax_id_full.length < 10) { showMsg(msgEl, 'Enter full Tax ID.', false); return; }
+  } else {
+    fields.tax_type = 'SSN';
+    fields.tax_id_full = document.getElementById('onb-w4-ssn').value.replace(/\D/g, '');
+    if (fields.tax_id_full.length < 9) { showMsg(msgEl, 'Enter full SSN.', false); return; }
+    fields.w4_filing_status = (document.querySelector('input[name="onb-w4-status"]:checked') || {}).value;
+    fields.w4_multiple_jobs = document.getElementById('onb-w4-step2').checked;
+    fields.w4_dependents_1 = document.getElementById('onb-w4-dep1').value || '0';
+    fields.w4_dependents_2 = document.getElementById('onb-w4-dep2').value || '0';
+    fields.w4_other_income = document.getElementById('onb-w4-4a').value || '0';
+    fields.w4_deductions = document.getElementById('onb-w4-4b').value || '0';
+    fields.w4_extra_withholding = document.getElementById('onb-w4-4c').value || '0';
+  }
 
   const w9b64 = document.getElementById('onb-w9-base64').value;
-  const doSave = (b64) => {
+  const w4b64 = document.getElementById('onb-w4-base64').value;
+  
+  const doSave = (b64Key, b64Val) => {
     const body = Object.assign({ action: 'save_info' }, fields);
-    if (b64) body.w9_base64 = b64;
+    if (b64Val) body[b64Key] = b64Val;
 
     body.token = _s.token;
     body.secret = SEC;
@@ -4137,10 +4187,18 @@ function submitPersonalInfo() {
     }).catch(() => showMsg(msgEl, 'Network error.', false));
   };
 
-  if (w9b64) {
-    doSave(w9b64);
+  if (!isW2) {
+    if (w9b64) {
+      doSave('w9_base64', w9b64);
+    } else {
+      showMsg(msgEl, 'Please generate and review your W-9 Form before saving.', false);
+    }
   } else {
-    showMsg(msgEl, 'Please generate and review your W-9 Form before saving.', false);
+    if (w4b64) {
+      doSave('w4_base64', w4b64);
+    } else {
+      showMsg(msgEl, 'Please generate and review your W-4 Form before saving.', false);
+    }
   }
 }
 
@@ -4297,6 +4355,134 @@ function confirmW9() {
   closeW9Modal();
 }
 
+function onbFormatW4Ssn(inp) {
+  let val = inp.value.replace(/\D/g, '');
+  let formatted = '';
+  if (val.length > 0) formatted += val.substring(0, 3);
+  if (val.length > 3) formatted += '-' + val.substring(3, 5);
+  if (val.length > 5) formatted += '-' + val.substring(5, 9);
+  inp.value = formatted;
+}
+
+let _pendingW4PdfBytes = null;
+
+async function generateAndReviewW4() {
+  const btn = document.getElementById('btn-gen-w4');
+  btn.textContent = 'Generating...';
+  btn.disabled = true;
+
+  try {
+    const rawForm = await fetch('/fw4.pdf').then(res => res.arrayBuffer());
+    const pdfDoc = await PDFLib.PDFDocument.load(rawForm);
+    const form = pdfDoc.getForm();
+    
+    // Fill fields
+    const fullName = document.getElementById('onb-legal-name').value.trim();
+    const addr1 = document.getElementById('onb-addr1').value.trim();
+    const city = document.getElementById('onb-city').value.trim();
+    const state = document.getElementById('onb-state').value.trim();
+    const zip = document.getElementById('onb-zip').value.trim();
+    const ssn = document.getElementById('onb-w4-ssn').value.replace(/\D/g, '');
+
+    if (!fullName || !addr1 || !city || !state || !zip || ssn.length < 9) {
+      alert("Please check that Personal Information, Address, and SSN are fully entered.");
+      btn.textContent = 'Review & Sign W-4 Form';
+      btn.disabled = false;
+      return;
+    }
+
+    const parts = fullName.split(' ');
+    const lastName = parts.pop();
+    const firstMiddle = parts.join(' ');
+
+    const filingStatus = (document.querySelector('input[name="onb-w4-status"]:checked') || {}).value;
+    const step2 = document.getElementById('onb-w4-step2').checked;
+    
+    // Convert dependent values
+    let dep1Raw = parseFloat(document.getElementById('onb-w4-dep1').value) || 0;
+    let dep2Raw = parseFloat(document.getElementById('onb-w4-dep2').value) || 0;
+    let dep1 = dep1Raw * 2000;
+    let dep2 = dep2Raw * 500;
+    let depTotal = dep1 + dep2;
+
+    const v4a = document.getElementById('onb-w4-4a').value.trim();
+    const v4b = document.getElementById('onb-w4-4b').value.trim();
+    const v4c = document.getElementById('onb-w4-4c').value.trim();
+
+    try { form.getField('topmostSubform[0].Page1[0].Step1a[0].f1_01[0]').setText(firstMiddle); } catch(e){}
+    try { form.getField('topmostSubform[0].Page1[0].Step1a[0].f1_02[0]').setText(lastName); } catch(e){}
+    try { form.getField('topmostSubform[0].Page1[0].Step1a[0].f1_03[0]').setText(addr1); } catch(e){}
+    try { form.getField('topmostSubform[0].Page1[0].Step1a[0].f1_04[0]').setText(city + ', ' + state + ' ' + zip); } catch(e){}
+    try { form.getField('topmostSubform[0].Page1[0].f1_05[0]').setText(ssn.substring(0,3) + '-' + ssn.substring(3,5) + '-' + ssn.substring(5,9)); } catch(e){}
+
+    // Filing status checkboxes
+    if (filingStatus === 'single') {
+      try { form.getField('topmostSubform[0].Page1[0].c1_1[0]').check(); } catch(e){}
+    } else if (filingStatus === 'married') {
+      try { form.getField('topmostSubform[0].Page1[0].c1_1[1]').check(); } catch(e){}
+    } else if (filingStatus === 'head') {
+      try { form.getField('topmostSubform[0].Page1[0].c1_1[2]').check(); } catch(e){}
+    }
+
+    if (step2) {
+      try { form.getField('topmostSubform[0].Page1[0].c1_2[0]').check(); } catch(e){}
+    }
+
+    try { if (dep1 > 0) form.getField('topmostSubform[0].Page1[0].Step3_ReadOrder[0].f1_06[0]').setText(dep1.toString()); } catch(e){}
+    try { if (dep2 > 0) form.getField('topmostSubform[0].Page1[0].Step3_ReadOrder[0].f1_07[0]').setText(dep2.toString()); } catch(e){}
+    try { if (depTotal > 0) form.getField('topmostSubform[0].Page1[0].f1_08[0]').setText(depTotal.toString()); } catch(e){}
+
+    try { if (v4a) form.getField('topmostSubform[0].Page1[0].f1_09[0]').setText(v4a.toString()); } catch(e){}
+    try { if (v4b) form.getField('topmostSubform[0].Page1[0].f1_10[0]').setText(v4b.toString()); } catch(e){}
+    try { if (v4c) form.getField('topmostSubform[0].Page1[0].f1_11[0]').setText(v4c.toString()); } catch(e){}
+
+    // E-Signature and Date (drawn onto the PDF)
+    const pages = pdfDoc.getPages();
+    const page = pages[0];
+    const signatureText = fullName + ' (e-signed)';
+    const dateText = new Date().toLocaleDateString();
+    
+    page.drawText(signatureText, { x: 80, y: 153, size: 14 });
+    page.drawText(dateText, { x: 440, y: 153, size: 14 });
+
+    const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    form.updateFieldAppearances(helveticaFont);
+    
+    const pdfBytes = await pdfDoc.save();
+    
+    _pendingW4PdfBytes = pdfBytes;
+    
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    document.getElementById('w4-preview-frame').src = url;
+    document.getElementById('w4-modal-backdrop').style.display = 'flex';
+  } catch (err) {
+    console.error(err);
+    alert('Failed to generate W-4: ' + err.message);
+  } finally {
+    btn.textContent = 'Review & Sign W-4 Form';
+    btn.disabled = false;
+  }
+}
+
+function closeW4Modal() {
+  document.getElementById('w4-modal-backdrop').style.display = 'none';
+  document.getElementById('w4-preview-frame').src = '';
+  _pendingW4PdfBytes = null;
+}
+
+function confirmW4() {
+  if (!_pendingW4PdfBytes) return;
+  let binary = '';
+  for (let i = 0; i < _pendingW4PdfBytes.byteLength; i++) {
+    binary += String.fromCharCode(_pendingW4PdfBytes[i]);
+  }
+  const base64 = btoa(binary);
+  document.getElementById('onb-w4-base64').value = base64;
+  document.getElementById('w4-status-msg').style.display = 'block';
+  closeW4Modal();
+}
+
 
 function submitContract() {
   const msgEl = document.getElementById('onb-contract-msg');
@@ -4346,7 +4532,10 @@ function loadPendingHires() {
     }
     container.innerHTML = res.applications.map(a => `
       <div class="pend-card" id="hire-card-${a.username}">
-        <div class="pend-sku">${a.username}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="pend-sku">${a.username}</div>
+          ${a.worker_type === 'w2_employee' ? '<span style="font-size:.65rem;background:var(--accent);color:#fff;padding:.1rem .4rem;border-radius:4px;font-weight:700">W-2</span>' : '<span style="font-size:.65rem;background:#475569;color:#fff;padding:.1rem .4rem;border-radius:4px;font-weight:700">1099</span>'}
+        </div>
         <div class="pend-desc">${a.full_name || '—'}</div>
         <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">
           Submitted: ${a.info_submitted_at ? new Date(a.info_submitted_at).toLocaleDateString() : '—'}
@@ -4413,7 +4602,10 @@ function renderRecords(list) {
     return `<div class="pend-card" style="margin-bottom:.5rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.25rem">
         <div>
-          <div class="pend-sku">${a.username}</div>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <div class="pend-sku">${a.username}</div>
+            ${a.worker_type === 'w2_employee' ? '<span style="font-size:.65rem;background:var(--accent);color:#fff;padding:.1rem .4rem;border-radius:4px;font-weight:700">W-2</span>' : '<span style="font-size:.65rem;background:#475569;color:#fff;padding:.1rem .4rem;border-radius:4px;font-weight:700">1099</span>'}
+          </div>
           <div class="pend-desc" style="margin:.1rem 0 0">${a.full_name || '—'}</div>
           ${approvedLine}
         </div>
@@ -4423,7 +4615,7 @@ function renderRecords(list) {
         <span class="pend-ai-pill ${a.info_done?'conf-high':'conf-low'}">${a.info_done?'✓ Info':'✗ Info'}</span>
         <span class="pend-ai-pill ${a.contract_done?'conf-high':'conf-low'}">${a.contract_done?'✓ Contract':'✗ Contract'}</span>
       </div>
-      <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid);width:100%" onclick="viewHireDocs('${a.username}')">📄 View Docs & W-9</button>
+      <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid);width:100%" onclick="viewHireDocs('${a.username}')">📄 View Docs & Tax Form</button>
     </div>`;
   }).join('');
 }
@@ -4444,6 +4636,7 @@ function viewHireDocs(username) {
         <div class="docs-row"><span>Phone</span><span>${d.phone || '—'}</span></div>
         <div class="docs-row"><span>Address</span><span>${[d.address_line1, d.address_city, d.address_state, d.address_zip].filter(Boolean).join(', ') || '—'}</span></div>
         <div class="docs-row"><span>Emergency Contact</span><span>${d.emergency_name || '—'} ${d.emergency_phone ? '· ' + d.emergency_phone : ''}</span></div>
+        <div class="docs-row"><span>Type</span><span style="font-weight:700;color:var(--accent)">${d.worker_type === 'w2_employee' ? 'W-2 Employee' : '1099 Contractor'}</span></div>
         <div class="docs-row"><span>Tax ID Type</span><span>${d.tax_type || '—'}</span></div>
         <div class="docs-row"><span>Last 4 Digits</span><span>${d.tax_id_last4 ? '••••' + d.tax_id_last4 : '—'}</span></div>
       </div>
@@ -4453,10 +4646,15 @@ function viewHireDocs(username) {
         <div class="docs-row"><span>Signed At</span><span>${d.contract_signed_at ? new Date(d.contract_signed_at).toLocaleString() : '—'}</span></div>
       </div>
       <div>
-        <div class="docs-section-title">W-9 Document</div>
-        ${d.w9_signed_url
-          ? `<a href="${d.w9_signed_url}" target="_blank" class="docs-w9-btn">⬇ Open W-9 PDF</a><div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Link expires in 1 hour</div>`
-          : '<span style="color:var(--muted);font-size:.85rem">No W-9 uploaded</span>'}
+        <div class="docs-section-title">Tax Document</div>
+        ${d.worker_type === 'w2_employee' ?
+          (d.w4_signed_url
+            ? `<a href="${d.w4_signed_url}" target="_blank" class="docs-w9-btn">⬇ Open W-4 PDF</a><div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Link expires in 1 hour</div>`
+            : '<span style="color:var(--muted);font-size:.85rem">No W-4 uploaded</span>') :
+          (d.w9_signed_url
+            ? `<a href="${d.w9_signed_url}" target="_blank" class="docs-w9-btn">⬇ Open W-9 PDF</a><div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Link expires in 1 hour</div>`
+            : '<span style="color:var(--muted);font-size:.85rem">No W-9 uploaded</span>')
+        }
       </div>`;
   }).catch(() => { body.innerHTML = '<p style="color:var(--error)">Network error.</p>'; });
 }
