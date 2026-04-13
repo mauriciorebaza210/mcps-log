@@ -2893,6 +2893,7 @@ function renderTraining() {
             <button onclick="openVideoDrawerWithType('${mod.id}','video')">🎬 Video</button>
             <button onclick="openVideoDrawerWithType('${mod.id}','document')">📄 Document</button>
             <button onclick="openVideoDrawerWithType('${mod.id}','quiz')">📝 Quiz</button>
+            <button onclick="openVideoDrawerWithType('${mod.id}','final_quiz')">🏁 Final Quiz</button>
             <button onclick="openVideoDrawerWithType('${mod.id}','submodule')">📂 Submodule</button>
           </div>
         </div>
