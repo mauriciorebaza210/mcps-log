@@ -69,8 +69,8 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 
 /* Day selector tabs */
 .day-tabs-bar{
-  display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.5rem;
-  scrollbar-width:none;margin-bottom:1rem;
+  display:flex;gap:.4rem;overflow-x:auto;
+  scrollbar-width:none;
 }
 .day-tabs-bar::-webkit-scrollbar{display:none}
 .day-tab{
@@ -307,6 +307,179 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .cal-pill.green{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;}
 .cal-pill.onetime{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
 
+/* ── Hub-level tabs (Schedule / My Operator Profile) ────────────────── */
+.hub-tabs-bar{display:flex;gap:0;background:var(--card);border-bottom:2px solid var(--border)}
+.hub-tab{
+  flex:1;padding:.75rem .5rem;border:none;background:transparent;
+  font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+  cursor:pointer;transition:all .2s;border-bottom:2px solid transparent;
+  margin-bottom:-2px;
+}
+.hub-tab:hover{color:var(--teal);background:var(--teal-glow)}
+.hub-tab.active{color:var(--teal);border-bottom-color:var(--teal);background:transparent}
+
+/* ── Week range header (sticky, above day tabs) ──────────────────────── */
+.week-range-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:.6rem 1rem .4rem;
+  background:var(--card);
+  position:sticky;top:0;z-index:10;
+}
+.wrh-center{display:flex;align-items:center;gap:.5rem}
+.wrh-label{
+  font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+}
+.this-week-badge{
+  font-family:'Barlow Condensed',sans-serif;font-size:.65rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;padding:.15rem .5rem;
+  border-radius:99px;background:var(--teal);color:#fff;
+}
+.wrh-nav-btn{
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
+  letter-spacing:.04em;padding:.3rem .65rem;border-radius:8px;
+  border:1.5px solid var(--border);background:transparent;color:var(--muted);
+  cursor:pointer;transition:all .15s;
+}
+.wrh-nav-btn:hover{border-color:var(--teal-light);background:var(--teal-glow);color:var(--teal)}
+
+/* ── Week pool summary line ──────────────────────────────────────────── */
+.week-pool-summary{
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;color:var(--muted);
+  padding:.2rem 1rem .55rem;letter-spacing:.03em;
+}
+
+/* ── Day tab: make bar sticky beneath week header ────────────────────── */
+.day-tabs-bar{
+  position:sticky;top:37px;z-index:9;
+  background:var(--bg);
+  padding:.5rem 1rem .5rem;
+  margin-bottom:.75rem;
+}
+
+/* ── Weather chip inside day tab ─────────────────────────────────────── */
+.dt-weather{
+  display:flex;align-items:center;gap:.15rem;
+  font-size:.68rem;font-weight:700;margin-top:.2rem;
+  min-width:48px;height:18px;justify-content:center;
+  color:var(--teal-mid);letter-spacing:-.01em;
+  background:rgba(42,168,154,.08);border-radius:4px;
+}
+.day-tab.active .dt-weather{background:rgba(255,255,255,.2);color:#fff;opacity:1}
+.day-tab.locked .dt-weather{color:var(--muted);background:transparent}
+
+.rdc-weather-chip{
+  display:inline-flex;align-items:center;gap:.3rem;
+  font-size:.78rem;font-weight:700;color:var(--teal-mid);
+  margin-left:.75rem;padding:.15rem .45rem;background:var(--teal-glow);
+  border-radius:6px;vertical-align:middle;
+}
+.rdc-weather-chip i{font-style:normal}
+
+/* ── Profile tab: team grid header & editing label ──────────────────── */
+.profile-grid-hdr{
+  display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.3rem;
+  padding:.75rem 1rem .4rem;border-bottom:1px solid var(--border);
+  font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text);
+  background:var(--surface);
+}
+.profile-grid-hint{font-size:.72rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)}
+.profile-editing-label{
+  font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:.5rem 1.25rem .3rem;color:var(--teal-mid);
+  border-top:1px solid var(--border);
+}
+/* Highlight the selected row in the availability grid */
+.ag-row-selected td{ background:var(--teal-glow) !important; }
+
+/* ── My Operator Profile tab ─────────────────────────────────────────── */
+.profile-hdr-card{
+  display:flex;align-items:center;gap:1rem;
+  background:var(--card);border-bottom:1px solid var(--border);
+  padding:1.1rem 1.25rem;
+}
+.phc-avatar{
+  width:48px;height:48px;border-radius:50%;
+  background:linear-gradient(135deg,var(--teal),var(--teal-mid));
+  color:#fff;font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.phc-name{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.04em}
+.phc-meta{font-size:.8rem;color:var(--muted);margin-top:.15rem}
+
+/* ── Availability section ────────────────────────────────────────────── */
+.avail-section{padding:1.1rem 1.25rem}
+.avail-section-title{
+  font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:.2rem;
+}
+.avail-section-hint{font-size:.78rem;color:var(--muted);margin-bottom:1rem}
+.avail-shift-rows{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1.1rem}
+
+.avail-row{
+  display:flex;align-items:center;gap:.75rem;
+  padding:.5rem .75rem;border-radius:12px;
+  background:var(--surface);border:1px solid var(--border);
+  transition:background .15s;
+}
+.avail-row.avail-unavailable{opacity:.55}
+.avail-day-label{
+  width:78px;font-family:'Barlow Condensed',sans-serif;font-size:.88rem;
+  font-weight:700;letter-spacing:.04em;flex-shrink:0;color:var(--text);
+}
+.avail-shifts{display:flex;gap:.35rem;flex:1;flex-wrap:wrap}
+.shift-btn{
+  font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;
+  padding:.3rem .7rem;border-radius:8px;
+  border:1.5px solid var(--border);background:transparent;color:var(--muted);
+  cursor:pointer;transition:all .15s;
+}
+.shift-btn:hover{border-color:var(--teal-light);background:var(--teal-glow);color:var(--teal)}
+.shift-btn.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.shift-btn.active:hover{background:var(--teal-mid);border-color:var(--teal-mid)}
+
+.avail-save-btn{
+  width:100%;padding:.75rem;background:var(--teal);color:#fff;border:none;
+  border-radius:12px;font-family:'Oswald',sans-serif;font-size:1rem;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .15s;
+}
+.avail-save-btn:hover{background:var(--teal-mid)}
+.avail-save-btn:disabled{background:#cbd5e1;cursor:not-allowed}
+.avail-recalc-note{font-size:.75rem;color:var(--muted);text-align:center;margin-top:.6rem}
+
+/* ── Admin availability grid ─────────────────────────────────────────── */
+.avail-grid{width:100%;border-collapse:collapse;font-size:.82rem}
+.avail-grid th{
+  font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  padding:.45rem .5rem;text-align:center;border-bottom:2px solid var(--border);
+}
+.avail-grid th.ag-name-col{text-align:left;padding-left:.75rem}
+.avail-grid td{
+  padding:.45rem .5rem;text-align:center;border-bottom:1px solid var(--border);
+  cursor:pointer;transition:background .12s;
+}
+.avail-grid td.ag-name-cell{
+  text-align:left;padding-left:.75rem;font-weight:600;font-size:.85rem;
+}
+.avail-grid tr:last-child td{border-bottom:none}
+.avail-grid tr:hover td{background:var(--teal-glow)}
+
+.ag-badge{
+  display:inline-block;font-family:'Barlow Condensed',sans-serif;font-size:.68rem;
+  font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:.15rem .45rem;border-radius:5px;
+}
+.ag-badge.am{background:#dbeafe;color:#1d4ed8}
+.ag-badge.pm{background:#fef3c7;color:#b45309}
+.ag-badge.full{background:var(--teal-glow);color:var(--teal-mid)}
+.ag-badge.off{color:#cbd5e1}
+
 /* ── Pool Action Bottom Sheet ─────────────────────────────────────────── */
 .pool-action-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:none;animation:fadein .2s}
 .pool-action-backdrop.open{display:block}
@@ -343,8 +516,80 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .pas-apply-btn:hover{background:var(--teal-mid);transform:translateY(-1px)}
 .pas-apply-btn:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}
 
+/* ── Technician Hub & Routes ─────────────────────────────────────────── */
+.map-view-hdr{padding:1rem 1.1rem .75rem;display:flex;align-items:center;justify-content:space-between}
+.map-view-toggle{display:flex;background:var(--surface);padding:4px;border-radius:10px;border:1px solid var(--border)}
+.mvt-btn{padding:.4rem 1.1rem;border:none;background:transparent;border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:all .15s}
+.mvt-btn.active{background:var(--card);color:var(--teal);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.map-add-evt-btn{padding:.4rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:.85rem;font-weight:700;text-transform:uppercase;cursor:pointer}
 
-/* ── SERVICE LOG ─────────────────────────────────────────────────────────── */
+.hub-hero{padding:1.25rem 1.1rem 0;display:flex;align-items:flex-end;justify-content:space-between}
+.hh-left h1{font-family:'Oswald',sans-serif;font-size:1.6rem;letter-spacing:.02em;margin:0}
+.hh-left p{font-size:.85rem;color:var(--muted);margin:0}
+.hh-weather{text-align:right}
+.hhw-temp{font-family:'Oswald',sans-serif;font-size:1.3rem;font-weight:700;color:var(--text);line-height:1}
+.hhw-cond{font-size:.7rem;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em}
+
+.day-tabs-bar{padding:0 1.1rem;display:flex;gap:.5rem;overflow-x:auto;scrollbar-width:none}
+.day-tabs-bar::-webkit-scrollbar{display:none}
+.day-tab{
+  flex-shrink:0;width:72px;padding:.75rem .25rem .65rem;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  display:flex;flex-direction:column;align-items:center;cursor:pointer;
+  transition:all .18s cubic-bezier(.4,0,.2,1);
+}
+.day-tab:hover{border-color:var(--teal-light);background:var(--teal-glow);transform:translateY(-2px)}
+.day-tab.active{background:var(--teal);border-color:var(--teal);color:#fff;box-shadow:0 8px 16px rgba(13,77,68,.15)}
+.day-tab.today{border-color:var(--teal-mid);border-width:2px}
+.day-tab.today:not(.active){background:var(--teal-glow)}
+.day-tab.locked{opacity:.5;cursor:default}
+.day-tab.locked:hover{transform:none}
+
+.dt-day{font-family:'Barlow Condensed',sans-serif;font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:.2rem}
+.dt-date{font-size:.72rem;margin-top:.1rem;opacity:.8}
+.dt-count{font-size:.65rem;font-weight:700;margin-top:.25rem;color:var(--muted);text-transform:uppercase;background:var(--surface);padding:1px 6px;border-radius:6px}
+.day-tab.active .dt-count{color:var(--teal-mid);background:#fff}
+
+.pool-stop{
+  display:flex;align-items:stretch;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;margin-bottom:.55rem;overflow:hidden;
+  transition:all .2s;cursor:pointer;
+}
+.pool-stop:hover{border-color:var(--teal-light);box-shadow:0 3px 8px rgba(0,0,0,.04);transform:translateX(1px)}
+.ps-num-col{
+  width:32px;background:var(--surface);display:flex;flex-direction:column;align-items:center;
+  padding-top:.45rem;border-right:1px solid var(--border);flex-shrink:0;
+}
+.ps-num{font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;color:var(--muted)}
+.ps-pin{font-size:.7rem;margin-top:.15rem;cursor:help}
+.ps-main-col{flex:1;padding:.5rem .75rem;min-width:0}
+.ps-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps-meta{font-size:.75rem;color:var(--muted);margin-top:0px;display:flex;align-items:center;gap:.5rem}
+.ps-meta i{font-style:normal;opacity:.7}
+.ps-label-row{display:flex;gap:.3rem;margin-top:.25rem;flex-wrap:wrap}
+.ps-label{font-size:.620rem;font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:0px 6px;border-radius:4px}
+
+.ps-action-col{width:48px;display:flex;align-items:center;justify-content:center;border-left:1px solid #f1f5f9;background:#fafafa}
+.ps-check{width:24px;height:24px;border:1.5px solid #cbd5e1;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:all .2s;background:#fff;font-size:.8rem}
+.ps-done .ps-check{background:var(--success);border-color:var(--success);color:#fff}
+.ps-done .ps-title{text-decoration:line-through;opacity:.6}
+.ps-done{opacity:.85}
+
+.ps-btns{display:flex;gap:.35rem;margin-top:.35rem;flex-wrap:wrap}
+.ps-btn{
+  display:flex;align-items:center;justify-content:center;gap:.3rem;
+  padding:.35rem .6rem;border-radius:6px;border:1px solid var(--border);
+  background:var(--card);font-family:'Barlow Condensed',sans-serif;
+  font-size:.72rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:.03em;cursor:pointer;transition:all .15s;color:var(--text);
+  white-space:nowrap;
+}
+.ps-btn:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.ps-btn.ps-sms{color:var(--teal-mid);background:white;border-color:rgba(42,168,154,.25)}
+.ps-btn.ps-log{background:var(--teal);color:#fff;border-color:var(--teal);padding-left:.8rem;padding-right:.8rem}
+.ps-btn.ps-log:hover{background:var(--teal-mid);border-color:var(--teal-mid)}
+.ps-btn.ps-nav{color:var(--muted);width:34px;padding:0;font-size:0} /* Icon only for nav */
+.ps-btn.ps-nav::after{content:'🧭';font-size:1rem}
 .svc-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.25rem;margin-bottom:1.25rem}
 .svc-stitle{font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);border-bottom:2px solid var(--border);padding-bottom:.4rem;margin-bottom:1rem}
 .sfg{margin-bottom:1.1rem}

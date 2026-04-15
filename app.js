@@ -40,6 +40,10 @@ let _formItems = [];
 let _mapLoaded = false;
 let _leafMap = null;
 let _mapMarkers = [];
+let _weekOffset = 0;           // week navigation offset from current week (admin only)
+let _weatherCache = {};        // keyed by week_start ISO date
+let _activeHubTab = 'schedule';
+let _profileOp = null;         // username whose profile is shown in the profile tab
 
 function api(payload){ return fetch(AS,{method:'POST',body:JSON.stringify(payload)}).then(r=>r.json()); }
 function apiGet(params){ return fetch(AS+'?'+new URLSearchParams(params)).then(r=>r.json()); }
@@ -144,7 +148,9 @@ function loadRoutes(opOverride) {
   document.getElementById('route-loading').style.display='block';
   document.getElementById('route-content').style.display='none';
   const op = opOverride || _activeOp;
-  apiGet({action:'route_data', token:_s.token, operator:op})
+  const params = {action:'route_data', token:_s.token, operator:op};
+  if(_weekOffset !== 0) params.week_offset = _weekOffset;
+  apiGet(params)
     .then(res=>{
       document.getElementById('route-loading').style.display='none';
       if(!res.ok){
@@ -171,11 +177,34 @@ let _calData = null;
 let _calMonth = new Date().getMonth() + 1;
 let _calYear = new Date().getFullYear();
 
+// ── Hub tab switching (Schedule ↔ My Operator Profile) ──
+function switchHubTab(tab) {
+  _activeHubTab = tab;
+  document.getElementById('htab-schedule').classList.toggle('active', tab === 'schedule');
+  document.getElementById('htab-profile').classList.toggle('active', tab === 'profile');
+  document.getElementById('hub-tab-schedule').style.display = tab === 'schedule' ? 'block' : 'none';
+  document.getElementById('hub-tab-profile').style.display  = tab === 'profile'  ? 'block' : 'none';
+  if (tab === 'profile') {
+    // Admins need full user list for the grid — load eagerly if not cached
+    if(isAdmin() && !_usersCache.length){
+      loadUsers(); // renderProfileTab called again after loadUsers() via renderUserTable chain
+    }
+    renderProfileTab();
+  }
+}
+
+// ── Admin week navigation ──
+function navWeek(dir) {
+  _weekOffset += dir;
+  _routeData = null;
+  loadRoutes();
+}
+
 function switchMapView(view) {
   _currentMapView = view;
   document.getElementById('btn-view-week').classList.toggle('active', view === 'week');
   document.getElementById('btn-view-month').classList.toggle('active', view === 'month');
-  
+
   if (view === 'week') {
     document.getElementById('map-week-view').style.display = 'block';
     document.getElementById('map-month-view').style.display = 'none';
@@ -224,7 +253,7 @@ function loadCalendarData(m, y) {
         const opRow = document.getElementById('op-filter-row');
         opRow.style.display='flex';
         opRow.innerHTML='<button class="op-filter-btn'+((_activeOp==='all')?' active':'')+'" onclick="switchOp(\'all\')">All</button>'+
-          res.all_operators.map(op=>`<button class="op-filter-btn${_activeOp===op?' active':''}" onclick="switchOp('${op}')">${op.split(' ')[0]}</button>`).join('');
+          res.all_operators.map(op=>{const un=op.username||op,nm=op.name||op;return`<button class="op-filter-btn${_activeOp===un?' active':''}" onclick="switchOp('${un}')">${nm.split(' ')[0]}</button>`;}).join('');
       }
 
       renderMapCalendar();
@@ -603,37 +632,99 @@ function renderRoutePage(){
   if(isAdmin() && _routeData.all_operators && _routeData.all_operators.length > 1){
     opRow.style.display='flex';
     opRow.innerHTML='<button class="op-filter-btn'+((_activeOp==='all')?' active':'')+'" onclick="switchOp(\'all\')">All</button>'+
-      _routeData.all_operators.map(op=>`<button class="op-filter-btn${_activeOp===op?' active':''}" onclick="switchOp('${op}')">${op.split(' ')[0]}</button>`).join('');
+      _routeData.all_operators.map(op=>{const un=op.username||op,nm=(op.name||op);return`<button class="op-filter-btn${_activeOp===un?' active':''}" onclick="switchOp('${un}')">${nm.split(' ')[0]}</button>`;}).join('');
   } else {
     opRow.style.display='none';
   }
 
-  // Build day tabs
-  const tabsEl = document.getElementById('day-tabs');
-  const days = _routeData.days || [];
-  const today = _routeData.today;
+  const days  = _routeData.days || [];
 
+  // Normalize today: GAS may return "2026-04-14" (date) or "Monday" (day name)
+  let today = _routeData.today || '';
+  const _tp = parseDateStr_(today);
+  if(_tp) today = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(_tp.y, _tp.m-1, _tp.d).getDay()];
+
+  // ── Week range header ──
+  const wrh   = document.getElementById('week-range-hdr');
+  const label = document.getElementById('week-range-label');
+  const badge = document.getElementById('week-this-week-badge');
+  if(wrh && days.length){
+    const firstDay = days[0];
+    const lastDay  = days[days.length - 1];
+    const fpFirst  = parseDateStr_(firstDay.date);
+    const fpLast   = parseDateStr_(lastDay.date);
+    // Fall back: compute from week_start if individual dates are missing
+    let fpFallbackFirst = null, fpFallbackLast = null;
+    if((!fpFirst || !fpLast) && _routeData.week_start){
+      const ws = parseDateStr_(_routeData.week_start);
+      if(ws){
+        fpFallbackFirst = ws;
+        const sat = new Date(ws.y, ws.m-1, ws.d+5);
+        const pad = n=>String(n).padStart(2,'0');
+        fpFallbackLast = parseDateStr_(`${sat.getFullYear()}-${pad(sat.getMonth()+1)}-${pad(sat.getDate())}`);
+      }
+    }
+    const fp1 = fpFirst  || fpFallbackFirst;
+    const fp2 = fpLast   || fpFallbackLast;
+    if(fp1 && fp2){
+      const d1 = new Date(fp1.y, fp1.m-1, fp1.d);
+      const d2 = new Date(fp2.y, fp2.m-1, fp2.d);
+      const short = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const full  = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      label.textContent = `Week of ${short(d1)} – ${full(d2)}`;
+    }
+    // "This Week" badge
+    const nowDate = new Date(); nowDate.setHours(0,0,0,0);
+    const rangeStart = fp1 ? new Date(fp1.y, fp1.m-1, fp1.d) : null;
+    const rangeEnd   = fp2 ? new Date(fp2.y, fp2.m-1, fp2.d) : null;
+    const isThisWeek = rangeStart && rangeEnd && nowDate >= rangeStart && nowDate <= rangeEnd;
+    badge.style.display = isThisWeek ? 'inline-block' : 'none';
+    wrh.style.display = 'flex';
+    // Admin week nav buttons
+    const prevBtn = document.getElementById('btn-prev-week');
+    const nextBtn = document.getElementById('btn-next-week');
+    if(prevBtn) prevBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+    if(nextBtn) nextBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+  }
+
+  // ── Pool count summary ──
+  const summaryEl = document.getElementById('week-pool-summary');
+  if(summaryEl){
+    const totalPools = days.reduce((n,d)=>n+(d.pools||[]).length, 0);
+    const operators  = new Set(days.flatMap(d=>(d.pools||[]).map(p=>p.operator).filter(Boolean)));
+    summaryEl.textContent = `${totalPools} pool${totalPools!==1?'s':''} this week${operators.size>0?' · '+operators.size+' operator'+(operators.size!==1?'s':''):''}`;
+    summaryEl.style.display = 'block';
+  }
+
+  // ── Build day tabs (compact date: "Apr 14", weather chip placeholder) ──
+  const tabsEl = document.getElementById('day-tabs');
   tabsEl.innerHTML = days.map(d=>{
     const isToday = d.day === today;
     const count   = (d.pools || []).length;
     const locked  = d.locked;
-    const dateStr = d.date ? (() => {
-      const [y,mo,dy] = d.date.split('-').map(Number);
-      return new Date(y, mo-1, dy).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-    })() : d.day;
+    const _dp  = parseDateStr_(d.date);
+    const _dObj = _dp ? new Date(_dp.y, _dp.m-1, _dp.d) : dayDateFromWeekStart_(d.day);
+    const dateStr = _dObj
+      ? _dObj.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+      : d.day.slice(0,3);
     return `<div class="day-tab${isToday?' today':''}${locked?' locked':''}" id="tab-${d.day}" onclick="selectDay('${d.day}')">
-      <span class="dt-day">${d.day.slice(0,3)}${locked?'<span class="dt-lock">🔒</span>':''}</span>
-      <span class="dt-date">${dateStr}</span>
+      <span class="dt-day">${d.day.slice(0,3)}</span>
+      <span class="dt-weather" id="dtw-${d.day}">--</span>
       <span class="dt-count">${count} pool${count!==1?'s':''}</span>
     </div>`;
   }).join('');
 
-  // Load the current weekday locally, fallback to Monday if Sunday
+  // Auto-select today (or Monday if Sunday), then scroll into view
   const jsDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   let autoDay = jsDays[new Date().getDay()];
-  if (autoDay === 'Sunday') autoDay = 'Monday';
+  if(autoDay === 'Sunday') autoDay = 'Monday';
+  // If viewing a different week, just select the first available day
+  if(_weekOffset !== 0) autoDay = (days[0] || {}).day || 'Monday';
 
   selectDay(autoDay);
+
+  // Fetch weather after tabs are rendered
+  fetchWeekWeather();
 }
 
 function switchOp(op){
@@ -648,7 +739,11 @@ function selectDay(dayName){
   // Update tab active state
   document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
   const tab = document.getElementById('tab-'+dayName);
-  if(tab) tab.classList.add('active');
+  if(tab){
+    tab.classList.add('active');
+    // Smooth-scroll the active tab into the center of the bar (mobile-friendly)
+    tab.scrollIntoView({inline:'center', behavior:'smooth', block:'nearest'});
+  }
 
   const dayData = (_routeData&&_routeData.days||[]).find(d=>d.day===dayName);
   renderDayCard(dayData);
@@ -665,7 +760,11 @@ function renderDayCard(dayData){
   const isToday = dayData.day === today;
   const locked  = dayData.locked;
   const pools   = dayData.pools || [];
-  const dateStr = dayData.date ? new Date(dayData.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}) : dayData.day;
+  const _ddp  = parseDateStr_(dayData.date);
+  const _ddObj = _ddp ? new Date(_ddp.y, _ddp.m-1, _ddp.d) : dayDateFromWeekStart_(dayData.day);
+  const dateStr = _ddObj
+    ? _ddObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+    : dayData.day;
 
   // Load done state from localStorage
   const doneKey = `mcps_done_${_routeData.week_start}_${dayData.day}`;
@@ -673,11 +772,17 @@ function renderDayCard(dayData){
 
   let html = '';
 
+  // Weather for this day from cache
+  const cacheKey = _routeData.week_start || '';
+  const dayWeather = (_weatherCache[cacheKey] || {})[dayData.day];
+  const weatherHtml = dayWeather ? `${dayWeather.icon} ${dayWeather.high}°/${dayWeather.low}°` : '';
+
   // Header
   html += `<div class="rdc-header${locked?' locked-day':''}">
-    <div>
-      <div class="rdc-day-name">${dayData.day}</div>
-      <div class="rdc-meta">${dateStr} · ${pools.length} pool${pools.length!==1?'s':''}</div>
+    <div class="rdc-header-main">
+      <div class="rdc-day-name">
+        ${dateStr} <span class="rdc-weather-chip" id="rdc-w-${dayData.day}">${weatherHtml || '<i>Loading...</i>'}</span>
+      </div>
     </div>
     <div class="rdc-badges">
       ${isToday?'<span class="rdc-badge today-badge">Today</span>':''}
@@ -687,7 +792,7 @@ function renderDayCard(dayData){
   </div>`;
 
   if(!pools.length){
-    html += '<div class="route-empty" style="padding:2.5rem 1rem"><div class="route-empty-icon">😎</div><div class="route-empty-text">No pools scheduled for this day.</div></div>';
+    html += '<div class="route-empty" style="padding:2.5rem 1rem"><div class="route-empty-icon">😎</div><div class="route-empty-text">No pools scheduled for this day. Enjoy the break!</div></div>';
     card.innerHTML = html;
     return;
   }
@@ -718,38 +823,44 @@ function renderDayCard(dayData){
   // Pool stop list
   html += '<div class="pool-stops">';
   pools.forEach((pool, idx) => {
-    const done = doneSet.has(pool.pool_id || String(idx));
+    const pId = pool.pool_id || String(idx);
+    const done = doneSet.has(pId);
     const svcClass = getSvcClass_(pool.service);
     const svcLabel = getSvcLabel_(pool.service);
-    const indivMaps = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(pool.address+', '+pool.city+', TX');
     const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
-    const pinIcon = isPinned ? '📌' : '○';
-    const pinClass = isPinned ? 'stop-pinned' : 'stop-unpinned';
-    const adminTap = isAdmin() ? ` onclick="openPoolAction('${pool.pool_id||idx}','${dayData.day}','${pool.operator||''}',${isPinned})"` : '';
+    const indivMaps = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(pool.address+', '+pool.city+', TX');
+    const adminTap = isAdmin() ? ` onclick="openPoolAction('${escHtml(pId)}','${escHtml(dayData.day)}','${escHtml(pool.operator||'')}',${isPinned})"` : '';
 
-    html += `<div class="pool-stop${done?' done-stop':''}" id="stop-${idx}" style="${isAdmin()?'cursor:pointer':''}"${adminTap}>
-      <div class="stop-num-wrap">
-        <div class="stop-num">${idx+1}</div>
-        <input type="checkbox" class="stop-check" ${done?'checked':''} onchange="event.stopPropagation();toggleDone(this,${idx},'${pool.pool_id||idx}','${doneKey}')">
+    html += `
+    <div class="pool-stop${done?' ps-done':''}" id="stop-${idx}" style="${isAdmin()?'cursor:pointer':''}"${adminTap}>
+      <div class="ps-num-col">
+        <div class="ps-num">${idx+1}</div>
+        ${isPinned ? '<div class="ps-pin" title="Pinned Stop">📌</div>' : ''}
       </div>
-      <div class="stop-body">
-        <div class="stop-name">${pool.customer_name||'—'}<span class="stop-pin ${pinClass}" title="${isPinned?'Pinned':'Not pinned'}">${pinIcon}</span></div>
-        <div class="stop-addr">${pool.address}${pool.city?', '+pool.city:''}</div>
-        <span class="stop-svc ${svcClass}">${svcLabel}</span>
-        ${pool.operator && isAdmin()?`<span class="stop-svc svc-other" style="margin-left:.3rem">${pool.operator}</span>`:''}
-        ${pool.notes?`<div class="stop-notes">📋 ${pool.notes}</div>`:''}
+      <div class="ps-main-col">
+        <div class="ps-title">${pool.customer_name||'—'}</div>
+        <div class="ps-meta">
+          <span>📍 ${pool.address}${pool.city?', '+pool.city:''}</span>
+        </div>
+        <div class="ps-label-row">
+          <span class="ps-label ${svcClass}">${svcLabel}</span>
+          ${pool.operator && isAdmin()?`<span class="ps-label svc-other">${pool.op_name||pool.operator}</span>`:''}
+          ${pool.priority?`<span class="ps-label" style="background:#fee2e2;color:#ef4444">High Priority</span>`:''}
+        </div>
+        ${pool.notes?`<div class="stop-notes" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;font-style:italic">📋 ${pool.notes}</div>`:''}
+        
+        <div class="ps-btns" onclick="event.stopPropagation()">
+          <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name||'')}')">
+            📝 Log Service
+          </button>
+          <button class="ps-btn ps-sms" data-pool-id="${escHtml(pId)}" data-cust-name="${escHtml(pool.customer_name||'')}" onclick="headsUp(event,this)" title="Send heads up SMS">
+            📲 On My Way
+          </button>
+          <a class="ps-btn ps-nav" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool"></a>
+        </div>
       </div>
-      <div class="stop-actions" onclick="event.stopPropagation()">
-        <button class="stop-log-btn" onclick="goToSvcLog('${escHtml(pool.pool_id||'')}','${escHtml(pool.customer_name||'')}')">
-          📋 Log
-        </button>
-        <button class="stop-headsup-btn" data-pool-id="${escHtml(pool.pool_id||String(idx))}" data-cust-name="${escHtml(pool.customer_name||'')}" onclick="headsUp(event,this)" title="Send heads up SMS">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          On the way!
-        </button>
-        <a class="stop-nav-btn" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-        </a>
+      <div class="ps-action-col" onclick="event.stopPropagation();toggleDoneInHub(this,${idx},'${escHtml(pId)}','${doneKey}')">
+        <div class="ps-check">${done?'✓':''}</div>
       </div>
     </div>`;
   });
@@ -766,6 +877,323 @@ function renderDayCard(dayData){
 
   // Init/update map
   initOrUpdateMap_(pools);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WEATHER (Open-Meteo — free, no API key)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Default service area coords — update if needed; used when no pools have lat/lng
+const SERVICE_LAT = 29.4235;
+const SERVICE_LNG = -98.4850;
+
+function wmoIcon(code){
+  if(code === 0)                   return '☀️';
+  if(code <= 3)                    return '⛅';
+  if(code <= 48)                   return '🌫️';
+  if(code <= 57)                   return '🌦️';
+  if(code <= 67)                   return '🌧️';
+  if(code <= 77)                   return '🌨️';
+  if(code <= 82)                   return '🌧️';
+  if(code <= 94)                   return '⛈️';
+  return '⛈️';
+}
+
+// Parse a date value from GAS — handles "YYYY-MM-DD", ISO timestamps, and Date.toString()
+function parseDateStr_(raw){
+  if(!raw) return null;
+  const s = String(raw);
+  const match = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(!match) return null;
+  return { y:+match[1], m:+match[2], d:+match[3],
+           iso: `${match[1]}-${match[2]}-${match[3]}` };
+}
+
+function guessWeekStart_(){
+  const d = new Date();
+  const day = d.getDay();
+  // Adjust to previous Monday
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(d.getFullYear(), d.getMonth(), diff);
+  const pad = n => String(n).padStart(2,'0');
+  return `${mon.getFullYear()}-${pad(mon.getMonth()+1)}-${pad(mon.getDate())}`;
+}
+
+// Compute a JS Date for a given weekday using week_start (guaranteed fallback)
+// week_start is Monday; Mon=+0, Tue=+1, …, Sat=+5
+const _DAY_OFFSET = {Monday:0,Tuesday:1,Wednesday:2,Thursday:3,Friday:4,Saturday:5};
+function dayDateFromWeekStart_(dayName){
+  let wsRaw = _routeData && _routeData.week_start;
+  if(!wsRaw && _routeData && _routeData.days && _routeData.days[0]) wsRaw = _routeData.days[0].date;
+  if(!wsRaw) wsRaw = guessWeekStart_();
+  
+  const ws = parseDateStr_(wsRaw);
+  if(!ws) return null;
+  const off = _DAY_OFFSET[dayName];
+  if(off === undefined) return null;
+  return new Date(ws.y, ws.m-1, ws.d + off);
+}
+
+function fetchWeekWeather(){
+  if(!_routeData) return;
+  const days = _routeData.days || [];
+  if(!days.length) return;
+
+  const cacheKey = _routeData.week_start || (days[0] && days[0].date) || '';
+  if(_weatherCache[cacheKey]){
+    injectWeatherChips(_weatherCache[cacheKey], days);
+    return;
+  }
+
+  // Derive lat/lng from first pool with coordinates
+  let lat = 0, lng = 0;
+  for(const d of days){
+    for(const p of (d.pools||[])){
+      if(p.lat && p.lng && p.lat !== 0 && p.lng !== 0){ lat = p.lat; lng = p.lng; break; }
+    }
+    if(lat) break;
+  }
+  if(!lat){ lat = SERVICE_LAT; lng = SERVICE_LNG; }
+
+  // Build ISO date range
+  const toISO = dateObj => {
+    if(!dateObj) return null;
+    const pad = n => String(n).padStart(2,'0');
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth()+1)}-${pad(dateObj.getDate())}`;
+  };
+  
+  const _dpStart = parseDateStr_(days[0].date);
+  const _dpEnd   = parseDateStr_(days[days.length-1].date);
+  
+  // Ensure we get a full week coverage if needed
+  const startISO = (_dpStart && _dpStart.iso) || toISO(dayDateFromWeekStart_('Monday'));
+  const endISO   = (_dpEnd   && _dpEnd.iso)   || toISO(dayDateFromWeekStart_('Saturday'));
+
+  if(!startISO || !endISO){
+    console.warn('[weather] No date range available — skipping fetch');
+    return;
+  }
+  console.log('[weather] Fetching', startISO, '→', endISO, 'lat:', lat, 'lng:', lng);
+
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`+
+              `&daily=weathercode,temperature_2m_max,temperature_2m_min`+
+              `&temperature_unit=fahrenheit&timezone=auto`+
+              `&start_date=${startISO}&end_date=${endISO}`;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if(!data.daily || !data.daily.time){ console.warn('[weather] No daily data in response', data); return; }
+      const result = {};
+      data.daily.time.forEach((dateStr, i) => {
+        const p = parseDateStr_(dateStr);
+        if(!p) return;
+        const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date(p.y, p.m-1, p.d).getDay()];
+        result[dayName] = {
+          icon: wmoIcon(data.daily.weathercode[i]),
+          high: Math.round(data.daily.temperature_2m_max[i]),
+          low:  Math.round(data.daily.temperature_2m_min[i]),
+        };
+      });
+      _weatherCache[cacheKey] = result;
+      injectWeatherChips(result, days);
+      
+      // Update current card if it matches the fetched week
+      if (_activeDay && result[_activeDay]) {
+        renderDayCard(days.find(d => d.day === _activeDay));
+      }
+    })
+    .catch(err => console.warn('[weather] Fetch failed:', err));
+}
+
+function injectWeatherChips(weatherMap, days){
+  const todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  
+  days.forEach(d => {
+    const el = document.getElementById('dtw-' + d.day);
+    if(!el) return;
+    const w = weatherMap[d.day];
+    if(w){
+      el.textContent = `${w.icon} ${w.high}°`;
+      el.title = `${w.high}° / ${w.low}°`;
+      
+      // Update Header Chip if present
+      const headerChip = document.getElementById('rdc-w-' + d.day);
+      if(headerChip) headerChip.textContent = `${w.icon} ${w.high}°/${w.low}°`;
+
+      // Update Hub Hero if this is "Today"
+      if(d.day === todayName){
+        const heroWrap = document.getElementById('hub-hero-weather');
+        const heroTemp = document.getElementById('hhw-temp');
+        const heroCond = document.getElementById('hhw-cond');
+        if(heroWrap && heroTemp && heroCond){
+          heroWrap.style.display = 'block';
+          heroTemp.textContent = `${w.high}°`;
+          heroCond.textContent = `Today: ${w.icon}`;
+        }
+      }
+    } else {
+      el.textContent = '--';
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MY OPERATOR PROFILE TAB
+// ══════════════════════════════════════════════════════════════════════════════
+
+function renderProfileTab(){
+  // Determine whose profile to show
+  if(!_profileOp) _profileOp = _s.username;
+
+  // Admin: show team availability grid at top, hide old selector pills
+  const selEl = document.getElementById('profile-op-selector');
+  if(selEl) selEl.style.display = 'none'; // pills replaced by grid row clicks
+
+  const gridWrap = document.getElementById('profile-avail-grid-wrap');
+  if(gridWrap) gridWrap.style.display = isAdmin() ? 'block' : 'none';
+  if(isAdmin()) renderAvailabilityGrid();
+
+  // Look up profile data from users cache (admins have it), otherwise use session
+  let user = _usersCache.find(u => u.username === _profileOp);
+  if(!user && _profileOp === _s.username){
+    user = { name: _s.name, username: _s.username, roles: _s.roles };
+  }
+  if(!user){
+    document.getElementById('profile-name').textContent = _profileOp || 'Loading…';
+    document.getElementById('profile-meta').textContent = '';
+    renderShiftRows({});
+    return;
+  }
+
+  // Avatar initials
+  const initials = (user.name||user.username||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('profile-avatar').textContent = initials;
+
+  // Name + meta
+  document.getElementById('profile-name').textContent = user.name || user.username;
+  const roles = Array.isArray(user.roles) ? user.roles : String(user.roles||'').split(',').map(r=>r.trim()).filter(Boolean);
+  document.getElementById('profile-meta').textContent = `@${user.username}${roles.length?' · '+roles.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', '):''}`;
+
+  // Admin: show "Editing: <name>" label above the form
+  const editingLabel = document.getElementById('profile-editing-label');
+  if(editingLabel){
+    if(isAdmin()){
+      editingLabel.textContent = `Editing: ${user.name || user.username}`;
+      editingLabel.style.display = 'block';
+    } else {
+      editingLabel.style.display = 'none';
+    }
+  }
+
+  // Parse shift_preferences
+  let prefs = {};
+  if(user.shift_preferences){
+    try{ prefs = JSON.parse(user.shift_preferences); } catch(e){ prefs = {}; }
+  }
+  renderShiftRows(prefs);
+}
+
+function switchProfileOp(op){
+  _profileOp = op;
+  renderProfileTab();
+  // Scroll the edit form into view so admin sees it after clicking a grid row
+  const hdr = document.getElementById('profile-editing-label');
+  if(hdr) hdr.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function renderShiftRows(prefs){
+  const container = document.getElementById('avail-shift-rows');
+  if(!container) return;
+  container.innerHTML = ALL_DAYS.map(day => {
+    const val = prefs[day] || null; // 'am', 'pm', 'full', or null
+    const unavailable = !val;
+    return `<div class="avail-row${unavailable?' avail-unavailable':''}" id="avail-row-${day}">
+      <div class="avail-day-label">${day}</div>
+      <div class="avail-shifts">
+        <button class="shift-btn${val==='am'?' active':''}" data-day="${day}" data-shift="am" onclick="toggleShift(this)">AM</button>
+        <button class="shift-btn${val==='pm'?' active':''}" data-day="${day}" data-shift="pm" onclick="toggleShift(this)">PM</button>
+        <button class="shift-btn${val==='full'?' active':''}" data-day="${day}" data-shift="full" onclick="toggleShift(this)">Full Day</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleShift(btn){
+  const day   = btn.dataset.day;
+  const shift = btn.dataset.shift;
+  const row   = document.getElementById('avail-row-' + day);
+  const allBtns = row.querySelectorAll('.shift-btn');
+
+  if(shift === 'full'){
+    // Full Day: deselect AM/PM, toggle full
+    const isActive = btn.classList.contains('active');
+    allBtns.forEach(b => b.classList.remove('active'));
+    if(!isActive) btn.classList.add('active');
+  } else {
+    // AM or PM: deselect Full Day, toggle this one
+    const fullBtn = row.querySelector('[data-shift="full"]');
+    if(fullBtn) fullBtn.classList.remove('active');
+    btn.classList.toggle('active');
+  }
+
+  // Update row dimming
+  const anyActive = Array.from(allBtns).some(b => b.classList.contains('active'));
+  row.classList.toggle('avail-unavailable', !anyActive);
+}
+
+function saveAvailability(){
+  const targetUsername = _profileOp || _s.username;
+  const btn = document.querySelector('.avail-save-btn');
+  const msgEl = document.getElementById('avail-msg');
+
+  // Build prefs object from current UI state
+  const prefs = {};
+  ALL_DAYS.forEach(day => {
+    const row = document.getElementById('avail-row-' + day);
+    if(!row) return;
+    const active = row.querySelector('.shift-btn.active');
+    prefs[day] = active ? active.dataset.shift : null;
+  });
+
+  // On-leave guard: all days null
+  const hasDays = Object.values(prefs).some(v => v !== null);
+  if(!hasDays){
+    if(!confirm('You have no days selected — this will mark you as completely unavailable for routing. Continue?')) return;
+  }
+
+  // Derive available_days from prefs (non-null days)
+  const availDays = ALL_DAYS.filter(d => prefs[d] !== null).join(',');
+
+  if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
+  msgEl.style.display = 'none';
+
+  api({ secret:SEC, action:'update_user', token:_s.token,
+        username: targetUsername,
+        fields: {
+          shift_preferences: JSON.stringify(prefs),
+          available_days: availDays,
+        }
+  }).then(res => {
+    if(btn){ btn.disabled = false; btn.textContent = 'Save Availability'; }
+    if(res.ok){
+      // Update local cache
+      const cached = _usersCache.find(u => u.username === targetUsername);
+      if(cached){ cached.shift_preferences = JSON.stringify(prefs); cached.available_days = availDays; }
+      msgEl.className = 'im success';
+      msgEl.textContent = '✓ Availability saved.';
+    } else {
+      msgEl.className = 'im error';
+      msgEl.textContent = 'Error: ' + (res.error || 'Could not save.');
+    }
+    msgEl.style.display = 'block';
+    setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
+  }).catch(e => {
+    if(btn){ btn.disabled = false; btn.textContent = 'Save Availability'; }
+    msgEl.className = 'im error';
+    msgEl.textContent = 'Network error: ' + e.message;
+    msgEl.style.display = 'block';
+  });
 }
 
 function toggleMapPanel(){
@@ -813,8 +1241,31 @@ function toggleDone(cb, idx, poolId, doneKey){
   else { const i=done.indexOf(poolId); if(i!==-1)done.splice(i,1); }
   localStorage.setItem(doneKey, JSON.stringify(done));
   if(row) row.classList.toggle('done-stop', cb.checked);
-  const numEl = row&&row.querySelector('.stop-num');
-  if(numEl) numEl.style.background = cb.checked ? 'var(--success)' : 'var(--teal)';
+}
+
+function toggleDoneInHub(actionCol, idx, poolId, doneKey){
+  const row = document.getElementById('stop-'+idx);
+  const checkEl = actionCol.querySelector('.ps-check');
+  const done = JSON.parse(localStorage.getItem(doneKey)||'[]');
+  const isDone = done.includes(poolId);
+  
+  if(!isDone){ done.push(poolId); }
+  else { const i=done.indexOf(poolId); if(i!==-1)done.splice(i,1); }
+  
+  const nowDone = !isDone;
+  localStorage.setItem(doneKey, JSON.stringify(done));
+  
+  if(row) row.classList.toggle('ps-done', nowDone);
+  if(checkEl) checkEl.textContent = nowDone ? '✓' : '';
+  
+  // Also sync a small done label if present
+  const doneLabel = row.querySelector('.ps-label:last-child');
+  if(doneLabel && doneLabel.textContent.includes('Done')){
+    if(!nowDone) doneLabel.remove();
+  } else if(nowDone){
+    const rowLabels = row.querySelector('.ps-label-row');
+    if(rowLabels) rowLabels.insertAdjacentHTML('beforeend', '<span class="ps-label" style="background:#f0fdf4;color:#166534">✓ Done</span>');
+  }
 }
 
 function buildAppleMapsUrl_(pools){
@@ -863,7 +1314,7 @@ function openPoolAction(poolId, day, operator, pinned) {
   // Operator select
   const opSel = document.getElementById('pas-op-select');
   const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
-  opSel.innerHTML = ops.map(op => `<option value="${op}"${op===operator?' selected':''}>${op}</option>`).join('');
+  opSel.innerHTML = ops.map(op => {const un=op.username||op,nm=op.name||op;return`<option value="${un}"${un===operator?' selected':''}>${nm}</option>`;}).join('');
   // Pin toggle
   updatePasPin_(pinned);
   // Show
@@ -968,7 +1419,7 @@ function openPlacePool(poolId) {
   ).join('');
   const opSel = document.getElementById('pas-op-select');
   const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
-  opSel.innerHTML = ops.map((op,i) => `<option value="${op}"${i===0?' selected':''}>${op}</option>`).join('');
+  opSel.innerHTML = ops.map((op,i) => {const un=op.username||op,nm=op.name||op;return`<option value="${un}"${i===0?' selected':''}>${nm}</option>`;}).join('');
   updatePasPin_(true);
   document.getElementById('pas-backdrop').classList.add('open');
   document.getElementById('pas-sheet').classList.add('open');
@@ -1553,8 +2004,21 @@ function confirmAndSubmit(){
     if(res.ok){
       if (window._svcPayload) {
         const poolIdKey = Object.keys(window._svcPayload).find(k => k.trim().toLowerCase() === 'pool_id');
-        if (poolIdKey && window._svcPayload[poolIdKey]) {
-          localStorage.removeItem('svc_draft_' + window._svcPayload[poolIdKey]);
+        const pId = poolIdKey ? window._svcPayload[poolIdKey] : null;
+        
+        if (pId) {
+          localStorage.removeItem('svc_draft_' + pId);
+          
+          // Auto-mark as done in Technician Hub
+          if(_activeDay && _routeData && _routeData.week_start){
+            const doneKey = `mcps_done_${_routeData.week_start}_${_activeDay}`;
+            const done = JSON.parse(localStorage.getItem(doneKey)||'[]');
+            if(!done.includes(pId)){
+              done.push(pId);
+              localStorage.setItem(doneKey, JSON.stringify(done));
+              console.log('[hub] Pool', pId, 'auto-marked as done for', _activeDay);
+            }
+          }
         }
         window._lastLoadedPoolId = null;
       }
@@ -1669,7 +2133,55 @@ function loadUsers() {
     if (!res.ok) return;
     _usersCache = res.users || [];
     renderUserTable(_usersCache);
+    // If profile tab is open, refresh the grid with fresh data
+    if(_activeHubTab === 'profile') renderProfileTab();
   });
+}
+
+// ── Admin Team Availability grid (lives in Profile tab) ───────────────────────
+function renderAvailabilityGrid(){
+  const body = document.getElementById('profile-avail-grid-body');
+  if(!body) return;
+
+  const users = _usersCache.filter(u => {
+    const roles = Array.isArray(u.roles) ? u.roles : String(u.roles||'').split(',').map(r=>r.trim());
+    const active = u.active === true || String(u.active).toUpperCase() === 'TRUE';
+    return active && roles.some(r => ['technician','lead','manager'].includes(r));
+  });
+  if(!users.length){
+    body.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">No technicians found. Users may still be loading.</div>';
+    return;
+  }
+
+  const dayAbbr = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  let html = '<table class="avail-grid">';
+  html += '<thead><tr>';
+  html += '<th class="ag-name-col">Technician</th>';
+  dayAbbr.forEach(d => { html += `<th>${d}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  users.forEach(u => {
+    let prefs = {};
+    if(u.shift_preferences){
+      try{ prefs = JSON.parse(u.shift_preferences); } catch(e){ prefs = {}; }
+    }
+    const isSelected = u.username === _profileOp;
+    html += `<tr onclick="switchProfileOp('${u.username}')" title="Edit ${u.name||u.username}'s availability"${isSelected?' class="ag-row-selected"':''}>`;
+    html += `<td class="ag-name-cell">${u.name||u.username}</td>`;
+    ALL_DAYS.forEach(day => {
+      const val = prefs[day] || null;
+      let badge = '<span class="ag-badge off">—</span>';
+      if(val === 'am')   badge = '<span class="ag-badge am">AM</span>';
+      if(val === 'pm')   badge = '<span class="ag-badge pm">PM</span>';
+      if(val === 'full') badge = '<span class="ag-badge full">FULL</span>';
+      html += `<td>${badge}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
 }
  
 function renderUserTable(users) {

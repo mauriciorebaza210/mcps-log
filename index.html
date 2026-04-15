@@ -57,46 +57,113 @@
     <div class="pf" id="page-live_map">
       <div id="route-loading" class="route-loading"><div class="spinner"></div></div>
       <div id="route-content" style="display:none">
-        
-        <!-- View Toggle & Admin Add Button -->
-        <div class="map-view-hdr">
-          <div class="map-view-toggle">
-            <button class="mvt-btn active" id="btn-view-week" onclick="switchMapView('week')">Week View</button>
-            <button class="mvt-btn" id="btn-view-month" onclick="switchMapView('month')">Month Calendar</button>
-          </div>
-          <button class="map-add-evt-btn" id="btn-add-adhoc" style="display:none" onclick="openAdHocModal()">+ Add Event</button>
+
+        <!-- Hub-level tab bar -->
+        <div class="hub-tabs-bar">
+          <button class="hub-tab active" id="htab-schedule" onclick="switchHubTab('schedule')">📅 Schedule</button>
+          <button class="hub-tab" id="htab-profile" onclick="switchHubTab('profile')">👤 My Operator Profile</button>
         </div>
 
-        <!-- Admin operator filter -->
-        <div id="op-filter-row" class="op-filter-row" style="display:none"></div>
-        
-        <!-- WEEK VIEW -->
-        <div id="map-week-view">
-          <!-- Day tabs -->
-          <div class="day-tabs-bar" id="day-tabs"></div>
-          <!-- Selected day route card -->
-          <div class="route-day-card" id="route-day-card">
-            <div class="route-empty"><div class="route-empty-icon">📅</div><div class="route-empty-text">Select a day above.</div></div>
-          </div>
-        </div>
+        <!-- ══ SCHEDULE TAB ══ -->
+        <div id="hub-tab-schedule">
 
-        <!-- MONTH CALENDAR VIEW -->
-        <div id="map-month-view" style="display:none">
-          <div class="cal-hdr">
-             <button class="cal-nav-btn" onclick="navMonth(-1)">◀</button>
-             <div class="cal-month-title" id="cal-month-title">Month Year</div>
-             <button class="cal-nav-btn" onclick="navMonth(1)">▶</button>
+          <!-- Hub Hero & Weather Summary -->
+          <div class="hub-hero">
+            <div class="hh-left">
+              <h1>Technician Hub</h1>
+              <p id="hub-subtitle">Your route at a glance</p>
+            </div>
+            <div class="hh-weather" id="hub-hero-weather" style="display:none">
+              <div class="hhw-temp" id="hhw-temp">--°</div>
+              <div class="hhw-cond" id="hhw-cond">FETCHING...</div>
+            </div>
           </div>
-          <div class="cal-grid">
-            <div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div>
-            <!-- Calendar cells injected here -->
-            <div id="cal-cells" class="cal-cells-wrap"></div>
+
+          <!-- Sub-toggle (Week / Month) + Add Event -->
+          <div class="map-view-hdr">
+            <div class="map-view-toggle">
+              <button class="mvt-btn active" id="btn-view-week" onclick="switchMapView('week')">Week</button>
+              <button class="mvt-btn" id="btn-view-month" onclick="switchMapView('month')">Month</button>
+            </div>
+            <button class="map-add-evt-btn" id="btn-add-adhoc" style="display:none" onclick="openAdHocModal()">+ Add Event</button>
           </div>
-          
-          <div class="route-day-card" id="cal-detail-card" style="margin-top:1rem; display:none;">
-            <!-- detail info for clicked day -->
+
+          <!-- Admin operator filter -->
+          <div id="op-filter-row" class="op-filter-row" style="display:none"></div>
+
+          <!-- WEEK VIEW -->
+          <div id="map-week-view">
+            <!-- Sticky week context header -->
+            <div class="week-range-hdr" id="week-range-hdr" style="display:none">
+              <button class="wrh-nav-btn" id="btn-prev-week" onclick="navWeek(-1)" style="display:none">&#8592; Prev</button>
+              <div class="wrh-center">
+                <span class="wrh-label" id="week-range-label"></span>
+                <span class="wrh-badge this-week-badge" id="week-this-week-badge" style="display:none">THIS WEEK</span>
+              </div>
+              <button class="wrh-nav-btn" id="btn-next-week" onclick="navWeek(1)" style="display:none">Next &#8594;</button>
+            </div>
+            <!-- Pool count summary -->
+            <div class="week-pool-summary" id="week-pool-summary" style="display:none"></div>
+            <!-- Day tabs -->
+            <div class="day-tabs-bar" id="day-tabs"></div>
+            <!-- Selected day route card -->
+            <div class="route-day-card" id="route-day-card">
+              <div class="route-empty"><div class="route-empty-icon">📅</div><div class="route-empty-text">Select a day above.</div></div>
+            </div>
           </div>
-        </div>
+
+          <!-- MONTH CALENDAR VIEW -->
+          <div id="map-month-view" style="display:none">
+            <div class="cal-hdr">
+               <button class="cal-nav-btn" onclick="navMonth(-1)">◀</button>
+               <div class="cal-month-title" id="cal-month-title">Month Year</div>
+               <button class="cal-nav-btn" onclick="navMonth(1)">▶</button>
+            </div>
+            <div class="cal-grid">
+              <div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div>
+              <!-- Calendar cells injected here -->
+              <div id="cal-cells" class="cal-cells-wrap"></div>
+            </div>
+            <div class="route-day-card" id="cal-detail-card" style="margin-top:1rem; display:none;"></div>
+          </div>
+
+        </div><!-- /hub-tab-schedule -->
+
+        <!-- ══ MY OPERATOR PROFILE TAB ══ -->
+        <div id="hub-tab-profile" style="display:none">
+
+          <!-- Admin-only: Team Availability grid (injected by JS) -->
+          <div id="profile-avail-grid-wrap" style="display:none">
+            <div class="profile-grid-hdr">
+              <span>Team Availability</span>
+              <span class="profile-grid-hint">Click a row to edit that technician's shifts below.</span>
+            </div>
+            <div id="profile-avail-grid-body" style="overflow-x:auto;padding:.25rem 1rem .75rem"></div>
+          </div>
+
+          <!-- Section label shown when admin is editing a specific tech -->
+          <div id="profile-editing-label" class="profile-editing-label" style="display:none"></div>
+
+          <!-- Profile header card -->
+          <div class="profile-hdr-card" id="profile-hdr-card">
+            <div class="phc-avatar" id="profile-avatar">?</div>
+            <div class="phc-info">
+              <div class="phc-name" id="profile-name">Loading…</div>
+              <div class="phc-meta" id="profile-meta"></div>
+            </div>
+          </div>
+
+          <!-- Availability section -->
+          <div class="avail-section">
+            <div class="avail-section-title">MY AVAILABILITY</div>
+            <div class="avail-section-hint">Select which shifts you work each day. Admins use this to assign pools.</div>
+            <div id="avail-shift-rows" class="avail-shift-rows"></div>
+            <button class="avail-save-btn" onclick="saveAvailability()">Save Availability</button>
+            <div class="avail-recalc-note">Changes apply at the next route recalculation.</div>
+            <div class="im" id="avail-msg" style="display:none;margin-top:.75rem"></div>
+          </div>
+
+        </div><!-- /hub-tab-profile -->
 
       </div>
     </div>
