@@ -176,6 +176,7 @@
 
 <!-- ── REPLACE the entire id="page-admin" div with this ── -->
  
+  <!-- Admin -->
 <div class="pf" id="page-admin">
 
   <div style="padding:.85rem 1.1rem;border-top:1px solid var(--border)">
@@ -285,6 +286,56 @@
   </div>
  
 </div>
+
+  <!-- CRM & Leads -->
+  <div class="pf" id="page-crm">
+    <div class="adm-card">
+      <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Client Management (CRM)</span>
+        <div style="display:flex;gap:.5rem">
+          <button class="adm-new-btn" id="crm-new-quote-btn" style="background:var(--teal);display:none" onclick="navigateTo('quotes')">➕ New Quote</button>
+          <button class="adm-new-btn" onclick="loadCRM()">↻ Refresh</button>
+          <button class="adm-new-btn" style="background:#059669" onclick="exportCRM()">⬇ Export</button>
+        </div>
+      </div>
+      <div style="padding:.85rem 1.1rem">
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <input class="si" id="crm-search" type="text" placeholder="Search by name, email, or city..." oninput="filterCRM()">
+          </div>
+          <select class="si" id="crm-filter-status" onchange="filterCRM()" style="width:auto">
+            <option value="all">All Statuses</option>
+            <option value="LEAD">Leads</option>
+            <option value="UNSENT">Quotes (Unsent)</option>
+            <option value="SENT">Quotes (Sent)</option>
+            <option value="SIGNED">Signed Contracts</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="LOST">Lost</option>
+          </select>
+        </div>
+        <div id="crm-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
+        <div style="overflow-x:auto; margin: 0 -1.1rem; border-top: 1px solid var(--border)">
+          <table class="ut crm-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Client</th>
+                <th>City</th>
+                <th>Service</th>
+                <th>Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="crm-tbody">
+              <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Click Refresh to load client data.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
  
 <!-- ── Order CSV modal ── -->
 <div class="csv-modal-backdrop" id="csv-modal-backdrop" onclick="invCloseCsvModal(event)">
@@ -1076,6 +1127,22 @@
     <div class="conf-modal-foot">
       <button class="conf-cancel-btn" onclick="closeAdHocModal()">Cancel</button>
       <button class="conf-submit-btn" id="btn-save-adhoc" onclick="saveAdHocEvent()">Save Event</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CRM Detail Modal ── -->
+<div class="conf-modal-backdrop" id="crm-detail-modal" onclick="closeCRMDetail()">
+  <div class="conf-modal" style="max-width:600px" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Client Detail</div>
+      <button class="drawer-close" onclick="closeCRMDetail()">✕</button>
+    </div>
+    <div class="conf-modal-body" id="crm-detail-content">
+      <!-- Injected by JS -->
+    </div>
+    <div class="conf-modal-foot">
+      <button class="conf-submit-btn" onclick="closeCRMDetail()">Close</button>
     </div>
   </div>
 </div>

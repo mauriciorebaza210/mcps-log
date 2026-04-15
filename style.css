@@ -1228,3 +1228,27 @@ select.q-inp{cursor:pointer}
 /* ── GRADUATION MODAL ────────────────────────────────────────────────────── */
 .grad-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:none;align-items:center;justify-content:center;text-align:center;padding:2rem}
 .grad-modal-inner{color:#fff;animation:fadeUp .4s ease}
+/* ── CRM STYLES ───────────────────────────────────────────────────────────── */
+.crm-table tr:hover { background: rgba(13,77,68,0.04); }
+.sc-badge { 
+  display: inline-block; 
+  padding: .25rem .6rem; 
+  border-radius: 6px; 
+  font-size: .68rem; 
+  font-weight: 700; 
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sc-unsent { background: #fef3c7; color: #92400e; }
+.sc-sent   { background: #e0f2fe; color: #075985; }
+.sc-signed { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+.sc-lost   { background: #fee2e2; color: #991b1b; }
+.sc-lead   { background: #f1f5f9; color: #475569; }
+
+.crm-detail-wrap h3 { font-family: 'Oswald', sans-serif; font-size: 1.25rem; margin-bottom: 1rem; color: var(--teal); }
+.crm-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; }
+.crm-detail-sec { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.crm-detail-wrap b { color: var(--muted); font-weight: 500; font-size: .75rem; text-transform: uppercase; display: block; margin-bottom: .1rem; }
+.crm-detail-wrap code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-size: .85rem; font-family: monospace; }

@@ -6,7 +6,7 @@ const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
   home:'🏠|Home', live_map:'🛟|Technician Hub', service_log:'📝|Service Log',
-  inventory:'📦|Inventory', quotes:'📄|Quotes', training:'🎓|Training', admin:'🔒|Admin',
+  inventory:'📦|Inventory', quotes:'📄|Quote Tool', crm:'📇|CRM & Leads', training:'🎓|Training', admin:'🔒|Admin',
   onboarding:'📋|Get Started'
 };
 
@@ -16,12 +16,12 @@ const ROLE_PAGES = {
   lead:['home','live_map','service_log','training'],
   trainee:['home','training'],
   new_hire:['onboarding'],
-  office:['home','quotes','inventory'],
-  manager:['home','live_map','service_log','inventory','quotes','training'],
-  admin:['home','live_map','service_log','inventory','quotes','training','admin'],
+  office:['home','inventory'],
+  manager:['home','crm','live_map','service_log','inventory','quotes','training'],
+  admin:['home','crm','live_map','service_log','inventory','quotes','training','admin'],
 };
 
-const ALL_ROLES = ['technician','lead','office','manager','admin','trainee','new_hire'];
+const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];
 const ALL_DAYS  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 let _editingUsername = null;
 let _usersCache = [];
@@ -85,7 +85,7 @@ function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch
 
 function unionPages_(roles) {
   const set = new Set();
-  const order = ['home','onboarding','live_map','service_log','inventory','quotes','training','admin'];
+  const order = ['home','onboarding','live_map','service_log','inventory','crm','quotes','training','admin'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }
@@ -101,6 +101,8 @@ function showApp(startPage) {
   const rb=document.getElementById('tp-role');
   rb.textContent=(_s.roles||[]).join(', '); rb.className='r-badge '+(_s.roles||[])[0];
   document.getElementById('home-name').textContent=_s.name.split(' ')[0];
+  // Refresh pages list in case ROLE_PAGES was updated
+  _s.pages = unionPages_(_s.roles);
   buildNav(); buildHomeCards();
   if((_s.pages||[]).includes('admin')) { loadUsers(); loadPendingHires(); loadInternalNotes(); }
   const pg = (_s.pages||[]).includes(startPage)?startPage:'home';
@@ -108,7 +110,8 @@ function showApp(startPage) {
 }
 
 function buildNav(){
-  document.getElementById('bnav').innerHTML=(_s.pages||[]).filter(p => p !== 'service_log').map(p=>{
+  const skip = ['service_log', 'quotes'];
+  document.getElementById('bnav').innerHTML=(_s.pages||[]).filter(p => !skip.includes(p)).map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<button class="ni" id="ni-${p}" onclick="navigateTo('${p}')"><span class="ni-icon">${icon}</span><span class="ni-label">${label}</span></button>`;
   }).join('');
@@ -137,6 +140,7 @@ function navigateTo(page){
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
+  if(page==='crm') loadCRM();
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
 }
@@ -3194,6 +3198,171 @@ async function qSave() {
 }
 
 function qInit() { if (!_qS._calc) qRecalc(); }
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CRM & LEADS
+// ══════════════════════════════════════════════════════════════════════════════
+let _crmCache = [];
+
+async function loadCRM() {
+  const loading = document.getElementById('crm-loading');
+  const tbody = document.getElementById('crm-tbody');
+  const quoteBtn = document.getElementById('crm-new-quote-btn');
+  
+  if (quoteBtn) quoteBtn.style.display = isAdmin() ? 'block' : 'none';
+  if (loading) loading.style.display = 'block';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Loading client data...</td></tr>';
+
+  try {
+    const res = await apiGet({ action: 'get_crm_data', token: _s.token });
+    if (res.ok) {
+      _crmCache = res.data || [];
+      renderCRM(_crmCache);
+    } else {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load CRM data.'}</td></tr>`;
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--error)">Network error. Please try again.</td></tr>`;
+  } finally {
+    if (loading) loading.style.display = 'none';
+  }
+}
+
+function renderCRM(data) {
+  const tbody = document.getElementById('crm-tbody');
+  if (!tbody) return;
+
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No records found matching filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.map(item => {
+    const ts = item.timestamp ? new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }) : '—';
+    const status = (item.status || 'UNSENT').toUpperCase();
+    const client = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '—';
+    const total = typeof item.total_with_tax === 'number' ? `$${item.total_with_tax.toFixed(2)}` : (item.total_with_tax || '—');
+    
+    let statusClass = 'sc-unsent';
+    if (status === 'SIGNED' || status === 'COMPLETED') statusClass = 'sc-signed';
+    if (status === 'LOST') statusClass = 'sc-lost';
+    if (status === 'LEAD') statusClass = 'sc-lead';
+    if (status === 'SENT') statusClass = 'sc-sent';
+
+    return `
+      <tr onclick="viewCRMDetail('${item.quote_id}')" style="cursor:pointer">
+        <td><div style="font-size:.85rem;color:var(--muted)">${ts}</div></td>
+        <td><span class="sc-badge ${statusClass}">${status}</span></td>
+        <td><div style="font-weight:600">${client}</div><div style="font-size:.72rem;color:var(--muted)">${item.email || ''}</div></td>
+        <td><div style="font-size:.85rem">${item.city || '—'}</div></td>
+        <td><div style="font-size:.85rem">${item.service || '—'}</div></td>
+        <td><div style="font-weight:600">${total}</div></td>
+        <td style="text-align:right">📑</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterCRM() {
+  const q = document.getElementById('crm-search').value.toLowerCase();
+  const status = document.getElementById('crm-filter-status').value;
+
+  const filtered = _crmCache.filter(item => {
+    const clientMatch = `${item.first_name} ${item.last_name} ${item.email} ${item.city}`.toLowerCase().includes(q);
+    const statusMatch = status === 'all' || (item.status || 'UNSENT').toUpperCase() === status.toUpperCase();
+    return clientMatch && statusMatch;
+  });
+
+  renderCRM(filtered);
+}
+
+function viewCRMDetail(quoteId) {
+  const item = _crmCache.find(i => i.quote_id === quoteId);
+  if (!item) return;
+
+  // Since we don't have a dedicated CRM drawer yet, let's use a dynamic one or alert for now
+  // In a real app, I'd create a CRM Detail Modal
+  let detailHtml = `<div class="crm-detail-wrap" style="padding:1rem">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+      <div>
+        <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem">Client Information</div>
+        <div style="font-weight:700;font-size:1.1rem">${item.first_name || ''} ${item.last_name || ''}</div>
+        <div style="margin-top:.4rem">📧 ${item.email || '—'}</div>
+        <div>📞 ${item.phone || '—'}</div>
+        <div style="margin-top:.4rem">🏠 ${item.address || ''}, ${item.city || ''} ${item.zip_code || ''}</div>
+      </div>
+      <div>
+        <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem">Quote Status</div>
+        <div style="font-weight:700;font-size:1.1rem;color:var(--teal)">${item.status || 'UNSENT'}</div>
+        <div style="margin-top:.4rem">ID: <code>${item.quote_id || '—'}</code></div>
+        <div>Date: ${item.timestamp ? new Date(item.timestamp).toLocaleString() : '—'}</div>
+      </div>
+    </div>
+    
+    <div style="margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem">
+      <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Service Details</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.85rem">
+        <div><b>Service:</b> ${item.service || '—'}</div>
+        <div><b>Pool Type:</b> ${item.pool_type || '—'}</div>
+        <div><b>Size:</b> ${item.size || '—'}</div>
+        <div><b>Material:</b> ${item.material || '—'}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem">
+      <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Financials</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.85rem">
+        <div><b>Subtotal:</b> $${(item.quote_subtotal || 0).toFixed(2)}</div>
+        <div><b>Tax:</b> $${(item.sales_tax || 0).toFixed(2)}</div>
+        <div style="font-size:1rem;font-weight:700;margin-top:.3rem">Total: $${(item.total_with_tax || 0).toFixed(2)}</div>
+        <div style="color:var(--success);font-weight:600;margin-top:.3rem">Est. Profit: $${(item.net_profit_est || 0).toFixed(2)}</div>
+      </div>
+    </div>
+
+    ${item.notes ? `
+    <div style="margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem">
+      <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem">Notes</div>
+      <div style="font-size:.85rem;white-space:pre-wrap">${item.notes}</div>
+    </div>` : ''}
+
+    <div style="margin-top:2rem;text-align:right">
+      <button class="ni" style="background:var(--teal);color:white;padding:.6rem 1.2rem;border-radius:6px;font-weight:600" onclick="closeCRMDetail()">Close</button>
+    </div>
+  </div>`;
+
+  document.getElementById('crm-detail-content').innerHTML = detailHtml;
+  document.getElementById('crm-detail-modal').style.display = 'flex';
+}
+
+function closeCRMDetail() {
+  const modal = document.getElementById('crm-detail-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function exportCRM() {
+  if (!_crmCache.length) return alert('No data to export.');
+  
+  const headers = Object.keys(_crmCache[0]);
+  const rows = _crmCache.map(item => headers.map(h => {
+    let val = item[h] === null || item[h] === undefined ? '' : item[h];
+    if (typeof val === 'string' && (val.includes(',') || val.includes('\n'))) {
+      val = `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  }).join(','));
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `MCPS_CRM_Export_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
 
 
 // ══════════════════════════════════════════════════════════════════════════════
