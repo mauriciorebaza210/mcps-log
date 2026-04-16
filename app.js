@@ -220,8 +220,8 @@ function navigateTo(page){
   if(nb)nb.classList.add('active');
   _curPage=page;
   location.hash=page==='home'?'':page;
+  if(page==='home') loadHomeStats();
   if(page==='live_map'&&!_routeData) loadRoutes();
-  // Always reload service log state. Pass any pending prefill ID if applicable.
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
@@ -6044,3 +6044,68 @@ function showGraduationModal() {
   setTimeout(() => { el.style.display = 'none'; }, 3200);
 }
 
+
+async function loadHomeStats() {
+  const container = document.getElementById('home-stats');
+  if(!container) return;
+  
+  if(!isAdmin()) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'grid';
+
+  // Show skeletons
+  container.innerHTML = `<div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div>`;
+
+  try {
+    const [crmRes, goalRes, unRes] = await Promise.all([
+      apiGet({ action: 'get_crm_data', token: _s.token }),
+      apiGet({ action: 'get_weekly_goal', token: _s.token }),
+      apiGet({ action: 'get_unassigned', token: _s.token })
+    ]);
+
+    let signedCount = 0;
+    if(crmRes.ok && crmRes.data){
+      signedCount = crmRes.data.filter(i => (i.status||'').toUpperCase() === 'SIGNED').length;
+    }
+
+    let weeklyGoal = goalRes.ok ? (goalRes.goal || 5) : 5;
+    let weeklySigned = goalRes.ok ? (goalRes.signed_this_week || 0) : 0;
+    
+    let unassignedCount = unRes.ok ? (unRes.pools ? unRes.pools.length : 0) : 0;
+
+    renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount);
+  } catch(e) {
+    console.error("Home stats error:", e);
+    container.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:.8rem;text-align:center;padding:1rem;background:var(--surface);border-radius:12px">Summary unavailable</div>`;
+  }
+}
+
+function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned) {
+  const container = document.getElementById('home-stats');
+  if(!container) return;
+
+  const pct = Math.min(weeklySigned / Math.max(weeklyGoal, 1), 1);
+
+  container.innerHTML = `
+    <div class="hs-card" onclick="navigateTo('crm')">
+      <div class="hs-label">Signed Pools</div>
+      <div class="hs-value">${totalSigned}</div>
+      <div class="hs-sub">Active recurring contracts</div>
+    </div>
+    <div class="hs-card" onclick="navigateTo('crm')">
+      <div class="hs-label">Weekly Progress</div>
+      <div class="hs-value">${weeklySigned} / ${weeklyGoal}</div>
+      <div class="hs-progress-wrap">
+        <div class="hs-progress-bar" style="width:${pct*100}%"></div>
+      </div>
+      <div class="hs-sub">New signs this week</div>
+    </div>
+    <div class="hs-card" onclick="navigateTo('live_map')">
+      <div class="hs-label">Needs Routing</div>
+      <div class="hs-value" style="color: ${unassigned > 0 ? 'var(--warn)' : 'var(--teal)'}">${unassigned}</div>
+      <div class="hs-sub">Pools without a schedule</div>
+    </div>
+  `;
+}

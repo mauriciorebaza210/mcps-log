@@ -1517,3 +1517,80 @@ select.q-inp{cursor:pointer}
 /* flex:1 already distributes evenly; tighten font slightly so 3 tabs fit on narrow phones */
 .hub-tab { font-size: .78rem; padding: .75rem .25rem; }
 @media(min-width: 420px){ .hub-tab { font-size: .85rem; padding: .75rem .5rem; } }
+
+/* ── HOME STYLES ── */
+.home-section-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 1.5rem 0 .75rem;
+}
+
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 600px) {
+  .home-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.hs-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  transition: all .2s;
+}
+
+.hs-card:hover {
+  border-color: var(--teal-light);
+  transform: translateY(-2px);
+}
+
+.hs-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hs-value {
+  font-family: 'Oswald', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--teal);
+  line-height: 1;
+}
+
+.hs-sub {
+  font-size: .72rem;
+  color: var(--muted);
+}
+
+.hs-progress-wrap {
+  margin-top: .4rem;
+  height: 6px;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hs-progress-bar {
+  height: 100%;
+  background: var(--teal-mid);
+  width: 0%;
+  transition: width .5s ease;
+}
