@@ -3385,6 +3385,7 @@ async function loadCRM() {
       _crmCache = res.data || [];
       renderCRM(_crmCache, true);
       renderCRMStats();
+      populateYearFilter();
       loadWeeklyGoal();
     } else {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load data.'}</td></tr>`;
@@ -3500,6 +3501,21 @@ function renderCRMStats() {
   ).join('');
 }
 
+function populateYearFilter() {
+  const select = document.getElementById('crm-filter-year');
+  if (!select) return;
+  const currentVal = select.value;
+  const years = [...new Set(_crmCache.map(i => i.year_built).filter(Boolean).map(y => String(y).trim()))].sort((a,b) => b-a);
+  
+  let html = '<option value="all">Year (All)</option>';
+  years.forEach(y => {
+    html += `<option value="${y}">${y}</option>`;
+  });
+  select.innerHTML = html;
+  if (years.includes(currentVal)) select.value = currentVal;
+  else select.value = 'all';
+}
+
 function crmStatFilter(key) {
   const statusEl = document.getElementById('crm-filter-status');
   if (key === 'all') statusEl.value = 'all';
@@ -3513,13 +3529,16 @@ function filterCRM() {
   const status = document.getElementById('crm-filter-status').value;
   const areaEl = document.getElementById('crm-filter-area');
   const area = areaEl ? areaEl.value : 'all';
+  const yearEl = document.getElementById('crm-filter-year');
+  const yearMatchVal = yearEl ? yearEl.value.trim() : '';
 
   const filtered = _crmCache.filter(item => {
     const name = item.client_name || `${item.first_name || ''} ${item.last_name || ''}`;
     const clientMatch = `${name} ${item.email || ''} ${item.city || ''}`.toLowerCase().includes(q);
     const statusMatch = status === 'all' || (item.status || 'UNSENT').toUpperCase() === status.toUpperCase();
     const areaMatch = area === 'all' || (item.area || '').toUpperCase() === area.toUpperCase();
-    return clientMatch && statusMatch && areaMatch;
+    const yearMatch = yearMatchVal === 'all' || String(item.year_built || '').trim() === yearMatchVal;
+    return clientMatch && statusMatch && areaMatch && yearMatch;
   });
 
   renderCRM(filtered, true);
@@ -3702,6 +3721,36 @@ async function saveLeadChanges() {
   }
 }
 
+async function confirmImportLeads() {
+  const btn = document.getElementById('import-leads-confirm-btn');
+  const msg = document.getElementById('import-leads-msg');
+  const valid = _importLeadsParsed.filter(r => r.client_name.trim());
+  if (!valid.length) return;
+
+  btn.disabled = true;
+  btn.textContent = `Importing ${valid.length} leads...`;
+
+  try {
+    // Each lead in 'valid' already has first_name/last_name from _parseLeadsText
+    const res = await api({ action: 'import_leads', token: _s.token, leads: valid });
+    if (res.ok) {
+      msg.className = 'im'; msg.style.background = '#dcfce7'; msg.style.color = '#166534';
+      msg.textContent = `Successfully imported ${res.count} leads.`;
+      msg.style.display = 'block';
+      setTimeout(() => { closeImportLeads(); loadCRM(); }, 1500);
+    } else {
+      throw new Error(res.error || 'Unknown error');
+    }
+  } catch (err) {
+    console.error('Import error:', err);
+    msg.className = 'im'; msg.style.background = '#fef2f2'; msg.style.color = '#991b1b';
+    msg.textContent = `Import failed: ${err.message}`;
+    msg.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Confirm Import';
+  }
+}
+
 function exportCRM() {
   if (!_crmCache.length) return alert('No data to export.');
   
@@ -3760,12 +3809,45 @@ function _parseLeadsText(raw) {
   const lines = raw.trim().split('\n').map(l => l.trim()).filter(Boolean);
   if (!lines.length) return [];
   const delim = lines[0].includes('\t') ? '\t' : ',';
-  const firstCell = lines[0].split(delim)[0].trim().toLowerCase().replace(/"/g,'');
-  const start = ['client name','name','client','cliente'].includes(firstCell) ? 1 : 0;
+  
+  // Improved Parser: Handles quoted fields with commas and escaped quotes
+  const parseLine = (line, d) => {
+    if (d === '\t') return line.split('\t').map(c => c.trim().replace(/^"|"$/g,''));
+    const cols = [];
+    let cur = '', inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i], next = line[i+1];
+      if (char === '"') {
+        if (inQuotes && next === '"') { cur += '"'; i++; } 
+        else { inQuotes = !inQuotes; }
+      } else if (char === d && !inQuotes) {
+        cols.push(cur.trim()); cur = '';
+      } else {
+        cur += char;
+      }
+    }
+    cols.push(cur.trim());
+    return cols;
+  };
+
+  const firstLineCols = parseLine(lines[0], delim);
+  const firstCell = (firstLineCols[0] || '').toLowerCase().replace(/[^a-z]/g,'');
+  const start = ['clientname','name','client','cliente'].includes(firstCell) ? 1 : 0;
+
   return lines.slice(start).map(line => {
-    const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g,''));
+    const cols = parseLine(line, delim);
     const obj = {};
     IMPORT_COLS.forEach((k, i) => { obj[k] = cols[i] || ''; });
+    
+    // Auto-split name for backend compatibility
+    const fullName = (obj.client_name || '').trim();
+    if (fullName) {
+      const parts = fullName.split(' ');
+      obj.first_name = parts[0];
+      obj.last_name = parts.slice(1).join(' ');
+    } else {
+      obj.first_name = ''; obj.last_name = '';
+    }
     return obj;
   });
 }
