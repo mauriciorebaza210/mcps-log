@@ -301,18 +301,46 @@
  
 </div>
 
-  <!-- CRM & Leads -->
+  <!-- Sales Hub -->
   <div class="pf" id="page-crm">
+
+    <!-- Weekly Goal Speedometer -->
+    <div class="adm-card" id="crm-goal-card" style="margin-bottom:1rem">
+      <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Weekly Signed Goal</span>
+        <button class="adm-new-btn" id="crm-goal-edit-btn" style="display:none" onclick="openGoalEditor()">✏ Set Goal</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;padding:.75rem 1rem .5rem;gap:2.5rem;flex-wrap:wrap">
+        <div id="crm-speedometer"></div>
+        <div style="text-align:center">
+          <div style="font-size:3rem;font-weight:700;font-family:'Oswald',sans-serif;line-height:1;color:var(--teal)" id="crm-signed-count">—</div>
+          <div style="font-size:.8rem;color:var(--muted);margin-top:.15rem">signed this week</div>
+          <div style="margin-top:.5rem;font-size:.9rem;color:var(--muted)">Goal: <strong id="crm-goal-display">—</strong></div>
+        </div>
+      </div>
+      <div id="crm-goal-editor" style="display:none;padding:.75rem 1rem;border-top:1px solid var(--border)">
+        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.4rem">Weekly Goal (signed contracts)</label>
+        <div style="display:flex;gap:.5rem;margin-top:.2rem;flex-wrap:wrap">
+          <input class="si" type="number" id="crm-goal-input" min="1" max="999" style="width:100px">
+          <button class="conf-submit-btn" onclick="saveWeeklyGoal()">Save</button>
+          <button class="conf-cancel-btn" onclick="closeGoalEditor()">Cancel</button>
+        </div>
+        <div class="im" id="crm-goal-msg" style="margin-top:.5rem"></div>
+      </div>
+    </div>
+
     <div class="adm-card">
       <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
-        <span>Client Management (CRM)</span>
+        <span>Sales Hub</span>
         <div style="display:flex;gap:.5rem">
           <button class="adm-new-btn" id="crm-new-quote-btn" style="background:var(--teal);display:none" onclick="navigateTo('quotes')">➕ New Quote</button>
+          <button class="adm-new-btn" id="crm-import-btn" style="background:#7c3aed;display:none" onclick="openImportLeads()">⬆ Import Leads</button>
           <button class="adm-new-btn" onclick="loadCRM()">↻ Refresh</button>
           <button class="adm-new-btn" style="background:#059669" onclick="exportCRM()">⬇ Export</button>
         </div>
       </div>
       <div style="padding:.85rem 1.1rem">
+        <div id="crm-stats-bar" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem"></div>
         <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
           <div style="flex:1;min-width:200px">
             <input class="si" id="crm-search" type="text" placeholder="Search by name, email, or city..." oninput="filterCRM()">
@@ -326,6 +354,13 @@
             <option value="COMPLETED">Completed</option>
             <option value="LOST">Lost</option>
           </select>
+          <select class="si" id="crm-filter-area" onchange="filterCRM()" style="width:auto">
+            <option value="all">All Areas</option>
+            <option value="NW">NW</option>
+            <option value="NE">NE</option>
+            <option value="SW">SW</option>
+            <option value="SE">SE</option>
+          </select>
         </div>
         <div id="crm-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
         <div style="overflow-x:auto; margin: 0 -1.1rem; border-top: 1px solid var(--border)">
@@ -336,6 +371,7 @@
                 <th>Status</th>
                 <th>Client</th>
                 <th>City</th>
+                <th>Area</th>
                 <th>Service</th>
                 <th>Total</th>
                 <th></th>
@@ -346,11 +382,12 @@
             </tbody>
           </table>
         </div>
+        <div id="crm-pagination" style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 1.1rem;border-top:1px solid var(--border);flex-wrap:wrap;gap:.5rem"></div>
       </div>
     </div>
   </div>
 
- 
+
 <!-- ── Order CSV modal ── -->
 <div class="csv-modal-backdrop" id="csv-modal-backdrop" onclick="invCloseCsvModal(event)">
   <div class="csv-modal" onclick="event.stopPropagation()">
@@ -1139,7 +1176,7 @@
 <div class="conf-modal-backdrop" id="crm-detail-modal" onclick="closeCRMDetail()">
   <div class="conf-modal" style="max-width:600px" onclick="event.stopPropagation()">
     <div class="conf-modal-hdr">
-      <div class="conf-modal-title">Client Detail</div>
+      <div class="conf-modal-title">Lead Detail</div>
       <button class="drawer-close" onclick="closeCRMDetail()">✕</button>
     </div>
     <div class="conf-modal-body" id="crm-detail-content">
@@ -1147,6 +1184,62 @@
     </div>
     <div class="conf-modal-foot">
       <button class="conf-submit-btn" onclick="closeCRMDetail()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Lead Detail Drawer ── -->
+<div class="drawer-backdrop" id="lead-backdrop" onclick="closeLeadDrawer()"></div>
+<div class="drawer" id="lead-drawer" style="width:min(520px,100vw)">
+  <div class="drawer-inner">
+    <div class="drawer-hdr">
+      <div>
+        <div class="drawer-title" id="lead-drawer-title">Lead Detail</div>
+        <div class="drawer-sub" id="lead-drawer-sub"></div>
+      </div>
+      <button class="drawer-close" onclick="closeLeadDrawer()">✕</button>
+    </div>
+    <div class="drawer-body" id="lead-drawer-body" style="overflow-y:auto;flex:1"></div>
+    <div class="drawer-footer" id="lead-drawer-footer" style="padding:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="conf-cancel-btn" onclick="closeLeadDrawer()">Close</button>
+      <button class="conf-submit-btn" id="lead-save-btn" onclick="saveLeadChanges()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Import Leads Modal ── -->
+<div class="conf-modal-backdrop" id="import-leads-backdrop" onclick="closeImportLeads(event)" style="display:none">
+  <div class="conf-modal" style="max-width:680px;width:95%" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Import Leads</div>
+      <button class="drawer-close" onclick="closeImportLeads()">✕</button>
+    </div>
+    <div class="conf-modal-body" id="import-leads-body" style="padding:1rem">
+      <div id="import-leads-input-view">
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:.75rem">
+          Paste rows from a spreadsheet (tab-separated) or upload a CSV.<br>
+          Columns: <strong>CLIENT NAME · ADDRESS · CITY · EMAIL · PHONE · POOL INFO · YEAR BUILT · Area</strong>
+        </p>
+        <div style="margin-bottom:.75rem">
+          <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Upload CSV File</label>
+          <input type="file" id="import-leads-file" accept=".csv" class="si" onchange="importLeadsFromFile(event)">
+        </div>
+        <div style="margin-bottom:.75rem">
+          <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Or paste tab-separated rows here</label>
+          <textarea class="si" id="import-leads-paste" rows="6" placeholder="Jose Rodriguez&#9;123 Oak St&#9;San Antonio&#9;jose@email.com&#9;210-555-1234&#9;20k vinyl&#9;2005&#9;NW"></textarea>
+        </div>
+        <button class="conf-submit-btn" onclick="previewImportLeads()">Preview Import →</button>
+      </div>
+      <div id="import-leads-preview-view" style="display:none">
+        <div style="font-size:.82rem;color:var(--muted);margin-bottom:.6rem">Review before importing. Rows with errors are highlighted.</div>
+        <div id="import-leads-preview-table" style="overflow-x:auto;max-height:50vh;overflow-y:auto"></div>
+        <div class="im" id="import-leads-msg" style="margin-top:.5rem"></div>
+      </div>
+    </div>
+    <div class="conf-modal-foot" id="import-leads-foot">
+      <button class="conf-cancel-btn" onclick="closeImportLeads()">Cancel</button>
+      <button class="conf-cancel-btn" id="import-leads-back-btn" style="display:none" onclick="importLeadsBack()">← Back</button>
+      <button class="conf-submit-btn" id="import-leads-confirm-btn" style="display:none;background:#059669" onclick="confirmImportLeads()">Import Leads</button>
     </div>
   </div>
 </div>

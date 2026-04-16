@@ -1253,6 +1253,71 @@ select.q-inp{cursor:pointer}
 .crm-detail-wrap b { color: var(--muted); font-weight: 500; font-size: .75rem; text-transform: uppercase; display: block; margin-bottom: .1rem; }
 .crm-detail-wrap code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-size: .85rem; font-family: monospace; }
 
+/* ── SALES HUB — EXTENDED STYLES ──────────────────────────────────────────── */
+
+/* Pipeline stats pills */
+.crm-stat-pill {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .3rem .8rem; border-radius: 99px; border: none; cursor: pointer;
+  font-family: 'Barlow Condensed', sans-serif; font-size: .8rem; font-weight: 700;
+  letter-spacing: .04em; transition: opacity .15s; white-space: nowrap;
+}
+.crm-stat-pill:hover { opacity: .75; }
+.crm-stat-pill strong { font-size: .95rem; }
+
+/* Area badge in table */
+.crm-area-badge {
+  display: inline-block; padding: .15rem .45rem; border-radius: 4px;
+  background: #e0f2fe; color: #075985; font-size: .72rem; font-weight: 700;
+  font-family: 'Barlow Condensed', sans-serif; letter-spacing: .06em;
+}
+
+/* Pagination */
+.crm-pager { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.crm-pager-btn {
+  min-width: 32px; height: 32px; border-radius: 8px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  color: var(--muted); font-family: 'Barlow Condensed', sans-serif;
+  font-size: .82rem; font-weight: 700; cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; padding: 0 .45rem;
+}
+.crm-pager-btn:hover:not(:disabled) { border-color: var(--teal-light); color: var(--teal); }
+.crm-pager-btn.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+.crm-pager-btn:disabled { opacity: .35; cursor: not-allowed; }
+.crm-pager-info { font-size: .78rem; color: var(--muted); font-family: 'Barlow Condensed', sans-serif; }
+
+/* Lead detail drawer sections */
+.lead-section {
+  margin-bottom: 1.15rem; padding-bottom: 1.15rem;
+  border-bottom: 1px solid var(--border);
+}
+.lead-section:last-of-type { border-bottom: none; margin-bottom: 0; }
+.lead-sec-label {
+  font-family: 'Barlow Condensed', sans-serif; font-size: .68rem; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: .55rem;
+}
+.lead-info-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .35rem .75rem; font-size: .85rem;
+}
+.lead-info-grid b {
+  display: block; font-size: .67rem; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: .05rem;
+}
+.lead-status-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+.lead-status-btn {
+  padding: .3rem .75rem; border-radius: 99px; border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--muted); font-family: 'Barlow Condensed', sans-serif;
+  font-size: .78rem; font-weight: 700; letter-spacing: .06em; cursor: pointer; transition: all .15s;
+}
+.lead-status-btn:hover { border-color: var(--teal-light); color: var(--teal); }
+.lead-status-btn.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+.lead-log-entry {
+  padding: .5rem .7rem; background: var(--surface); border-radius: 8px;
+  margin-bottom: .4rem; border-left: 3px solid var(--teal-light);
+}
+.lle-meta { font-size: .75rem; color: var(--muted); margin-bottom: .15rem; }
+.lle-notes { font-size: .83rem; }
+
 /* ══════════════════════════════════════════════════════════════════════════════
    TECHNICIAN HUB — AESTHETIC & OPTIMIZATION OVERHAUL
    ══════════════════════════════════════════════════════════════════════════════ */

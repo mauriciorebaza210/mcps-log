@@ -6,7 +6,7 @@ const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
   home:'🏠|Home', live_map:'🛟|Technician Hub', service_log:'📝|Service Log',
-  inventory:'📦|Inventory', quotes:'📄|Quote Tool', crm:'📇|CRM & Leads', training:'🎓|Training', admin:'🔒|Admin',
+  inventory:'📦|Inventory', quotes:'📄|Quote Tool', crm:'📊|Sales Hub', training:'🎓|Training', admin:'🔒|Admin',
   onboarding:'📋|Get Started'
 };
 
@@ -197,7 +197,7 @@ function _configureHubTabs(){
 }
 
 function buildHomeCards(){
-  const descs={onboarding:'Complete your onboarding to get started',live_map:'View and manage your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical inventory levels',quotes:'Quote calculator',training:'Video training modules',admin:'Manage users & access'};
+  const descs={onboarding:'Complete your onboarding to get started',live_map:'View and manage your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical inventory levels',quotes:'Quote calculator',crm:'Leads, pipeline, and signed contracts',training:'Video training modules',admin:'Manage users & access'};
   document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
@@ -3361,49 +3361,64 @@ function qInit() { if (!_qS._calc) qRecalc(); }
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CRM & LEADS
+// SALES HUB (CRM)
 // ══════════════════════════════════════════════════════════════════════════════
 let _crmCache = [];
+let _crmFiltered = [];
+let _crmPage = 1;
+const CRM_PAGE_SIZE = 10;
 
 async function loadCRM() {
   const loading = document.getElementById('crm-loading');
   const tbody = document.getElementById('crm-tbody');
   const quoteBtn = document.getElementById('crm-new-quote-btn');
-  
+  const importBtn = document.getElementById('crm-import-btn');
+
   if (quoteBtn) quoteBtn.style.display = isAdmin() ? 'block' : 'none';
+  if (importBtn) importBtn.style.display = isAdmin() ? 'block' : 'none';
   if (loading) loading.style.display = 'block';
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">Loading client data...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">Loading pipeline data...</td></tr>';
 
   try {
     const res = await apiGet({ action: 'get_crm_data', token: _s.token });
     if (res.ok) {
       _crmCache = res.data || [];
-      renderCRM(_crmCache);
+      renderCRM(_crmCache, true);
+      renderCRMStats();
+      loadWeeklyGoal();
     } else {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load CRM data.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load data.'}</td></tr>`;
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--error)">Network error. Please try again.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Network error. Please try again.</td></tr>`;
   } finally {
     if (loading) loading.style.display = 'none';
   }
 }
 
-function renderCRM(data) {
+function renderCRM(data, resetPage = true) {
+  if (resetPage) _crmPage = 1;
+  _crmFiltered = data;
+
   const tbody = document.getElementById('crm-tbody');
   if (!tbody) return;
 
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--muted)">No records found matching filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No records match this filter.</td></tr>';
+    renderCRMPagination();
     return;
   }
 
-  tbody.innerHTML = data.map(item => {
+  const start = (_crmPage - 1) * CRM_PAGE_SIZE;
+  const page = data.slice(start, start + CRM_PAGE_SIZE);
+
+  tbody.innerHTML = page.map(item => {
     const ts = item.timestamp ? new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }) : '—';
     const status = (item.status || 'UNSENT').toUpperCase();
-    const client = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '—';
+    const client = `${item.first_name || ''} ${item.last_name || ''}`.trim() || (item.client_name || '—');
     const total = typeof item.total_with_tax === 'number' ? `$${item.total_with_tax.toFixed(2)}` : (item.total_with_tax || '—');
-    
+    const area = item.area ? `<span class="crm-area-badge">${item.area.toUpperCase()}</span>` : '';
+
     let statusClass = 'sc-unsent';
     if (status === 'SIGNED' || status === 'COMPLETED') statusClass = 'sc-signed';
     if (status === 'LOST') statusClass = 'sc-lost';
@@ -3416,88 +3431,275 @@ function renderCRM(data) {
         <td><span class="sc-badge ${statusClass}">${status}</span></td>
         <td><div style="font-weight:600">${client}</div><div style="font-size:.72rem;color:var(--muted)">${item.email || ''}</div></td>
         <td><div style="font-size:.85rem">${item.city || '—'}</div></td>
+        <td>${area}</td>
         <td><div style="font-size:.85rem">${item.service || '—'}</div></td>
         <td><div style="font-weight:600">${total}</div></td>
-        <td style="text-align:right">📑</td>
+        <td style="text-align:right;color:var(--muted);font-size:.85rem">›</td>
       </tr>
     `;
   }).join('');
+
+  renderCRMPagination();
+}
+
+function renderCRMPagination() {
+  const el = document.getElementById('crm-pagination');
+  if (!el) return;
+  const total = _crmFiltered.length;
+  const totalPages = Math.ceil(total / CRM_PAGE_SIZE);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const start = (_crmPage - 1) * CRM_PAGE_SIZE + 1;
+  const end = Math.min(_crmPage * CRM_PAGE_SIZE, total);
+
+  let btns = '';
+  for (let i = 1; i <= totalPages; i++) {
+    if (totalPages <= 7 || i === 1 || i === totalPages || Math.abs(i - _crmPage) <= 1) {
+      btns += `<button class="crm-pager-btn${i === _crmPage ? ' active' : ''}" onclick="crmGoToPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - _crmPage) === 2) {
+      btns += `<span style="color:var(--muted);padding:0 .2rem">…</span>`;
+    }
+  }
+
+  el.innerHTML = `
+    <span class="crm-pager-info">Showing ${start}–${end} of ${total}</span>
+    <div class="crm-pager">
+      <button class="crm-pager-btn" onclick="crmGoToPage(${_crmPage - 1})" ${_crmPage === 1 ? 'disabled' : ''}>‹</button>
+      ${btns}
+      <button class="crm-pager-btn" onclick="crmGoToPage(${_crmPage + 1})" ${_crmPage === totalPages ? 'disabled' : ''}>›</button>
+    </div>`;
+}
+
+function crmGoToPage(n) {
+  const totalPages = Math.ceil(_crmFiltered.length / CRM_PAGE_SIZE);
+  if (n < 1 || n > totalPages) return;
+  _crmPage = n;
+  renderCRM(_crmFiltered, false);
+}
+
+function renderCRMStats() {
+  const bar = document.getElementById('crm-stats-bar');
+  if (!bar) return;
+  const counts = { all: _crmCache.length, LEAD: 0, UNSENT: 0, SENT: 0, SIGNED: 0, LOST: 0 };
+  _crmCache.forEach(i => {
+    const s = (i.status || 'UNSENT').toUpperCase();
+    if (counts[s] !== undefined) counts[s]++;
+  });
+  const pills = [
+    { label: 'All', key: 'all', color: '#0f172a', bg: '#f1f5f9' },
+    { label: 'Leads', key: 'LEAD', color: '#475569', bg: '#e2e8f0' },
+    { label: 'Quoted', key: 'SENT', color: '#075985', bg: '#e0f2fe' },
+    { label: 'Signed', key: 'SIGNED', color: '#065f46', bg: '#d1fae5' },
+    { label: 'Lost', key: 'LOST', color: '#991b1b', bg: '#fee2e2' },
+  ];
+  bar.innerHTML = pills.map(p =>
+    `<button class="crm-stat-pill" onclick="crmStatFilter('${p.key}')"
+       style="background:${p.bg};color:${p.color}">
+       ${p.label} <strong>${counts[p.key] ?? 0}</strong>
+     </button>`
+  ).join('');
+}
+
+function crmStatFilter(key) {
+  const statusEl = document.getElementById('crm-filter-status');
+  if (key === 'all') statusEl.value = 'all';
+  else if (key === 'SENT') statusEl.value = 'SENT';
+  else statusEl.value = key;
+  filterCRM();
 }
 
 function filterCRM() {
-  const q = document.getElementById('crm-search').value.toLowerCase();
+  const q = (document.getElementById('crm-search').value || '').toLowerCase();
   const status = document.getElementById('crm-filter-status').value;
+  const areaEl = document.getElementById('crm-filter-area');
+  const area = areaEl ? areaEl.value : 'all';
 
   const filtered = _crmCache.filter(item => {
-    const clientMatch = `${item.first_name} ${item.last_name} ${item.email} ${item.city}`.toLowerCase().includes(q);
+    const name = item.client_name || `${item.first_name || ''} ${item.last_name || ''}`;
+    const clientMatch = `${name} ${item.email || ''} ${item.city || ''}`.toLowerCase().includes(q);
     const statusMatch = status === 'all' || (item.status || 'UNSENT').toUpperCase() === status.toUpperCase();
-    return clientMatch && statusMatch;
+    const areaMatch = area === 'all' || (item.area || '').toUpperCase() === area.toUpperCase();
+    return clientMatch && statusMatch && areaMatch;
   });
 
-  renderCRM(filtered);
+  renderCRM(filtered, true);
 }
+
+let _activeLeadId = null;
 
 function viewCRMDetail(quoteId) {
   const item = _crmCache.find(i => i.quote_id === quoteId);
   if (!item) return;
+  _activeLeadId = quoteId;
 
-  // Since we don't have a dedicated CRM drawer yet, let's use a dynamic one or alert for now
-  // In a real app, I'd create a CRM Detail Modal
-  let detailHtml = `<div class="crm-detail-wrap" style="padding:1rem">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
-      <div>
-        <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem">Client Information</div>
-        <div style="font-weight:700;font-size:1.1rem">${item.first_name || ''} ${item.last_name || ''}</div>
-        <div style="margin-top:.4rem">📧 ${item.email || '—'}</div>
-        <div>📞 ${item.phone || '—'}</div>
-        <div style="margin-top:.4rem">🏠 ${item.address || ''}, ${item.city || ''} ${item.zip_code || ''}</div>
-      </div>
-      <div>
-        <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem">Quote Status</div>
-        <div style="font-weight:700;font-size:1.1rem;color:var(--teal)">${item.status || 'UNSENT'}</div>
-        <div style="margin-top:.4rem">ID: <code>${item.quote_id || '—'}</code></div>
-        <div>Date: ${item.timestamp ? new Date(item.timestamp).toLocaleString() : '—'}</div>
-      </div>
-    </div>
-    
-    <div style="margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem">
-      <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Service Details</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.85rem">
-        <div><b>Service:</b> ${item.service || '—'}</div>
-        <div><b>Pool Type:</b> ${item.pool_type || '—'}</div>
-        <div><b>Size:</b> ${item.size || '—'}</div>
-        <div><b>Material:</b> ${item.material || '—'}</div>
-      </div>
-    </div>
+  const name = (item.client_name || `${item.first_name || ''} ${item.last_name || ''}`).trim() || 'Lead Detail';
+  const status = (item.status || 'UNSENT').toUpperCase();
+  document.getElementById('lead-drawer-title').textContent = name;
+  document.getElementById('lead-drawer-sub').textContent = status + (item.area ? '  ·  Area ' + item.area.toUpperCase() : '');
+  document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(item);
 
-    <div style="margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem">
-      <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem">Financials</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.85rem">
-        <div><b>Subtotal:</b> $${(item.quote_subtotal || 0).toFixed(2)}</div>
-        <div><b>Tax:</b> $${(item.sales_tax || 0).toFixed(2)}</div>
-        <div style="font-size:1rem;font-weight:700;margin-top:.3rem">Total: $${(item.total_with_tax || 0).toFixed(2)}</div>
-        <div style="color:var(--success);font-weight:600;margin-top:.3rem">Est. Profit: $${(item.net_profit_est || 0).toFixed(2)}</div>
-      </div>
-    </div>
-
-    ${item.notes ? `
-    <div style="margin-top:1.5rem; border-top:1px solid var(--border); padding-top:1rem">
-      <div style="font-size:.7rem;text-transform:uppercase;color:var(--muted);margin-bottom:.2rem">Notes</div>
-      <div style="font-size:.85rem;white-space:pre-wrap">${item.notes}</div>
-    </div>` : ''}
-
-    <div style="margin-top:2rem;text-align:right">
-      <button class="ni" style="background:var(--teal);color:white;padding:.6rem 1.2rem;border-radius:6px;font-weight:600" onclick="closeCRMDetail()">Close</button>
-    </div>
-  </div>`;
-
-  document.getElementById('crm-detail-content').innerHTML = detailHtml;
-  document.getElementById('crm-detail-modal').style.display = 'flex';
+  document.getElementById('lead-backdrop').classList.add('open');
+  document.getElementById('lead-drawer').classList.add('open');
 }
 
-function closeCRMDetail() {
-  const modal = document.getElementById('crm-detail-modal');
-  if (modal) modal.style.display = 'none';
+function closeLeadDrawer() {
+  document.getElementById('lead-backdrop').classList.remove('open');
+  document.getElementById('lead-drawer').classList.remove('open');
+  _activeLeadId = null;
+}
+
+// Legacy alias — keep in case other code calls it
+function closeCRMDetail() { closeLeadDrawer(); }
+
+function buildLeadDrawerHTML(item) {
+  const status = (item.status || 'UNSENT').toUpperCase();
+  const contactLog = Array.isArray(item.contact_log) ? item.contact_log : [];
+  const STATUSES = ['LEAD','UNSENT','SENT','SIGNED','LOST'];
+
+  const logHTML = contactLog.length
+    ? contactLog.slice().reverse().map(e => `
+        <div class="lead-log-entry">
+          <div class="lle-meta">${e.date || ''} · <strong>${e.method || ''}</strong> · ${e.outcome || ''}</div>
+          ${e.notes ? `<div class="lle-notes">${e.notes}</div>` : ''}
+        </div>`).join('')
+    : '<div style="color:var(--muted);font-size:.82rem;padding:.25rem 0">No contact attempts logged yet.</div>';
+
+  const hasQuoteData = item.total_with_tax || item.service;
+
+  return `
+    <div style="padding:1rem">
+
+      <!-- Client Info -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Client Information</div>
+        <div class="lead-info-grid">
+          ${item.email ? `<div><b>Email</b>${item.email}</div>` : ''}
+          ${item.phone ? `<div><b>Phone</b>${item.phone}</div>` : ''}
+          ${(item.address || item.city) ? `<div><b>Address</b>${[item.address, item.city, item.zip_code].filter(Boolean).join(', ')}</div>` : ''}
+          ${item.area ? `<div><b>Area</b>${item.area.toUpperCase()}</div>` : ''}
+          ${item.pool_info ? `<div><b>Pool Info</b>${item.pool_info}</div>` : ''}
+          ${item.year_built ? `<div><b>Year Built</b>${item.year_built}</div>` : ''}
+          ${item.quote_id ? `<div style="grid-column:1/-1"><b>ID</b><code style="font-size:.78rem">${item.quote_id}</code></div>` : ''}
+        </div>
+      </div>
+
+      ${hasQuoteData ? `
+      <!-- Service & Financials -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Quote Details</div>
+        <div class="lead-info-grid">
+          ${item.service ? `<div><b>Service</b>${item.service}</div>` : ''}
+          ${item.pool_type ? `<div><b>Pool Type</b>${item.pool_type}</div>` : ''}
+          ${typeof item.total_with_tax === 'number' ? `<div><b>Total</b>$${item.total_with_tax.toFixed(2)}</div>` : ''}
+          ${typeof item.net_profit_est === 'number' ? `<div><b>Est. Profit</b><span style="color:var(--success)">$${item.net_profit_est.toFixed(2)}</span></div>` : ''}
+        </div>
+      </div>` : ''}
+
+      <!-- Status -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Update Status</div>
+        <div class="lead-status-row">
+          ${STATUSES.map(s => `<button class="lead-status-btn${s === status ? ' active' : ''}" data-status="${s}" onclick="selectLeadStatus('${s}')">${s}</button>`).join('')}
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Internal Notes</div>
+        <textarea class="si" id="lead-notes-input" rows="3" placeholder="Notes visible only to your team...">${item.notes || ''}</textarea>
+      </div>
+
+      <!-- Log Contact -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Log Contact Attempt</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.5rem">
+          <select class="si" id="log-method">
+            <option value="Call">Call</option>
+            <option value="Text">Text</option>
+            <option value="Email">Email</option>
+            <option value="In Person">In Person</option>
+          </select>
+          <select class="si" id="log-outcome">
+            <option value="Interested">Interested</option>
+            <option value="Follow Up">Follow Up</option>
+            <option value="No Answer">No Answer</option>
+            <option value="Not Interested">Not Interested</option>
+            <option value="Left Voicemail">Left Voicemail</option>
+          </select>
+        </div>
+        <input class="si" type="date" id="log-date" value="${new Date().toISOString().split('T')[0]}" style="margin-bottom:.5rem;width:100%">
+        <textarea class="si" id="log-notes" rows="2" placeholder="What was discussed? (optional)"></textarea>
+      </div>
+
+      <!-- Contact History -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Contact History (${contactLog.length})</div>
+        <div id="lead-log-history">${logHTML}</div>
+      </div>
+
+      <div class="im" id="lead-drawer-msg" style="display:none"></div>
+    </div>`;
+}
+
+function selectLeadStatus(status) {
+  document.querySelectorAll('.lead-status-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.status === status);
+  });
+}
+
+async function saveLeadChanges() {
+  if (!_activeLeadId) return;
+  const btn = document.getElementById('lead-save-btn');
+  const msg = document.getElementById('lead-drawer-msg');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  const activeStatusBtn = document.querySelector('.lead-status-btn.active');
+  const newStatus = activeStatusBtn ? activeStatusBtn.dataset.status : null;
+  const notes = (document.getElementById('lead-notes-input') || {}).value || '';
+  const logNotes = (document.getElementById('log-notes') || {}).value || '';
+  const logDate = (document.getElementById('log-date') || {}).value || new Date().toISOString().split('T')[0];
+  const logMethod = (document.getElementById('log-method') || {}).value || '';
+  const logOutcome = (document.getElementById('log-outcome') || {}).value || '';
+
+  const contactEntry = logNotes.trim()
+    ? { date: logDate, method: logMethod, outcome: logOutcome, notes: logNotes }
+    : null;
+
+  try {
+    const res = await api({
+      action: 'update_lead',
+      token: _s.token,
+      quote_id: _activeLeadId,
+      status: newStatus,
+      notes,
+      contact_entry: contactEntry
+    });
+
+    if (res.ok) {
+      const idx = _crmCache.findIndex(i => i.quote_id === _activeLeadId);
+      if (idx > -1) {
+        if (newStatus) _crmCache[idx].status = newStatus;
+        _crmCache[idx].notes = notes;
+        if (contactEntry) {
+          _crmCache[idx].contact_log = _crmCache[idx].contact_log || [];
+          _crmCache[idx].contact_log.push(contactEntry);
+        }
+      }
+      msg.className = 'im ok'; msg.textContent = 'Saved successfully.'; msg.style.display = 'block';
+      renderCRM(_crmFiltered, false);
+      renderCRMStats();
+      // Re-render drawer with updated data
+      const updated = _crmCache.find(i => i.quote_id === _activeLeadId);
+      if (updated) document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+      setTimeout(() => { msg.style.display = 'none'; }, 2500);
+    } else {
+      msg.className = 'im err'; msg.textContent = res.error || 'Failed to save.'; msg.style.display = 'block';
+    }
+  } catch (e) {
+    msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
 }
 
 function exportCRM() {
@@ -3524,6 +3726,199 @@ function exportCRM() {
   document.body.removeChild(link);
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SALES HUB — IMPORT LEADS
+// ══════════════════════════════════════════════════════════════════════════════
+let _importLeadsParsed = [];
+const IMPORT_COLS = ['client_name','address','city','email','phone','pool_info','year_built','area'];
+
+function openImportLeads() {
+  document.getElementById('import-leads-input-view').style.display = 'block';
+  document.getElementById('import-leads-preview-view').style.display = 'none';
+  document.getElementById('import-leads-back-btn').style.display = 'none';
+  document.getElementById('import-leads-confirm-btn').style.display = 'none';
+  document.getElementById('import-leads-paste').value = '';
+  document.getElementById('import-leads-file').value = '';
+  document.getElementById('import-leads-backdrop').style.display = 'flex';
+}
+
+function closeImportLeads(event) {
+  if (event && event.target !== document.getElementById('import-leads-backdrop')) return;
+  document.getElementById('import-leads-backdrop').style.display = 'none';
+}
+
+function importLeadsFromFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('import-leads-paste').value = e.target.result; };
+  reader.readAsText(file);
+}
+
+function _parseLeadsText(raw) {
+  const lines = raw.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const delim = lines[0].includes('\t') ? '\t' : ',';
+  const firstCell = lines[0].split(delim)[0].trim().toLowerCase().replace(/"/g,'');
+  const start = ['client name','name','client','cliente'].includes(firstCell) ? 1 : 0;
+  return lines.slice(start).map(line => {
+    const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g,''));
+    const obj = {};
+    IMPORT_COLS.forEach((k, i) => { obj[k] = cols[i] || ''; });
+    return obj;
+  });
+}
+
+function previewImportLeads() {
+  const raw = document.getElementById('import-leads-paste').value;
+  if (!raw.trim()) return alert('Paste or upload data first.');
+  _importLeadsParsed = _parseLeadsText(raw);
+  if (!_importLeadsParsed.length) return alert('No valid rows found. Check your data format.');
+
+  const VALID_AREAS = ['NW','NE','SW','SE'];
+  let tableHTML = `<table class="ut" style="font-size:.78rem">
+    <thead><tr><th>#</th><th>Name</th><th>City</th><th>Email</th><th>Phone</th><th>Area</th><th></th></tr></thead><tbody>`;
+
+  _importLeadsParsed.forEach((row, i) => {
+    const areaOk = VALID_AREAS.includes((row.area || '').toUpperCase().trim());
+    const hasName = !!row.client_name.trim();
+    const ok = hasName;
+    const rowStyle = ok ? '' : 'background:#fef2f2';
+    tableHTML += `<tr style="${rowStyle}">
+      <td>${i+1}</td>
+      <td>${hasName ? row.client_name : '<span style="color:#dc2626">MISSING</span>'}</td>
+      <td>${row.city}</td><td>${row.email}</td><td>${row.phone}</td>
+      <td>${areaOk ? `<span class="crm-area-badge">${row.area.toUpperCase()}</span>` : `<span style="color:#d97706">${row.area||'—'}</span>`}</td>
+      <td>${ok ? '<span style="color:#16a34a">✓</span>' : '<span style="color:#dc2626">✗</span>'}</td>
+    </tr>`;
+  });
+  tableHTML += '</tbody></table>';
+
+  document.getElementById('import-leads-preview-table').innerHTML = tableHTML;
+  document.getElementById('import-leads-input-view').style.display = 'none';
+  document.getElementById('import-leads-preview-view').style.display = 'block';
+  document.getElementById('import-leads-back-btn').style.display = 'inline-block';
+  document.getElementById('import-leads-confirm-btn').style.display = 'inline-block';
+  const invalidCount = _importLeadsParsed.filter(r => !r.client_name.trim()).length;
+  if (invalidCount) {
+    const msg = document.getElementById('import-leads-msg');
+    msg.className = 'im'; msg.style.background = '#fef3c7'; msg.style.color = '#92400e';
+    msg.textContent = `${invalidCount} row(s) are missing a client name and will be skipped.`;
+    msg.style.display = 'block';
+  }
+}
+
+function importLeadsBack() {
+  document.getElementById('import-leads-input-view').style.display = 'block';
+  document.getElementById('import-leads-preview-view').style.display = 'none';
+  document.getElementById('import-leads-back-btn').style.display = 'none';
+  document.getElementById('import-leads-confirm-btn').style.display = 'none';
+}
+
+async function confirmImportLeads() {
+  const btn = document.getElementById('import-leads-confirm-btn');
+  const msg = document.getElementById('import-leads-msg');
+  const valid = _importLeadsParsed.filter(r => r.client_name.trim());
+  if (!valid.length) return;
+  btn.disabled = true; btn.textContent = `Importing ${valid.length} leads...`;
+  try {
+    const res = await api({ action: 'import_leads', token: _s.token, leads: valid });
+    if (res.ok) {
+      document.getElementById('import-leads-backdrop').style.display = 'none';
+      loadCRM();
+    } else {
+      msg.className = 'im err'; msg.textContent = res.error || 'Import failed.'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Import Leads';
+    }
+  } catch (e) {
+    msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Import Leads';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SALES HUB — WEEKLY GOAL SPEEDOMETER
+// ══════════════════════════════════════════════════════════════════════════════
+let _weeklyGoal = 5;
+let _weeklySignedCount = 0;
+
+async function loadWeeklyGoal() {
+  try {
+    const res = await apiGet({ action: 'get_weekly_goal', token: _s.token });
+    if (res.ok) {
+      _weeklyGoal = res.goal || 5;
+      _weeklySignedCount = res.signed_this_week || 0;
+    }
+  } catch(e) {}
+  renderSpeedometer();
+  const editBtn = document.getElementById('crm-goal-edit-btn');
+  if (editBtn) editBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
+}
+
+function renderSpeedometer() {
+  const container = document.getElementById('crm-speedometer');
+  if (!container) return;
+  const pct = Math.min(_weeklySignedCount / Math.max(_weeklyGoal, 1), 1);
+  const filled = Math.round(pct * 100);
+  const R = 70, CX = 90, CY = 90;
+  const arcLen = Math.PI * R;
+  const fillLen = arcLen * pct;
+  const gapLen = arcLen - fillLen + 0.001;
+  const color = pct >= 1 ? '#16a34a' : pct >= 0.5 ? '#d97706' : '#ef4444';
+  const angle = Math.PI - Math.PI * pct;
+  const nx = CX + R * 0.72 * Math.cos(angle);
+  const ny = CY - R * 0.72 * Math.sin(Math.PI * pct);
+
+  container.innerHTML = `
+    <svg viewBox="0 0 180 100" width="180" height="100">
+      <path d="M ${CX-R},${CY} A ${R},${R} 0 0 1 ${CX+R},${CY}"
+        fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/>
+      <path d="M ${CX-R},${CY} A ${R},${R} 0 0 1 ${CX+R},${CY}"
+        fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
+        stroke-dasharray="${fillLen} ${gapLen}"/>
+      <line x1="${CX}" y1="${CY}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}"
+        stroke="#0f172a" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="${CX}" cy="${CY}" r="5" fill="#0f172a"/>
+      <text x="${CX}" y="${CY - 14}" text-anchor="middle"
+        font-family="Oswald,sans-serif" font-size="15" font-weight="700" fill="${color}">${filled}%</text>
+    </svg>`;
+
+  const countEl = document.getElementById('crm-signed-count');
+  const goalEl = document.getElementById('crm-goal-display');
+  if (countEl) countEl.textContent = _weeklySignedCount;
+  if (goalEl) goalEl.textContent = _weeklyGoal;
+}
+
+function openGoalEditor() {
+  const ed = document.getElementById('crm-goal-editor');
+  if (!ed) return;
+  document.getElementById('crm-goal-input').value = _weeklyGoal;
+  ed.style.display = 'block';
+}
+
+function closeGoalEditor() {
+  const ed = document.getElementById('crm-goal-editor');
+  if (ed) ed.style.display = 'none';
+}
+
+async function saveWeeklyGoal() {
+  const val = parseInt((document.getElementById('crm-goal-input') || {}).value, 10);
+  const msg = document.getElementById('crm-goal-msg');
+  if (!val || val < 1) return;
+  try {
+    const res = await api({ action: 'set_weekly_goal', token: _s.token, goal: val });
+    if (res.ok) {
+      _weeklyGoal = val;
+      renderSpeedometer();
+      closeGoalEditor();
+    } else {
+      msg.className = 'im err'; msg.textContent = res.error || 'Failed.'; msg.style.display = 'block';
+    }
+  } catch(e) {
+    msg.className = 'im err'; msg.textContent = 'Network error.'; msg.style.display = 'block';
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TRAINING MODULE (LMS)
