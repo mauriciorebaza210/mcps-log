@@ -12,13 +12,13 @@ const PAGE_META = {
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['home','live_map','service_log','training'],
-  lead:['home','live_map','service_log','training'],
-  trainee:['home','training'],
+  technician:['live_map','service_log'],           // training accessed via hub tab
+  lead:['live_map','service_log'],                  // training accessed via hub tab
+  trainee:['live_map'],                             // hub-only: training tab shown exclusively
   new_hire:['onboarding'],
   office:['home','inventory'],
-  manager:['home','crm','live_map','service_log','inventory','quotes','training'],
-  admin:['home','crm','live_map','service_log','inventory','quotes','training','admin'],
+  manager:['home','crm','live_map','service_log','inventory','quotes'],  // training via hub tab
+  admin:['home','crm','live_map','service_log','inventory','quotes','admin'],  // training via hub tab
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];
@@ -44,6 +44,59 @@ let _weekOffset = 0;           // week navigation offset from current week (admi
 let _weatherCache = {};        // keyed by week_start ISO date
 let _activeHubTab = 'schedule';
 let _profileOp = null;         // username whose profile is shown in the profile tab
+let _routeFetchInFlight = null; // { key, promise } — deduplicates concurrent loadRoutes calls
+let _daySelectTimer = null;     // debounce timer for selectDay()
+
+// ── Route data cache (localStorage, 15-min TTL) ──────────────────────────────
+const ROUTE_CACHE_TTL = 15 * 60 * 1000;
+function _routeCacheKey(op, weekOffset){ return `mcps_route_${op||'all'}_${weekOffset||0}`; }
+function _getRouteCache(op, weekOffset){
+  try{
+    const raw = localStorage.getItem(_routeCacheKey(op, weekOffset));
+    if(!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if(Date.now() - ts > ROUTE_CACHE_TTL){ localStorage.removeItem(_routeCacheKey(op, weekOffset)); return null; }
+    return data;
+  }catch(e){ return null; }
+}
+function _setRouteCache(op, weekOffset, data){
+  try{ localStorage.setItem(_routeCacheKey(op, weekOffset), JSON.stringify({ ts: Date.now(), data })); }catch(e){}
+}
+function _clearRouteCache(){
+  Object.keys(localStorage).filter(k=>k.startsWith('mcps_route_')).forEach(k=>localStorage.removeItem(k));
+}
+
+// ── Weather cache (in-memory + localStorage, 24h TTL) ────────────────────────
+function _weatherLocalKey(k){ return `mcps_weather_${k}`; }
+function _getWeatherCache(k){
+  if(_weatherCache[k]) return _weatherCache[k];
+  try{
+    const raw = localStorage.getItem(_weatherLocalKey(k));
+    if(!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if(Date.now() - ts > 24*60*60*1000){ localStorage.removeItem(_weatherLocalKey(k)); return null; }
+    _weatherCache[k] = data;
+    return data;
+  }catch(e){ return null; }
+}
+function _setWeatherCache(k, data){
+  _weatherCache[k] = data;
+  try{ localStorage.setItem(_weatherLocalKey(k), JSON.stringify({ ts: Date.now(), data })); }catch(e){}
+}
+
+// ── Skeleton loader for route content ────────────────────────────────────────
+function _showRouteSkeleton(){
+  document.getElementById('route-loading').style.display='none';
+  const content = document.getElementById('route-content');
+  content.style.display='block';
+  document.getElementById('day-tabs').innerHTML=`<div class="sk-tabs">${Array(6).fill('<div class="skeleton-block sk-tab"></div>').join('')}</div>`;
+  document.getElementById('route-day-card').innerHTML=`
+    <div class="skeleton-block sk-header"></div>
+    <div class="skeleton-block sk-maps-row"></div>
+    <div class="skeleton-block sk-stop"></div>
+    <div class="skeleton-block sk-stop"></div>
+    <div class="skeleton-block sk-stop" style="opacity:.65"></div>`;
+}
 
 function api(payload){ return fetch(AS,{method:'POST',body:JSON.stringify(payload)}).then(r=>r.json()); }
 function apiGet(params){ return fetch(AS+'?'+new URLSearchParams(params)).then(r=>r.json()); }
@@ -51,7 +104,7 @@ function apiGet(params){ return fetch(AS+'?'+new URLSearchParams(params)).then(r
 window.onload = () => {
   const stored = localStorage.getItem('mcps_s');
   if (stored) {
-    try { _s = JSON.parse(stored); showApp(location.hash.replace('#','') || 'home'); return; } catch(e) { localStorage.removeItem('mcps_s'); }
+    try { _s = JSON.parse(stored); showApp(location.hash.replace('#','') || _defaultLandingPage_()); return; } catch(e) { localStorage.removeItem('mcps_s'); }
   }
   const deep = location.hash.replace('#','');
   if (deep) sessionStorage.setItem('mcps_deep', deep);
@@ -71,7 +124,7 @@ function doLogin() {
       const pages = unionPages_(roles);
       _s = {token:res.token,name:res.name,roles,pages};
       localStorage.setItem('mcps_s',JSON.stringify(_s));
-      const deep = sessionStorage.getItem('mcps_deep')||'home';
+      const deep = sessionStorage.getItem('mcps_deep') || _defaultLandingPage_();
       sessionStorage.removeItem('mcps_deep');
       showApp(deep);
     } else {
@@ -92,6 +145,8 @@ function unionPages_(roles) {
 
 function hasRole(role){return _s&&(_s.roles||[]).includes(role);}
 function isAdmin(){return hasRole('admin')||hasRole('manager');}
+// Technicians, leads, and trainees land directly on the Hub; everyone else on Home
+function _defaultLandingPage_(){ return (hasRole('technician')||hasRole('lead')||hasRole('trainee')) ? 'live_map' : 'home'; }
 
 // ── App shell ─────────────────────────────────────────────────────────────────
 function showApp(startPage) {
@@ -105,16 +160,40 @@ function showApp(startPage) {
   _s.pages = unionPages_(_s.roles);
   buildNav(); buildHomeCards();
   if((_s.pages||[]).includes('admin')) { loadUsers(); loadPendingHires(); loadInternalNotes(); }
-  const pg = (_s.pages||[]).includes(startPage)?startPage:'home';
+
+  // Configure which hub tabs are visible based on role
+  _configureHubTabs();
+
+  const pg = (_s.pages||[]).includes(startPage)?startPage:_defaultLandingPage_();
   navigateTo(pg);
+
+  // Trainees land on the Training tab (no Schedule/Profile access)
+  if(hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager')){
+    switchHubTab('training');
+  }
 }
 
 function buildNav(){
-  const skip = ['service_log', 'quotes'];
+  const skip = ['service_log', 'quotes', 'training']; // training lives inside the hub tab now
   document.getElementById('bnav').innerHTML=(_s.pages||[]).filter(p => !skip.includes(p)).map(p=>{
     const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
     return `<button class="ni" id="ni-${p}" onclick="navigateTo('${p}')"><span class="ni-icon">${icon}</span><span class="ni-label">${label}</span></button>`;
   }).join('');
+}
+
+// Show/hide hub tab buttons based on role.
+// Trainees see only the Training tab; everyone else sees all three.
+function _configureHubTabs(){
+  const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
+  const schedBtn = document.getElementById('htab-schedule');
+  const profBtn  = document.getElementById('htab-profile');
+  if(schedBtn) schedBtn.style.display = traineeOnly ? 'none' : '';
+  if(profBtn)  profBtn.style.display  = traineeOnly ? 'none' : '';
+  // Also hide the schedule/profile tab content for trainees
+  if(traineeOnly){
+    document.getElementById('hub-tab-schedule').style.display = 'none';
+    document.getElementById('hub-tab-profile').style.display  = 'none';
+  }
 }
 
 function buildHomeCards(){
@@ -126,6 +205,12 @@ function buildHomeCards(){
 }
 
 function navigateTo(page){
+  // Training lives inside the hub — redirect for all hub users
+  if(page==='training' && (_s&&(_s.pages||[]).includes('live_map'))){
+    navigateTo('live_map');
+    switchHubTab('training');
+    return;
+  }
   if(!_s||!(_s.pages||[]).includes(page))return;
   document.querySelectorAll('.pf').forEach(f=>f.classList.remove('active'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
@@ -149,30 +234,50 @@ function navigateTo(page){
 // ROUTES / MAP PAGE
 // ══════════════════════════════════════════════════════════════════════════════
 function loadRoutes(opOverride) {
-  document.getElementById('route-loading').style.display='block';
-  document.getElementById('route-content').style.display='none';
   const op = opOverride || _activeOp;
+
+  // ── Cache hit: skip network call entirely ──
+  const cached = _getRouteCache(op, _weekOffset);
+  if(cached){
+    _routeData = cached;
+    document.getElementById('route-loading').style.display='none';
+    document.getElementById('route-content').style.display='block';
+    renderRoutePage();
+    if(isAdmin()) loadUnassigned();
+    return;
+  }
+
+  // ── Request deduplication: attach to in-flight promise if already fetching ──
+  const fetchKey = _routeCacheKey(op, _weekOffset);
+  if(_routeFetchInFlight && _routeFetchInFlight.key === fetchKey){
+    _routeFetchInFlight.promise.then(()=>{ if(_routeData) renderRoutePage(); });
+    return;
+  }
+
+  // ── Show skeleton while loading ──
+  _showRouteSkeleton();
+
   const params = {action:'route_data', token:_s.token, operator:op};
   if(_weekOffset !== 0) params.week_offset = _weekOffset;
-  apiGet(params)
+
+  const fetchPromise = apiGet(params)
     .then(res=>{
-      document.getElementById('route-loading').style.display='none';
+      _routeFetchInFlight = null;
       if(!res.ok){
         document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error}</div></div>`;
-        document.getElementById('route-content').style.display='block';
         return;
       }
       _routeData = res;
-      document.getElementById('route-content').style.display='block';
+      _setRouteCache(op, _weekOffset, res);
       renderRoutePage();
-      // Load unassigned pools for admins
       if(isAdmin()) loadUnassigned();
     })
     .catch(e=>{
-      document.getElementById('route-loading').style.display='none';
+      _routeFetchInFlight = null;
       document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
-      document.getElementById('route-content').style.display='block';
     });
+
+  _routeFetchInFlight = { key: fetchKey, promise: fetchPromise };
 }
 
 // ── Map Calendar Logic ──
@@ -184,16 +289,26 @@ let _calYear = new Date().getFullYear();
 // ── Hub tab switching (Schedule ↔ My Operator Profile) ──
 function switchHubTab(tab) {
   _activeHubTab = tab;
-  document.getElementById('htab-schedule').classList.toggle('active', tab === 'schedule');
-  document.getElementById('htab-profile').classList.toggle('active', tab === 'profile');
+
+  // Update tab button active states (only for buttons that exist / are visible)
+  ['schedule','training','profile'].forEach(t => {
+    const btn = document.getElementById('htab-'+t);
+    if(btn) btn.classList.toggle('active', t === tab);
+  });
+
+  // Show/hide tab content panels
   document.getElementById('hub-tab-schedule').style.display = tab === 'schedule' ? 'block' : 'none';
+  document.getElementById('hub-tab-training').style.display = tab === 'training' ? 'block' : 'none';
   document.getElementById('hub-tab-profile').style.display  = tab === 'profile'  ? 'block' : 'none';
+
   if (tab === 'profile') {
-    // Admins need full user list for the grid — load eagerly if not cached
     if(isAdmin() && !_usersCache.length){
-      loadUsers(); // renderProfileTab called again after loadUsers() via renderUserTable chain
+      loadUsers();
     }
     renderProfileTab();
+  }
+  if (tab === 'training') {
+    loadTraining();
   }
 }
 
@@ -201,6 +316,7 @@ function switchHubTab(tab) {
 function navWeek(dir) {
   _weekOffset += dir;
   _routeData = null;
+  _clearRouteCache();
   loadRoutes();
 }
 
@@ -713,6 +829,7 @@ function renderRoutePage(){
       : d.day.slice(0,3);
     return `<div class="day-tab${isToday?' today':''}${locked?' locked':''}" id="tab-${d.day}" onclick="selectDay('${d.day}')">
       <span class="dt-day">${d.day.slice(0,3)}</span>
+      <span class="dt-date">${dateStr}</span>
       <span class="dt-weather" id="dtw-${d.day}">--</span>
       <span class="dt-count">${count} pool${count!==1?'s':''}</span>
     </div>`;
@@ -725,7 +842,7 @@ function renderRoutePage(){
   // If viewing a different week, just select the first available day
   if(_weekOffset !== 0) autoDay = (days[0] || {}).day || 'Monday';
 
-  selectDay(autoDay);
+  _doSelectDay(autoDay); // bypass debounce for initial auto-select
 
   // Fetch weather after tabs are rendered
   fetchWeekWeather();
@@ -734,10 +851,17 @@ function renderRoutePage(){
 function switchOp(op){
   _activeOp = op;
   _routeData = null;
+  _clearRouteCache();
   loadRoutes(op);
 }
 
 function selectDay(dayName){
+  // Debounce: ignore rapid double-taps within 80ms
+  if(_daySelectTimer) clearTimeout(_daySelectTimer);
+  _daySelectTimer = setTimeout(()=>{ _daySelectTimer=null; _doSelectDay(dayName); }, 80);
+}
+
+function _doSelectDay(dayName){
   _activeDay = dayName;
 
   // Update tab active state
@@ -750,6 +874,11 @@ function selectDay(dayName){
   }
 
   const dayData = (_routeData&&_routeData.days||[]).find(d=>d.day===dayName);
+
+  // Trigger fade-in animation on the day card
+  const card = document.getElementById('route-day-card');
+  if(card){ card.classList.remove('day-entering'); void card.offsetWidth; card.classList.add('day-entering'); }
+
   renderDayCard(dayData);
 }
 
@@ -778,20 +907,31 @@ function renderDayCard(dayData){
 
   // Weather for this day from cache
   const cacheKey = _routeData.week_start || '';
-  const dayWeather = (_weatherCache[cacheKey] || {})[dayData.day];
+  const cachedWeekW = _getWeatherCache(cacheKey);
+  const dayWeather = (cachedWeekW || {})[dayData.day];
   const weatherHtml = dayWeather ? `${dayWeather.icon} ${dayWeather.high}°/${dayWeather.low}°` : '';
+
+  // Pre-compute progress for initial render
+  const totalCount = pools.length;
+  const doneCount  = pools.filter((p,i)=>doneSet.has(p.pool_id||String(i))).length;
+  const progressPct = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
+  const allDone = totalCount > 0 && doneCount === totalCount;
 
   // Header
   html += `<div class="rdc-header${locked?' locked-day':''}">
     <div class="rdc-header-main">
       <div class="rdc-day-name">
-        ${dateStr} <span class="rdc-weather-chip" id="rdc-w-${dayData.day}">${weatherHtml || '<i>Loading...</i>'}</span>
+        ${dateStr} <span class="rdc-weather-chip" id="rdc-w-${dayData.day}">${weatherHtml || '<i style="font-style:normal;opacity:.6">--°</i>'}</span>
       </div>
     </div>
     <div class="rdc-badges">
       ${isToday?'<span class="rdc-badge today-badge">Today</span>':''}
       ${locked?'<span class="rdc-badge locked">Locked 🔒</span>':''}
+      ${totalCount>0?`<span class="rdc-progress-badge${allDone?' all-done':''}" id="rdc-progress-badge">${doneCount}/${totalCount} Done</span>`:''}
       ${isAdmin()?'<button class="pin-all-btn" onclick="pinAllDay(\''+dayData.day+'\')" title="Pin all pools on this day">📌 Pin All</button>':''}
+    </div>
+    <div class="rdc-progress-bar-wrap">
+      <div class="rdc-progress-bar-fill${allDone?' all-done':''}" id="rdc-progress-bar-fill" style="width:${progressPct}%"></div>
     </div>
   </div>`;
 
@@ -836,7 +976,7 @@ function renderDayCard(dayData){
     const adminTap = isAdmin() ? ` onclick="openPoolAction('${escHtml(pId)}','${escHtml(dayData.day)}','${escHtml(pool.operator||'')}',${isPinned})"` : '';
 
     html += `
-    <div class="pool-stop${done?' ps-done':''}" id="stop-${idx}" style="${isAdmin()?'cursor:pointer':''}"${adminTap}>
+    <div class="pool-stop${done?' ps-done':''}${pool.priority?' ps-priority':''}" id="stop-${idx}" style="${isAdmin()?'cursor:pointer':''}"${adminTap}>
       <div class="ps-num-col">
         <div class="ps-num">${idx+1}</div>
         ${isPinned ? '<div class="ps-pin" title="Pinned Stop">📌</div>' : ''}
@@ -944,8 +1084,9 @@ function fetchWeekWeather(){
   if(!days.length) return;
 
   const cacheKey = _routeData.week_start || (days[0] && days[0].date) || '';
-  if(_weatherCache[cacheKey]){
-    injectWeatherChips(_weatherCache[cacheKey], days);
+  const cachedW = _getWeatherCache(cacheKey);
+  if(cachedW){
+    injectWeatherChips(cachedW, days);
     return;
   }
 
@@ -999,7 +1140,7 @@ function fetchWeekWeather(){
           low:  Math.round(data.daily.temperature_2m_min[i]),
         };
       });
-      _weatherCache[cacheKey] = result;
+      _setWeatherCache(cacheKey, result);
       injectWeatherChips(result, days);
       
       // Update current card if it matches the fetched week
@@ -1250,25 +1391,43 @@ function toggleDone(cb, idx, poolId, doneKey){
 function toggleDoneInHub(actionCol, idx, poolId, doneKey){
   const row = document.getElementById('stop-'+idx);
   const checkEl = actionCol.querySelector('.ps-check');
-  const done = JSON.parse(localStorage.getItem(doneKey)||'[]');
-  const isDone = done.includes(poolId);
-  
-  if(!isDone){ done.push(poolId); }
-  else { const i=done.indexOf(poolId); if(i!==-1)done.splice(i,1); }
-  
+
+  // 1. Read current state from DOM — no localStorage read needed
+  const isDone = row ? row.classList.contains('ps-done') : false;
   const nowDone = !isDone;
-  localStorage.setItem(doneKey, JSON.stringify(done));
-  
+
+  // 2. Apply visual change to DOM IMMEDIATELY (optimistic)
   if(row) row.classList.toggle('ps-done', nowDone);
   if(checkEl) checkEl.textContent = nowDone ? '✓' : '';
-  
-  // Also sync a small done label if present
-  const doneLabel = row.querySelector('.ps-label:last-child');
-  if(doneLabel && doneLabel.textContent.includes('Done')){
-    if(!nowDone) doneLabel.remove();
-  } else if(nowDone){
-    const rowLabels = row.querySelector('.ps-label-row');
-    if(rowLabels) rowLabels.insertAdjacentHTML('beforeend', '<span class="ps-label" style="background:#f0fdf4;color:#166534">✓ Done</span>');
+
+  // 3. Update progress counter immediately from DOM
+  _updateProgressCounter();
+
+  // 4. Persist to localStorage
+  try{
+    const done = JSON.parse(localStorage.getItem(doneKey)||'[]');
+    if(nowDone){ if(!done.includes(poolId)) done.push(poolId); }
+    else { const i=done.indexOf(poolId); if(i!==-1) done.splice(i,1); }
+    localStorage.setItem(doneKey, JSON.stringify(done));
+  }catch(e){}
+}
+
+function _updateProgressCounter(){
+  const allStops  = document.querySelectorAll('#route-day-card .pool-stop');
+  const doneStops = document.querySelectorAll('#route-day-card .pool-stop.ps-done');
+  const total = allStops.length;
+  const done  = doneStops.length;
+  const allDone = total > 0 && done === total;
+
+  const badge = document.getElementById('rdc-progress-badge');
+  const bar   = document.getElementById('rdc-progress-bar-fill');
+  if(badge){
+    badge.textContent = `${done}/${total} Done`;
+    badge.classList.toggle('all-done', allDone);
+  }
+  if(bar){
+    bar.style.width = (total > 0 ? Math.round(done/total*100) : 0) + '%';
+    bar.classList.toggle('all-done', allDone);
   }
 }
 
@@ -1283,6 +1442,7 @@ function buildAppleMapsUrl_(pools){
 
 function getSvcClass_(svc){
   const s=(svc||'').toLowerCase();
+  if(s.includes('bi-weekly')||s.includes('biweekly'))return 'svc-biweekly'; // must be before 'weekly'
   if(s.includes('weekly'))return 'svc-weekly';
   if(s.includes('startup'))return 'svc-startup';
   if(s.includes('monthly'))return 'svc-monthly';

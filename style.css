@@ -1252,3 +1252,203 @@ select.q-inp{cursor:pointer}
 .crm-detail-sec { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 .crm-detail-wrap b { color: var(--muted); font-weight: 500; font-size: .75rem; text-transform: uppercase; display: block; margin-bottom: .1rem; }
 .crm-detail-wrap code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-size: .85rem; font-family: monospace; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TECHNICIAN HUB — AESTHETIC & OPTIMIZATION OVERHAUL
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1A: Pool Stop Cards ── */
+.ps-num-col { border-left: 3px solid transparent; transition: border-left-color .2s; }
+.pool-stop.ps-priority .ps-num-col { border-left-color: var(--error); }
+.pool-stop.ps-done .ps-num-col { border-left-color: var(--success); }
+
+.ps-num {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Oswald', sans-serif;
+  font-size: .95rem; font-weight: 700;
+  transition: background .2s;
+  flex-shrink: 0;
+}
+.pool-stop.ps-done .ps-num { background: var(--success); }
+
+.ps-done { opacity: .8; }
+.ps-done .ps-title { text-decoration: line-through; text-decoration-color: var(--muted); opacity: .55; }
+.ps-done .ps-meta,
+.ps-done .ps-label-row,
+.ps-done .ps-btns { opacity: .5; }
+
+.ps-check {
+  width: 28px; height: 28px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0;
+  background: #fff;
+  cursor: pointer;
+  transition: all .2s cubic-bezier(.34, 1.56, .64, 1);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ps-done .ps-check {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+  font-size: .85rem;
+  font-weight: 700;
+  transform: scale(1.15);
+}
+.ps-action-col {
+  width: 52px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── 1B: Progress Counter + Bar in Day Card Header ── */
+.rdc-progress-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem; font-weight: 700; letter-spacing: .05em;
+  padding: .2rem .65rem;
+  border-radius: 99px;
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.3);
+  color: #fff;
+  transition: background .3s, border-color .3s;
+}
+.rdc-progress-badge.all-done {
+  background: rgba(22,163,74,.35);
+  border-color: rgba(22,163,74,.6);
+}
+.rdc-progress-bar-wrap {
+  height: 3px;
+  background: rgba(255,255,255,.15);
+  overflow: hidden;
+}
+.rdc-progress-bar-fill {
+  height: 100%;
+  background: rgba(255,255,255,.65);
+  border-radius: 0;
+  transition: width .4s ease, background .3s;
+  will-change: width;
+}
+.rdc-progress-bar-fill.all-done { background: var(--success); }
+
+/* ── 1C: Day Tabs Enhancement ── */
+.day-tab {
+  flex-shrink: 0;
+  width: 76px;
+  padding: .85rem .25rem .7rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center;
+  cursor: pointer;
+  transition: all .18s cubic-bezier(.4,0,.2,1);
+  gap: .1rem;
+}
+.day-tab:hover:not(.active):not(.locked) {
+  border-color: var(--teal-light);
+  box-shadow: 0 2px 8px rgba(13,77,68,.1);
+}
+.day-tab.active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(13,77,68,.22);
+}
+.day-tab.today:not(.active) {
+  box-shadow: 0 0 0 2px var(--teal-mid);
+  background: var(--teal-glow);
+  border-color: transparent;
+}
+.day-tab.locked { opacity: .5; cursor: default; }
+.dt-day { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+.dt-date { font-size: .65rem; opacity: .7; margin-top: .02rem; }
+.day-tab.active .dt-date { opacity: .85; }
+.dt-count {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .62rem; font-weight: 800; letter-spacing: .04em;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 1px 7px;
+  border-radius: 99px;
+  margin-top: .25rem;
+  border: 1px solid var(--border);
+  transition: all .18s;
+}
+.day-tab.active .dt-count {
+  background: rgba(255,255,255,.25);
+  color: #fff;
+  border-color: transparent;
+}
+.day-tab.today:not(.active) .dt-count {
+  background: var(--teal-glow);
+  color: var(--teal-mid);
+  border-color: rgba(42,168,154,.3);
+}
+.dt-weather {
+  display: flex; align-items: center; justify-content: center; gap: .2rem;
+  font-size: .72rem; font-weight: 700; letter-spacing: -.01em;
+  background: rgba(42,168,154,.08);
+  border-radius: 5px;
+  padding: .05rem .35rem;
+  min-width: 52px; height: 20px;
+  color: var(--teal-mid);
+  transition: all .18s;
+}
+.day-tab.active .dt-weather {
+  background: rgba(255,255,255,.2);
+  color: #fff;
+}
+
+/* ── 1D: Maps Buttons ── */
+.maps-btn { min-height: 48px; border-radius: 12px; padding: .6rem 1rem; font-size: .85rem; }
+.maps-btn.gmaps { border-color: #bfd0e8; color: #1a56c4; }
+.maps-btn.gmaps:hover { background: #eff4ff; border-color: #1a56c4; }
+.maps-btn.amaps { border-color: #c7ccd6; color: #374151; }
+.maps-btn.amaps:hover { background: #f1f5f9; border-color: #374151; }
+
+/* ── 1E: Skeleton Shimmer ── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton-block {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 1200px 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 10px;
+}
+.sk-tabs { display: flex; gap: .5rem; padding: .75rem 1rem; }
+.sk-tab  { height: 88px; width: 76px; flex-shrink: 0; border-radius: 14px; }
+.sk-header { height: 84px; border-radius: 20px 20px 0 0; }
+.sk-maps-row { height: 56px; margin: .5rem 1rem; border-radius: 12px; }
+.sk-stop { height: 88px; margin: .5rem 1rem; border-radius: 12px; }
+
+/* ── 1F: Day Transition Fade ── */
+@keyframes dayFadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+#route-day-card.day-entering { animation: dayFadeIn .18s ease both; }
+
+/* ── 1G: Service Label Color Upgrade ── */
+.svc-weekly   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.svc-biweekly { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+.svc-startup  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.svc-monthly  { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.svc-gtc      { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.svc-other    { background: #f1f5f9; color: #475569; border: 1px solid var(--border); }
+
+/* ── 1H: Action Button Touch-Target Sizing ── */
+.ps-btn.ps-log, .ps-btn.ps-sms { min-height: 36px; padding: .4rem .85rem; font-size: .76rem; border-radius: 8px; }
+.ps-btn.ps-nav { min-height: 36px; min-width: 36px; }
+
+/* ── Hub tab bar: 3-tab layout ── */
+/* flex:1 already distributes evenly; tighten font slightly so 3 tabs fit on narrow phones */
+.hub-tab { font-size: .78rem; padding: .75rem .25rem; }
+@media(min-width: 420px){ .hub-tab { font-size: .85rem; padding: .75rem .5rem; } }

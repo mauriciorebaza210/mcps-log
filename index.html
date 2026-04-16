@@ -55,12 +55,13 @@
 
     <!-- Routes / Map -->
     <div class="pf" id="page-live_map">
-      <div id="route-loading" class="route-loading"><div class="spinner"></div></div>
+      <div id="route-loading" style="display:none"></div>
       <div id="route-content" style="display:none">
 
-        <!-- Hub-level tab bar -->
+        <!-- Hub-level tab bar (tabs shown/hidden per role by JS) -->
         <div class="hub-tabs-bar">
           <button class="hub-tab active" id="htab-schedule" onclick="switchHubTab('schedule')">📅 Schedule</button>
+          <button class="hub-tab" id="htab-training" onclick="switchHubTab('training')">🎓 Training</button>
           <button class="hub-tab" id="htab-profile" onclick="switchHubTab('profile')">👤 My Operator Profile</button>
         </div>
 
@@ -164,6 +165,19 @@
           </div>
 
         </div><!-- /hub-tab-profile -->
+
+        <!-- ══ TRAINING TAB ══ -->
+        <div id="hub-tab-training" style="display:none">
+          <div id="tr-mod-list">
+            <div class="tr-page-hdr">
+              <h2>Training Modules</h2>
+              <button class="tr-add-btn" id="tr-add-mod-btn" style="display:none" onclick="openModuleDrawer(null)">+ Module</button>
+            </div>
+            <div id="tr-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
+            <div id="tr-root"></div>
+          </div>
+          <div id="tr-detail" style="display:none"></div>
+        </div><!-- /hub-tab-training -->
 
       </div>
     </div>
@@ -669,18 +683,8 @@
       </div>
     </div>
 
-    <!-- Training Modules -->
-    <div class="pf" id="page-training">
-      <div id="tr-mod-list">
-        <div class="tr-page-hdr">
-          <h2>Training Modules</h2>
-          <button class="tr-add-btn" id="tr-add-mod-btn" style="display:none" onclick="openModuleDrawer(null)">+ Module</button>
-        </div>
-        <div id="tr-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
-        <div id="tr-root"></div>
-      </div>
-      <div id="tr-detail" style="display:none"></div>
-    </div>
+    <!-- Training Modules (content moved into Technician Hub training tab) -->
+    <div class="pf" id="page-training"></div>
 
     <!-- Onboarding / Get Started -->
     <div class="pf" id="page-onboarding">

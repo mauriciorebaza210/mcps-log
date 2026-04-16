@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+    <pre id="output">Loading...</pre>
+    <script>
+        async function run() {
+            try {
+                const res = await fetch('fw4.pdf');
+                const buf = await res.arrayBuffer();
+                const doc = await PDFLib.PDFDocument.load(buf);
+                const form = doc.getForm();
+                const fields = form.getFields();
+                let out = '';
+                fields.forEach(f => out += f.getName() + ' : ' + f.constructor.name + '\n');
+                document.getElementById('output').textContent = out;
+            } catch(e) {
+                document.getElementById('output').textContent = e.message;
+            }
+        }
+        run();
+    </script>
+</body>
+</html>
