@@ -5,10 +5,50 @@ const AS = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_Qbs
 const SEC = 'mcps_webhook_2026';
 
 const PAGE_META = {
-  home:'🏠|Home', live_map:'🛟|Technician Hub', service_log:'📝|Service Log',
-  inventory:'📦|Inventory', quotes:'📄|Quote Tool', crm:'📊|Sales Hub', training:'🎓|Training', admin:'🔒|Admin',
-  onboarding:'📋|Get Started'
+  home:'Home', live_map:'Technician Hub', service_log:'Service Log',
+  inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
+  onboarding:'Get Started'
 };
+
+// Emoji icons used on home cards only (sidebar uses SVG)
+const PAGE_ICONS = {
+  home:'🏠', live_map:'🛟', service_log:'📝', inventory:'📦',
+  quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋'
+};
+
+// ── Sidebar SVG icon strings (16×16, stroke-based Heroicons) ─────────────────
+const SVG_HOME     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+const SVG_CALENDAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+const SVG_CLIP     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>`;
+const SVG_BOX      = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
+const SVG_PLAY     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>`;
+const SVG_USER     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+const SVG_DOC      = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`;
+const SVG_CHART    = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
+const SVG_LOCK     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+const SVG_STAR     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+
+// ── Sidebar accordion group definitions ──────────────────────────────────────
+const SIDEBAR_GROUPS = [
+  {
+    id: 'sales',
+    label: 'Sales Hub',
+    children: [
+      { page:'crm',    label:'Leads CRM',  icon:SVG_CHART },
+      { page:'quotes', label:'Quote Tool',  icon:SVG_DOC   }
+    ]
+  },
+  {
+    id: 'tech',
+    label: 'Technician Hub',
+    children: [
+      { page:'live_map',    label:'Schedule',         icon:SVG_CALENDAR },
+      { page:'live_map',    label:'Training',          icon:SVG_PLAY,     hubTab:'training', id:'sb-child-training' },
+      { page:'inventory',   label:'Inventory',         icon:SVG_BOX      },
+      { page:'service_log', label:'Service Log',       icon:SVG_CLIP     }
+    ]
+  }
+];
 
 // Pages per role — additive
 const ROLE_PAGES = {
@@ -152,9 +192,10 @@ function _defaultLandingPage_(){ return (hasRole('technician')||hasRole('lead')|
 function showApp(startPage) {
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
-  document.getElementById('tp-name').textContent=_s.name;
-  const rb=document.getElementById('tp-role');
-  rb.textContent=(_s.roles||[]).join(', '); rb.className='r-badge '+(_s.roles||[])[0];
+  // Sidebar footer — user name & role
+  document.getElementById('sb-name').textContent=_s.name;
+  const sbRole=document.getElementById('sb-role');
+  sbRole.textContent=(_s.roles||[]).join(', '); sbRole.className='r-badge '+(_s.roles||[])[0];
   document.getElementById('home-name').textContent=_s.name.split(' ')[0];
   // Refresh pages list in case ROLE_PAGES was updated
   _s.pages = unionPages_(_s.roles);
@@ -173,12 +214,87 @@ function showApp(startPage) {
   }
 }
 
-function buildNav(){
-  const skip = ['service_log', 'quotes', 'training']; // training lives inside the hub tab now
-  document.getElementById('bnav').innerHTML=(_s.pages||[]).filter(p => !skip.includes(p)).map(p=>{
-    const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
-    return `<button class="ni" id="ni-${p}" onclick="navigateTo('${p}')"><span class="ni-icon">${icon}</span><span class="ni-label">${label}</span></button>`;
+function buildNav() {
+  const pages = _s.pages || [];
+  const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
+  let html = '';
+
+  // Home — direct link
+  if (pages.includes('home')) {
+    html += `<button class="sb-item" id="ni-home" onclick="navigateTo('home')">${SVG_HOME}<span>Home</span></button>`;
+  }
+
+  // Sales Hub accordion
+  const salesChildren = SIDEBAR_GROUPS[0].children.filter(c => pages.includes(c.page));
+  if (salesChildren.length) html += _makeSbGroup('sales', 'Sales Hub', salesChildren);
+
+  // Technician Hub accordion
+  let techChildren;
+  if (!pages.includes('live_map') && pages.includes('inventory')) {
+    // Office users: only show Inventory under Tech Hub
+    techChildren = SIDEBAR_GROUPS[1].children.filter(c => c.page === 'inventory');
+  } else {
+    techChildren = SIDEBAR_GROUPS[1].children.filter(c => {
+      if (!pages.includes(c.page)) return false;
+      if (traineeOnly && c.page === 'live_map' && !c.hubTab) return false;
+      if (traineeOnly && c.hubTab === 'profile') return false;
+      if (traineeOnly && c.page === 'inventory') return false;
+      if (traineeOnly && c.page === 'service_log') return false;
+      return true;
+    });
+  }
+  if (techChildren.length) html += _makeSbGroup('tech', 'Technician Hub', techChildren);
+
+  // Admin / Onboarding — direct links
+  if (pages.includes('admin')) {
+    html += `<button class="sb-item" id="ni-admin" onclick="navigateTo('admin')">${SVG_LOCK}<span>Admin</span></button>`;
+  }
+  if (pages.includes('onboarding')) {
+    html += `<button class="sb-item" id="ni-onboarding" onclick="navigateTo('onboarding')">${SVG_STAR}<span>Get Started</span></button>`;
+  }
+
+  // Operator Profile — standalone at the bottom
+  if (pages.includes('live_map') && !traineeOnly) {
+    html += `<button class="sb-item sb-item-bottom" id="sb-child-profile" onclick="navigateTo('live_map');switchHubTab('profile')">${SVG_USER}<span>Operator Profile</span></button>`;
+  }
+
+  document.getElementById('sb-nav').innerHTML = html;
+}
+
+function _makeSbGroup(id, label, children) {
+  const SVG_CHEVRON = `<svg class="sb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
+  const childrenHtml = children.map(c => {
+    const childId = c.id || `ni-${c.page}${c.hubTab ? '-'+c.hubTab : ''}`;
+    const onclick = c.hubTab
+      ? `navigateTo('${c.page}');switchHubTab('${c.hubTab}')`
+      : `navigateTo('${c.page}')`;
+    return `<button class="sb-child" id="${childId}" onclick="${onclick}">${c.icon || ''}<span>${c.label}</span></button>`;
   }).join('');
+  return `<div class="sb-group" id="sbg-${id}"><div class="sb-group-header" onclick="_toggleAccordion('${id}')"><span>${label}</span>${SVG_CHEVRON}</div><div class="sb-group-children">${childrenHtml}</div></div>`;
+}
+
+function _toggleAccordion(id) {
+  document.getElementById('sbg-'+id)?.classList.toggle('open');
+}
+
+function _setAccordionOpen(id, open) {
+  document.getElementById('sbg-'+id)?.classList.toggle('open', open);
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sb-overlay');
+  const isOpen = sb.classList.toggle('open');
+  ov.classList.toggle('visible', isOpen);
+  document.body.style.overflow = isOpen ? 'hidden' : '';
+}
+
+function _closeSidebar() {
+  const sb = document.getElementById('sidebar');
+  if (!sb || !sb.classList.contains('open')) return;
+  sb.classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
 }
 
 // Show/hide hub tab buttons based on role.
@@ -199,7 +315,8 @@ function _configureHubTabs(){
 function buildHomeCards(){
   const descs={onboarding:'Complete your onboarding to get started',live_map:'View and manage your route assignments',service_log:'Log a pool visit & dosage recs',inventory:'Chemical inventory levels',quotes:'Quote calculator',crm:'Leads, pipeline, and signed contracts',training:'Video training modules',admin:'Manage users & access'};
   document.getElementById('home-grid').innerHTML=(_s.pages||[]).filter(p=>p!=='home').map(p=>{
-    const [icon,label]=(PAGE_META[p]||'❓|?').split('|');
+    const icon = PAGE_ICONS[p] || '❓';
+    const label = PAGE_META[p] || p;
     return `<div class="home-card" onclick="navigateTo('${p}')"><span class="hc-icon">${icon}</span><div><div class="hc-name">${label}</div><div class="hc-desc">${descs[p]||''}</div></div><span class="hc-arrow">›</span></div>`;
   }).join('');
 }
@@ -213,21 +330,38 @@ function navigateTo(page){
   }
   if(!_s||!(_s.pages||[]).includes(page))return;
   document.querySelectorAll('.pf').forEach(f=>f.classList.remove('active'));
-  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
   const frame=document.getElementById('page-'+page);
   if(frame)frame.classList.add('active');
-  const nb=document.getElementById('ni-'+page);
-  if(nb)nb.classList.add('active');
+  _setSidebarActive(page, null);
   _curPage=page;
   location.hash=page==='home'?'':page;
+  _closeSidebar();
+  // Scroll content area back to top
+  const mc = document.querySelector('.main-content');
+  if (mc) mc.scrollTop = 0;
   if(page==='home') loadHomeStats();
-  if(page==='live_map'&&!_routeData) loadRoutes();
+  if(page==='live_map'){ if(!_routeData) loadRoutes(); switchHubTab('schedule'); }
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
   if(page==='crm') loadCRM();
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
+}
+
+function _setSidebarActive(page, hubTab) {
+  document.querySelectorAll('.sb-item, .sb-child').forEach(n => n.classList.remove('active'));
+  let targetId;
+  if (hubTab === 'profile') {
+    targetId = 'sb-child-profile';
+  } else {
+    targetId = hubTab ? `ni-${page}-${hubTab}` : `ni-${page}`;
+  }
+  const target = document.getElementById(targetId);
+  if (target) target.classList.add('active');
+  // Auto-expand parent accordion
+  if (page === 'crm' || page === 'quotes') _setAccordionOpen('sales', true);
+  if (['live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -310,6 +444,8 @@ function switchHubTab(tab) {
   if (tab === 'training') {
     loadTraining();
   }
+  // Sync sidebar: schedule maps to the parent live_map item; training/profile map to their child items
+  _setSidebarActive('live_map', tab === 'schedule' ? null : tab);
 }
 
 // ── Admin week navigation ──
@@ -1605,56 +1741,96 @@ const TF={FC:"Chlorine (Cl)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium Hard
 const SG={small:12000,medium:17500,large:25000};
 const SM=[6,7,8,9];
 
+const _SVC_META_TTL = 4 * 60 * 60 * 1000; // 4 hours — force fresh metadata after this
+
 function loadServiceLog(prefillPoolId){
-  window._lastLoadedPoolId = null; 
+  window._lastLoadedPoolId = null;
   window._svcLoadCounter = (window._svcLoadCounter||0) + 1;
   const thisRequest = window._svcLoadCounter;
 
-  // 1. Try to render INSTANTLY from cache if we have it
-  const cached = localStorage.getItem('svc_meta_cache');
-  if (cached) {
+  // 1. Try to render INSTANTLY from cache if fresh enough
+  const cached   = localStorage.getItem('svc_meta_cache');
+  const cachedTs = parseInt(localStorage.getItem('svc_meta_cache_ts') || '0', 10);
+  const cacheValid = cached && (Date.now() - cachedTs < _SVC_META_TTL);
+  if (cacheValid) {
     try {
-      const meta = JSON.parse(cached);
+      renderSvcForm(JSON.parse(cached), prefillPoolId);
       document.getElementById('svc-loading').style.display = 'none';
       document.getElementById('svc-root').style.display = 'block';
-      renderSvcForm(meta, prefillPoolId);
     } catch(e) {}
   }
-  
-  // 2. Start both requests in parallel for maximum speed
-  const metaReq = api({secret:SEC,action:'get_metadata'});
-  const ctxReq  = prefillPoolId ? api({ secret: SEC, action: 'get_pool_context', token: _s.token, pool_id: prefillPoolId }) : Promise.resolve(null);
 
-  metaReq.then(res=>{
+  // 2. Three parallel requests: form metadata, live pool list, pool context
+  const metaReq  = api({ secret:SEC, action:'get_metadata' });
+  const poolsReq = api({ secret:SEC, action:'get_pool_list', token:_s.token });
+  const ctxReq   = prefillPoolId
+    ? api({ secret:SEC, action:'get_pool_context', token:_s.token, pool_id:prefillPoolId })
+    : Promise.resolve(null);
+
+  // 3. Fresh form metadata — re-render if stale or changed
+  metaReq.then(res => {
     if (thisRequest !== window._svcLoadCounter) return;
-    if(res.ok){
-      localStorage.setItem('svc_meta_cache', JSON.stringify(res.data));
-      // Only re-render if we didn't have a cache or if metadata is different
-      if (!cached || JSON.stringify(JSON.parse(cached)) !== JSON.stringify(res.data)) {
-        document.getElementById('svc-loading').style.display='none';
-        document.getElementById('svc-root').style.display='block';
+    if (res.ok) {
+      const fresh = JSON.stringify(res.data);
+      const changed = !cacheValid || localStorage.getItem('svc_meta_cache') !== fresh;
+      localStorage.setItem('svc_meta_cache', fresh);
+      localStorage.setItem('svc_meta_cache_ts', String(Date.now()));
+      if (changed) {
+        document.getElementById('svc-loading').style.display = 'none';
+        document.getElementById('svc-root').style.display = 'block';
         renderSvcForm(res.data, prefillPoolId);
       }
-    } else if (!cached) {
-      document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">'+res.error+'</div>';
-      document.getElementById('svc-root').style.display='block';
+    } else if (!cacheValid) {
+      document.getElementById('svc-root').innerHTML = '<div style="color:var(--error);padding:2rem;text-align:center">'+res.error+'</div>';
+      document.getElementById('svc-root').style.display = 'block';
     }
-  }).catch(e=>{
-    if (!cached) {
-      document.getElementById('svc-loading').style.display='none';
-      document.getElementById('svc-root').innerHTML='<div style="color:var(--error);padding:2rem;text-align:center">Failed: '+e.message+'</div>';
-      document.getElementById('svc-root').style.display='block';
+  }).catch(e => {
+    if (!cacheValid) {
+      document.getElementById('svc-loading').style.display = 'none';
+      document.getElementById('svc-root').innerHTML = '<div style="color:var(--error);padding:2rem;text-align:center">Failed: '+e.message+'</div>';
+      document.getElementById('svc-root').style.display = 'block';
     }
   });
 
-  // 3. Handle the context (specs/notes) as soon as it arrives
+  // 4. Live pool list — replaces dropdown options as soon as it arrives
+  poolsReq.then(res => {
+    if (thisRequest !== window._svcLoadCounter) return;
+    if (res && res.ok && res.pools && res.pools.length) {
+      // Give the form a moment to render before swapping options
+      setTimeout(() => _applyLivePoolList_(res.pools, prefillPoolId), 60);
+    }
+  }).catch(() => {}); // Silent fail — form metadata choices are the fallback
+
+  // 5. Pool context (specs/notes/trends) as soon as it arrives
   ctxReq.then(res => {
     if (thisRequest !== window._svcLoadCounter) return;
     if (res && res.ok && res.data && res.data.found) {
-      // Use a small delay to ensure the form has been rendered by the metaReq
       setTimeout(() => applyPoolContext_(res.data, prefillPoolId), 20);
     }
   });
+}
+
+// Replace the pool_id select with live data and re-apply any prefill match
+function _applyLivePoolList_(pools, prefillPoolId) {
+  const sel = document.querySelector('[name="pool_id"]');
+  if (!sel) return;
+  const normalize = v => (typeof v === 'string' ? v : (v.label || v.id || String(v)));
+  sel.innerHTML = '<option value="">Select...</option>' +
+    pools.map(p => {
+      const v = escHtml(normalize(p));
+      return `<option value="${v}">${v}</option>`;
+    }).join('');
+  if (!prefillPoolId) return;
+  // Re-apply prefill match (same logic as renderSvcForm)
+  const mcpsId = prefillPoolId.match(/(MCPS-\d{4,})\s*$/i);
+  for (let i = 0; i < sel.options.length; i++) {
+    const opt = sel.options[i].value;
+    if (opt === prefillPoolId || (mcpsId && opt.toUpperCase().includes(mcpsId[1].toUpperCase()))) {
+      sel.selectedIndex = i;
+      sel.dispatchEvent(new Event('change'));
+      break;
+    }
+  }
 }
 
 function renderSvcForm(meta, prefillPoolId){
@@ -3024,8 +3200,10 @@ const _qDef = () => ({
   repair_desc:'', repair_amount:0, repair_sku:'',
   discount_type:'none', discount_value:0, custom_price:0,
   void_travel:false, travel:null, travel_loading:false, travel_error:'',
-  first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'',
-  _calc:null, saved_id:null, saving:false
+  first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'', area:'',
+  _calc:null, saved_id:null, saving:false,
+  contract_status:'none', contract_url:'', contract_download_url:'', contract_error:'',
+  send_contract_status:'none', sent_at:''
 });
 let _qS = _qDef();
 
@@ -3291,13 +3469,14 @@ function qReset() {
   ['spa','robot','sun','pets','school','mcp','override'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
   document.getElementById('qchk-chem')?.classList.add('active');
   document.getElementById('qchk-prog')?.classList.add('active');
-  ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city',
+  ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
    'q-startup-co','q-startup-date','q-rep-co','q-rep-sku','q-rep-addr','q-rep-desc','q-rep-amt'
   ].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('q-disc-type').value = 'none';
   document.getElementById('q-disc-val-wrap').style.display = 'none';
   document.getElementById('q-disc-val').value = '';
   const msg = document.getElementById('q-save-msg'); msg.className='q-msg'; msg.textContent='';
+  qRenderSavedCard();
   qRecalc();
 }
 
@@ -3310,7 +3489,7 @@ async function qSave() {
   const payload = {
     action: 'save_quote', token: _s ? _s.token : '',
     first_name:_qS.first_name, last_name:_qS.last_name, email:_qS.email, phone:_qS.phone,
-    address:_qS.address, city:_qS.city, zip_code:_qS.zip_code,
+    address:_qS.address, city:_qS.city, zip_code:_qS.zip_code, area:_qS.area,
     service:eng.service_label, pool_type:eng.pool_type, size:eng.size, material:eng.material,
     spa:eng.spa, finish:eng.finish, debris:eng.debris,
     has_robot:_qS.has_robot, high_sun_exposure:_qS.high_sun_exposure, has_pets:_qS.has_pets,
@@ -3318,9 +3497,12 @@ async function qSave() {
     startup_pool_school:_qS.startup_pool_school, startup_company:_qS.startup_company,
     sponsored_by_mcp:_qS.sponsored_by_mcp, startup_start_date:_qS.startup_start_date,
     startup_total_days:_qS.sponsored_by_mcp ? 3 : 0,
-    repair_job_type:_qS.repair_type, repair_company_name:_qS.repair_company,
-    repair_company_address:_qS.repair_address, repair_job_description:_qS.repair_desc,
-    repair_invoice_amount:_qS.repair_amount, repair_sku:_qS.repair_sku,
+    repair_job_type:        _qS.service==='repair_job' ? _qS.repair_type    : '',
+    repair_company_name:    _qS.service==='repair_job' ? _qS.repair_company  : '',
+    repair_company_address: _qS.service==='repair_job' ? _qS.repair_address  : '',
+    repair_job_description: _qS.service==='repair_job' ? _qS.repair_desc     : '',
+    repair_invoice_amount:  _qS.service==='repair_job' ? _qS.repair_amount   : 0,
+    repair_sku:             _qS.service==='repair_job' ? _qS.repair_sku      : '',
     travel_fee:tFee,
     travel_one_way_miles:             (_qS.travel&&!_qS.void_travel)?_qS.travel.one_way_miles:0,
     travel_round_trip_miles:          (_qS.travel&&!_qS.void_travel)?_qS.travel.round_trip_miles:0,
@@ -3344,6 +3526,7 @@ async function qSave() {
       msg.className = 'q-msg ok';
       msg.textContent = `Saved! Quote ID: ${res.quote_id || '—'}`;
       msg.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      qRenderSavedCard();
     } else {
       msg.className = 'q-msg err';
       msg.textContent = `Error: ${res.error || 'Save failed — check Apps Script logs.'}`;
@@ -3358,6 +3541,213 @@ async function qSave() {
 }
 
 function qInit() { if (!_qS._calc) qRecalc(); }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SAVED QUOTE CARD
+// ──────────────────────────────────────────────────────────────────────────────
+
+function qRenderSavedCard() {
+  const el = document.getElementById('q-saved-card');
+  if (!el) return;
+  if (!_qS.saved_id) { el.innerHTML = ''; return; }
+
+  const c = _qS._calc;
+  const eng = c ? c.eng : null;
+  const tFee  = c ? c.tFee  : 0;
+  const tax   = c ? c.tax   : 0;
+  const total = c ? c.total : 0;
+  const sub   = c ? c.sub   : 0;
+
+  const fullName = [_qS.first_name, _qS.last_name].filter(Boolean).join(' ') || '—';
+  const serviceLabel = eng ? eng.service_label : (_qS.service || '—');
+  const specs = eng ? (eng.specs_summary || '') : '';
+
+  // Contract section
+  let contractHtml = '';
+  if (_qS.contract_status === 'generating') {
+    contractHtml = `<div class="q-contract-section">
+      <span class="q-contract-status generating">Generating contract…</span>
+    </div>`;
+  } else if (_qS.contract_status === 'generated') {
+    const sendLabel = _qS.send_contract_status === 'sending' ? 'Sending…'
+                    : _qS.sent_at ? 'Resend Contract'
+                    : 'Send Contract ✉';
+    const sentNote = _qS.sent_at
+      ? `<span style="font-size:.75rem;color:var(--muted)">Sent ${new Date(_qS.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`
+      : '';
+    contractHtml = `<div class="q-contract-section">
+      <span class="q-contract-status ok">Contract ready</span>
+      <div class="q-contract-btns">
+        <a class="q-btn-outline" href="${_qS.contract_url}" target="_blank" rel="noopener">View PDF</a>
+        <a class="q-btn-outline" href="${_qS.contract_download_url}" target="_blank" rel="noopener">Download</a>
+        <button class="q-btn-ghost" onclick="qGenerateContract()">Regenerate</button>
+        <button class="q-btn-primary" onclick="qSendContract()" id="q-send-contract-btn"
+          ${_qS.send_contract_status === 'sending' ? 'disabled' : ''}>${sendLabel}</button>
+      </div>
+      ${sentNote}
+      <div id="q-send-msg" style="display:none;font-size:.8rem;margin-top:.35rem;color:var(--error)"></div>
+    </div>`;
+  } else {
+    const errHtml = _qS.contract_error
+      ? `<span class="q-contract-err">${_qS.contract_error}</span>` : '';
+    contractHtml = `<div class="q-contract-section">
+      <span class="q-contract-status none">No contract yet</span>
+      ${errHtml}
+      <div class="q-contract-btns">
+        <button class="q-btn-primary" onclick="qGenerateContract()">Generate Contract</button>
+      </div>
+    </div>`;
+  }
+
+  // Edit panel (hidden initially)
+  const editPanel = `<div class="q-edit-panel" id="q-edit-panel" style="display:none">
+    <div class="q-edit-grid">
+      <div><label class="q-flabel">First Name</label><input class="q-inp" id="qe-fname" value="${esc(_qS.first_name)}"></div>
+      <div><label class="q-flabel">Last Name</label><input class="q-inp" id="qe-lname" value="${esc(_qS.last_name)}"></div>
+      <div><label class="q-flabel">Email</label><input class="q-inp" id="qe-email" type="email" value="${esc(_qS.email)}"></div>
+      <div><label class="q-flabel">Phone</label><input class="q-inp" id="qe-phone" type="tel" value="${esc(_qS.phone)}"></div>
+      <div class="q-edit-full"><label class="q-flabel">Address</label><input class="q-inp" id="qe-address" value="${esc(_qS.address)}"></div>
+      <div><label class="q-flabel">City</label><input class="q-inp" id="qe-city" value="${esc(_qS.city)}"></div>
+      <div><label class="q-flabel">ZIP Code</label><input class="q-inp" id="qe-zip" value="${esc(_qS.zip_code)}"></div>
+    </div>
+    <div class="q-edit-actions">
+      <button class="q-btn-primary" onclick="qSaveQuoteInfo()">Save Changes</button>
+      <button class="q-btn-ghost" onclick="qToggleEditPanel(false)">Cancel</button>
+      <span id="q-edit-msg" class="q-edit-msg"></span>
+    </div>
+  </div>`;
+
+  el.innerHTML = `<div class="q-saved-card">
+    <div class="q-saved-card-header">
+      <div class="q-saved-card-id">
+        <span class="q-id-badge">${_qS.saved_id}</span>
+        <span class="q-saved-name">${esc(fullName)}</span>
+      </div>
+      <button class="q-btn-ghost q-edit-btn" onclick="qToggleEditPanel(true)">Edit Info</button>
+    </div>
+
+    <div class="q-saved-card-fields">
+      ${_qS.email    ? `<div class="q-scf"><span class="q-scf-lbl">Email</span><span>${esc(_qS.email)}</span></div>` : ''}
+      ${_qS.phone    ? `<div class="q-scf"><span class="q-scf-lbl">Phone</span><span>${esc(_qS.phone)}</span></div>` : ''}
+      ${_qS.address  ? `<div class="q-scf q-scf-full"><span class="q-scf-lbl">Address</span><span>${esc(_qS.address)}</span></div>` : ''}
+      ${(_qS.city || _qS.zip_code) ? `<div class="q-scf"><span class="q-scf-lbl">City / ZIP</span><span>${esc([_qS.city,_qS.zip_code].filter(Boolean).join(', '))}</span></div>` : ''}
+    </div>
+
+    <div class="q-saved-card-service">
+      <span class="q-saved-svc-label">${esc(serviceLabel)}</span>
+      ${specs ? `<span class="q-saved-specs">${esc(specs)}</span>` : ''}
+    </div>
+
+    <div class="q-metrics4 q-saved-pricing">
+      <div class="q-met"><div class="q-met-lbl">Service</div><div class="q-met-val">$${(sub || 0).toFixed(2)}</div></div>
+      <div class="q-met"><div class="q-met-lbl">Travel</div><div class="q-met-val">$${(tFee || 0).toFixed(2)}</div></div>
+      <div class="q-met"><div class="q-met-lbl">Tax</div><div class="q-met-val">$${(tax || 0).toFixed(2)}</div></div>
+      <div class="q-met hi"><div class="q-met-lbl">Total</div><div class="q-met-val">$${(total || 0).toFixed(2)}</div></div>
+    </div>
+
+    ${editPanel}
+    ${contractHtml}
+  </div>`;
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function qGenerateContract() {
+  if (_qS.contract_status === 'generating') return;
+  _qS.contract_status = 'generating';
+  _qS.contract_error = '';
+  qRenderSavedCard();
+  try {
+    const res = await api({ action: 'generate_contract', token: _s ? _s.token : '', quote_id: _qS.saved_id });
+    if (res.ok) {
+      _qS.contract_status = 'generated';
+      _qS.contract_url = res.contract_url || '';
+      _qS.contract_download_url = res.contract_download_url || '';
+    } else {
+      _qS.contract_status = 'none';
+      _qS.contract_error = res.error || 'Contract generation failed.';
+    }
+  } catch(e) {
+    _qS.contract_status = 'none';
+    _qS.contract_error = 'Network error — check connection.';
+  }
+  qRenderSavedCard();
+}
+
+async function qSendContract() {
+  if (!_qS.saved_id || _qS.send_contract_status === 'sending') return;
+  _qS.send_contract_status = 'sending';
+  qRenderSavedCard();
+  try {
+    const res = await api({ action: 'send_contract', token: _s ? _s.token : '', quote_id: _qS.saved_id });
+    if (res.ok) {
+      _qS.send_contract_status = 'sent';
+      _qS.sent_at = res.sent_at || new Date().toISOString();
+      // Keep CRM cache in sync
+      const idx = _crmCache.findIndex(i => i.quote_id === _qS.saved_id);
+      if (idx > -1) { _crmCache[idx].status = 'SENT'; _crmCache[idx].sent_at = _qS.sent_at; }
+    } else {
+      _qS.send_contract_status = 'error';
+      _qS.contract_error = res.error || 'Failed to send contract.';
+    }
+  } catch(e) {
+    _qS.send_contract_status = 'error';
+    _qS.contract_error = 'Network error — check connection.';
+  }
+  qRenderSavedCard();
+  const msgEl = document.getElementById('q-send-msg');
+  if (msgEl && _qS.send_contract_status === 'error') {
+    msgEl.textContent = _qS.contract_error;
+    msgEl.style.display = 'block';
+  }
+}
+
+function qToggleEditPanel(show) {
+  const panel = document.getElementById('q-edit-panel');
+  if (panel) panel.style.display = show ? '' : 'none';
+}
+
+async function qSaveQuoteInfo() {
+  const btn = document.querySelector('#q-edit-panel .q-btn-primary');
+  const msgEl = document.getElementById('q-edit-msg');
+  if (btn) btn.disabled = true;
+  if (msgEl) { msgEl.textContent = 'Saving…'; msgEl.className = 'q-edit-msg'; }
+
+  const payload = {
+    action: 'update_quote_info',
+    token: _s ? _s.token : '',
+    quote_id: _qS.saved_id,
+    first_name: document.getElementById('qe-fname').value.trim(),
+    last_name:  document.getElementById('qe-lname').value.trim(),
+    email:      document.getElementById('qe-email').value.trim(),
+    phone:      document.getElementById('qe-phone').value.trim(),
+    address:    document.getElementById('qe-address').value.trim(),
+    city:       document.getElementById('qe-city').value.trim(),
+    zip_code:   document.getElementById('qe-zip').value.trim(),
+  };
+
+  try {
+    const res = await api(payload);
+    if (res.ok) {
+      _qS.first_name = payload.first_name;
+      _qS.last_name  = payload.last_name;
+      _qS.email      = payload.email;
+      _qS.phone      = payload.phone;
+      _qS.address    = payload.address;
+      _qS.city       = payload.city;
+      _qS.zip_code   = payload.zip_code;
+      qRenderSavedCard();
+    } else {
+      if (btn) btn.disabled = false;
+      if (msgEl) { msgEl.textContent = res.error || 'Save failed.'; msgEl.className = 'q-edit-msg err'; }
+    }
+  } catch(e) {
+    if (btn) btn.disabled = false;
+    if (msgEl) { msgEl.textContent = 'Network error.'; msgEl.className = 'q-edit-msg err'; }
+  }
+}
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -3422,6 +3812,7 @@ function renderCRM(data, resetPage = true) {
 
     let statusClass = 'sc-unsent';
     if (status === 'SIGNED' || status === 'COMPLETED') statusClass = 'sc-signed';
+    if (status === 'ACTIVE_CUSTOMER') statusClass = 'sc-active';
     if (status === 'LOST') statusClass = 'sc-lost';
     if (status === 'LEAD') statusClass = 'sc-lead';
     if (status === 'SENT') statusClass = 'sc-sent';
@@ -3481,7 +3872,7 @@ function crmGoToPage(n) {
 function renderCRMStats() {
   const bar = document.getElementById('crm-stats-bar');
   if (!bar) return;
-  const counts = { all: _crmCache.length, LEAD: 0, UNSENT: 0, SENT: 0, SIGNED: 0, LOST: 0 };
+  const counts = { all: _crmCache.length, LEAD: 0, UNSENT: 0, SENT: 0, SIGNED: 0, ACTIVE_CUSTOMER: 0, LOST: 0 };
   _crmCache.forEach(i => {
     const s = (i.status || 'UNSENT').toUpperCase();
     if (counts[s] !== undefined) counts[s]++;
@@ -3491,6 +3882,7 @@ function renderCRMStats() {
     { label: 'Leads', key: 'LEAD', color: '#475569', bg: '#e2e8f0' },
     { label: 'Quoted', key: 'SENT', color: '#075985', bg: '#e0f2fe' },
     { label: 'Signed', key: 'SIGNED', color: '#065f46', bg: '#d1fae5' },
+    { label: 'Active', key: 'ACTIVE_CUSTOMER', color: '#14532d', bg: '#bbf7d0' },
     { label: 'Lost', key: 'LOST', color: '#991b1b', bg: '#fee2e2' },
   ];
   bar.innerHTML = pills.map(p =>
@@ -3573,7 +3965,7 @@ function closeCRMDetail() { closeLeadDrawer(); }
 function buildLeadDrawerHTML(item) {
   const status = (item.status || 'UNSENT').toUpperCase();
   const contactLog = Array.isArray(item.contact_log) ? item.contact_log : [];
-  const STATUSES = ['LEAD','UNSENT','SENT','SIGNED','LOST'];
+  const STATUSES = ['LEAD','UNSENT','SENT','SIGNED','ACTIVE_CUSTOMER','LOST'];
 
   const logHTML = contactLog.length
     ? contactLog.slice().reverse().map(e => `
@@ -3612,6 +4004,54 @@ function buildLeadDrawerHTML(item) {
           ${typeof item.total_with_tax === 'number' ? `<div><b>Total</b>$${item.total_with_tax.toFixed(2)}</div>` : ''}
           ${typeof item.net_profit_est === 'number' ? `<div><b>Est. Profit</b><span style="color:var(--success)">$${item.net_profit_est.toFixed(2)}</span></div>` : ''}
         </div>
+      </div>` : ''}
+
+      ${item.contract_url ? `
+      <!-- Contract -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Contract</div>
+        <div style="display:flex;flex-direction:column;gap:.45rem">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+            <a href="${escHtml(item.contract_url)}" target="_blank" rel="noopener"
+               style="padding:.45rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--teal);text-decoration:none;font-weight:600">
+              View PDF
+            </a>
+            <button id="drawer-send-btn" onclick="sendContract('${item.quote_id}')"
+              style="padding:.45rem .9rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer">
+              ${item.sent_at ? 'Resend Contract' : 'Send Contract ✉'}
+            </button>
+          </div>
+          ${item.sent_at ? `<div style="font-size:.75rem;color:var(--muted)">Last sent: ${new Date(item.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+          <div id="send-contract-msg" style="display:none;font-size:.8rem;padding:.3rem .5rem;border-radius:6px"></div>
+        </div>
+      </div>` : ''}
+
+      ${status === 'SIGNED' ? `
+      <!-- Activate Customer CTA -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Ready to Service?</div>
+        <div id="activate-cta-area">
+          <button onclick="activateCustomerFlow('${item.quote_id}')"
+            style="width:100%;padding:.75rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:10px;font-family:Oswald;font-size:.95rem;font-weight:600;cursor:pointer;letter-spacing:.03em">
+            Activate Customer →
+          </button>
+        </div>
+      </div>` : ''}
+
+      ${status === 'ACTIVE_CUSTOMER' ? `
+      <!-- Active Customer Info -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Active Customer</div>
+        <div class="lead-info-grid">
+          ${item.pool_id ? `<div><b>Pool ID</b><code style="font-size:.82rem">${item.pool_id}</code></div>` : '<div style="color:var(--muted);font-size:.82rem;grid-column:1/-1">No pool ID assigned yet. Update status to reassign.</div>'}
+          <div><b>Origin</b>${item.sponsored_by_mcp ? '<span style="color:#7c3aed;font-weight:600">Startup Transfer</span>' : 'Standard Contract'}</div>
+        </div>
+      </div>
+
+      <!-- Billing Tracker -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Billing</div>
+        <div id="billing-section-body">${_buildBillingSectionHTML_(item)}</div>
       </div>` : ''}
 
       <!-- Status -->
@@ -3659,6 +4099,171 @@ function buildLeadDrawerHTML(item) {
       <div class="im" id="lead-drawer-msg" style="display:none"></div>
     </div>`;
 }
+
+// ── Billing Tracker Helpers ────────────────────────────────────────────────────
+
+function _getMonthRange_(startYYYYMM) {
+  const months = [];
+  const now = new Date();
+  const [sy, sm] = startYYYYMM.split('-').map(Number);
+  let y = sy, m = sm;
+  const curY = now.getFullYear(), curM = now.getMonth() + 1;
+  while (y < curY || (y === curY && m <= curM)) {
+    months.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++; if (m > 12) { m = 1; y++; }
+    if (months.length > 60) break;
+  }
+  return months;
+}
+
+function _ordSuffix_(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th';
+  return ['th','st','nd','rd'][n % 10] || 'th';
+}
+
+function _buildBillingSectionHTML_(item) {
+  if (!item) return '';
+  const iDay   = item.invoice_day   ? Number(item.invoice_day)   : null;
+  const bStart = item.billing_start ? String(item.billing_start) : null;
+
+  if (!iDay || !bStart) {
+    return `<div id="billing-setup-area">
+      <button onclick="openBillingSetup('${item.quote_id}')"
+        style="padding:.45rem .9rem;background:transparent;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--teal);cursor:pointer;font-weight:600">
+        + Set Up Billing Tracker
+      </button>
+    </div>`;
+  }
+
+  let payLog = [];
+  try { const r = item.payment_log; payLog = Array.isArray(r) ? r : (r ? JSON.parse(r) : []); } catch(e) {}
+  const logMap = {};
+  payLog.forEach(e => { if (e.month) logMap[e.month] = e.status; });
+
+  const months = _getMonthRange_(bStart);
+  const monthsHTML = months.map(mo => {
+    const st = logMap[mo] || 'pending';
+    const [yr, mn] = mo.split('-');
+    const lbl = new Date(Number(yr), Number(mn) - 1, 1).toLocaleString([], { month: 'short' }) + ' \'' + yr.slice(2);
+    const icon = st === 'paid' ? '✓' : st === 'invoiced' ? '✉' : '○';
+    return `<div class="bill-month bm-${st}" onclick="cyclePaymentStatus('${item.quote_id}','${mo}')" title="${mo}">
+      <div class="bm-label">${lbl}</div><div class="bm-icon">${icon}</div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem">
+      <span style="font-size:.83rem">Invoice on the <strong>${iDay}${_ordSuffix_(iDay)}</strong> of each month</span>
+      <button onclick="openBillingSetup('${item.quote_id}')"
+        style="font-size:.73rem;color:var(--teal);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">Edit</button>
+    </div>
+    <div class="billing-calendar">${monthsHTML}</div>
+    <div style="display:flex;gap:.75rem;margin-top:.45rem;font-size:.72rem;color:var(--muted)">
+      <span>○ Not sent</span><span>✉ Invoiced</span><span>✓ Paid</span>
+    </div>`;
+}
+
+function openBillingSetup(quoteId) {
+  const item = _crmCache.find(i => i.quote_id === quoteId);
+  if (!item) return;
+  const today = new Date();
+  const defStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const curDay   = item.invoice_day   ? Number(item.invoice_day)   : 1;
+  const curStart = item.billing_start ? String(item.billing_start) : defStart;
+
+  document.getElementById('billing-section-body').innerHTML = `
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:.85rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+        <div>
+          <label style="font-size:.73rem;color:var(--muted);display:block;margin-bottom:.2rem">Invoice Day (1–28)</label>
+          <input class="si" type="number" id="billing-day-inp" min="1" max="28" value="${curDay}" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:.73rem;color:var(--muted);display:block;margin-bottom:.2rem">Billing Start</label>
+          <input class="si" type="month" id="billing-start-inp" value="${curStart}" style="width:100%">
+        </div>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button onclick="saveBillingSetup('${quoteId}')"
+          style="padding:.4rem .85rem;background:var(--teal);color:#fff;border:none;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer">
+          Save
+        </button>
+        <button onclick="cancelBillingSetup('${quoteId}')"
+          style="padding:.4rem .85rem;background:transparent;border:1px solid var(--border);border-radius:7px;font-size:.82rem;cursor:pointer">
+          Cancel
+        </button>
+      </div>
+      <div id="billing-setup-msg" style="display:none;font-size:.8rem;margin-top:.4rem;padding:.3rem .5rem;border-radius:6px"></div>
+    </div>`;
+}
+
+function cancelBillingSetup(quoteId) {
+  const item = _crmCache.find(i => i.quote_id === quoteId);
+  const el = document.getElementById('billing-section-body');
+  if (el && item) el.innerHTML = _buildBillingSectionHTML_(item);
+}
+
+async function saveBillingSetup(quoteId) {
+  const dayEl   = document.getElementById('billing-day-inp');
+  const startEl = document.getElementById('billing-start-inp');
+  const msg     = document.getElementById('billing-setup-msg');
+  const day     = parseInt(dayEl?.value);
+  const start   = startEl?.value;
+
+  if (!day || day < 1 || day > 28 || !start) {
+    if (msg) { msg.style.display = 'block'; msg.className = 'im err'; msg.textContent = 'Enter a valid day (1–28) and start month.'; }
+    return;
+  }
+
+  const item = _crmCache.find(i => i.quote_id === quoteId) || {};
+  const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
+    status: item.status || 'ACTIVE_CUSTOMER', notes: item.notes || '',
+    invoice_day: day, billing_start: start });
+
+  if (res.ok) {
+    const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+    if (idx > -1) { _crmCache[idx].invoice_day = day; _crmCache[idx].billing_start = start; }
+    const el = document.getElementById('billing-section-body');
+    if (el) el.innerHTML = _buildBillingSectionHTML_(_crmCache[idx] || item);
+  } else {
+    if (msg) { msg.style.display = 'block'; msg.className = 'im err'; msg.textContent = res.error || 'Save failed.'; }
+  }
+}
+
+async function cyclePaymentStatus(quoteId, month) {
+  const cacheIdx = _crmCache.findIndex(i => i.quote_id === quoteId);
+  if (cacheIdx === -1) return;
+  const item = _crmCache[cacheIdx];
+
+  let payLog = [];
+  try { const r = item.payment_log; payLog = Array.isArray(r) ? r : (r ? JSON.parse(r) : []); } catch(e) {}
+  payLog = payLog.slice(); // shallow copy
+
+  const entryIdx = payLog.findIndex(e => e.month === month);
+  const cur  = entryIdx > -1 ? payLog[entryIdx].status : 'pending';
+  const next = cur === 'pending' ? 'invoiced' : cur === 'invoiced' ? 'paid' : 'pending';
+
+  if (next === 'pending') { if (entryIdx > -1) payLog.splice(entryIdx, 1); }
+  else if (entryIdx > -1) payLog[entryIdx].status = next;
+  else payLog.push({ month, status: next });
+
+  // Optimistic update
+  const prevLog = item.payment_log;
+  _crmCache[cacheIdx].payment_log = payLog;
+  const el = document.getElementById('billing-section-body');
+  if (el) el.innerHTML = _buildBillingSectionHTML_(_crmCache[cacheIdx]);
+
+  const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
+    status: item.status, notes: item.notes || '', payment_log: payLog });
+
+  if (!res.ok) {
+    _crmCache[cacheIdx].payment_log = prevLog;
+    if (el) el.innerHTML = _buildBillingSectionHTML_(item);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
 
 function selectLeadStatus(status) {
   document.querySelectorAll('.lead-status-btn').forEach(b => {
@@ -3718,6 +4323,134 @@ async function saveLeadChanges() {
     msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block';
   } finally {
     btn.disabled = false; btn.textContent = 'Save Changes';
+  }
+}
+
+function _nextMcpsPoolId_() {
+  let max = 0;
+  _crmCache.forEach(i => {
+    const m = String(i.pool_id || '').match(/^MCPS-(\d+)$/i);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return 'MCPS-' + String(max + 1).padStart(4, '0');
+}
+
+function activateCustomerFlow(quoteId) {
+  const item = _crmCache.find(i => i.quote_id === quoteId);
+  if (!item) return;
+  const area = document.getElementById('activate-cta-area');
+  if (!area) return;
+
+  const existingPoolId = item.pool_id || _nextMcpsPoolId_();
+  const isStartup = item.sponsored_by_mcp ? 'true' : 'false';
+
+  area.innerHTML = `
+    <div style="background:var(--surface-2,#f8fafc);border:1px solid var(--border);border-radius:10px;padding:.85rem;display:flex;flex-direction:column;gap:.6rem">
+      <div>
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.3rem">Pool ID</label>
+        <input class="si" id="activate-pool-id" type="text" placeholder="MCPS-XXXX" value="${escHtml(existingPoolId)}" style="width:100%">
+      </div>
+      <div>
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.3rem">Customer Origin</label>
+        <select class="si" id="activate-origin" style="width:100%">
+          <option value="false" ${isStartup === 'false' ? 'selected' : ''}>Standard Contract</option>
+          <option value="true" ${isStartup === 'true' ? 'selected' : ''}>Startup Transfer</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button id="activate-confirm-btn" onclick="confirmActivateCustomer('${quoteId}')"
+          style="flex:1;padding:.6rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:.88rem;font-weight:600;cursor:pointer">
+          Confirm Activation
+        </button>
+        <button onclick="viewCRMDetail('${quoteId}')"
+          style="padding:.6rem 1rem;background:none;border:1px solid var(--border);border-radius:8px;font-size:.82rem;cursor:pointer;color:var(--muted)">
+          Cancel
+        </button>
+      </div>
+      <div id="activate-msg" style="display:none;font-size:.82rem;padding:.4rem .6rem;border-radius:6px"></div>
+    </div>`;
+}
+
+async function confirmActivateCustomer(quoteId) {
+  const btn = document.getElementById('activate-confirm-btn');
+  const msg = document.getElementById('activate-msg');
+  const poolId = (document.getElementById('activate-pool-id').value || '').trim();
+  const sponsoredByMcp = document.getElementById('activate-origin').value === 'true';
+
+  if (!poolId) {
+    msg.className = 'im err'; msg.textContent = 'Pool ID is required.'; msg.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Activating...';
+
+  try {
+    const res = await api({
+      action: 'update_lead',
+      token: _s.token,
+      quote_id: quoteId,
+      status: 'ACTIVE_CUSTOMER',
+      pool_id: poolId,
+      sponsored_by_mcp: sponsoredByMcp,
+      notes: (_crmCache.find(i => i.quote_id === quoteId) || {}).notes || ''
+    });
+
+    if (res.ok) {
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) {
+        _crmCache[idx].status = 'ACTIVE_CUSTOMER';
+        _crmCache[idx].pool_id = poolId;
+        _crmCache[idx].sponsored_by_mcp = sponsoredByMcp;
+      }
+      renderCRM(_crmFiltered, false);
+      renderCRMStats();
+      const updated = _crmCache.find(i => i.quote_id === quoteId);
+      if (updated) {
+        document.getElementById('lead-drawer-title').textContent =
+          (updated.client_name || `${updated.first_name || ''} ${updated.last_name || ''}`).trim();
+        document.getElementById('lead-drawer-sub').textContent =
+          'ACTIVE_CUSTOMER' + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
+        document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+      }
+    } else {
+      msg.className = 'im err'; msg.textContent = res.error || 'Failed to activate.'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Confirm Activation';
+    }
+  } catch (e) {
+    msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Confirm Activation';
+  }
+}
+
+async function sendContract(quoteId) {
+  const btn = document.getElementById('drawer-send-btn');
+  const msg = document.getElementById('send-contract-msg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    const res = await api({ action: 'send_contract', token: _s.token, quote_id: quoteId });
+    if (res.ok) {
+      const sentAt = res.sent_at || new Date().toISOString();
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) {
+        _crmCache[idx].status = 'SENT';
+        _crmCache[idx].sent_at = sentAt;
+      }
+      renderCRM(_crmFiltered, false);
+      renderCRMStats();
+      const updated = _crmCache.find(i => i.quote_id === quoteId);
+      if (updated) {
+        document.getElementById('lead-drawer-sub').textContent =
+          'SENT' + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
+        document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+      }
+    } else {
+      if (msg) { msg.className = 'im err'; msg.textContent = res.error || 'Failed to send.'; msg.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Send Contract ✉'; }
+    }
+  } catch(e) {
+    if (msg) { msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Contract ✉'; }
   }
 }
 
