@@ -693,7 +693,9 @@ async function loadHomeStats() {
     let weeklyGoal = goalRes.ok ? (goalRes.goal || 5) : 5;
     let weeklySigned = goalRes.ok ? (goalRes.signed_this_week || 0) : 0;
     
-    let unassignedCount = unRes.ok ? (unRes.pools ? unRes.pools.length : 0) : 0;
+    let unassignedCount = unRes.ok && unRes.pools
+      ? unRes.pools.filter(p => (p.service||'').toLowerCase().includes('weekly full service')).length
+      : 0;
 
     renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount);
   } catch(e) {

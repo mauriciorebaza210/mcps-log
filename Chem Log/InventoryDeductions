@@ -1,0 +1,140 @@
+// InventoryDeduction.gs
+// Moved to InventoryCODEEE project so it can call logInventoryMovement_ directly.
+
+const CHEM_LOG_SS_ID_FOR_DEDUCT = "1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U";
+const INV_DEDUCT_SPREADSHEET_ID = "1xPv2oEkJ1KCI3l1LexA4cGH73MM-sWXunQ4fr0wyBSI";
+const INV_DEDUCT_SHEET_NAME = "Inventory_Master";
+const RAW_USAGE_SHEET_NAME = "Chemical_Usage_Log";
+
+const INVENTORY_DISPLAY_NAME_HEADER = "display_name";
+const INVENTORY_QTY_ON_HAND_HEADER  = "qty_on_hand";
+const INVENTORY_USAGE_UNIT_HEADER   = "usage_unit";
+const INVENTORY_REORDER_LEVEL_HEADER = "reorder_level";
+
+
+
+function deductInventoryOnFormSubmit(e) {
+  deductInventoryOnFormSubmit_(e);
+}
+
+function deductInventoryOnFormSubmit_(e) {
+  // Open Chem Log by ID — NOT getActiveSpreadsheet()
+  const ss = SpreadsheetApp.openById(CHEM_LOG_SS_ID_FOR_DEDUCT);
+  const rawSheet = ss.getSheetByName(RAW_USAGE_SHEET_NAME);
+  if (!rawSheet) throw new Error(`Missing sheet: ${RAW_USAGE_SHEET_NAME}`);
+
+  const rowNumber = (e && e.range) ? e.range.getRow() : rawSheet.getLastRow();
+  if (rowNumber < 2) return;
+
+  const headerRow = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0]
+    .map(h => String(h || "").trim());
+  const rowData = rawSheet.getRange(rowNumber, 1, 1, rawSheet.getLastColumn()).getValues()[0];
+
+  const invSs = SpreadsheetApp.openById(INV_DEDUCT_SPREADSHEET_ID);
+  const invSheet = invSs.getSheetByName(INV_DEDUCT_SHEET_NAME);
+  if (!invSheet) throw new Error(`Missing sheet: ${INV_DEDUCT_SHEET_NAME}`);
+
+  const invLastRow = invSheet.getLastRow();
+  const invLastCol = invSheet.getLastColumn();
+  if (invLastRow < 2) throw new Error(`${INV_DEDUCT_SHEET_NAME} has no data rows`);
+
+  const invHeaders = invSheet.getRange(1, 1, 1, invLastCol).getValues()[0]
+    .map(h => String(h || "").trim());
+
+  const displayNameCol  = invHeaders.indexOf(INVENTORY_DISPLAY_NAME_HEADER);
+  const qtyOnHandCol    = invHeaders.indexOf(INVENTORY_QTY_ON_HAND_HEADER);
+  const usageUnitCol    = invHeaders.indexOf(INVENTORY_USAGE_UNIT_HEADER);
+  const reorderLevelCol = invHeaders.indexOf(INVENTORY_REORDER_LEVEL_HEADER);
+
+  if (displayNameCol === -1) throw new Error(`Missing header "${INVENTORY_DISPLAY_NAME_HEADER}"`);
+  if (qtyOnHandCol   === -1) throw new Error(`Missing header "${INVENTORY_QTY_ON_HAND_HEADER}"`);
+
+  const invData = invSheet.getRange(2, 1, invLastRow - 1, invLastCol).getValues();
+
+  const inventoryMap = {};
+  invData.forEach((row, idx) => {
+    const displayName = String(row[displayNameCol] || "").trim();
+    if (!displayName) return;
+    inventoryMap[displayName] = {
+      sheetRow    : idx + 2,
+      qtyOnHand   : Number(row[qtyOnHandCol] || 0),
+      usageUnit   : usageUnitCol    !== -1 ? String(row[usageUnitCol]    || "").trim() : "",
+      reorderLevel: reorderLevelCol !== -1 ? Number(row[reorderLevelCol] || 0)         : 0
+    };
+  });
+
+  const nonChemicalHeaders = new Set([
+    "Timestamp","pool_id","Technician","Notes","Client Name","Address",
+    "Service Type","Month","Visit # in Month","Week Start","WeekKey","MonthKey",
+    "Visit # in Week","Total Visit Chem Cost (Snapshot)","Chlorine (Cl)","pH",
+    "Total Alkalinity (TA)","Calcium Hardness (CH)",
+    "Pool description (if Other selected)","Voided","Voided_At","Voided_By","Void_Reason"
+  ]);
+
+  const updates          = [];
+  const missingChemicals = [];
+  const reorderAlerts    = [];
+
+  headerRow.forEach((headerName, colIdx) => {
+    const name = String(headerName || "").trim();
+    if (!name || nonChemicalHeaders.has(name)) return;
+    if (name.endsWith(" Unit Cost (Snapshot)")) return;
+
+    const qtyUsed = Number(rowData[colIdx]);
+    if (!isFinite(qtyUsed) || qtyUsed === 0) return;
+
+    const invItem = inventoryMap[name];
+    if (!invItem) { missingChemicals.push(name); return; }
+
+    const newQty = invItem.qtyOnHand - qtyUsed;
+    updates.push({
+      sheetRow    : invItem.sheetRow,
+      chemical    : name,
+      previousQty : invItem.qtyOnHand,
+      qtyUsed,
+      newQty,
+      usageUnit   : invItem.usageUnit,
+      reorderLevel: invItem.reorderLevel
+    });
+    inventoryMap[name].qtyOnHand = newQty;
+
+    if (isFinite(invItem.reorderLevel) && newQty <= invItem.reorderLevel) {
+      reorderAlerts.push({ chemical: name, qty: newQty, reorderLevel: invItem.reorderLevel, usageUnit: invItem.usageUnit });
+    }
+  });
+
+  if (missingChemicals.length) Logger.log("Missing in Inventory_Master: " + missingChemicals.join(", "));
+  if (!updates.length) { Logger.log(`No deductions needed for row ${rowNumber}`); return; }
+
+  const dedupKey = buildUsageDedupKey_(rowData, headerRow);
+  if (!claimDedupAction_("inventory_deduction", dedupKey)) {
+    Logger.log("Duplicate inventory deduction prevented for " + dedupKey);
+    return;
+  }
+
+  updates.forEach(u => {
+    invSheet.getRange(u.sheetRow, qtyOnHandCol + 1).setValue(u.newQty);
+    logInventoryMovement_({
+      timestamp   : new Date(),
+      chemical    : u.chemical,
+      direction   : "OUT",
+      qty_change  : -u.qtyUsed,
+      qty_before  : u.previousQty,
+      qty_after   : u.newQty,
+      usage_unit  : u.usageUnit,
+      reason_type : "usage_submit",
+      source_sheet: RAW_USAGE_SHEET_NAME,
+      source_row  : rowNumber,
+      reference_id: "",
+      notes       : "Chemical usage form submission",
+      performed_by: "system"
+    });
+  });
+
+  Logger.log(`Inventory deducted row ${rowNumber}: ` + JSON.stringify(updates));
+  if (reorderAlerts.length) Logger.log("Low stock: " + JSON.stringify(reorderAlerts));
+}
+
+function TEST_deductInventoryLastRow() {
+  deductInventoryOnFormSubmit_();
+}
