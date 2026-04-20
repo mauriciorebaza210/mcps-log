@@ -9,13 +9,13 @@ const SEC = '220ed543794285b632c27dec0b1b6529';
 const PAGE_META = {
   home:'Home', live_map:'Technician Hub', service_log:'Service Log',
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
-  onboarding:'Get Started'
+  onboarding:'Get Started', financial_hub:'Financial Hub'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
 const PAGE_ICONS = {
   home:'🏠', live_map:'🛟', service_log:'📝', inventory:'📦',
-  quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋'
+  quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋', financial_hub:'💰'
 };
 
 // ── Sidebar SVG icon strings (16×16, stroke-based Heroicons) ─────────────────
@@ -45,22 +45,30 @@ const SIDEBAR_GROUPS = [
     label: 'Technician Hub',
     children: [
       { page:'live_map',    label:'Schedule',         icon:SVG_CALENDAR },
+      { page:'live_map',    label:'My Jobs',           icon:SVG_CHART,    hubTab:'myjobs', id:'sb-child-myjobs' },
       { page:'live_map',    label:'Training',          icon:SVG_PLAY,     hubTab:'training', id:'sb-child-training' },
       { page:'inventory',   label:'Inventory',         icon:SVG_BOX      },
       { page:'service_log', label:'Service Log',       icon:SVG_CLIP     }
+    ]
+  },
+  {
+    id: 'finance',
+    label: 'Financial Hub',
+    children: [
+      { page:'financial_hub', label:'Overview', icon:SVG_CHART }
     ]
   }
 ];
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['live_map','service_log'],           // training accessed via hub tab
-  lead:['live_map','service_log'],                  // training accessed via hub tab
+  technician:['live_map','service_log'],           // training + myjobs accessed via hub tabs
+  lead:['live_map','service_log'],                  // training + myjobs accessed via hub tabs
   trainee:['live_map'],                             // hub-only: training tab shown exclusively
   new_hire:['onboarding'],
   office:['home','inventory'],
-  manager:['home','crm','live_map','service_log','inventory','quotes'],  // training via hub tab
-  admin:['home','crm','live_map','service_log','inventory','quotes','admin'],  // training via hub tab
+  manager:['home','crm','live_map','service_log','inventory','quotes','financial_hub'],
+  admin:['home','crm','live_map','service_log','inventory','quotes','admin','financial_hub'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

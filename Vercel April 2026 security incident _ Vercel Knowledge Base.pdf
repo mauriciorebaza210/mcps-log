@@ -1,0 +1,57 @@
+Vercel April 2026 security incident
+We’ve identified a security incident that involved unauthorized access to certain internal Vercel systems.
+
+
+Security Team
+Knowledge Base
+/
+Security Bulletin
+Copy URL
+Copy page
+Ask AI about this page
+3 min read
+Last updated April 20, 2026
+We’ve identified a security incident that involved unauthorized access to certain internal Vercel systems. We are actively investigating, and we have engaged incident response experts to help investigate and remediate. We have notified law enforcement and will update this page as the investigation progresses.
+
+In this bulletin:
+
+Updates
+Who is impacted
+What we know
+Recommendations
+Indicators of compromise (IOCs)
+Updates
+Date	Update
+April 19, 6:01 PM PST	We published information about the origin of the attack and additional Recommendations.
+April 19, 11:04 AM PST	We published an IOC to support the wider community in the investigation and vetting of potential malicious activity in their environments.
+Who is impacted
+Initially we identified a limited subset of customers whose Vercel credentials were compromised. We reached out to that subset and recommended an immediate rotation of credentials.
+
+If you have not been contacted, we do not have reason to believe that your Vercel credentials or personal data have been compromised at this time. 
+
+We continue to investigate whether and what data was exfiltrated and we will contact customers if we discover further evidence of compromise. We’ve deployed extensive protection measures and monitoring. Our services remain operational.
+
+What we know
+The incident originated with a compromise of Context.ai, a third-party AI tool used by a Vercel employee. The attacker used that access to take over the employee's Vercel Google Workspace account, which enabled them to gain access to some Vercel environments and environment variables that were not marked as “sensitive.”
+
+Environment variables marked as "sensitive" in Vercel are stored in a manner that prevents them from being read, and we currently do not have evidence that those values were accessed.
+
+We assess the attacker as highly sophisticated based on their operational velocity and detailed understanding of Vercel's systems. We are working with Mandiant, additional cybersecurity firms, industry peers, and law enforcement. We have also engaged Context.ai directly to understand the full scope of the underlying compromise.
+
+Recommendations
+While we continue to take actions to protect Vercel systems and customers, here are best practices you should follow:
+
+Review the activity log for your account and environments for suspicious activity. You can review activity logs in the dashboard or via the CLI.
+Review and rotate environment variables. If any of your environment variables contain secrets (API keys, tokens, database credentials, signing keys) that were not marked as sensitive, those values should be treated as potentially exposed and rotated as a priority.
+Take advantage of the sensitive environment variables feature going forward, so that secret values are protected from being read in the future.
+Investigate recent deployments for unexpected or suspicious looking deployments. If in doubt, delete any deployments in question.
+Ensure that Deployment Protection is set to Standard at a minimum.
+Rotate your Deployment Protection tokens, if set.
+For help rotating your secrets or other technical support, contact us through vercel.com/help.
+
+Indicators of compromise (IOCs)
+Our investigation has revealed that the incident originated from a small, third-party AI tool whose Google Workspace OAuth app was the subject of a broader compromise, potentially affecting its hundreds of users across many organizations.
+
+We are publishing the following IOC to support the wider community in the investigation and vetting of potential malicious activity in their environments. We recommend that Google Workspace Administrators and Google Account owners check for usage of this app immediately.
+
+OAuth App: 110671459871-30f1spbu0hptbs60cb4vsmv79i7bbvqj.apps.googleusercontent.com

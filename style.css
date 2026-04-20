@@ -1037,6 +1037,8 @@ select.q-inp{cursor:pointer}
 }
 .drawer-backdrop.open { display:block; }
 @keyframes fadein { from{opacity:0}to{opacity:1} }
+@keyframes finDrawerIn { from{transform:translateX(100%)} to{transform:translateX(0)} }
+.fin-drawer-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.5rem}
  
 .drawer {
   position:fixed;right:0;top:0;bottom:0;

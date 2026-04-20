@@ -30,6 +30,7 @@ function navigateTo(page){
   if(page==='crm') loadCRM();
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
+  if(page==='financial_hub') loadFinancialHub();
 }
 
 function _setSidebarActive(page, hubTab) {
@@ -45,13 +46,14 @@ function _setSidebarActive(page, hubTab) {
   // Auto-expand parent accordion
   if (page === 'crm' || page === 'quotes') _setAccordionOpen('sales', true);
   if (['live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
+  if (page === 'financial_hub') _setAccordionOpen('finance', true);
 }
 
 function switchHubTab(tab) {
   _activeHubTab = tab;
 
   // Update tab button active states (only for buttons that exist / are visible)
-  ['schedule','training','profile'].forEach(t => {
+  ['schedule','training','profile','myjobs'].forEach(t => {
     const btn = document.getElementById('htab-'+t);
     if(btn) btn.classList.toggle('active', t === tab);
   });
@@ -60,6 +62,8 @@ function switchHubTab(tab) {
   document.getElementById('hub-tab-schedule').style.display = tab === 'schedule' ? 'block' : 'none';
   document.getElementById('hub-tab-training').style.display = tab === 'training' ? 'block' : 'none';
   document.getElementById('hub-tab-profile').style.display  = tab === 'profile'  ? 'block' : 'none';
+  const myJobsPanel = document.getElementById('hub-tab-myjobs');
+  if(myJobsPanel) myJobsPanel.style.display = tab === 'myjobs' ? 'block' : 'none';
 
   if (tab === 'profile') {
     if(isAdmin() && !_usersCache.length){
@@ -69,6 +73,9 @@ function switchHubTab(tab) {
   }
   if (tab === 'training') {
     loadTraining();
+  }
+  if (tab === 'myjobs') {
+    loadMyJobsTab();
   }
   // Sync sidebar: schedule maps to the parent live_map item; training/profile map to their child items
   _setSidebarActive('live_map', tab === 'schedule' ? null : tab);

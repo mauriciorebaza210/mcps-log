@@ -86,6 +86,7 @@
           <button class="hub-tab active" id="htab-schedule" onclick="switchHubTab('schedule')">📅 Schedule</button>
           <button class="hub-tab" id="htab-training" onclick="switchHubTab('training')">🎓 Training</button>
           <button class="hub-tab" id="htab-profile" onclick="switchHubTab('profile')">👤 My Operator Profile</button>
+          <button class="hub-tab" id="htab-myjobs" onclick="switchHubTab('myjobs')" style="display:none">💰 My Jobs</button>
         </div>
 
         <!-- ══ SCHEDULE TAB ══ -->
@@ -201,6 +202,11 @@
           </div>
           <div id="tr-detail" style="display:none"></div>
         </div><!-- /hub-tab-training -->
+
+        <!-- ══ MY JOBS TAB ══ -->
+        <div id="hub-tab-myjobs" style="display:none">
+          <div id="myjobs-root"></div>
+        </div><!-- /hub-tab-myjobs -->
 
       </div>
     </div>
@@ -946,6 +952,23 @@
 
     </div><!-- /page-onboarding -->
 
+    <!-- Financial Hub -->
+    <div class="pf" id="page-financial_hub">
+      <div class="fin-page-hdr">
+        <h2>Financial Hub</h2>
+      </div>
+      <div id="fin-stats"></div>
+      <div id="fin-filters"></div>
+      <div id="fin-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
+      <div id="fin-table-wrap" style="overflow-x:auto;padding:0 1rem 1rem">
+        <table class="adm-table" style="width:100%">
+          <thead id="fin-thead"></thead>
+          <tbody id="fin-tbody"></tbody>
+        </table>
+      </div>
+      <div id="fin-pagination" style="padding:0 1rem 1rem"></div>
+    </div><!-- /page-financial_hub -->
+
   </div><!-- /page-wrap -->
   </main>
 </div>
@@ -1298,6 +1321,7 @@
 <script src="/js/features/crm.js"></script>
 <script src="/js/features/training.js"></script>
 <script src="/js/features/onboarding.js"></script>
+<script src="/js/features/financial.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

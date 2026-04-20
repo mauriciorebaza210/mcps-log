@@ -4,6 +4,7 @@
   "description": "Vercel serverless functions for MCPS Portal",
   "main": "index.js",
   "scripts": {
+    "build": "echo 'No build step'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

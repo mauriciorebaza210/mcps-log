@@ -33,7 +33,7 @@ function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch
 
 function unionPages_(roles) {
   const set = new Set();
-  const order = ['home','onboarding','live_map','service_log','crm','inventory','quotes','training','admin'];
+  const order = ['home','onboarding','live_map','service_log','crm','inventory','quotes','training','admin','financial_hub'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }

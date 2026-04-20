@@ -144,6 +144,10 @@ function buildNav() {
   }
   if (techChildren.length) html += _makeSbGroup('tech', 'Technician Hub', techChildren);
 
+  // Financial Hub accordion
+  const finChildren = SIDEBAR_GROUPS[2].children.filter(c => pages.includes(c.page));
+  if (finChildren.length) html += _makeSbGroup('finance', 'Financial Hub', finChildren);
+
   // Admin / Onboarding — direct links
   if (pages.includes('admin')) {
     html += `<button class="sb-item" id="ni-admin" onclick="navigateTo('admin')">${SVG_LOCK}<span>Admin</span></button>`;
@@ -197,14 +201,17 @@ function _closeSidebar() {
 }
 
 // Show/hide hub tab buttons based on role.
-// Trainees see only the Training tab; everyone else sees all three.
+// Trainees see only the Training tab; field roles (tech/lead) also see My Jobs.
 function _configureHubTabs(){
   const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
-  const schedBtn = document.getElementById('htab-schedule');
-  const profBtn  = document.getElementById('htab-profile');
-  if(schedBtn) schedBtn.style.display = traineeOnly ? 'none' : '';
-  if(profBtn)  profBtn.style.display  = traineeOnly ? 'none' : '';
-  // Also hide the schedule/profile tab content for trainees
+  const isField = hasRole('technician') || hasRole('lead');
+  const schedBtn  = document.getElementById('htab-schedule');
+  const profBtn   = document.getElementById('htab-profile');
+  const myJobsBtn = document.getElementById('htab-myjobs');
+  if(schedBtn)  schedBtn.style.display  = traineeOnly ? 'none' : '';
+  if(profBtn)   profBtn.style.display   = traineeOnly ? 'none' : '';
+  if(myJobsBtn) myJobsBtn.style.display = isField ? '' : 'none';
+  // Also hide the schedule/profile/myjobs tab content for trainees
   if(traineeOnly){
     document.getElementById('hub-tab-schedule').style.display = 'none';
     document.getElementById('hub-tab-profile').style.display  = 'none';
