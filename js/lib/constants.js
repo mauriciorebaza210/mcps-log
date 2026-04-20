@@ -2,8 +2,9 @@
 // CONSTANTS — config, icons, roles, sidebar structure
 // ══════════════════════════════════════════════════════════════════════════════
 
-const AS  = 'https://script.google.com/macros/s/AKfycbzcCh5WVhiCZglMFQ_BaHHRD_QbsOFzpf5KgKyFWReAv7aJp2Z6_oYIUYBMLwzTIy_v/exec';
-const SEC = 'mcps_webhook_2026';
+// TODO: Replace with new GAS deployment URL after rotating in Apps Script editor
+const AS  = 'https://script.google.com/macros/s/AKfycbxFrdZRbkXuGuazfqf7q-rKp-T-3DinM8t_3Pp5i6Efr7tciDU59Go6L7s3kxCQl9I/exec';
+const SEC = '220ed543794285b632c27dec0b1b6529';
 
 const PAGE_META = {
   home:'Home', live_map:'Technician Hub', service_log:'Service Log',
