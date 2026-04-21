@@ -102,26 +102,66 @@ function trNormalizeModules_(modules) {
 
 function loadTraining() {
   if (_trLoaded) { renderTraining(); return; }
-  document.getElementById('tr-loading').style.display = 'block';
-  document.getElementById('tr-root').innerHTML = '';
+  const root = document.getElementById('tr-root');
+  const loading = document.getElementById('tr-loading');
+
+  const cachedMods = _appCacheGet('tr_modules', 30 * 60 * 1000);
+  const cachedProg = _appCacheGet('tr_progress', 5 * 60 * 1000);
+
+  if (cachedMods && cachedProg) {
+    _trModules = cachedMods;
+    _trProgress = cachedProg;
+    _trLoaded = true;
+    if (loading) loading.style.display = 'none';
+    renderTraining();
+  } else {
+    if (loading) loading.style.display = 'block';
+    root.innerHTML = '';
+  }
+
   Promise.all([
     apiGet({action:'get_modules', token:_s.token}),
     apiGet({action:'get_training_progress', token:_s.token}).catch(() => ({ok:false}))
   ])
     .then(([res, progRes]) => {
-      document.getElementById('tr-loading').style.display = 'none';
+      let changed = false;
+
       if (res.ok) {
-        _trModules = trNormalizeModules_(res.modules || []);
-        _trProgress = (progRes && progRes.ok && progRes.progress) ? progRes.progress : {};
+        const freshMods = trNormalizeModules_(res.modules || []);
+        if (!cachedMods || JSON.stringify(cachedMods) !== JSON.stringify(freshMods)) {
+          _trModules = freshMods;
+          _appCacheSet('tr_modules', _trModules);
+          changed = true;
+        }
+      }
+
+      if (progRes && progRes.ok) {
+        const freshProg = progRes.progress || {};
+        if (!cachedProg || JSON.stringify(cachedProg) !== JSON.stringify(freshProg)) {
+          _trProgress = freshProg;
+          _appCacheSet('tr_progress', _trProgress);
+          changed = true;
+        }
+      }
+
+      if (!cachedMods || !cachedProg) {
+        if (loading) loading.style.display = 'none';
+        if (res.ok) {
+          _trLoaded = true;
+          renderTraining();
+        } else {
+          root.innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">⚠️</div><div class="tr-empty-text">${res.error||'Failed to load modules'}</div></div>`;
+        }
+      } else if (changed) {
         _trLoaded = true;
         renderTraining();
-      } else {
-        document.getElementById('tr-root').innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">⚠️</div><div class="tr-empty-text">${res.error||'Failed to load modules'}</div></div>`;
       }
     })
     .catch(e => {
-      document.getElementById('tr-loading').style.display = 'none';
-      document.getElementById('tr-root').innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">⚠️</div><div class="tr-empty-text">Network error: ${e.message}</div></div>`;
+      if (!cachedMods || !cachedProg) {
+        if (loading) loading.style.display = 'none';
+        root.innerHTML = `<div class="tr-empty"><div class="tr-empty-icon">⚠️</div><div class="tr-empty-text">Network error: ${e.message}</div></div>`;
+      }
     });
 }
 

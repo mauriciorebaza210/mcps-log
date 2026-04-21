@@ -18,27 +18,45 @@ async function loadCRM() {
 
   if (quoteBtn) quoteBtn.style.display = isAdmin() ? 'block' : 'none';
   if (importBtn) importBtn.style.display = isAdmin() ? 'block' : 'none';
-  if (loading) loading.style.display = 'block';
-  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">Loading pipeline data...</td></tr>';
+
+  loadWeeklyGoal();
+
+  const cachedCrm = _appCacheGet('crm_data', 15 * 60 * 1000);
+  if (cachedCrm) {
+    _crmCache = cachedCrm;
+    renderCRM(_crmCache, true);
+    renderCRMStats();
+    populateYearFilter();
+    if (window._pendingAlertQuoteId) {
+      const pending = window._pendingAlertQuoteId;
+      window._pendingAlertQuoteId = null;
+      viewCRMDetail(pending);
+    }
+  } else {
+    if (loading) loading.style.display = 'block';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">Loading pipeline data...</td></tr>';
+  }
 
   try {
     const res = await apiGet({ action: 'get_crm_data', token: _s.token });
     if (res.ok) {
-      _crmCache = res.data || [];
-      renderCRM(_crmCache, true);
-      renderCRMStats();
-      populateYearFilter();
-      loadWeeklyGoal();
-      if (window._pendingAlertQuoteId) {
-        const pending = window._pendingAlertQuoteId;
-        window._pendingAlertQuoteId = null;
-        viewCRMDetail(pending);
+      if (!cachedCrm || JSON.stringify(cachedCrm) !== JSON.stringify(res.data)) {
+        _crmCache = res.data || [];
+        _appCacheSet('crm_data', _crmCache);
+        renderCRM(_crmCache, true);
+        renderCRMStats();
+        populateYearFilter();
+        if (!cachedCrm && window._pendingAlertQuoteId) {
+          const pending = window._pendingAlertQuoteId;
+          window._pendingAlertQuoteId = null;
+          viewCRMDetail(pending);
+        }
       }
-    } else {
-      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load data.'}</td></tr>`;
+    } else if (!cachedCrm) {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load data.'}</td></tr>`;
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Network error. Please try again.</td></tr>`;
+    if (!cachedCrm && tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Network error. Please try again.</td></tr>`;
   } finally {
     if (loading) loading.style.display = 'none';
   }
@@ -916,16 +934,29 @@ let _weeklyGoal = 5;
 let _weeklySignedCount = 0;
 
 async function loadWeeklyGoal() {
+  const cachedGoal = _appCacheGet('crm_goal', 5 * 60 * 1000);
+  if (cachedGoal) {
+    _weeklyGoal = cachedGoal.goal || 5;
+    _weeklySignedCount = cachedGoal.signed_this_week || 0;
+    renderSpeedometer();
+    const editBtn = document.getElementById('crm-goal-edit-btn');
+    if (editBtn) editBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
+  }
+
   try {
     const res = await apiGet({ action: 'get_weekly_goal', token: _s.token });
     if (res.ok) {
-      _weeklyGoal = res.goal || 5;
-      _weeklySignedCount = res.signed_this_week || 0;
+      const freshGoal = { goal: res.goal || 5, signed_this_week: res.signed_this_week || 0 };
+      if (!cachedGoal || JSON.stringify(cachedGoal) !== JSON.stringify(freshGoal)) {
+        _weeklyGoal = freshGoal.goal;
+        _weeklySignedCount = freshGoal.signed_this_week;
+        _appCacheSet('crm_goal', freshGoal);
+        renderSpeedometer();
+        const editBtn = document.getElementById('crm-goal-edit-btn');
+        if (editBtn) editBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
+      }
     }
   } catch(e) {}
-  renderSpeedometer();
-  const editBtn = document.getElementById('crm-goal-edit-btn');
-  if (editBtn) editBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
 }
 
 function renderSpeedometer() {

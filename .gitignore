@@ -2,6 +2,6 @@
 .env*.local
 .env
 node_modules/
-Chem Log/
 Quote_Log/
 CLAUDE.md
+tasks/

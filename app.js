@@ -76,6 +76,34 @@ function _showRouteSkeleton(){
 
 // API helpers — see js/lib/api.js
 
+function _appCacheGet(key, ttlMs) {
+  try {
+    const raw = localStorage.getItem('mcps_' + key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > ttlMs) { 
+      localStorage.removeItem('mcps_' + key); 
+      return null; 
+    }
+    return data;
+  } catch(e) { return null; }
+}
+
+function _appCacheSet(key, data) {
+  const fullKey = 'mcps_' + key;
+  const payload = JSON.stringify({ ts: Date.now(), data });
+  try { 
+    localStorage.setItem(fullKey, payload); 
+  } catch(e) {
+    // If quota exceeded, nuke all old MCPS cache keys and retry
+    console.warn('Storage full. Purging MCPS cache...');
+    Object.keys(localStorage).forEach(k => { 
+      if(k.startsWith('mcps_')) localStorage.removeItem(k); 
+    });
+    try { localStorage.setItem(fullKey, payload); } catch(e2) { console.error('Cache totally failed'); }
+  }
+}
+
 window.onload = () => {
   const stored = localStorage.getItem('mcps_s');
   if (stored) {
@@ -99,7 +127,11 @@ function showApp(startPage) {
   // Refresh pages list in case ROLE_PAGES was updated
   _s.pages = unionPages_(_s.roles);
   buildNav(); buildHomeCards();
-  if((_s.pages||[]).includes('admin')) { loadUsers(); loadPendingHires(); loadInternalNotes(); }
+  if((_s.pages||[]).includes('admin')) { loadUsers(); }
+
+  // Safely run prefetch when the browser has free time
+  const runIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 3000));
+  runIdle(_prefetchCommon);
 
   // Configure which hub tabs are visible based on role
   _configureHubTabs();
@@ -108,8 +140,20 @@ function showApp(startPage) {
   navigateTo(pg);
 
   // Trainees land on the Training tab (no Schedule/Profile access)
-  if(hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager')){
+  const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
+  if(traineeOnly){
     switchHubTab('training');
+  }
+}
+
+function _prefetchCommon() {
+  if (isAdmin() && !_appCacheGet('crm_data', 15*60*1000)) {
+    apiGet({ action: 'get_crm_data', token: _s.token })
+      .then(r => { if (r.ok) _appCacheSet('crm_data', r.data); }).catch(()=>{});
+  }
+  if (hasRole('technician') || hasRole('lead')) {
+    api({ action: 'get_metadata' })
+      .then(r => { if (r.ok) _appCacheSet('svc_meta', r); }).catch(()=>{});
   }
 }
 

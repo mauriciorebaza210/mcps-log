@@ -9,25 +9,44 @@ let _invTab    = 'stock';
 
 function loadInventory() {
   _invLoaded = true;
-  document.getElementById('inv-loading').style.display = 'block';
-  document.getElementById('inv-root').style.display    = 'none';
+  const root = document.getElementById('inv-root');
+  const loading = document.getElementById('inv-loading');
+
+  const cached = _appCacheGet('inv_data', 5 * 60 * 1000);
+  if (cached) {
+    _invData = cached;
+    root.style.display = 'block';
+    if (loading) loading.style.display = 'none';
+    renderInventoryPage();
+  } else {
+    if (loading) loading.style.display = 'block';
+    root.style.display = 'none';
+  }
+
   apiGet({ action:'get_inventory', token:_s.token })
     .then(res => {
-      document.getElementById('inv-loading').style.display = 'none';
-      document.getElementById('inv-root').style.display    = 'block';
+      if (!cached) {
+        if (loading) loading.style.display = 'none';
+        root.style.display = 'block';
+      }
       if (!res.ok) {
-        document.getElementById('inv-root').innerHTML =
-          `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error||'Failed to load inventory.'}</div></div>`;
+        if (!cached) {
+          root.innerHTML = `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error||'Failed to load inventory.'}</div></div>`;
+        }
         return;
       }
-      _invData = res.data;
-      renderInventoryPage();
+      if (!cached || JSON.stringify(cached) !== JSON.stringify(res.data)) {
+        _invData = res.data;
+        _appCacheSet('inv_data', _invData);
+        renderInventoryPage();
+      }
     })
     .catch(e => {
-      document.getElementById('inv-loading').style.display = 'none';
-      document.getElementById('inv-root').style.display    = 'block';
-      document.getElementById('inv-root').innerHTML =
-        `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
+      if (!cached) {
+        if (loading) loading.style.display = 'none';
+        root.style.display = 'block';
+        root.innerHTML = `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">Network error: ${e.message}</div></div>`;
+      }
     });
 }
 

@@ -19,7 +19,7 @@ function loadOnboarding() {
     // Render contract HTML
     if (ctx && ctx.contract_html) {
       document.getElementById('onb-contract-html').innerHTML = ctx.contract_html;
-    }
+    } 
     
     // Branch on worker type
     const isW2 = status && status.worker_type === 'w2_employee';

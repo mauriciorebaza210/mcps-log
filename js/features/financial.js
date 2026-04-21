@@ -277,56 +277,74 @@ function switchFinTab(tab) {
 
 async function loadFinancialHub() {
   const loading = document.getElementById('fin-loading');
-  if (loading) loading.style.display = 'block';
 
-  // If we came from a direct URL hash link, parse it
   const hash = location.hash.replace('#','');
   if (hash.startsWith('financial_hub/') && hash.split('/')[1] !== _finActiveTab) {
     _finActiveTab = hash.split('/')[1];
   }
 
-  // Toggle shell visibility based on active tab
   ['payouts', 'profit', 'chemicals'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
   });
 
-  try {
-    // 1. Fetch Visit History if not loaded
-    if (!_finLoaded || !_finCache.length) {
-      const res = await apiGet({ action: 'get_visit_history', token: _s.token });
-      if (res.ok) {
-        _finCache    = res.rows || [];
-        _finPayRate  = String(res.pay_rate || '');
-        _finPayRates = res.pay_rates || {};
-        _finLoaded   = true;
-      }
-    }
+  const cachedVisits = _appCacheGet('fin_visits', 5 * 60 * 1000);
+  const cachedCrm = _appCacheGet('crm_data', 15 * 60 * 1000);
 
-    // 2. Fetch CRM Data if not loaded (used for name enrichment and profitability)
-    if (!_finCrmCache.length) {
-      const res = await apiGet({ action: 'get_crm_data', token: _s.token });
-      if (res.ok) {
-        _finCrmCache = res.data || [];
-      }
-    }
-
-    // 3. Render the active view
-    _renderFinFilters(); // Shared filters
+  if (cachedVisits && cachedCrm) {
+    _finCache = cachedVisits.rows || [];
+    _finPayRate = String(cachedVisits.pay_rate || '');
+    _finPayRates = cachedVisits.pay_rates || {};
+    _finCrmCache = cachedCrm || [];
     
-    if (_finActiveTab === 'payouts') {
-      _finApplyAndRender();
-    } else if (_finActiveTab === 'profit') {
-      _renderProfitTab();
-    } else if (_finActiveTab === 'chemicals') {
-      _renderChemTab();
+    _renderFinFilters();
+    if (_finActiveTab === 'payouts') _finApplyAndRender();
+    else if (_finActiveTab === 'profit') _renderProfitTab();
+    else if (_finActiveTab === 'chemicals') _renderChemTab();
+  } else {
+    if (loading) loading.style.display = 'block';
+  }
+
+  try {
+    const [visitsRes, crmRes] = await Promise.all([
+      apiGet({ action: 'get_visit_history', token: _s.token }),
+      apiGet({ action: 'get_crm_data',      token: _s.token })
+    ]);
+
+    let changed = false;
+
+    if (visitsRes.ok) {
+      const freshVisits = { rows: visitsRes.rows || [], pay_rate: visitsRes.pay_rate, pay_rates: visitsRes.pay_rates };
+      if (!cachedVisits || JSON.stringify(cachedVisits) !== JSON.stringify(freshVisits)) {
+        _finCache = freshVisits.rows;
+        _finPayRate = String(freshVisits.pay_rate || '');
+        _finPayRates = freshVisits.pay_rates || {};
+        _appCacheSet('fin_visits', freshVisits);
+        changed = true;
+      }
+    }
+    
+    if (crmRes.ok) {
+      if (!cachedCrm || JSON.stringify(cachedCrm) !== JSON.stringify(crmRes.data)) {
+        _finCrmCache = crmRes.data || [];
+        _appCacheSet('crm_data', _finCrmCache);
+        changed = true;
+      }
     }
 
+    if (changed || (!cachedVisits || !cachedCrm)) {
+      _renderFinFilters();
+      if (_finActiveTab === 'payouts') _finApplyAndRender();
+      else if (_finActiveTab === 'profit') _renderProfitTab();
+      else if (_finActiveTab === 'chemicals') _renderChemTab();
+    }
   } catch(e) {
     console.error('Financial Hub load error:', e);
-    const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : 'chem-tbody');
-    const el = document.getElementById(targetId);
-    if (el) el.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Failed to load data. Network error.</td></tr>`;
+    if (!cachedVisits || !cachedCrm) {
+      const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : 'chem-tbody');
+      const el = document.getElementById(targetId);
+      if (el) el.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Failed to load data. Network error.</td></tr>`;
+    }
   } finally {
     if (loading) loading.style.display = 'none';
   }
