@@ -6,17 +6,23 @@
 
 let _finCache      = [];   // raw rows from GAS (newest first)
 let _finVisitCache = {};   // id → visit object for drawer lookup
-let _finGrouped   = [];   // aggregated rows displayed in table
-let _finPage      = 1;
-let _finPayRates  = {};   // { "Tech Name": rate } — per-tech pay rate map
-let _finPayRate   = '';   // own pay_rate (fallback / My Jobs tech view)
+let _finGrouped    = [];   // aggregated rows displayed in table
+let _finPage       = 1;
+let _finPayRates   = {};   // { "Tech Name": rate } — per-tech pay rate map
+let _finPayRate    = '';   // own pay_rate (fallback / My Jobs tech view)
 let _finPeriod     = 'this_month'; // period key
 let _finCustomFrom = '';           // 'YYYY-MM-DD' — used when _finPeriod === 'custom'
 let _finCustomTo   = '';           // 'YYYY-MM-DD'
 let _finTechFilter = '';           // '' = all techs (admin only)
 let _finLoaded     = false;
 
+let _finActiveTab  = 'payouts'; // 'payouts', 'profit', 'chemicals'
+let _finCrmCache   = [];        // cache for CRM/Quote data
+
 const FIN_PAGE_SIZE = 15;
+const CHEM_KW = ['muriatic','liquid chlor','chlorine tablet', 'tablet', 'cal hypo','soda ash',
+                 'borax','algae','algaTec','scaleTec','scale tec','startup','cyanuric acid add',
+                 'shock','bicarb','acid'];
 
 // ── Period presets (QB-style) ─────────────────────────────────────────────────
 
@@ -196,36 +202,133 @@ function _finGroupByWeek(rows) {
 
 // ── Admin: Financial Hub page ─────────────────────────────────────────────────
 
-async function loadFinancialHub() {
-  if (_finLoaded && _finCache.length) {
-    _finApplyAndRender();
-    return;
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function _finGetRowChemData(detail) {
+  const chemMap = {};
+  let totalCost = 0;
+  
+  Object.entries(detail || {}).forEach(([k, v2]) => {
+    // Ignore meta columns and pre-calculated totals from the sheet
+    if (k.includes('Unit Cost (Snapshot)') || k.toLowerCase().includes('total')) return;
+
+    const kl = k.toLowerCase();
+    const isChem = CHEM_KW.some(kw => kl.includes(kw));
+    const num = parseFloat(v2);
+
+    if (isChem && !isNaN(num) && num > 0) {
+      const unitCost = parseFloat(detail[k + ' Unit Cost (Snapshot)']) || 0;
+      const unit = (k.match(/\((.*?)\)/) || [])[1] || '';
+      const name = k.replace(/\(.*?\)/, '').trim();
+      const rowCost = num * unitCost;
+
+      // Deduplicate by name: ensure each chemical is only counted once per visit
+      if (!chemMap[name]) {
+        chemMap[name] = { k: name, v: v2, unit, cost: rowCost };
+        totalCost += rowCost;
+      }
+    }
+  });
+  return { chemRows: Object.values(chemMap), totalCost };
+}
+
+function _finGetClientNameFromCrm(item) {
+  if (!item) return null;
+  const combined = `${item.first_name || ''} ${item.last_name || ''}`.trim();
+  return combined || item.client_name || null;
+}
+
+function _finNormalizePoolId(id) {
+  return String(id || '').replace(/^MCPS-/i, '').trim();
+}
+
+function _finFindCrm(poolId, poolName) {
+  const normId = _finNormalizePoolId(poolId);
+  return _finCrmCache.find(c => {
+    const cNormId = _finNormalizePoolId(c.pool_id || c.quote_id);
+    if (normId && cNormId && normId === cNormId) return true;
+    if (poolName && c.client_name && c.client_name.toLowerCase() === poolName.toLowerCase()) return true;
+    return false;
+  });
+}
+
+function switchFinTab(tab) {
+  _finActiveTab = tab;
+  
+  // Sync the hash to drive routing and sidebar state
+  const newHash = `financial_hub/${tab}`;
+  if (location.hash !== `#` + newHash) {
+    location.hash = newHash;
   }
-  document.getElementById('fin-loading').style.display = 'block';
-  document.getElementById('fin-table-wrap').style.display = 'none';
-  document.getElementById('fin-stats').innerHTML = '';
-  document.getElementById('fin-filters').innerHTML = '';
-  document.getElementById('fin-pagination').innerHTML = '';
+
+  // Toggle view visibility
+  ['payouts', 'profit', 'chemicals'].forEach(t => {
+    const view = document.getElementById(`fin-view-${t}`);
+    if (view) view.style.display = t === tab ? 'block' : 'none';
+  });
+
+  // Ensure sidebar is highlighted correctly (router handles this but call just in case)
+  if (typeof _setSidebarActive === 'function') {
+    _setSidebarActive('financial_hub', tab);
+  }
+
+  loadFinancialHub(); // Re-trigger load to ensure data is synced for the active tab
+}
+
+async function loadFinancialHub() {
+  const loading = document.getElementById('fin-loading');
+  if (loading) loading.style.display = 'block';
+
+  // If we came from a direct URL hash link, parse it
+  const hash = location.hash.replace('#','');
+  if (hash.startsWith('financial_hub/') && hash.split('/')[1] !== _finActiveTab) {
+    _finActiveTab = hash.split('/')[1];
+  }
+
+  // Toggle shell visibility based on active tab
+  ['payouts', 'profit', 'chemicals'].forEach(t => {
+    const view = document.getElementById(`fin-view-${t}`);
+    if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
+  });
 
   try {
-    const res = await apiGet({ action: 'get_visit_history', token: _s.token });
-    if (!res.ok) {
-      document.getElementById('fin-tbody').innerHTML =
-        `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load.'}</td></tr>`;
-      document.getElementById('fin-table-wrap').style.display = 'block';
-      return;
+    // 1. Fetch Visit History if not loaded
+    if (!_finLoaded || !_finCache.length) {
+      const res = await apiGet({ action: 'get_visit_history', token: _s.token });
+      if (res.ok) {
+        _finCache    = res.rows || [];
+        _finPayRate  = String(res.pay_rate || '');
+        _finPayRates = res.pay_rates || {};
+        _finLoaded   = true;
+      }
     }
-    _finCache    = res.rows || [];
-    _finPayRate  = String(res.pay_rate || '');
-    _finPayRates = res.pay_rates || {};
-    _finLoaded   = true;
-    _finApplyAndRender();
+
+    // 2. Fetch CRM Data if not loaded (used for name enrichment and profitability)
+    if (!_finCrmCache.length) {
+      const res = await apiGet({ action: 'get_crm_data', token: _s.token });
+      if (res.ok) {
+        _finCrmCache = res.data || [];
+      }
+    }
+
+    // 3. Render the active view
+    _renderFinFilters(); // Shared filters
+    
+    if (_finActiveTab === 'payouts') {
+      _finApplyAndRender();
+    } else if (_finActiveTab === 'profit') {
+      _renderProfitTab();
+    } else if (_finActiveTab === 'chemicals') {
+      _renderChemTab();
+    }
+
   } catch(e) {
-    document.getElementById('fin-tbody').innerHTML =
-      `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--error)">Network error. Please try again.</td></tr>`;
-    document.getElementById('fin-table-wrap').style.display = 'block';
+    console.error('Financial Hub load error:', e);
+    const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : 'chem-tbody');
+    const el = document.getElementById(targetId);
+    if (el) el.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Failed to load data. Network error.</td></tr>`;
   } finally {
-    document.getElementById('fin-loading').style.display = 'none';
+    if (loading) loading.style.display = 'none';
   }
 }
 
@@ -236,14 +339,13 @@ function _finApplyAndRender() {
   }
   _finGrouped = _finGroupByTech(filtered);
   _finPage = 1;
-  _renderFinFilters();
   _renderFinStats(_finGrouped);
   _renderFinTable(_finGrouped);
   document.getElementById('fin-table-wrap').style.display = 'block';
 }
 
 function _renderFinFilters() {
-  const el = document.getElementById('fin-filters');
+  const el = document.getElementById('fin-shared-filters');
   if (!el) return;
 
   const rangeText = (_finPeriod !== 'all' && _finPeriod !== 'custom') ? _finDateRangeText(_finPeriod) : '';
@@ -258,13 +360,13 @@ function _renderFinFilters() {
     <div style="display:flex;flex-direction:column;gap:.3rem">
       <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">From</label>
       <input type="date" class="si" style="min-width:140px" value="${_finCustomFrom || defaultFrom}"
-        onchange="_finCustomFrom=this.value;_finLoaded=true;_finApplyAndRender()">
+        onchange="_finCustomFrom=this.value;_finLoaded=true;loadFinancialHub()">
       <div style="min-height:.9rem"></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:.3rem">
       <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">To</label>
       <input type="date" class="si" style="min-width:140px" value="${_finCustomTo || defaultTo}"
-        onchange="_finCustomTo=this.value;_finLoaded=true;_finApplyAndRender()">
+        onchange="_finCustomTo=this.value;_finLoaded=true;loadFinancialHub()">
       <div style="min-height:.9rem"></div>
     </div>` : '';
 
@@ -274,7 +376,7 @@ function _renderFinFilters() {
       <select class="si" style="min-width:170px" onchange="
         _finPeriod=this.value;
         if(_finPeriod==='custom'){_finCustomFrom='';_finCustomTo='';}
-        _finLoaded=true;_finApplyAndRender()">
+        _finLoaded=true;loadFinancialHub()">
         ${FIN_PERIODS.map(p => `<option value="${p.key}" ${_finPeriod===p.key?'selected':''}>${p.label}</option>`).join('')}
       </select>
       <div style="font-size:.72rem;color:var(--muted);min-height:.9rem">${rangeText}</div>
@@ -290,7 +392,7 @@ function _renderFinFilters() {
   const techSelect = isAdmin() && techs.length > 1
     ? `<div style="display:flex;flex-direction:column;gap:.3rem">
         <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Technician</label>
-        <select class="si" style="min-width:170px" onchange="_finTechFilter=this.value;_finLoaded=true;_finApplyAndRender()">
+        <select class="si" style="min-width:170px" onchange="_finTechFilter=this.value;_finLoaded=true;loadFinancialHub()">
           <option value="">All Techs</option>
           ${techs.map(t => `<option value="${t}" ${_finTechFilter===t?'selected':''}>${t}</option>`).join('')}
         </select>
@@ -367,6 +469,20 @@ function _renderFinTable(groups) {
     const estPay   = techRate ? _finFmtCurrency(g.job_count * techRate) : '—';
     const chemFmt  = g.chem_cost ? _finFmtCurrency(g.chem_cost) : '—';
     const rowId    = `fin-row-${start + idx}`;
+    
+    // Find first visit to get pool info for the detail view (groups are tech-based, 
+    // but in Payouts we want to see visits by tech. Wait, Payouts is Tech-based.)
+    
+    // Actually, in Payouts, clicking a Tech shows their visits. 
+    // I should create a separate detail view for Tech visits or stick to the dropdown there.
+    
+    // User said "when i click on one i wanna see the detail of the visit... maybe not as a dropdown but as a card"
+    // This specifically refers to the analytical views where "one" is a POOL.
+    
+    // In Payouts, "one" is a TECHNICIAN. 
+    // I will keep the Payouts dropdown for now as it's tech-centric, 
+    // unless the user clarifies they want tech-detail cards too.
+    
     return `
       <tr style="cursor:pointer" onclick="_finToggleDetail('${rowId}')">
         <td>${g.technician}</td>
@@ -380,7 +496,9 @@ function _renderFinTable(groups) {
           ${g.visits.map((v, vIdx) => {
             const d   = v.timestamp ? new Date(v.timestamp).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}) : '—';
             const pid = String(v.pool_id||'').replace(/.*-\s*/,'').trim();
-            const clientDisplay = v.client_name || pid || '—';
+            // Enrichment using CRM for Payouts visit list
+            const crmItem = _finFindCrm(v.pool_id, v.pool_name);
+            const clientDisplay = _finGetClientNameFromCrm(crmItem) || v.client_name || v.pool_name || pid || '—';
             const hasPhotos = (() => { try { return JSON.parse((v.detail||{})._photo_urls||'[]').length > 0; } catch(e){ return false; } })();
             
             // Store in cache and use ID to avoid JSON escaping issues in HTML attributes
@@ -426,29 +544,33 @@ function _renderFinPagination(total) {
 
 // ── Visit detail drawer ───────────────────────────────────────────────────────
 
-// Called from inline onclick — receives ID to lookup in _finVisitCache
 function _finOpenVisit(vid) {
   const v = _finVisitCache[vid];
   if (!v) return;
   const detail = v.detail || {};
 
-  // Parse photos
+  // Parse and sanitize photos
   let photos = [];
-  try { photos = JSON.parse(detail._photo_urls || '[]'); } catch(e) {}
+  try { 
+    const raw = detail._photo_urls || '[]';
+    photos = JSON.parse(raw);
+    if (!Array.isArray(photos)) photos = [photos];
+  } catch(e) {}
+  photos = photos.filter(Boolean).map(u => String(u).trim());
 
-  // Known water-test reading keywords (column name contains any of these)
-  const TEST_KW = ['ph','free chlorine','total chlorine','combined chlorine',
+  // Known water-test reading keywords
+  const TEST_KW = ['ph','chlorine','free chlorine','total chlorine','combined chlorine',
                    'alkalinity','calcium','stabilizer','cyanuric','salt','temp',
                    'tds','orp','phosphate'];
-  // Known added-chemical keywords
-  const CHEM_KW = ['muriatic','liquid chlor','chlorine tablet','cal hypo','soda ash',
-                   'borax','algae','algaTec','scaleTec','scale tec','startup','cyanuric acid add',
-                   'shock','bicarb'];
-
-  const testRows = [], chemRows = [], noteKeys = ['Notes','Internal Notes','Observations','Comments'];
+  
+  const testRows = [], noteKeys = ['Notes','Internal Notes','Observations','Comments'];
   let notes = '';
 
   // Process all fields first to categorize them
+  const rowChem = _finGetRowChemData(detail);
+  const chemRows = rowChem.chemRows;
+  const visitChemCost = rowChem.totalCost;
+
   const rawTests = {};
   Object.entries(detail).forEach(([k, v2]) => {
     if (k === '_photo_urls' || k.includes('Unit Cost (Snapshot)')) return;
@@ -456,16 +578,9 @@ function _finOpenVisit(vid) {
     if (noteKeys.includes(k)) { notes = notes || String(v2); return; }
 
     const isTest = TEST_KW.some(kw => kl.includes(kw));
-    const isChem = CHEM_KW.some(kw => kl.includes(kw));
-    const num = parseFloat(v2);
 
     if (isTest) {
       rawTests[k] = (v2 === '' || v2 === null) ? '-' : v2;
-    } else if (isChem && !isNaN(num) && num > 0) {
-      const unitCost = parseFloat(detail[k + ' Unit Cost (Snapshot)']) || 0;
-      const unit = (k.match(/\((.*?)\)/) || [])[1] || '';
-      const name = k.replace(/\(.*?\)/, '').trim();
-      chemRows.push({ k: name, v: v2, unit, cost: num * unitCost });
     }
   });
 
@@ -515,7 +630,7 @@ function _finOpenVisit(vid) {
           </div>
           <button onclick="document.getElementById('fin-drawer').remove()" style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--muted);padding:.2rem .4rem;border-radius:6px">×</button>
         </div>
-        ${v.chem_cost && parseFloat(v.chem_cost) ? `<div style="margin-top:.6rem;display:inline-block;background:var(--teal);color:#fff;font-size:.8rem;font-weight:600;padding:.25rem .6rem;border-radius:20px">Chem cost: ${_finFmtCurrency(parseFloat(v.chem_cost))}</div>` : ''}
+        ${visitChemCost > 0 ? `<div style="margin-top:.6rem;display:inline-block;background:var(--teal);color:#fff;font-size:.8rem;font-weight:600;padding:.25rem .6rem;border-radius:20px">Chem cost: ${_finFmtCurrency(visitChemCost)}</div>` : ''}
       </div>
 
       <!-- Scrollable body -->
@@ -567,6 +682,86 @@ function _finOpenVisit(vid) {
 
       </div>
     </div>`;
+
+  document.body.appendChild(drawer);
+}
+
+function _finOpenPoolDetail(poolId, poolName) {
+  // 1. Filter visits for this pool and current period
+  let rows = _finFilterRows(_finCache);
+  rows = rows.filter(r => r.pool_id === poolId || (poolName && r.pool_name === poolName));
+  
+  // Sort by date desc
+  rows.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // 2. Identify client detail from CRM
+  const crm = _finFindCrm(poolId, poolName);
+  const clientName = _finGetClientNameFromCrm(crm) || poolName || poolId;
+  const status = crm?.status || 'UNKNOWN';
+
+  // 3. Remove old drawer if any
+  const old = document.getElementById('fin-pool-detail');
+  if (old) old.remove();
+
+  const drawer = document.createElement('div');
+  drawer.id = 'fin-pool-detail';
+  drawer.style.cssText = 'position:fixed;inset:0;z-index:8000;display:flex;justify-content:flex-end';
+
+  const periodText = _finDateRangeText(_finPeriod) || 'All Time';
+
+  drawer.innerHTML = `
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.35)" onclick="document.getElementById('fin-pool-detail').remove()"></div>
+    <div style="position:relative;width:min(520px,100vw);height:100%;background:var(--bg-subtle,#f8f9fa);display:flex;flex-direction:column;box-shadow:-6px 0 32px rgba(0,0,0,.18);animation:finDrawerIn .22s ease">
+      
+      <!-- Header -->
+      <div style="padding:1.5rem 1.5rem 1rem;background:var(--surface,#fff);border-bottom:1px solid var(--border);flex-shrink:0">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:1.25rem;font-weight:700;line-height:1.2;color:var(--teal)">${clientName}</div>
+            <div style="font-size:.85rem;color:var(--muted);margin-top:.2rem">${poolId} · ${status}</div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:.5rem">${periodText}</div>
+          </div>
+          <button onclick="document.getElementById('fin-pool-detail').remove()" style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--muted);padding:.2rem .4rem;border-radius:6px">×</button>
+        </div>
+      </div>
+
+      <!-- Visit List -->
+      <div style="flex:1;overflow-y:auto;padding:1.25rem 1.5rem 2.5rem">
+        <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.85rem">Visit History Card</div>
+        
+        ${rows.length ? rows.map((r, idx) => {
+          const d = r.timestamp ? new Date(r.timestamp).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
+          const rate = _finRate(r.tech_name);
+          const rowChem = _finGetRowChemData(r.detail);
+          const chemCost = rowChem.totalCost;
+          const totalCost = chemCost + rate;
+          
+          // Store in global visit cache for drill-down to individual visit details
+          const vid = `pdetail_${idx}`;
+          _finVisitCache[vid] = r;
+
+          return `
+            <div class="fin-visit-card" onclick="_finOpenVisit('${vid}')" style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:.85rem;cursor:pointer;transition:transform .15s, box-shadow .15s">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.6rem">
+                <div>
+                  <div style="font-weight:700;font-size:.95rem">${d}</div>
+                  <div style="font-size:.75rem;color:var(--muted)">${r.tech_name || 'Unassigned'}</div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-weight:700;color:var(--teal);font-size:1rem">${_finFmtCurrency(totalCost)}</div>
+                  <div style="font-size:0.65rem;color:var(--muted)">Total Cost</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:1.5rem;padding-top:.6rem;border-top:1px solid var(--border-light, #eee);font-size:.75rem">
+                <div><span style="color:var(--muted)">Chem:</span> <b>${_finFmtCurrency(chemCost)}</b></div>
+                <div><span style="color:var(--muted)">Labor:</span> <b>${_finFmtCurrency(rate)}</b></div>
+              </div>
+            </div>
+          `;
+        }).join('') : `<div style="text-align:center;padding:3rem 1rem;color:var(--muted)">No service logs found for this period.</div>`}
+      </div>
+    </div>
+  `;
 
   document.body.appendChild(drawer);
 }
@@ -660,4 +855,227 @@ function _renderMyJobs() {
 
       <button class="mvt-btn" style="margin-top:.75rem" onclick="_myJobsLoaded=false;loadMyJobsTab()">↻ Refresh</button>
     </div>`;
+}
+
+// ── Profitability Tab ────────────────────────────────────────────────────────
+
+function _renderProfitTab() {
+  let rows = _finFilterRows(_finCache);
+  if (_finTechFilter) {
+    rows = rows.filter(r => _finCanonicalName(r.technician || r.tech_name) === _finTechFilter);
+  }
+  const grouped = {};
+
+  // 1. Group logs by pool
+  rows.forEach(r => {
+    const key = r.pool_id || r.pool_name;
+    if (!grouped[key]) {
+      grouped[key] = {
+        pool_id: r.pool_id,
+        pool_name: r.pool_name,
+        chem_cost: 0,
+        labor_cost: 0,
+        visit_count: 0,
+        last_visit: null
+      };
+    }
+    const g = grouped[key];
+    const rowChem = _finGetRowChemData(r.detail);
+    g.chem_cost += rowChem.totalCost;
+    const rate = _finRate(r.tech_name);
+    g.labor_cost += rate;
+    g.visit_count++;
+    if (!g.last_visit || new Date(r.timestamp) > new Date(g.last_visit)) {
+      g.last_visit = r.timestamp;
+    }
+  });
+
+  // 2. Join with CRM and calculate metrics
+  const analysis = Object.values(grouped).map(g => {
+    // Attempt match in CRM
+    const crm = _finFindCrm(g.pool_id, g.pool_name);
+    
+    const revenue = parseFloat(crm?.discounted_service_subtotal) || 0;
+    const totalCost = g.chem_cost + g.labor_cost;
+    const profit = revenue - totalCost;
+    const margin = revenue > 0 ? (profit / revenue) : 0;
+    const marginEst = parseFloat(crm?.margin_est) || 0;
+    const variance = margin - (marginEst / 100);
+
+    return {
+      ...g,
+      display_name: _finGetClientNameFromCrm(crm) || g.pool_name || g.pool_id,
+      status: crm?.status || 'UNKNOWN',
+      revenue,
+      totalCost,
+      profit,
+      margin,
+      marginEst: marginEst / 100,
+      variance
+    };
+  });
+
+  // Sort by profit desc
+  analysis.sort((a,b) => b.profit - a.profit);
+
+  // 3. Render
+  const tbody = document.getElementById('profit-tbody');
+  const thead = document.getElementById('profit-thead');
+  const stats = document.getElementById('profit-stats');
+
+  thead.innerHTML = `
+    <tr>
+      <th style="padding-left:1rem">Pool</th>
+      <th>Status</th>
+      <th>Visits</th>
+      <th>Revenue (Est.)</th>
+      <th>Actual Cost</th>
+      <th>Profit</th>
+      <th>Margin</th>
+      <th style="text-align:right;padding-right:1rem">Variance</th>
+    </tr>
+  `;
+
+  if (!analysis.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No data for this period.</td></tr>`;
+  } else {
+    tbody.innerHTML = analysis.map(a => {
+      const statusClass = a.status === 'ACTIVE_CUSTOMER' ? 'svc-weekly' : (a.status === 'LOST' ? 'svc-gtc' : 'svc-other');
+      const varColor = a.variance >= 0 ? '#16a34a' : '#dc2626';
+      const marginColor = a.margin >= 0.4 ? '#16a34a' : (a.margin >= 0.2 ? '#b45309' : '#dc2626');
+
+      return `
+        <tr onclick="_finOpenPoolDetail('${a.pool_id}', '${a.pool_name}')" style="cursor:pointer">
+          <td style="padding-left:1rem;font-weight:600">${a.display_name || '—'}</td>
+          <td><span class="ps-label ${statusClass}">${a.status}</span></td>
+          <td>${a.visit_count}</td>
+          <td>${_finFmtCurrency(a.revenue)}</td>
+          <td>
+            <div style="font-weight:600">${_finFmtCurrency(a.totalCost)}</div>
+            <div style="font-size:0.7rem;color:var(--muted)">Chem: ${_finFmtCurrency(a.chem_cost)} | Lab: ${_finFmtCurrency(a.labor_cost)}</div>
+          </td>
+          <td style="font-weight:700;color:${a.profit >= 0 ? 'var(--text)' : '#dc2626'}">${_finFmtCurrency(a.profit)}</td>
+          <td style="color:${marginColor};font-weight:600">${(a.margin * 100).toFixed(1)}%</td>
+          <td style="text-align:right;padding-right:1rem;color:${varColor};font-weight:700">
+            ${a.variance >= 0 ? '+' : ''}${(a.variance * 100).toFixed(1)}%
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Stats cards
+  const totalRev = analysis.reduce((sum, a) => sum + a.revenue, 0);
+  const totalCost = analysis.reduce((sum, a) => sum + a.totalCost, 0);
+  const totalProfit = totalRev - totalCost;
+  const avgMargin = totalRev > 0 ? (totalProfit / totalRev) : 0;
+
+  stats.innerHTML = `
+    <div style="display:flex;gap:1rem;padding:1rem;flex-wrap:wrap">
+      <div class="q-met hi" style="flex:1;min-width:140px">
+        <div class="q-met-lbl">Total Period Revenue</div>
+        <div class="q-met-val">${_finFmtCurrency(totalRev)}</div>
+      </div>
+      <div class="q-met" style="flex:1;min-width:140px">
+        <div class="q-met-lbl">Actual Operating Cost</div>
+        <div class="q-met-val">${_finFmtCurrency(totalCost)}</div>
+      </div>
+      <div class="q-met" style="flex:1;min-width:140px">
+        <div class="q-met-lbl">Net Operating Profit</div>
+        <div class="q-met-val" style="color:${totalProfit >= 0 ? 'var(--teal)' : '#dc2626'}">${_finFmtCurrency(totalProfit)}</div>
+      </div>
+      <div class="q-met" style="flex:1;min-width:140px">
+        <div class="q-met-lbl">Avg Period Margin</div>
+        <div class="q-met-val">${(avgMargin * 100).toFixed(1)}%</div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Chemical Analysis Tab ──────────────────────────────────────────────────
+
+function _renderChemTab() {
+  let rows = _finFilterRows(_finCache);
+  if (_finTechFilter) {
+    rows = rows.filter(r => _finCanonicalName(r.technician || r.tech_name) === _finTechFilter);
+  }
+  const fleetChems = {}; // chemical_name -> { cost: 0, amount: 0, unit: '', visits: 0 }
+  const poolChems  = {}; // pool_id -> { pool_name, cost: 0, breakdown: {} }
+
+
+    rows.forEach(r => {
+      const detail = r.detail || {};
+      const pk = r.pool_id || r.pool_name;
+      
+      const rowChem = _finGetRowChemData(detail);
+      rowChem.chemRows.forEach(cr => {
+        const name = cr.k;
+        const cost = cr.cost;
+        const num  = parseFloat(cr.v) || 0;
+        const unit = cr.unit;
+
+        // Fleet aggregation
+        if (!fleetChems[name]) fleetChems[name] = { cost: 0, amount: 0, unit, visits: 0 };
+        fleetChems[name].cost += cost;
+        fleetChems[name].amount += num;
+        fleetChems[name].visits++;
+
+        // Pool aggregation
+        const crmItem = _finFindCrm(r.pool_id, r.pool_name);
+        const dispName = _finGetClientNameFromCrm(crmItem) || r.pool_name || r.pool_id;
+
+        if (!poolChems[pk]) poolChems[pk] = { pool_name: dispName, pool_id: r.pool_id, cost: 0, breakdown: {} };
+        poolChems[pk].cost += cost;
+        if (!poolChems[pk].breakdown[name]) poolChems[pk].breakdown[name] = 0;
+        poolChems[pk].breakdown[name] += cost;
+      });
+    });
+
+  const sortedFleet = Object.entries(fleetChems).sort((a,b) => b[1].cost - a[1].cost);
+  const sortedPools = Object.values(poolChems).sort((a,b) => b.cost - a.cost).slice(0, 10);
+
+  // Stats: Top chemicals
+  const stats = document.getElementById('chem-stats');
+  stats.innerHTML = `
+    <div style="padding:1rem; background:var(--surface); margin:1rem; border-radius:12px; border:1px solid var(--border)">
+      <div class="q-met-lbl" style="margin-bottom:0.75rem">FLEET-WIDE CHEMICAL CONSUMPTION</div>
+      <div style="display:flex; gap:1.5rem; flex-wrap:wrap">
+        ${sortedFleet.slice(0, 4).map(([name, data]) => `
+          <div style="min-width:120px">
+            <div style="font-size:0.75rem; color:var(--muted); font-weight:600">${name.toUpperCase()}</div>
+            <div style="font-size:1.1rem; font-weight:700; color:var(--teal)">${_finFmtCurrency(data.cost)}</div>
+            <div style="font-size:0.65rem; color:var(--muted)">${data.amount.toFixed(1)}${data.unit} total</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  const thead = document.getElementById('chem-thead');
+  const tbody = document.getElementById('chem-tbody');
+
+  thead.innerHTML = `
+    <tr>
+      <th style="padding-left:1rem">Pool (Top 10 High-Utilization)</th>
+      <th>Total Chem Spend</th>
+      <th style="text-align:right;padding-right:1rem">Highest Cost Factor</th>
+    </tr>
+  `;
+
+  if (!sortedPools.length) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:2rem;color:var(--muted)">No chemical usage recorded.</td></tr>`;
+  } else {
+    tbody.innerHTML = sortedPools.map(p => {
+      const topChem = Object.entries(p.breakdown).sort((a,b) => b[1] - a[1])[0];
+      return `
+        <tr onclick="_finOpenPoolDetail('${p.pool_id}', '${p.pool_name}')" style="cursor:pointer">
+          <td style="padding-left:1rem;font-weight:600">${p.pool_name || '—'}</td>
+          <td style="font-weight:700;color:var(--teal)">${_finFmtCurrency(p.cost)}</td>
+          <td style="text-align:right;padding-right:1rem;font-size:0.85rem">
+            ${topChem ? `<b>${topChem[0]}</b> (${_finFmtCurrency(topChem[1])})` : '—'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
 }

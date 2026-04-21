@@ -330,6 +330,41 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .npb-auto-btn:hover{background:var(--teal-mid)}
 .npb-auto-btn:disabled{background:#cbd5e1;cursor:not-allowed}
 
+/* ── Invoice Action Alerts (Home page) ─────────────────────────────────── */
+#home-alerts{margin-top:.75rem;display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem}
+@media(min-width:600px){#home-alerts{grid-template-columns:repeat(3,1fr)}}
+
+/* "All good" card — same dimensions as hs-card */
+.ia-allgood{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.1rem;display:flex;flex-direction:column;gap:.25rem;grid-column:1/-1}
+.ia-allgood-label{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ia-allgood-value{font-family:'Oswald',sans-serif;font-size:1.25rem;font-weight:700;color:var(--teal)}
+.ia-allgood-sub{font-size:.72rem;color:var(--muted)}
+
+/* Alert banner cards — match hs-card style */
+.ia-banner{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:border-color .2s,transform .2s}
+.ia-banner:hover{border-color:var(--teal-light);transform:translateY(-2px)}
+.ia-banner.open{transform:none}
+.ia-header{display:flex;align-items:flex-start;justify-content:space-between;padding:1.1rem;cursor:pointer}
+.ia-header-text{display:flex;flex-direction:column;gap:.25rem}
+.ia-label{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.ia-count{font-family:'Oswald',sans-serif;font-size:1.75rem;font-weight:700;line-height:1;color:var(--warn)}
+.ia-sub{font-size:.72rem;color:var(--muted)}
+.ia-chevron{color:var(--muted);font-size:.7rem;transition:transform .2s;margin-top:.2rem;flex-shrink:0}
+.ia-banner.open .ia-chevron{transform:rotate(180deg)}
+.ia-body{display:none;padding:0 1.1rem .9rem;border-top:1px solid var(--border)}
+.ia-banner.open .ia-body{display:block}
+.ia-pool-row{display:flex;align-items:center;justify-content:space-between;padding:.55rem 0;border-bottom:1px solid var(--border);cursor:pointer;transition:padding-left .15s ease-in-out}
+.ia-pool-row:last-child{border-bottom:none}
+.ia-pool-row:hover{padding-left:.35rem}
+.ia-pool-name{font-weight:600;font-size:.88rem;color:var(--text)}
+.ia-pool-addr{font-size:.75rem;color:var(--muted);margin-top:.1rem}
+.ia-view-btn{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;padding:.3rem .7rem;border-radius:8px;border:1.5px solid var(--teal-mid);background:transparent;color:var(--teal-mid);cursor:pointer;transition:all .15s;flex-shrink:0;user-select:none}
+.ia-pool-row:hover .ia-view-btn{background:var(--teal-glow)}
+.ia-convert-btn{border-color:var(--teal);color:var(--teal)}
+.ia-convert-btn:hover{background:var(--teal-glow)}
+.ia-skip-btn{border-color:var(--muted);color:var(--muted)}
+.ia-skip-btn:hover{background:rgba(0,0,0,.04)}
+
 /* ── Map Calendar View ──────────────────────────────────────────────────── */
 .map-view-hdr{display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:var(--card);border-bottom:1px solid var(--border);}
 .map-view-toggle{display:flex;gap:0.35rem;background:#f1f5f9;padding:0.25rem;border-radius:8px;}

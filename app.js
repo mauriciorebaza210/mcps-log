@@ -168,9 +168,14 @@ function _makeSbGroup(id, label, children) {
   const SVG_CHEVRON = `<svg class="sb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`;
   const childrenHtml = children.map(c => {
     const childId = c.id || `ni-${c.page}${c.hubTab ? '-'+c.hubTab : ''}`;
-    const onclick = c.hubTab
-      ? `navigateTo('${c.page}');switchHubTab('${c.hubTab}')`
-      : `navigateTo('${c.page}')`;
+    let onclick;
+    if (c.page === 'financial_hub' && c.hubTab) {
+      onclick = `navigateTo('financial_hub');switchFinTab('${c.hubTab}')`;
+    } else if (c.hubTab) {
+      onclick = `navigateTo('${c.page}');switchHubTab('${c.hubTab}')`;
+    } else {
+      onclick = `navigateTo('${c.page}')`;
+    }
     return `<button class="sb-child" id="${childId}" onclick="${onclick}">${c.icon || ''}<span>${c.label}</span></button>`;
   }).join('');
   return `<div class="sb-group" id="sbg-${id}"><div class="sb-group-header" onclick="_toggleAccordion('${id}')"><span>${label}</span>${SVG_CHEVRON}</div><div class="sb-group-children">${childrenHtml}</div></div>`;

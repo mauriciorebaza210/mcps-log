@@ -671,6 +671,8 @@ async function loadHomeStats() {
   
   if(!isAdmin()) {
     container.style.display = 'none';
+    const alertsEl = document.getElementById('home-alerts');
+    if(alertsEl) alertsEl.innerHTML = '';
     return;
   }
   container.style.display = 'grid';
@@ -679,10 +681,11 @@ async function loadHomeStats() {
   container.innerHTML = `<div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div>`;
 
   try {
-    const [crmRes, goalRes, unRes] = await Promise.all([
-      apiGet({ action: 'get_crm_data', token: _s.token }),
-      apiGet({ action: 'get_weekly_goal', token: _s.token }),
-      apiGet({ action: 'get_unassigned', token: _s.token })
+    const [crmRes, goalRes, unRes, alertsRes] = await Promise.all([
+      apiGet({ action: 'get_crm_data',       token: _s.token }),
+      apiGet({ action: 'get_weekly_goal',    token: _s.token }),
+      apiGet({ action: 'get_unassigned',     token: _s.token }),
+      apiGet({ action: 'get_invoice_alerts', token: _s.token })
     ]);
 
     let signedCount = 0;
@@ -698,6 +701,7 @@ async function loadHomeStats() {
       : 0;
 
     renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount);
+    renderInvoiceAlerts(alertsRes);
   } catch(e) {
     console.error("Home stats error:", e);
     container.innerHTML = `<div style="grid-column:1/-1;color:var(--muted);font-size:.8rem;text-align:center;padding:1rem;background:var(--surface);border-radius:12px">Summary unavailable</div>`;
@@ -730,4 +734,115 @@ function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned) {
       <div class="hs-sub">Pools without a schedule</div>
     </div>
   `;
+}
+
+function renderInvoiceAlerts(res) {
+  const el = document.getElementById('home-alerts');
+  if (!el) return;
+  if (!res || !res.ok) { el.innerHTML = ''; return; }
+
+  const firstList   = Array.isArray(res.first_invoice)   ? res.first_invoice   : [];
+  const startupList = Array.isArray(res.startup_invoice) ? res.startup_invoice : [];
+  const convertList = Array.isArray(res.startup_convert) ? res.startup_convert : [];
+  if (!firstList.length && !startupList.length && !convertList.length) {
+    el.innerHTML = `
+      <div class="ia-allgood">
+        <div class="ia-allgood-label">Billing Actions</div>
+        <div class="ia-allgood-value">All caught up ✓</div>
+        <div class="ia-allgood-sub">No invoices pending</div>
+      </div>`;
+    return;
+  }
+
+  const makeBanner = (id, label, countLabel, sub, pools) => {
+    if (!pools.length) return '';
+    const rows = pools.map(p => `
+      <div class="ia-pool-row" onclick="_openAlertPool('${p.quote_id}')">
+        <div>
+          <div class="ia-pool-name">${p.customer_name || p.pool_id}</div>
+          <div class="ia-pool-addr">${p.address || ''}${p.city ? ', ' + p.city : ''}</div>
+        </div>
+        <span class="ia-view-btn">View ▸</span>
+      </div>`).join('');
+    return `
+      <div class="ia-banner" id="${id}">
+        <div class="ia-header" onclick="this.closest('.ia-banner').classList.toggle('open')">
+          <div class="ia-header-text">
+            <div class="ia-label">${label}</div>
+            <div class="ia-count">${pools.length}</div>
+            <div class="ia-sub">${sub}</div>
+          </div>
+          <span class="ia-chevron">▼</span>
+        </div>
+        <div class="ia-body">${rows}</div>
+      </div>`;
+  };
+
+  el.innerHTML =
+    _makeConvertBanner(convertList) +
+    makeBanner('ia-first-invoice',   'First Invoice',   firstList.length,   'Ready to send',   firstList) +
+    makeBanner('ia-startup-invoice', 'Startup Invoice', startupList.length, 'Ready to send',   startupList);
+}
+
+function _makeConvertBanner(pools) {
+  if (!pools.length) return '';
+  const rows = pools.map(p => `
+    <div class="ia-pool-row" id="ia-conv-${p.quote_id}">
+      <div>
+        <div class="ia-pool-name">${p.customer_name || p.pool_id}</div>
+        <div class="ia-pool-addr">${p.address || ''}${p.city ? ', ' + p.city : ''}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-shrink:0">
+        <span class="ia-view-btn ia-convert-btn" onclick="_convertToWFS('${p.quote_id}','${p.last_visit_date}',this)">Convert</span>
+        <span class="ia-view-btn ia-skip-btn" onclick="_skipConvert('${p.quote_id}')">Skip</span>
+      </div>
+    </div>`).join('');
+  return `
+    <div class="ia-banner" id="ia-startup-convert">
+      <div class="ia-header" onclick="this.closest('.ia-banner').classList.toggle('open')">
+        <div class="ia-header-text">
+          <div class="ia-label">Convert to WFS</div>
+          <div class="ia-count">${pools.length}</div>
+          <div class="ia-sub">Startup → Weekly Full Service</div>
+        </div>
+        <span class="ia-chevron">▼</span>
+      </div>
+      <div class="ia-body">${rows}</div>
+    </div>`;
+}
+
+async function _convertToWFS(quoteId, billingStart, btn) {
+  btn.textContent = '...';
+  btn.style.opacity = '.5';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await api({ action: 'convert_to_wfs', token: _s.token, secret: SEC, quote_id: quoteId, billing_start: billingStart });
+    if (res.ok) {
+      document.getElementById('ia-conv-' + quoteId)?.remove();
+      const body = document.querySelector('#ia-startup-convert .ia-body');
+      if (body && !body.children.length) document.getElementById('ia-startup-convert')?.remove();
+    } else {
+      btn.textContent = 'Convert';
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+      alert('Conversion failed: ' + (res.error || 'Unknown error'));
+    }
+  } catch(e) {
+    btn.textContent = 'Convert';
+    btn.style.opacity = '';
+    btn.style.pointerEvents = '';
+    alert('Network error. Please try again.');
+  }
+}
+
+function _skipConvert(quoteId) {
+  document.getElementById('ia-conv-' + quoteId)?.remove();
+  const body = document.querySelector('#ia-startup-convert .ia-body');
+  if (body && !body.children.length) document.getElementById('ia-startup-convert')?.remove();
+}
+
+function _openAlertPool(quoteId) {
+  if (!quoteId) return;
+  window._pendingAlertQuoteId = quoteId;
+  navigateTo('crm');
 }

@@ -4,7 +4,11 @@
 // Uses globals: _s, _curPage, _routeData, _activeHubTab, _usersCache, _invLoaded
 // ══════════════════════════════════════════════════════════════════════════════
 
-function navigateTo(page){
+function navigateTo(pageWithSub){
+  const parts = pageWithSub.split('/');
+  const page = parts[0];
+  const sub  = parts[1] || null;
+
   // Training lives inside the hub — redirect for all hub users
   if(page==='training' && (_s&&(_s.pages||[]).includes('live_map'))){
     navigateTo('live_map');
@@ -15,28 +19,41 @@ function navigateTo(page){
   document.querySelectorAll('.pf').forEach(f=>f.classList.remove('active'));
   const frame=document.getElementById('page-'+page);
   if(frame)frame.classList.add('active');
-  _setSidebarActive(page, null);
-  _curPage=page;
-  location.hash=page==='home'?'':page;
+  
+  _setSidebarActive(page, sub);
+  _curPage = page;
+  location.hash = (page === 'home' ? '' : page) + (sub ? '/' + sub : '');
   _closeSidebar();
+
   // Scroll content area back to top
   const mc = document.querySelector('.main-content');
   if (mc) mc.scrollTop = 0;
+
   if(page==='home') loadHomeStats();
-  if(page==='live_map'){ if(!_routeData) loadRoutes(); switchHubTab('schedule'); }
+  if(page==='live_map'){ 
+    if(!_routeData) loadRoutes(); 
+    switchHubTab(sub || 'schedule'); 
+  }
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
   if(page==='crm') loadCRM();
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
-  if(page==='financial_hub') loadFinancialHub();
+  if(page==='financial_hub') {
+    // If we have a sub-path, notify the hub logic
+    if (typeof switchFinTab === 'function' && sub) {
+      switchFinTab(sub);
+    } else {
+      loadFinancialHub();
+    }
+  }
 }
 
 function _setSidebarActive(page, hubTab) {
   document.querySelectorAll('.sb-item, .sb-child').forEach(n => n.classList.remove('active'));
   let targetId;
-  if (hubTab === 'profile') {
+  if (hubTab === 'profile' && page === 'live_map') {
     targetId = 'sb-child-profile';
   } else {
     targetId = hubTab ? `ni-${page}-${hubTab}` : `ni-${page}`;

@@ -73,6 +73,9 @@
         <!-- Injected by JS -->
       </div>
 
+      <!-- Invoice Action Alerts — filled by loadHomeStats() for admins -->
+      <div id="home-alerts"></div>
+
       <div class="home-grid" id="home-grid" style="display:none"></div>
     </div>
 
@@ -957,16 +960,46 @@
       <div class="fin-page-hdr">
         <h2>Financial Hub</h2>
       </div>
-      <div id="fin-stats"></div>
-      <div id="fin-filters"></div>
+
       <div id="fin-loading" class="route-loading" style="display:none"><div class="spinner"></div></div>
-      <div id="fin-table-wrap" style="overflow-x:auto;padding:0 1rem 1rem">
-        <table class="adm-table" style="width:100%">
-          <thead id="fin-thead"></thead>
-          <tbody id="fin-tbody"></tbody>
-        </table>
+
+      <!-- Shared Filters -->
+      <div id="fin-shared-filters" style="padding: 0 1rem 0.5rem"></div>
+
+      <!-- Tab: Payouts (Existing) -->
+      <div id="fin-view-payouts">
+        <div id="fin-stats"></div>
+        <div id="fin-table-wrap" style="overflow-x:auto;padding:0 1rem 1rem">
+          <table class="adm-table" style="width:100%">
+            <thead id="fin-thead"></thead>
+            <tbody id="fin-tbody"></tbody>
+          </table>
+        </div>
+        <div id="fin-pagination" style="padding:0 1rem 1rem"></div>
       </div>
-      <div id="fin-pagination" style="padding:0 1rem 1rem"></div>
+
+      <!-- Tab: Profitability (New) -->
+      <div id="fin-view-profit" style="display:none">
+        <div id="profit-stats"></div>
+        <div id="profit-table-wrap" style="overflow-x:auto;padding:0 1rem 1rem">
+          <table class="adm-table" style="width:100%">
+            <thead id="profit-thead"></thead>
+            <tbody id="profit-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab: Chemicals (New) -->
+      <div id="fin-view-chemicals" style="display:none">
+        <div id="chem-stats"></div>
+        <div id="chem-table-wrap" style="overflow-x:auto;padding:0 1rem 1rem">
+          <table class="adm-table" style="width:100%">
+            <thead id="chem-thead"></thead>
+            <tbody id="chem-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
     </div><!-- /page-financial_hub -->
 
   </div><!-- /page-wrap -->

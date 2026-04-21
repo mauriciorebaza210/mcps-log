@@ -55,7 +55,9 @@ const SIDEBAR_GROUPS = [
     id: 'finance',
     label: 'Financial Hub',
     children: [
-      { page:'financial_hub', label:'Overview', icon:SVG_CHART }
+      { page:'financial_hub', label:'Payouts',             icon:SVG_CHART, hubTab:'payouts',   id:'ni-financial_hub-payouts' },
+      { page:'financial_hub', label:'Profitability',       icon:SVG_CHART, hubTab:'profit',    id:'ni-financial_hub-profit' },
+      { page:'financial_hub', label:'Chemical Analysis',  icon:SVG_CLIP,  hubTab:'chemicals', id:'ni-financial_hub-chemicals' }
     ]
   }
 ];

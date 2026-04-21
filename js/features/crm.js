@@ -29,6 +29,11 @@ async function loadCRM() {
       renderCRMStats();
       populateYearFilter();
       loadWeeklyGoal();
+      if (window._pendingAlertQuoteId) {
+        const pending = window._pendingAlertQuoteId;
+        window._pendingAlertQuoteId = null;
+        viewCRMDetail(pending);
+      }
     } else {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Error: ${res.error || 'Failed to load data.'}</td></tr>`;
     }
