@@ -1206,18 +1206,48 @@
   <div class="pas-title" id="pas-title">Pool Name</div>
   <div class="pas-sub" id="pas-sub">Address · Service</div>
   <div class="pas-section">
-    <div class="pas-section-label">📅 Move to different day</div>
+    <div class="pas-section-label" id="pas-day-section-label">📅 Move to different day</div>
     <div class="pas-day-grid" id="pas-day-grid"></div>
+    <div id="pas-startup-span" style="display:none;margin:.4rem 0 0;padding:.35rem .6rem;border-radius:6px;background:rgba(200,168,75,.12);font-size:.82rem"></div>
+    <!-- Scope toggle: permanent vs this week only -->
+    <div style="display:flex;gap:.4rem;margin-top:.6rem">
+      <button class="pas-scope-btn active" id="pas-scope-perm" onclick="pasSetScope('permanent')" style="flex:1;padding:.38rem .5rem;border-radius:6px;border:1.5px solid var(--teal);background:var(--teal);color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">Permanent</button>
+      <button class="pas-scope-btn" id="pas-scope-week" onclick="pasSetScope('week')" style="flex:1;padding:.38rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.78rem;font-weight:600;cursor:pointer">This week only</button>
+    </div>
   </div>
-  <div class="pas-section">
+  <div class="pas-section" id="pas-op-section">
     <div class="pas-section-label">👤 Change operator</div>
     <select class="pas-op-select" id="pas-op-select"></select>
   </div>
-  <div class="pas-section">
+  <div class="pas-section" id="pas-pin-section">
     <div class="pas-section-label">📌 Pin status</div>
     <div class="pas-pin-toggle" id="pas-pin-toggle" onclick="togglePasPin()">
       <span class="pas-pin-icon" id="pas-pin-icon">📌</span>
       <span class="pas-pin-text" id="pas-pin-text">Pinned — won't be moved by auto-placement</span>
+    </div>
+  </div>
+  <!-- Startup-specific actions (shown only for startup pools) -->
+  <div class="pas-section" id="pas-startup-actions" style="display:none">
+    <div class="pas-section-label">🚀 Startup actions</div>
+    <div style="display:flex;flex-direction:column;gap:.4rem">
+      <button id="pas-convert-btn" onclick="convertStartupToWeeklyService(event)" style="padding:.5rem .75rem;border-radius:7px;border:none;background:#dcfce7;color:#15803d;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">✅ Convert to Weekly Full Service</button>
+      <!-- Day picker shown after clicking Convert (hidden initially) -->
+      <div id="pas-convert-day-picker" style="display:none;flex-direction:column;gap:.4rem;padding:.5rem .6rem;border-radius:7px;background:rgba(200,168,75,.1);border:1px solid rgba(200,168,75,.3)">
+        <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Which day will this pool be serviced weekly?</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-convert-day-grid"></div>
+        <!-- First month toggle -->
+        <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;padding:.35rem .5rem;border-radius:6px;background:rgba(13,77,68,.07);cursor:pointer" onclick="pasToggleFirstMonth()">
+          <div id="pas-fm-toggle" style="width:32px;height:18px;border-radius:9px;background:#ccc;position:relative;transition:background .2s;flex-shrink:0">
+            <div id="pas-fm-knob" style="width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+          </div>
+          <span style="font-size:.78rem;font-weight:600;color:var(--text)">First month service (4 visits)</span>
+        </div>
+        <div style="display:flex;gap:.4rem;margin-top:.4rem">
+          <button onclick="confirmConvertToWeekly()" id="pas-convert-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:var(--teal);color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Confirm</button>
+          <button onclick="cancelConvertToWeekly()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
+        </div>
+      </div>
+      <button onclick="markStartupDone(event)" style="padding:.5rem .75rem;border-radius:7px;border:none;background:#fee2e2;color:#b91c1c;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">✗ Startup complete — remove from schedule</button>
     </div>
   </div>
   <button class="pas-apply-btn" id="pas-apply-btn" onclick="applyPoolAction()">Apply Changes</button>

@@ -741,10 +741,11 @@ function renderInvoiceAlerts(res) {
   if (!el) return;
   if (!res || !res.ok) { el.innerHTML = ''; return; }
 
-  const firstList   = Array.isArray(res.first_invoice)   ? res.first_invoice   : [];
-  const startupList = Array.isArray(res.startup_invoice) ? res.startup_invoice : [];
-  const convertList = Array.isArray(res.startup_convert) ? res.startup_convert : [];
-  if (!firstList.length && !startupList.length && !convertList.length) {
+  const firstList     = Array.isArray(res.first_invoice)    ? res.first_invoice    : [];
+  const startupList   = Array.isArray(res.startup_invoice)  ? res.startup_invoice  : [];
+  const convertList   = Array.isArray(res.startup_convert)  ? res.startup_convert  : [];
+  const firstMonthList= Array.isArray(res.first_month_done) ? res.first_month_done : [];
+  if (!firstList.length && !startupList.length && !convertList.length && !firstMonthList.length) {
     el.innerHTML = `
       <div class="ia-allgood">
         <div class="ia-allgood-label">Billing Actions</div>
@@ -779,9 +780,55 @@ function renderInvoiceAlerts(res) {
   };
 
   el.innerHTML =
+    _makeFirstMonthBanner(firstMonthList) +
     _makeConvertBanner(convertList) +
     makeBanner('ia-first-invoice',   'First Invoice',   firstList.length,   'Ready to send',   firstList) +
     makeBanner('ia-startup-invoice', 'Startup Invoice', startupList.length, 'Ready to send',   startupList);
+}
+
+function _makeFirstMonthBanner(pools) {
+  if (!pools.length) return '';
+  const rows = pools.map(p => `
+    <div class="ia-pool-row" id="ia-fm-${p.pool_id}">
+      <div>
+        <div class="ia-pool-name">${p.customer_name || p.pool_id}</div>
+        <div class="ia-pool-addr">${p.address || ''}${p.city ? ', ' + p.city : ''} · ${p.visit_count} visits done</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-shrink:0">
+        <span class="ia-view-btn ia-convert-btn" onclick="_dismissFirstMonth('${p.pool_id}','signed',this)">✓ Signed</span>
+        <span class="ia-view-btn ia-skip-btn"    onclick="_dismissFirstMonth('${p.pool_id}','no',this)">Not signed</span>
+      </div>
+    </div>`).join('');
+  return `
+    <div class="ia-banner open" id="ia-first-month">
+      <div class="ia-header" onclick="this.closest('.ia-banner').classList.toggle('open')">
+        <div class="ia-header-text">
+          <div class="ia-label">First Month Complete</div>
+          <div class="ia-count">${pools.length}</div>
+          <div class="ia-sub">Did they sign for ongoing service?</div>
+        </div>
+        <span class="ia-chevron">▼</span>
+      </div>
+      <div class="ia-body">${rows}</div>
+    </div>`;
+}
+
+async function _dismissFirstMonth(poolId, _outcome, btn) {
+  if(btn) { btn.style.opacity = '.5'; btn.style.pointerEvents = 'none'; }
+  try {
+    const res = await api({ action: 'dismiss_first_month', token: _s.token, secret: SEC, pool_id: poolId });
+    if(res.ok) {
+      const row = document.getElementById('ia-fm-' + poolId);
+      if(row) row.remove();
+      const banner = document.getElementById('ia-first-month');
+      if(banner && !banner.querySelector('.ia-pool-row')) banner.remove();
+    } else {
+      if(btn) { btn.style.opacity = '1'; btn.style.pointerEvents = ''; }
+      alert('Error: ' + (res.error || 'Unknown'));
+    }
+  } catch(e) {
+    if(btn) { btn.style.opacity = '1'; btn.style.pointerEvents = ''; }
+  }
 }
 
 function _makeConvertBanner(pools) {

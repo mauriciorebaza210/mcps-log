@@ -29,7 +29,7 @@ function loadRoutes(opOverride) {
   // ── Show skeleton while loading ──
   _showRouteSkeleton();
 
-  const params = {action:'route_data', token:_s.token, operator:op};
+  const params = {action:'route_data', token:_s.token, operator:op, week_start: _weekStartForOffset_(_weekOffset)};
   if(_weekOffset !== 0) params.week_offset = _weekOffset;
 
   const fetchPromise = apiGet(params)
@@ -66,6 +66,59 @@ function navWeek(dir) {
   _routeData = null;
   _clearRouteCache();
   loadRoutes();
+}
+
+// Compute the Monday date string for a given offset from current week
+function _weekStartForOffset_(offset) {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // this Monday
+  const mon = new Date(d.getFullYear(), d.getMonth(), diff + (offset * 7));
+  const pad = n => String(n).padStart(2, '0');
+  return `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`;
+}
+
+// Duplicate startup pools onto the following 2 days so they appear as a 3-day block
+function _extendStartupPools_(origDays) {
+  const days = origDays.map(d => ({ ...d, pools: (d.pools || []).map(p => ({ ...p })) }));
+  days.forEach((d, dIdx) => {
+    d.pools.forEach(pool => {
+      if (pool._startupDay) return; // already a ghost
+      if (!(pool.service || '').toLowerCase().includes('startup')) return;
+      pool._startupDay = 1;
+      [1, 2].forEach(offset => {
+        const nextIdx = dIdx + offset;
+        if (nextIdx < days.length) {
+          days[nextIdx].pools.push({ ...pool, _startupDay: offset + 1, _startupOriginDay: d.day });
+        }
+      });
+    });
+  });
+  return days;
+}
+
+// Return up to 3 consecutive day names starting at startDay
+function _startupSpanDays_(startDay) {
+  const idx = ALL_DAYS.indexOf(startDay);
+  if (idx === -1) return [startDay];
+  return ALL_DAYS.slice(idx, idx + 3);
+}
+
+// Update the startup span preview inside the pool action sheet
+function _updateStartupSpanPreview_() {
+  const previewEl = document.getElementById('pas-startup-span');
+  const labelEl   = document.getElementById('pas-day-section-label');
+  if (!previewEl) return;
+  if (!_pasState || !_pasState.isStartup) {
+    previewEl.style.display = 'none';
+    if (labelEl) labelEl.textContent = '📅 Move to different day';
+    return;
+  }
+  if (labelEl) labelEl.textContent = '📅 Set Startup Start Day';
+  const spanDays = _startupSpanDays_(_pasState.newDay);
+  previewEl.style.display = 'block';
+  previewEl.innerHTML = '<span style="color:var(--muted)">3-day block: </span>'
+    + spanDays.map(d => `<strong style="color:var(--teal)">${d.slice(0, 3)}</strong>`).join(' → ');
 }
 
 function switchMapView(view) {
@@ -505,7 +558,7 @@ function renderRoutePage(){
     opRow.style.display='none';
   }
 
-  const days  = _routeData.days || [];
+  const days  = _extendStartupPools_(_routeData.days || []);
 
   // Normalize today: GAS may return "2026-04-14" (date) or "Monday" (day name)
   let today = _routeData.today || '';
@@ -568,7 +621,7 @@ function renderRoutePage(){
   const tabsEl = document.getElementById('day-tabs');
   tabsEl.innerHTML = days.map(d=>{
     const isToday = d.day === today;
-    const count   = (d.pools || []).length;
+    const count   = (d.pools || []).filter(p => !p._startupDay || p._startupDay === 1).length;
     const locked  = d.locked;
     const _dp  = parseDateStr_(d.date);
     const _dObj = _dp ? new Date(_dp.y, _dp.m-1, _dp.d) : dayDateFromWeekStart_(d.day);
@@ -659,9 +712,10 @@ function renderDayCard(dayData){
   const dayWeather = (cachedWeekW || {})[dayData.day];
   const weatherHtml = dayWeather ? `${dayWeather.icon} ${dayWeather.high}°/${dayWeather.low}°` : '';
 
-  // Pre-compute progress for initial render
-  const totalCount = pools.length;
-  const doneCount  = pools.filter((p,i)=>doneSet.has(p.pool_id||String(i))).length;
+  // Pre-compute progress for initial render (exclude ghost startup day 2/3)
+  const realPools   = pools.filter(p => !p._startupDay || p._startupDay === 1);
+  const totalCount  = realPools.length;
+  const doneCount   = realPools.filter((p,i)=>doneSet.has(p.pool_id||String(i))).length;
   const progressPct = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
   const allDone = totalCount > 0 && doneCount === totalCount;
 
@@ -721,7 +775,41 @@ function renderDayCard(dayData){
     const svcLabel = getSvcLabel_(pool.service);
     const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
     const indivMaps = 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(pool.address+', '+pool.city+', TX');
-    const adminTap = isAdmin() ? ` onclick="openPoolAction('${escHtml(pId)}','${escHtml(dayData.day)}','${escHtml(pool.operator||'')}',${isPinned})"` : '';
+    const isStartupGhost = pool._startupDay > 1;
+    // Admin tap: ghost startups open the action sheet on their origin day
+    const actionDay = isStartupGhost ? pool._startupOriginDay : dayData.day;
+    const adminTap = isAdmin() ? ` onclick="openPoolAction('${escHtml(pId)}','${escHtml(actionDay)}','${escHtml(pool.operator||'')}',${isPinned})"` : '';
+
+    if (isStartupGhost) {
+      // Ghost startup (Day 2 or 3) — show as continuation indicator, no done checkbox
+      html += `
+    <div class="pool-stop startup-ghost" id="stop-${idx}" style="${isAdmin()?'cursor:pointer;opacity:.72':'opacity:.72'}"${adminTap}>
+      <div class="ps-num-col">
+        <div class="ps-num" style="background:rgba(200,168,75,.25);color:#92400e">${idx+1}</div>
+      </div>
+      <div class="ps-main-col">
+        <div class="ps-title">${pool.customer_name||'—'}</div>
+        <div class="ps-meta"><span>📍 ${pool.address}${pool.city?', '+pool.city:''}</span></div>
+        <div class="ps-label-row">
+          <span class="ps-label svc-startup">Startup Day ${pool._startupDay}/3</span>
+          ${pool.operator && isAdmin()?`<span class="ps-label svc-other">${pool.op_name||pool.operator}</span>`:''}
+        </div>
+        <div class="ps-btns" onclick="event.stopPropagation()">
+          <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name||'')}')">
+            📝 Log Service
+          </button>
+          <a class="ps-btn ps-nav" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool"></a>
+        </div>
+      </div>
+      <div class="ps-action-col" style="opacity:.3;pointer-events:none"><div class="ps-check"></div></div>
+    </div>`;
+      return;
+    }
+
+    // Startup Day 1: add "Day 1/3" badge alongside service label
+    const startupDayBadge = pool._startupDay === 1
+      ? `<span class="ps-label svc-startup" style="font-size:.7rem">Day 1/3</span>`
+      : '';
 
     html += `
     <div class="pool-stop${done?' ps-done':''}${pool.priority?' ps-priority':''}" id="stop-${idx}" style="${isAdmin()?'cursor:pointer':''}"${adminTap}>
@@ -736,11 +824,12 @@ function renderDayCard(dayData){
         </div>
         <div class="ps-label-row">
           <span class="ps-label ${svcClass}">${svcLabel}</span>
+          ${startupDayBadge}
           ${pool.operator && isAdmin()?`<span class="ps-label svc-other">${pool.op_name||pool.operator}</span>`:''}
           ${pool.priority?`<span class="ps-label" style="background:#fee2e2;color:#ef4444">High Priority</span>`:''}
         </div>
         ${pool.notes?`<div class="stop-notes" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;font-style:italic">📋 ${pool.notes}</div>`:''}
-        
+
         <div class="ps-btns" onclick="event.stopPropagation()">
           <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name||'')}')">
             📝 Log Service
@@ -1161,8 +1250,8 @@ function toggleDoneInHub(actionCol, idx, poolId, doneKey){
 }
 
 function _updateProgressCounter(){
-  const allStops  = document.querySelectorAll('#route-day-card .pool-stop');
-  const doneStops = document.querySelectorAll('#route-day-card .pool-stop.ps-done');
+  const allStops  = document.querySelectorAll('#route-day-card .pool-stop:not(.startup-ghost)');
+  const doneStops = document.querySelectorAll('#route-day-card .pool-stop.ps-done:not(.startup-ghost)');
   const total = allStops.length;
   const done  = doneStops.length;
   const allDone = total > 0 && done === total;
@@ -1213,9 +1302,10 @@ function getSvcLabel_(svc){
 
 function openPoolAction(poolId, day, operator, pinned) {
   if(!isAdmin()) return;
-  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned };
-  // Fill title
   const pool = findPool_(poolId);
+  const isStartup = !!(pool && (pool.service || '').toLowerCase().includes('startup'));
+  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, scope: 'permanent' };
+  // Fill title
   document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
   document.getElementById('pas-sub').textContent = pool ? `${pool.address}, ${pool.city} · ${pool.service}` : '';
   // Day grid
@@ -1229,6 +1319,13 @@ function openPoolAction(poolId, day, operator, pinned) {
   opSel.innerHTML = ops.map(op => {const un=op.username||op,nm=op.name||op;return`<option value="${un}"${un===operator?' selected':''}>${nm}</option>`;}).join('');
   // Pin toggle
   updatePasPin_(pinned);
+  // Scope toggle: reset to permanent
+  pasSetScope('permanent');
+  // Startup span preview
+  _updateStartupSpanPreview_();
+  // Startup actions section
+  const startupActionsEl = document.getElementById('pas-startup-actions');
+  if(startupActionsEl) startupActionsEl.style.display = isStartup ? 'block' : 'none';
   // Show
   document.getElementById('pas-backdrop').classList.add('open');
   document.getElementById('pas-sheet').classList.add('open');
@@ -1238,12 +1335,21 @@ function closePoolAction() {
   document.getElementById('pas-backdrop').classList.remove('open');
   document.getElementById('pas-sheet').classList.remove('open');
   _pasState = null;
+  _updateStartupSpanPreview_();
+  const startupActionsEl = document.getElementById('pas-startup-actions');
+  if(startupActionsEl) startupActionsEl.style.display = 'none';
+  // Reset convert day picker to initial state
+  const convertBtn = document.getElementById('pas-convert-btn');
+  const picker     = document.getElementById('pas-convert-day-picker');
+  if(convertBtn) convertBtn.style.display = '';
+  if(picker)     picker.style.display = 'none';
+  pasSetScope('permanent'); // reset scope toggle for next open
 }
 
 function pasSelectDay(btn, day) {
   document.querySelectorAll('.pas-day-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  if(_pasState) _pasState.newDay = day;
+  if(_pasState) { _pasState.newDay = day; _updateStartupSpanPreview_(); }
 }
 
 function togglePasPin() {
@@ -1265,27 +1371,46 @@ function applyPoolAction() {
   if(!_pasState) return;
   const btn = document.getElementById('pas-apply-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
-  const newOp = document.getElementById('pas-op-select').value;
-  _pasState.newOp = newOp;
-  api({
-    secret: SEC, action: 'move_pool', token: _s.token,
-    pool_id: _pasState.pool_id,
-    new_day: _pasState.newDay,
-    new_operator: _pasState.newOp,
-    pinned: _pasState.newPinned
-  }).then(res => {
-    btn.disabled = false; btn.textContent = 'Apply Changes';
-    if(res.ok) {
-      closePoolAction();
-      _routeData = null;
-      loadRoutes();
-    } else {
-      alert('Error: ' + (res.error || 'Unknown'));
+  _pasState.newOp = document.getElementById('pas-op-select').value;
+
+  if(_pasState.scope === 'week') {
+    // ── This week only: remap the day in Weekly_Overrides, no permanent change ──
+    api({
+      secret: SEC, action: 'move_pool_week', token: _s.token,
+      pool_id: _pasState.pool_id,
+      new_day: _pasState.newDay,
+      week_start: _routeData && _routeData.week_start
+    }).then(res => {
+      btn.disabled = false; btn.textContent = 'Apply Changes';
+      if(res.ok) { closePoolAction(); _routeData = null; _clearRouteCache(); loadRoutes(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    }).catch(e => {
+      btn.disabled = false; btn.textContent = 'Apply Changes';
+      alert('Network error: ' + e.message);
+    });
+  } else {
+    // ── Permanent: update Routes sheet ──
+    const payload = {
+      secret: SEC, action: 'move_pool', token: _s.token,
+      pool_id: _pasState.pool_id,
+      new_day: _pasState.newDay,
+      new_operator: _pasState.newOp,
+      pinned: _pasState.newPinned
+    };
+    // For startup permanent moves, send the start date so GAS can filter by week
+    if(_pasState.isStartup) {
+      const startupDate = _dateForDay_(_pasState.newDay);
+      if(startupDate) payload.startup_start_date = startupDate;
     }
-  }).catch(e => {
-    btn.disabled = false; btn.textContent = 'Apply Changes';
-    alert('Network error: ' + e.message);
-  });
+    api(payload).then(res => {
+      btn.disabled = false; btn.textContent = 'Apply Changes';
+      if(res.ok) { closePoolAction(); _routeData = null; _clearRouteCache(); loadRoutes(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    }).catch(e => {
+      btn.disabled = false; btn.textContent = 'Apply Changes';
+      alert('Network error: ' + e.message);
+    });
+  }
 }
 
 function pinAllDay(day) {
@@ -1344,5 +1469,144 @@ function findPool_(poolId) {
     if(p) return p;
   }
   return null;
+}
+
+// Compute the calendar date (yyyy-MM-dd) of a given weekday in the currently-viewed week
+function _dateForDay_(dayName) {
+  const ws = _routeData && _routeData.week_start;
+  if(!ws) return null;
+  const p = parseDateStr_(ws);
+  if(!p) return null;
+  const off = {Monday:0,Tuesday:1,Wednesday:2,Thursday:3,Friday:4,Saturday:5};
+  const o = off[dayName];
+  if(o === undefined) return null;
+  const d = new Date(p.y, p.m-1, p.d+o);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+// ── Pool action sheet scope toggle ──────────────────────────────────────────
+function pasSetScope(scope) {
+  if(!_pasState) return;
+  _pasState.scope = scope;
+  const permBtn = document.getElementById('pas-scope-perm');
+  const weekBtn = document.getElementById('pas-scope-week');
+  const opSec   = document.getElementById('pas-op-section');
+  const pinSec  = document.getElementById('pas-pin-section');
+  const teal    = getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() || '#0d4d44';
+
+  if(permBtn) {
+    permBtn.style.background = scope === 'permanent' ? 'var(--teal)' : 'transparent';
+    permBtn.style.color      = scope === 'permanent' ? '#fff' : 'var(--text)';
+    permBtn.style.borderColor = scope === 'permanent' ? 'var(--teal)' : 'var(--border)';
+  }
+  if(weekBtn) {
+    weekBtn.style.background = scope === 'week' ? 'var(--teal)' : 'transparent';
+    weekBtn.style.color      = scope === 'week' ? '#fff' : 'var(--text)';
+    weekBtn.style.borderColor = scope === 'week' ? 'var(--teal)' : 'var(--border)';
+  }
+  // Operator & pin only apply to permanent changes
+  if(opSec)  opSec.style.opacity  = scope === 'week' ? '.4' : '1';
+  if(pinSec) pinSec.style.opacity = scope === 'week' ? '.4' : '1';
+}
+
+// ── Startup: convert to Weekly Full Service — step 1: show day picker ────────
+function convertStartupToWeeklyService(evt) {
+  if(evt) evt.stopPropagation();
+  if(!_pasState) return;
+
+  // Show the day picker, hide the convert button
+  const convertBtn = document.getElementById('pas-convert-btn');
+  const picker     = document.getElementById('pas-convert-day-picker');
+  const grid       = document.getElementById('pas-convert-day-grid');
+  if(!picker || !grid) return;
+
+  // Pre-select the pool's current day if available
+  const currentDay = _pasState.day || null;
+  grid.innerHTML = ALL_DAYS.slice(0, 6).map(d =>
+    `<button onclick="pasSelectConvertDay(this,'${d}')"
+      style="padding:.3rem .55rem;border-radius:5px;border:1.5px solid var(--border);background:${d===currentDay?'var(--teal)':'transparent'};color:${d===currentDay?'#fff':'var(--text)'};font-size:.78rem;font-weight:600;cursor:pointer"
+      data-day="${d}"${d===currentDay?' class="active"':''}>${d.slice(0,3)}</button>`
+  ).join('');
+  _pasState._convertDay = currentDay || null;
+
+  if(convertBtn) convertBtn.style.display = 'none';
+  picker.style.display = 'flex';
+}
+
+// First month toggle inside the convert picker
+function pasToggleFirstMonth() {
+  if(!_pasState) return;
+  _pasState._firstMonth = !_pasState._firstMonth;
+  const track = document.getElementById('pas-fm-toggle');
+  const knob  = document.getElementById('pas-fm-knob');
+  if(track) track.style.background = _pasState._firstMonth ? 'var(--teal)' : '#ccc';
+  if(knob)  knob.style.left = _pasState._firstMonth ? '16px' : '2px';
+}
+
+// Day selection inside the convert picker
+function pasSelectConvertDay(btn, day) {
+  document.querySelectorAll('#pas-convert-day-grid button').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = 'var(--text)';
+  });
+  btn.style.background = 'var(--teal)';
+  btn.style.color = '#fff';
+  if(_pasState) _pasState._convertDay = day;
+}
+
+/// ── Startup: convert — step 2: send confirmed request ────────────────────────
+function confirmConvertToWeekly() {
+  if(!_pasState) return;
+  const newDay = _pasState._convertDay;
+  if(!newDay) { alert('Please select the weekly service day first.'); return; }
+
+  const confirmBtn = document.getElementById('pas-convert-confirm-btn');
+  if(confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Converting…'; }
+
+  api({ secret: SEC, action: 'convert_startup_to_weekly', token: _s.token,
+        pool_id: _pasState.pool_id, new_day: newDay, first_month: !!_pasState._firstMonth })
+    .then(res => {
+      if(confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; }
+      if(res.ok) { closePoolAction(); _routeData = null; loadRoutes(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    })
+    .catch(e => {
+      if(confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; }
+      alert('Network error: ' + e.message);
+    });
+}
+
+/// ── Startup: cancel convert picker ───────────────────────────────────────────
+function cancelConvertToWeekly() {
+  const convertBtn = document.getElementById('pas-convert-btn');
+  const picker     = document.getElementById('pas-convert-day-picker');
+  if(convertBtn) convertBtn.style.display = '';
+  if(picker)     picker.style.display = 'none';
+  if(_pasState)  { _pasState._convertDay = null; _pasState._firstMonth = false; }
+  // Reset toggle visual
+  const track = document.getElementById('pas-fm-toggle');
+  const knob  = document.getElementById('pas-fm-knob');
+  if(track) track.style.background = '#ccc';
+  if(knob)  knob.style.left = '2px';
+}
+
+// ── Startup: mark complete (stop showing in schedule) ───────────────────────
+function markStartupDone(evt) {
+  if(evt) evt.stopPropagation();
+  if(!_pasState) return;
+  if(!confirm('Mark this startup as complete?\n\nThe pool will be removed from the schedule. Use "Convert to Weekly" if they\'re becoming a regular customer.')) return;
+  const btn = evt && evt.target;
+  if(btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  api({ secret: SEC, action: 'mark_startup_complete', token: _s.token, pool_id: _pasState.pool_id })
+    .then(res => {
+      if(btn) { btn.disabled = false; btn.textContent = '✗ Startup complete — remove from schedule'; }
+      if(res.ok) { closePoolAction(); _routeData = null; loadRoutes(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    })
+    .catch(e => {
+      if(btn) { btn.disabled = false; btn.textContent = '✗ Startup complete — remove from schedule'; }
+      alert('Network error: ' + e.message);
+    });
 }
 
