@@ -10,6 +10,17 @@ let _crmFiltered = [];
 let _crmPage = 1;
 const CRM_PAGE_SIZE = 10;
 
+function _applyPendingCrmFilter_() {
+  if (!window._pendingCrmFilter) return;
+  const f = window._pendingCrmFilter;
+  window._pendingCrmFilter = null;
+  const statusEl = document.getElementById('crm-filter-status');
+  const contractEl = document.getElementById('crm-filter-contract');
+  if (statusEl && f.status) statusEl.value = f.status;
+  if (contractEl && f.contractStatus) contractEl.value = f.contractStatus;
+  filterCRM();
+}
+
 async function loadCRM() {
   const loading = document.getElementById('crm-loading');
   const tbody = document.getElementById('crm-tbody');
@@ -27,6 +38,7 @@ async function loadCRM() {
     renderCRM(_crmCache, true);
     renderCRMStats();
     populateYearFilter();
+    _applyPendingCrmFilter_();
     if (window._pendingAlertQuoteId) {
       const pending = window._pendingAlertQuoteId;
       window._pendingAlertQuoteId = null;
@@ -46,6 +58,7 @@ async function loadCRM() {
         renderCRM(_crmCache, true);
         renderCRMStats();
         populateYearFilter();
+        if (!cachedCrm) _applyPendingCrmFilter_();
         if (!cachedCrm && window._pendingAlertQuoteId) {
           const pending = window._pendingAlertQuoteId;
           window._pendingAlertQuoteId = null;
@@ -198,6 +211,8 @@ function filterCRM() {
   const area = areaEl ? areaEl.value : 'all';
   const yearEl = document.getElementById('crm-filter-year');
   const yearMatchVal = yearEl ? yearEl.value.trim() : '';
+  const contractEl = document.getElementById('crm-filter-contract');
+  const contractFilter = contractEl ? contractEl.value : 'all';
 
   const filtered = _crmCache.filter(item => {
     const name = item.client_name || `${item.first_name || ''} ${item.last_name || ''}`;
@@ -205,10 +220,16 @@ function filterCRM() {
     const statusMatch = status === 'all' || (item.status || 'UNSENT').toUpperCase() === status.toUpperCase();
     const areaMatch = area === 'all' || (item.area || '').toUpperCase() === area.toUpperCase();
     const yearMatch = yearMatchVal === 'all' || String(item.year_built || '').trim() === yearMatchVal;
-    return clientMatch && statusMatch && areaMatch && yearMatch;
+    const contractMatch = contractFilter === 'all' || (item.contract_status || '').toUpperCase() === contractFilter.toUpperCase();
+    return clientMatch && statusMatch && areaMatch && yearMatch && contractMatch;
   });
 
   renderCRM(filtered, true);
+}
+
+function _crmFilterActiveClients() {
+  window._pendingCrmFilter = { status: 'ACTIVE_CUSTOMER', contractStatus: 'SIGNED' };
+  navigateTo('crm');
 }
 
 let _activeLeadId = null;
@@ -335,6 +356,13 @@ function buildLeadDrawerHTML(item) {
         <div class="lead-status-row">
           ${STATUSES.map(s => `<button class="lead-status-btn${s === status ? ' active' : ''}" data-status="${s}" onclick="selectLeadStatus('${s}')">${s}</button>`).join('')}
         </div>
+      </div>
+
+      <!-- Service End Date (shown when LOST or already has a value) -->
+      <div class="lead-section" id="lead-svc-end-section" style="display:${status === 'LOST' || item.service_end ? '' : 'none'}">
+        <div class="lead-sec-label">Service End Date</div>
+        <input class="si" type="date" id="lead-service-end" value="${item.service_end ? String(item.service_end).split('T')[0] : (status === 'LOST' ? new Date().toISOString().split('T')[0] : '')}" style="width:100%">
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Auto-filled when marked LOST. Edit to backdate if needed.</div>
       </div>
 
       <!-- Notes -->
@@ -544,6 +572,20 @@ function selectLeadStatus(status) {
   document.querySelectorAll('.lead-status-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.status === status);
   });
+  // Show/hide service_end section and auto-fill today when switching to LOST
+  const svcEndSection = document.getElementById('lead-svc-end-section');
+  const svcEndInput = document.getElementById('lead-service-end');
+  if (svcEndSection && svcEndInput) {
+    if (status === 'LOST') {
+      svcEndSection.style.display = '';
+      if (!svcEndInput.value) {
+        svcEndInput.value = new Date().toISOString().split('T')[0];
+      }
+    } else {
+      svcEndSection.style.display = 'none';
+      svcEndInput.value = ''; // clear so it doesn't accidentally get saved
+    }
+  }
 }
 
 async function saveLeadChanges() {
@@ -560,6 +602,8 @@ async function saveLeadChanges() {
   const logMethod = (document.getElementById('log-method') || {}).value || '';
   const logOutcome = (document.getElementById('log-outcome') || {}).value || '';
 
+  const serviceEnd = (document.getElementById('lead-service-end') || {}).value || null;
+
   const contactEntry = logNotes.trim()
     ? { date: logDate, method: logMethod, outcome: logOutcome, notes: logNotes }
     : null;
@@ -571,6 +615,7 @@ async function saveLeadChanges() {
       quote_id: _activeLeadId,
       status: newStatus,
       notes,
+      service_end: serviceEnd || null,
       contact_entry: contactEntry
     });
 
@@ -579,6 +624,7 @@ async function saveLeadChanges() {
       if (idx > -1) {
         if (newStatus) _crmCache[idx].status = newStatus;
         _crmCache[idx].notes = notes;
+        if (serviceEnd !== null) _crmCache[idx].service_end = serviceEnd;
         if (contactEntry) {
           _crmCache[idx].contact_log = _crmCache[idx].contact_log || [];
           _crmCache[idx].contact_log.push(contactEntry);

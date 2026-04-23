@@ -665,10 +665,94 @@ function showGraduationModal() {
 }
 
 
+// ── Active Clients Helpers ────────────────────────────────────────────────────
+
+function _parseClientDate_(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  if (!s) return null;
+  // Strip time portion to avoid timezone boundary shifts (e.g. Zapier ISO strings)
+  const dateOnly = s.includes('T') ? s.split('T')[0] : s;
+  const d = new Date(dateOnly);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function _computeActiveClients_(data) {
+  if (!data || !data.length) return { count: 0, history: Array(12).fill(0), vsLastWeek: 0 };
+
+  // Current active count: both contract signed AND currently in active service
+  const count = data.filter(item => {
+    const cs = String(item.contract_status || '').toUpperCase();
+    const st = String(item.status || '').toUpperCase();
+    return cs === 'SIGNED' && st === 'ACTIVE_CUSTOMER';
+  }).length;
+
+  // Build 12-week history using ONLY date fields — avoids survivorship bias.
+  // A churned client (status=LOST) still counts in weeks when they were active.
+  const now = new Date();
+  const curWeekStart = new Date(now);
+  curWeekStart.setDate(now.getDate() - now.getDay());
+  curWeekStart.setHours(0, 0, 0, 0);
+
+  const history = [];
+  for (let w = 11; w >= 0; w--) {
+    const weekStart = new Date(curWeekStart);
+    weekStart.setDate(curWeekStart.getDate() - w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weekCount = data.filter(item => {
+      const cs = String(item.contract_status || '').toUpperCase();
+      if (cs !== 'SIGNED') return false;
+      const signedAt = _parseClientDate_(item.signed_at);
+      if (!signedAt || signedAt > weekEnd) return false;
+      const serviceEnd = _parseClientDate_(item.service_end);
+      if (serviceEnd && serviceEnd < weekStart) return false;
+      return true;
+    }).length;
+
+    history.push(weekCount); // index 0 = 11 weeks ago, index 11 = current week
+  }
+
+  const vsLastWeek = history[11] - (history[10] || 0);
+  return { count, history, vsLastWeek };
+}
+
+function _buildSparklineSVG_(data) {
+  if (!data || data.length < 2) return '';
+  const W = 200, H = 40;
+  const n = data.length;
+  const minVal = Math.min(...data);
+  const maxVal = Math.max(...data);
+  const range = maxVal - minVal;
+  // Dynamic padding so narrow ranges (e.g. 150–160) still show visible variation
+  const pad = Math.max(Math.ceil((range || 1) * 0.2), 1);
+  const lo = minVal - pad;
+  const hi = maxVal + pad;
+  const span = hi - lo;
+
+  const pts = data.map((v, i) => ({
+    x: (i / (n - 1)) * W,
+    y: H - ((v - lo) / span) * H
+  }));
+
+  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const dots = pts.map((p, i) => {
+    const isCurrent = i === n - 1;
+    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isCurrent ? 3 : 2}" fill="${isCurrent ? 'var(--teal)' : 'var(--card)'}" stroke="var(--teal)" stroke-width="1.5"/>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">
+    <path d="${path}" fill="none" stroke="var(--teal-mid)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+  </svg>`;
+}
+
 async function loadHomeStats() {
   const container = document.getElementById('home-stats');
   if(!container) return;
-  
+
   if(!isAdmin()) {
     container.style.display = 'none';
     const alertsEl = document.getElementById('home-alerts');
@@ -677,8 +761,8 @@ async function loadHomeStats() {
   }
   container.style.display = 'grid';
 
-  // Show skeletons
-  container.innerHTML = `<div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div>`;
+  // Show skeletons (4 cards)
+  container.innerHTML = `<div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div><div class="hs-card skeleton-block" style="height:100px"></div>`;
 
   try {
     const [crmRes, goalRes, unRes, alertsRes] = await Promise.all([
@@ -689,18 +773,25 @@ async function loadHomeStats() {
     ]);
 
     let signedCount = 0;
+    let activeCount = 0;
+    let weeklyHistory = Array(12).fill(0);
+    let vsLastWeek = 0;
     if(crmRes.ok && crmRes.data){
       signedCount = crmRes.data.filter(i => (i.status||'').toUpperCase() === 'SIGNED').length;
+      const ac = _computeActiveClients_(crmRes.data);
+      activeCount = ac.count;
+      weeklyHistory = ac.history;
+      vsLastWeek = ac.vsLastWeek;
     }
 
     let weeklyGoal = goalRes.ok ? (goalRes.goal || 5) : 5;
     let weeklySigned = goalRes.ok ? (goalRes.signed_this_week || 0) : 0;
-    
+
     let unassignedCount = unRes.ok && unRes.pools
       ? unRes.pools.filter(p => (p.service||'').toLowerCase().includes('weekly full service')).length
       : 0;
 
-    renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount);
+    renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount, activeCount, weeklyHistory, vsLastWeek);
     renderInvoiceAlerts(alertsRes);
   } catch(e) {
     console.error("Home stats error:", e);
@@ -708,13 +799,32 @@ async function loadHomeStats() {
   }
 }
 
-function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned) {
+function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned, activeCount, weeklyHistory, vsLastWeek) {
   const container = document.getElementById('home-stats');
   if(!container) return;
 
+  activeCount = activeCount || 0;
+  weeklyHistory = weeklyHistory || Array(12).fill(0);
+  vsLastWeek = vsLastWeek || 0;
+
   const pct = Math.min(weeklySigned / Math.max(weeklyGoal, 1), 1);
+  const deltaSign = vsLastWeek > 0 ? '+' : '';
+  const deltaClass = vsLastWeek > 0 ? 'pos' : vsLastWeek < 0 ? 'neg' : '';
 
   container.innerHTML = `
+    <div class="hs-card hs-card--clients" onclick="_crmFilterActiveClients()">
+      <div class="hs-card-top">
+        <div>
+          <div class="hs-label">Active Clients</div>
+          <div class="hs-value">${activeCount}</div>
+          ${vsLastWeek !== 0 || weeklyHistory.some(v => v > 0)
+            ? `<div class="hs-sub hs-sub--${deltaClass}">${deltaSign}${vsLastWeek} vs last week</div>`
+            : `<div class="hs-sub">vs last week</div>`}
+        </div>
+        <div class="hs-icon-circle">${SVG_PEOPLE}</div>
+      </div>
+      <div class="hs-sparkline-wrap">${_buildSparklineSVG_(weeklyHistory)}</div>
+    </div>
     <div class="hs-card" onclick="navigateTo('crm')">
       <div class="hs-label">Signed Pools</div>
       <div class="hs-value">${totalSigned}</div>
