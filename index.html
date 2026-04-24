@@ -63,40 +63,81 @@
 
     <!-- Home -->
     <div class="pf active" id="page-home">
-      <div class="home-hi">
-        <h2>Hey, <span id="home-name"></span> 👋</h2>
-        <p>Here's how things are looking today.</p>
+      <div class="dash-header" style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:2rem; padding: 0.5rem 0;">
+        <div class="header-left">
+          <h1 id="greeting-text" style="font-family:'Oswald', sans-serif; font-size:1.8rem; margin:0; color:var(--text);">Good morning, <span id="home-name"></span> 👋</h1>
+          <p style="margin:0.25rem 0 0 0; color:var(--muted); font-size:0.95rem; font-weight:500;">Here's what's happening with MCPS today.</p>
+        </div>
+        
+        <div class="header-right" style="display:flex; align-items:center; gap:0.75rem;">
+          <div id="dash-date-display" style="background:var(--card); border:1px solid var(--border); border-radius:8px; padding:0.5rem 1rem; font-size:0.85rem; font-weight:600; color:var(--text); display:flex; align-items:center; gap:0.5rem; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span id="current-date-text"></span>
+          </div>
+          
+          <div class="quick-action-dropdown" style="position:relative;">
+            <button onclick="toggleQuickActionMenu()" style="background:var(--teal); color:white; border:none; border-radius:8px; padding:0.5rem 1.25rem; font-size:0.85rem; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:0.5rem; box-shadow:0 4px 12px rgba(42,157,143,0.3); transition:all 0.2s;">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="3" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Quick Action
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div id="quick-action-menu" style="display:none; position:absolute; right:0; top:calc(100% + 8px); background:white; border:1px solid var(--border); border-radius:12px; min-width:200px; box-shadow:0 12px 32px rgba(0,0,0,0.1); z-index:100; overflow:hidden;">
+              <div onclick="requestHomeReport('issue')" style="padding:0.75rem 1rem; font-size:0.9rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.75rem; border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background='white'">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--warn)" stroke-width="2" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                Report Issue / Alert
+              </div>
+              <div onclick="requestHomeReport('lead')" style="padding:0.75rem 1rem; font-size:0.9rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.75rem; border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background='white'">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--teal)" stroke-width="2" fill="none"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
+                Add New Lead
+              </div>
+              <div onclick="requestHomeReport('expense')" style="padding:0.75rem 1rem; font-size:0.9rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:0.75rem;" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background='white'">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--text)" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                Log Expense
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <!-- Company Summary Stats -->
-      <div class="home-stats" id="home-stats">
-        <!-- Injected by JS -->
+      <!-- Dashboard Grids (5 Rows) -->
+      <div id="home-dashboard" style="display:none; flex-direction:column; gap:1.5rem; margin-top:1rem;">
+        
+        <!-- Row 1: KPI Cards -->
+        <div class="dash-row-kpi" id="dash-row-kpi" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem;">
+          <!-- 6 KPI widgets injected here -->
+        </div>
+
+        <!-- Row 2: Snapshots -->
+        <div class="dash-row-snapshots" id="dash-row-snapshots" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
+          <!-- Sales, Ops, Finance snapshots injected here -->
+        </div>
+
+        <!-- Row 3: Attention Widget -->
+        <div class="dash-row-attention" id="dash-row-attention">
+          <!-- "Today Needs Attention" list injected here -->
+        </div>
+
+        <!-- Row 4: Charts -->
+        <div class="dash-row-charts" id="dash-row-charts" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:1rem;">
+          <!-- Pipeline Funnel, Revenue Chart, Route Health Donut, Activity Feed -->
+        </div>
+
+        <!-- Row 5: Goals -->
+        <div class="dash-row-goals" id="dash-row-goals">
+          <!-- Goal progress bars and mission block -->
+        </div>
+
       </div>
 
-      <div class="home-quick-actions" style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+      <!-- Quick Actions (Leftover from Issues UI) -->
+      <div class="home-quick-actions" style="margin-top: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap;">
         <button class="hm-btn-primary" onclick="openReportIssueModal()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           Submit Issue / Report
         </button>
       </div>
 
-      <div class="ia-banner open" id="home-issues-banner" style="margin-top: 1.5rem; display:none;">
-        <div class="ia-header" onclick="this.closest('.ia-banner').classList.toggle('open')">
-          <div class="ia-header-text">
-            <div class="ia-label">Issues &amp; Reports</div>
-            <div class="ia-count" id="home-issues-count">0</div>
-            <div class="ia-sub">Active alerts from the team</div>
-          </div>
-          <span class="ia-chevron">▼</span>
-        </div>
-        <div class="ia-body" id="home-issues-body">
-          <!-- Injected by JS -->
-        </div>
-      </div>
-
-      <!-- Invoice Action Alerts — filled by loadHomeStats() for admins -->
-      <div id="home-alerts" style="margin-top: 1.5rem;"></div>
-
+      <!-- Keep home-grid for module navigation links for now, but hidden initially -->
       <div class="home-grid" id="home-grid" style="margin-top: 1.5rem; display:none"></div>
     </div>
 
@@ -1464,6 +1505,7 @@
 <script src="/js/features/quotes.js"></script>
 <script src="/js/features/crm.js"></script>
 <script src="/js/features/training.js"></script>
+<script src="/js/features/home.js"></script>
 <script src="/js/features/onboarding.js"></script>
 <script src="/js/features/financial.js"></script>
 <script src="/js/features/visit-history.js"></script>

@@ -1,0 +1,512 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// HOME DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _activeClientsView = 'signed'; // 'signed' | 'mcp'
+let _crmDataCache = null;
+
+function _parseClientDate_(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  if (!s) return null;
+  const dateOnly = s.includes('T') ? s.split('T')[0] : s;
+  const d = new Date(dateOnly);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function _computeClientsForView_(data, view) {
+  if (!data || !data.length) return { count: 0, history: Array(12).fill(0), vsLastWeek: 0 };
+  const isMcp = view === 'mcp';
+  const count = data.filter(item => {
+    const cs = String(item.contract_status || '').toUpperCase();
+    const st = String(item.status || '').toUpperCase();
+    if (isMcp) return st === 'ACTIVE_CUSTOMER' && item.sponsored_by_mcp === true;
+    return cs === 'SIGNED' && st === 'ACTIVE_CUSTOMER';
+  }).length;
+
+  const now = new Date();
+  const curWeekStart = new Date(now);
+  curWeekStart.setDate(now.getDate() - now.getDay());
+  curWeekStart.setHours(0, 0, 0, 0);
+
+  const history = [];
+  for (let w = 11; w >= 0; w--) {
+    const weekStart = new Date(curWeekStart);
+    weekStart.setDate(curWeekStart.getDate() - w * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const weekCount = data.filter(item => {
+      const cs = String(item.contract_status || '').toUpperCase();
+      if (cs !== 'SIGNED') return false;
+      if (isMcp && item.sponsored_by_mcp !== true) return false;
+      const signedAt = _parseClientDate_(item.signed_at);
+      if (!signedAt || signedAt > weekEnd) return false;
+      const serviceEnd = _parseClientDate_(item.service_end);
+      if (serviceEnd && serviceEnd < weekStart) return false;
+      return true;
+    }).length;
+    history.push(weekCount);
+  }
+  const vsLastWeek = history[11] - (history[10] || 0);
+  return { count, history, vsLastWeek };
+}
+
+function _buildSparklineSVG_(data) {
+  if (!data || data.length < 2) return '';
+  const W = 200, H = 40;
+  const n = data.length;
+  const minVal = Math.min(...data);
+  const maxVal = Math.max(...data);
+  const range = maxVal - minVal;
+  const pad = Math.max(Math.ceil((range || 1) * 0.2), 1);
+  const lo = minVal - pad;
+  const hi = maxVal + pad;
+  const span = hi - lo;
+
+  const pts = data.map((v, i) => ({ x: (i / (n - 1)) * W, y: H - ((v - lo) / span) * H }));
+  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const dots = pts.map((p, i) => {
+    const isCurrent = i === n - 1;
+    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isCurrent ? 3 : 2}" fill="${isCurrent ? 'var(--teal)' : 'var(--card)'}" stroke="var(--teal)" stroke-width="1.5"/>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;display:block;overflow:visible">
+    <path d="${path}" fill="none" stroke="var(--teal-mid)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+  </svg>`;
+}
+
+function _buildClientsViewSelect_(view) {
+  return `<select class="hs-view-select" onclick="event.stopPropagation()" onchange="_onActiveClientsViewChange_(this.value)" style="background:transparent;border:none;font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);outline:none;cursor:pointer;padding:0;appearance:none;-webkit-appearance:none;position:relative;z-index:2;">
+    <option value="signed"${view === 'signed' ? ' selected' : ''}>Active Clients ▼</option>
+    <option value="mcp"${view === 'mcp' ? ' selected' : ''}>Active (MCP) ▼</option>
+  </select>`;
+}
+
+function _onActiveClientsViewChange_(view) {
+  _activeClientsView = view;
+  if (!_crmDataCache) return;
+  const ac = _computeClientsForView_(_crmDataCache, view);
+  
+  const card = document.getElementById('kpi-active-clients');
+  if (!card) return;
+  
+  const deltaSign = ac.vsLastWeek > 0 ? '+' : '';
+  const deltaColor = ac.vsLastWeek > 0 ? 'var(--teal)' : ac.vsLastWeek < 0 ? 'var(--warn)' : 'var(--muted)';
+  
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        ${_buildClientsViewSelect_(view)}
+        <div style="font-family:'Oswald',sans-serif;font-size:1.8rem;font-weight:700;line-height:1;margin-top:0.3rem;">${ac.count}</div>
+        <div style="font-size:0.75rem;color:${deltaColor};margin-top:0.2rem;font-weight:600;">
+          ${ac.vsLastWeek !== 0 || ac.history.some(v => v > 0) ? `${deltaSign}${ac.vsLastWeek} vs last week` : 'vs last week'}
+        </div>
+      </div>
+      <div style="width:20px;height:20px;color:var(--teal)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      </div>
+    </div>
+    <div style="margin-top:auto;padding-top:1rem;">${_buildSparklineSVG_(ac.history)}</div>
+  `;
+}
+
+async function loadHomeStats() {
+  const ds = document.getElementById('home-dashboard');
+  if(!ds) return;
+  if(!isAdmin()) {
+    ds.style.display = 'none';
+    return;
+  }
+  ds.style.display = 'flex';
+
+  try {
+    // Inject advanced CSS styles for the dashboard
+    if (!document.getElementById('mcps-dash-style')) {
+      const style = document.createElement('style');
+      style.id = 'mcps-dash-style';
+      style.innerHTML = `
+        @keyframes dashFadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .dash-card {
+          background: linear-gradient(160deg, var(--card, #ffffff), #fcfdfd);
+          border: 1px solid rgba(42, 157, 143, 0.1);
+          border-radius: 16px;
+          padding: 1.25rem;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.03);
+          transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          display: flex;
+          flex-direction: column;
+          animation: dashFadeUp 0.4s ease-out backwards;
+        }
+        .dash-card:hover {
+          transform: translateY(-4px) scale(1.01);
+          box-shadow: 0 12px 28px rgba(0,0,0,0.06);
+          border-color: rgba(42, 157, 143, 0.3);
+        }
+        .dash-metric-title {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-size: 0.85rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted);
+          margin-bottom: 0.5rem;
+        }
+        .dash-kpi-val {
+          font-family: 'Oswald', sans-serif;
+          font-size: 2.2rem;
+          font-weight: 700;
+          line-height: 1.1;
+          color: var(--text);
+        }
+        .dash-snapshot-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.65rem 0;
+          transition: background 0.2s;
+        }
+        .dash-snapshot-row:hover {
+          background: rgba(42, 157, 143, 0.03);
+          border-radius: 6px;
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+          margin: 0 -0.5rem;
+        }
+        .dash-alert-row {
+          transition: all 0.2s;
+        }
+        .dash-alert-row:hover {
+          background: rgba(220, 38, 38, 0.03) !important;
+        }
+        .dash-card-icon {
+          color: var(--teal);
+          opacity: 0.85;
+          transition: transform 0.3s ease;
+        }
+        .dash-card:hover .dash-card-icon {
+          transform: scale(1.1) rotate(-5deg);
+          opacity: 1;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // Fetch dashboard data
+    const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes] = await Promise.all([
+      apiGet({ action: 'get_crm_data',       token: _s.token }),
+      apiGet({ action: 'get_unassigned',     token: _s.token }),
+      apiGet({ action: 'get_issue_alerts',   token: _s.token }),
+      apiGet({ action: 'scheduled_visits',   token: _s.token }),
+      apiGet({ action: 'get_visit_history',  token: _s.token }),
+      apiGet({ action: 'route_data',         token: _s.token, operator: 'all', week_start: (function(){
+        const d = new Date(); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const mon = new Date(d.getFullYear(), d.getMonth(), diff);
+        return \`\${mon.getFullYear()}-\${String(mon.getMonth()+1).padStart(2,'0')}-\${String(mon.getDate()).padStart(2,'0')}\`;
+      })()})
+    ]);
+
+    let openOpportunities = 0;
+    let ac = { count: 0, history: Array(12).fill(0), vsLastWeek: 0 };
+    
+    if (crmRes.ok && crmRes.data) {
+      _crmDataCache = crmRes.data;
+      ac = _computeClientsForView_(crmRes.data, _activeClientsView);
+      openOpportunities = crmRes.data
+        .filter(i => ['LEAD', 'QUOTED'].includes((i.status||'').toUpperCase()))
+        .reduce((sum, item) => sum + (parseFloat(String(item.price||0).replace(/[^0-9.]/g, '')) || 0), 0);
+    }
+
+    // 1. Calculate pools scheduled today across regular routes and ad-hoc scheduled stops
+    let routeCount = 0;
+    if (routeRes.ok && routeRes.days) {
+      const dObj = new Date();
+      const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dObj.getDay()];
+      const todayRouteDay = routeRes.days.find(d => d.day === dayName || d.day === todayStr);
+      if (todayRouteDay && todayRouteDay.pools) routeCount = todayRouteDay.pools.length;
+    }
+    const schedCount = (visitsRes.ok && visitsRes.visits) 
+      ? visitsRes.visits.filter(v => (v.date||'').startsWith(todayStr)).length 
+      : 0;
+    const todayScheduled = routeCount + schedCount;
+      
+    const unassignedCount = (unRes.ok && unRes.pools)
+      ? unRes.pools.filter(p => (p.service||'').toLowerCase().includes('weekly full service')).length
+      : 0;
+
+    const criticalAlerts = (alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts.length : 0;
+
+    // Phase 1A: Render 6 KPI cards
+    const kpiRow = document.getElementById('dash-row-kpi');
+    if (kpiRow) {
+      const deltaSign = ac.vsLastWeek > 0 ? '+' : '';
+      const deltaColor = ac.vsLastWeek > 0 ? 'var(--teal)' : ac.vsLastWeek < 0 ? 'var(--warn)' : 'var(--muted)';
+      const peopleIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>';
+    
+      kpiRow.innerHTML = `
+        <div id="kpi-active-clients" class="dash-card" style="cursor:pointer;position:relative;animation-delay:0.05s" onclick="_onActiveClientsViewChange_(_activeClientsView === 'signed' ? 'mcp' : 'signed')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              ${_buildClientsViewSelect_(_activeClientsView)}
+              <div class="dash-kpi-val" style="margin-top:0.5rem;">${ac.count}</div>
+              <div style="font-size:0.75rem;color:${deltaColor};margin-top:0.2rem;font-weight:600;">
+                <span style="display:inline-block;padding:0.15rem 0.4rem;background:rgba(42,157,143,0.1);border-radius:4px">${ac.vsLastWeek !== 0 || ac.history.some(v => v > 0) ? `${deltaSign}${ac.vsLastWeek} vs last week` : 'vs last week'}</span>
+              </div>
+            </div>
+            <div class="dash-card-icon" style="width:24px;height:24px;">${peopleIcon}</div>
+          </div>
+          <div style="margin-top:auto;padding-top:1.5rem;margin-bottom:-1rem;margin-left:-0.5rem;margin-right:-0.5rem">${_buildSparklineSVG_(ac.history)}</div>
+        </div>
+
+        ${renderKPICard('Monthly Revenue', '---', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 18V6"></path></svg>', 'var(--teal)', '0.1s')}
+        ${renderKPICard('Open Opportunities', openOpportunities > 0 ? '$' + openOpportunities.toLocaleString() : '0', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>', 'var(--teal)', '0.15s')}
+        ${renderKPICard("Pools Scheduled Today", todayScheduled, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>', 'var(--teal-mid)', '0.2s')}
+        ${renderKPICard('Pools Needing Routing', unassignedCount, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>', unassignedCount > 0 ? '#b45309' : 'var(--teal)', '0.25s')}
+        ${renderKPICard('Critical Alerts', criticalAlerts, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>', criticalAlerts > 0 ? 'var(--warn)' : 'var(--muted)', '0.3s')}
+      `;
+    }
+
+    // Phase 1B: Snapshots
+    let newLeadsThisWeek = 0;
+    let quotesSent = 0;
+    let lastInboundLeadText = '---';
+
+    if (crmRes.ok && crmRes.data) {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      newLeadsThisWeek = crmRes.data.filter(i => {
+        const d = _parseClientDate_(i.timestamp || i.created_at);
+        return d && d >= sevenDaysAgo && (i.status||'').toUpperCase() === 'LEAD';
+      }).length;
+      
+      quotesSent = crmRes.data.filter(i => (i.status||'').toUpperCase() === 'QUOTED').length;
+      
+      const timestamps = crmRes.data
+        .map(i => _parseClientDate_(i.timestamp || i.created_at))
+        .filter(d => d !== null);
+      
+      if (timestamps.length > 0) {
+        const maxTs = new Date(Math.max(...timestamps));
+        const hoursAgo = Math.floor((new Date() - maxTs) / (1000 * 60 * 60));
+        if (hoursAgo < 24) lastInboundLeadText = `${hoursAgo}h ago`;
+        else lastInboundLeadText = `${Math.floor(hoursAgo / 24)}d ago`;
+      }
+    }
+
+    // 2. Fetch completed pools today from the actual finalized service log history
+    let poolsCompletedToday = 0;
+    if (histRes.ok && histRes.rows) {
+      poolsCompletedToday = histRes.rows.filter(r => (r.timestamp||'').startsWith(todayStr)).length;
+    }
+
+    const snapsRow = document.getElementById('dash-row-snapshots');
+    if (snapsRow) {
+      snapsRow.innerHTML = `
+        ${renderSnapshotDOM('Sales & Marketing', [
+          { label: 'New Leads (This Week)', value: newLeadsThisWeek, valColor: 'var(--text)' },
+          { label: 'Quotes Sent', value: quotesSent, valColor: 'var(--text)' },
+          { label: 'Last Inbound Lead', value: lastInboundLeadText, valColor: 'var(--text)' },
+          { label: 'Conversion Rate', value: '---', valColor: 'var(--muted)' },
+          { label: 'Past Clients Re-engaged', value: '---', valColor: 'var(--muted)' },
+          { label: 'Pending Follow-Ups', value: '---', valColor: 'var(--muted)' }
+        ], '0.35s')}
+        ${renderSnapshotDOM('Operations', [
+          { label: 'Pools Scheduled Today', value: todayScheduled, valColor: 'var(--text)' },
+          { label: 'Pools Completed Today', value: poolsCompletedToday, valColor: 'var(--teal)' },
+          { label: 'Missing Service Logs', value: '---', valColor: 'var(--muted)' },
+          { label: 'Technician Issues', value: '---', valColor: 'var(--muted)' },
+          { label: 'Maintenance Alerts', value: '---', valColor: 'var(--muted)' }
+        ], '0.4s')}
+        ${renderSnapshotDOM('Admin & Finance', [
+          { label: 'Invoices Sent', value: '---', valColor: 'var(--muted)' },
+          { label: 'Collected', value: '---', valColor: 'var(--muted)' },
+          { label: 'Overdue', value: '---', valColor: 'var(--muted)' },
+          { label: 'Contracts Pending', value: '---', valColor: 'var(--muted)' },
+          { label: 'Payroll', value: '---', valColor: 'var(--muted)' },
+          { label: 'Expenses', value: '---', valColor: 'var(--muted)' }
+        ], '0.45s')}
+      `;
+    }
+
+    // Phase 1C: Today Needs Attention
+    const attentionRow = document.getElementById('dash-row-attention');
+    if (attentionRow) {
+      const activeAlerts = (alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts : [];
+      attentionRow.innerHTML = renderAttentionWidget(activeAlerts);
+    }
+
+    // Phase 1C: Charts Row (Pipeline Funnel so far, the rest in 1D)
+    let crmLeads = 0, crmQuoted = 0, crmSigned = 0;
+    if (crmRes.ok && crmRes.data) {
+      crmRes.data.forEach(item => {
+        const s = (item.status || '').toUpperCase();
+        if (s === 'LEAD') crmLeads++;
+        else if (s === 'QUOTED') crmQuoted++;
+        else if (s === 'SIGNED') crmSigned++;
+      });
+    }
+
+    const chartsRow = document.getElementById('dash-row-charts');
+    if (chartsRow) {
+      chartsRow.innerHTML = `
+        <div id="chart-pipeline" class="dash-card" style="animation-delay:0.5s">
+          <h3 class="dash-metric-title" style="color:var(--teal);">Pipeline Funnel</h3>
+          ${buildFunnelSVG(crmLeads, crmQuoted, crmSigned)}
+        </div>
+        <div id="chart-revenue" class="dash-card" style="align-items:center; justify-content:center; color:var(--muted); min-height:240px; animation-delay:0.55s; background: repeating-linear-gradient(45deg, rgba(230,230,230,0.4), rgba(230,230,230,0.4) 10px, rgba(245,245,245,0.4) 10px, rgba(245,245,245,0.4) 20px);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="margin-bottom:0.5rem;opacity:0.6;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          <div style="font-family:'Oswald',sans-serif; font-size:1.4rem; font-weight:700; color:var(--text); opacity:0.8; margin-bottom:0.25rem;">Revenue vs Target</div>
+          <div style="font-size:0.85rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">Placeholder / Coming Soon</div>
+        </div>
+        <div id="chart-route-health" class="dash-card" style="align-items:center; justify-content:center; color:var(--muted); min-height:240px; animation-delay:0.6s; background: repeating-linear-gradient(-45deg, rgba(230,230,230,0.4), rgba(230,230,230,0.4) 10px, rgba(245,245,245,0.4) 10px, rgba(245,245,245,0.4) 20px);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="margin-bottom:0.5rem;opacity:0.6;"><circle cx="12" cy="12" r="10"></circle><path d="M16 12a4 4 0 0 0-8 0"></path></svg>
+          <div style="font-family:'Oswald',sans-serif; font-size:1.4rem; font-weight:700; color:var(--text); opacity:0.8; margin-bottom:0.25rem;">Route Health</div>
+          <div style="font-size:0.85rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">Placeholder / Coming Soon</div>
+        </div>
+      `;
+    }
+
+    // Phase 1D: Goals & Activity Row
+    const goalsRow = document.getElementById('dash-row-goals');
+    if (goalsRow) {
+      goalsRow.innerHTML = `
+        <div id="goal-activity" class="dash-card" style="min-height:220px; animation-delay:0.65s">
+          <h3 class="dash-metric-title" style="color:var(--teal)">Recent Activity</h3>
+          <div style="display:flex; flex-direction:column; gap:1.2rem; opacity:0.7;">
+            <div style="display:flex; gap:0.75rem; align-items:flex-start;">
+              <div style="width:10px; height:10px; border-radius:50%; background:var(--muted); margin-top:0.35rem; box-shadow:0 0 0 3px rgba(0,0,0,0.05)"></div>
+              <div>
+                <div style="font-size:0.9rem; font-weight:600; color:var(--text)">System Event Placeholder</div>
+                <div style="font-size:0.75rem; color:var(--muted); font-weight:500;">2 hours ago</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:0.75rem; align-items:flex-start;">
+              <div style="width:10px; height:10px; border-radius:50%; background:var(--muted); margin-top:0.35rem; box-shadow:0 0 0 3px rgba(0,0,0,0.05)"></div>
+              <div>
+                <div style="font-size:0.9rem; font-weight:600; color:var(--text)">System Event Placeholder</div>
+                <div style="font-size:0.75rem; color:var(--muted); font-weight:500;">5 hours ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="goal-company" class="dash-card" style="align-items:center; justify-content:center; color:var(--muted); min-height:220px; animation-delay:0.7s; background: repeating-linear-gradient(45deg, rgba(230,230,230,0.4), rgba(230,230,230,0.4) 10px, rgba(245,245,245,0.4) 10px, rgba(245,245,245,0.4) 20px);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" style="margin-bottom:0.5rem;opacity:0.6;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+          <div style="font-family:'Oswald',sans-serif; font-size:1.4rem; font-weight:700; color:var(--text); opacity:0.8; margin-bottom:0.25rem;">Company Goals</div>
+          <div style="font-size:0.85rem; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">Placeholder / Coming Soon</div>
+        </div>
+      `;
+    }
+
+  } catch(e) {
+    console.error("Dashboard error:", e);
+  }
+}
+
+function buildFunnelSVG(leads, quoted, signed) {
+  const max = Math.max(leads, quoted, signed, 1);
+  const pL = Math.max((leads / max) * 100, 15);
+  const pQ = Math.max((quoted / max) * 100, 10);
+  const pS = Math.max((signed / max) * 100, 5);
+
+  const cx = 50;
+  const x1 = cx - pL/2, x2 = cx + pL/2;
+  const x3 = cx + pQ/2, x4 = cx - pQ/2;
+  const x5 = cx - pQ/2, x6 = cx + pQ/2;
+  const x7 = cx + pS/2, x8 = cx - pS/2;
+  const x9 = cx - pS/2, x10 = cx + pS/2;
+  const x11 = cx - (pS/2)*0.6, x12 = cx + (pS/2)*0.6;
+
+  return `
+    <div style="position:relative; width:100%; height:200px;">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%; height:100%; display:block;">
+        <polygon points="${x1},0 ${x2},0 ${x3},30 ${x4},30" fill="rgba(42, 157, 143, 0.2)" stroke="var(--teal)" stroke-width="1" />
+        <polygon points="${x5},35 ${x6},35 ${x7},65 ${x8},65" fill="rgba(38, 70, 83, 0.2)" stroke="var(--teal-mid)" stroke-width="1" />
+        <polygon points="${x9},70 ${x10},70 ${x12},100 ${x11},100" fill="rgba(8, 114, 21, 0.2)" stroke="var(--green)" stroke-width="1" />
+      </svg>
+      <div style="position:absolute; top:5%; left:0; right:0; text-align:center; pointer-events:none;">
+        <div style="font-weight:700; font-size:1.5rem; color:var(--text); line-height:1;">${leads}</div>
+        <div style="font-size:0.7rem; color:var(--muted); font-weight:600; text-transform:uppercase;">Leads</div>
+      </div>
+      <div style="position:absolute; top:40%; left:0; right:0; text-align:center; pointer-events:none;">
+        <div style="font-weight:700; font-size:1.5rem; color:var(--text); line-height:1;">${quoted}</div>
+        <div style="font-size:0.7rem; color:var(--muted); font-weight:600; text-transform:uppercase;">Quoted</div>
+      </div>
+      <div style="position:absolute; top:75%; left:0; right:0; text-align:center; pointer-events:none;">
+        <div style="font-weight:700; font-size:1.5rem; color:var(--text); line-height:1;">${signed}</div>
+        <div style="font-size:0.7rem; color:var(--muted); font-weight:600; text-transform:uppercase;">Signed</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAttentionWidget(alerts) {
+  if (!alerts || alerts.length === 0) {
+    return `
+      <div id="attention-widget" style="background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.02)">
+        <div style="padding:1.5rem; text-align:center; color:var(--muted); font-size:0.95rem; font-weight:500;">
+          No items need your attention right now. All caught up! ✅
+        </div>
+      </div>
+    `;
+  }
+  
+  const rows = alerts.map((a, idx) => {
+    let tagColor = 'var(--teal)';
+    const t = (a.type||'').toLowerCase();
+    if (t.includes('issue') || t.includes('critical')) tagColor = 'var(--warn)';
+    
+    return `
+      <div class="dash-alert-row" style="display:flex; justify-content:space-between; align-items:center; padding:1.25rem 1.5rem; ${idx !== alerts.length - 1 ? 'border-bottom:1px solid var(--border);' : ''} background:var(--surface);">
+        <div>
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.35rem;">
+            <span style="font-size:0.7rem; font-weight:700; text-transform:uppercase; padding:0.25rem 0.6rem; border-radius:6px; background:${tagColor}; color:#fff; box-shadow:0 2px 4px rgba(0,0,0,0.1)">${a.type || 'Alert'}</span>
+            <span style="font-size:0.8rem; color:var(--muted); font-weight:600;">${new Date(a.timestamp).toLocaleDateString()} by <span style="color:var(--text)">${a.submitter||'System'}</span></span>
+          </div>
+          <div style="font-weight:700; color:var(--text); font-size:1.05rem; letter-spacing:-0.01em;">${a.message}</div>
+          ${a.linked_pool_id ? `<div style="font-size:0.85rem; color:var(--teal-mid); margin-top:0.3rem; font-weight:600; display:flex; align-items:center; gap:0.25rem"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg> Pool: ${a.linked_pool_id}</div>` : ''}
+        </div>
+        <button style="padding:0.5rem 1.25rem; border-radius:8px; background:white; border:1px solid var(--border); color:var(--text); font-size:0.85rem; cursor:pointer; font-weight:700; box-shadow:0 2px 4px rgba(0,0,0,0.02); transition:all 0.15s ease;" onmouseover="this.style.background='var(--bg-subtle)'" onmouseout="this.style.background='white'">Review</button>
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div class="dash-card" style="padding:0; overflow:hidden;">
+      <div style="background:linear-gradient(135deg, var(--warn), #b91c1c); padding:1rem 1.5rem; color:#fff; font-family:'Barlow Condensed',sans-serif; font-size:1.2rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; display:flex; align-items:center; gap:0.6rem;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        Today Needs Attention (${alerts.length})
+      </div>
+      <div style="display:flex; flex-direction:column;">
+        ${rows}
+      </div>
+    </div>
+  `;
+}
+
+function renderSnapshotDOM(title, metrics, animDelay = '0s') {
+  const metricsHTML = metrics.map((m, idx) => `
+    <div class="dash-snapshot-row" style="${idx !== metrics.length - 1 ? 'border-bottom:1px solid rgba(0,0,0,0.04);' : ''}">
+      <span style="font-size:0.85rem; font-weight:600; color:var(--muted);">${m.label}</span>
+      <span style="font-size:1.1rem; font-weight:700; font-family:'Oswald',sans-serif; color:${m.valColor || 'var(--text)'};">${m.value}</span>
+    </div>
+  `).join('');
+  return `
+    <div class="dash-card" style="animation-delay:${animDelay}; min-height:280px">
+      <h3 class="dash-metric-title" style="color:var(--teal)">${title}</h3>
+      <div style="display:flex; flex-direction:column; margin-top:0.5rem; flex:1">
+        ${metricsHTML}
+      </div>
+    </div>
+  `;
+}
+
+  `;
+}
