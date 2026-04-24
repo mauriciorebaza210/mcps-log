@@ -126,7 +126,7 @@ function showApp(startPage) {
   document.getElementById('home-name').textContent=_s.name.split(' ')[0];
   // Refresh pages list in case ROLE_PAGES was updated
   _s.pages = unionPages_(_s.roles);
-  buildNav(); buildHomeCards();
+  buildNav(); buildHomeCards(); loadHomeIssues();
   if((_s.pages||[]).includes('admin')) { loadUsers(); }
 
   // Safely run prefetch when the browser has free time
@@ -293,3 +293,137 @@ function buildHomeCards(){
 // TRAINING MODULE (LMS) — see js/features/training.js
 
 // ONBOARDING + GRADUATION — see js/features/onboarding.js
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HOME: ISSUES AND ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+function openReportIssueModal() {
+  document.getElementById('report-issue-backdrop').style.display = 'flex';
+  document.getElementById('report-issue-type').value = 'issue';
+  document.getElementById('report-issue-message').value = '';
+  document.getElementById('report-issue-visibility').value = 'admin_only';
+  document.getElementById('report-issue-msg').style.display = 'none';
+  
+  const select = document.getElementById('report-issue-pool');
+  select.innerHTML = '<option value="">Loading pools...</option>';
+  apiGet({ action: 'get_pool_list', token: _s.token }).then(res => {
+    if(res.ok && res.pools) {
+      select.innerHTML = '<option value="">-- No specific pool --</option>' + 
+        res.pools.map(p => `<option value="${p}">${p}</option>`).join('');
+    } else {
+      select.innerHTML = '<option value="">Error loading pools</option>';
+    }
+  }).catch(() => {
+    select.innerHTML = '<option value="">Error loading pools</option>';
+  });
+}
+
+function closeReportIssueModal() {
+  document.getElementById('report-issue-backdrop').style.display = 'none';
+}
+
+function submitReportIssue() {
+  const type = document.getElementById('report-issue-type').value;
+  const message = document.getElementById('report-issue-message').value.trim();
+  const linked_pool_id = document.getElementById('report-issue-pool').value;
+  const visibility = document.getElementById('report-issue-visibility').value;
+  const msgEl = document.getElementById('report-issue-msg');
+  const btn = document.getElementById('report-issue-submit-btn');
+
+  if(!message) {
+    showMsg(msgEl, 'Please enter a message.', false);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+
+  api({
+    action: 'submit_issue_alert',
+    token: _s.token,
+    default_secret: true,
+    type, message, linked_pool_id, visibility
+  }).then(res => {
+    if(res.ok) {
+      showMsg(msgEl, 'Submitted successfully!', true);
+      setTimeout(() => {
+        closeReportIssueModal();
+        loadHomeIssues(); // refresh list
+      }, 1000);
+    } else {
+      showMsg(msgEl, res.error || 'Failed to submit', false);
+    }
+  }).catch(e => {
+    showMsg(msgEl, 'Network error', false);
+  }).finally(() => {
+    btn.disabled = false;
+    btn.textContent = 'Submit Report';
+  });
+}
+
+function loadHomeIssues() {
+  const banner = document.getElementById('home-issues-banner');
+  const body = document.getElementById('home-issues-body');
+  const countSpan = document.getElementById('home-issues-count');
+  
+  if(!banner) return;
+  body.innerHTML = '<div style="padding:1rem;color:var(--muted);text-align:center;">Loading...</div>';
+  
+  apiGet({ action: 'get_issue_alerts', token: _s.token }).then(res => {
+    if(res.ok && res.alerts && res.alerts.length > 0) {
+      banner.style.display = 'block';
+      countSpan.textContent = res.alerts.length;
+      body.innerHTML = res.alerts.map(a => {
+        let icon = '📢';
+        if(a.type === 'issue') icon = '⚠️';
+        if(a.type === 'kudos') icon = '🌟';
+        
+        let poolHtml = '';
+        if(a.linked_pool_id) {
+          poolHtml = `<div style="font-size:0.75rem;color:var(--teal);margin-top:0.25rem;">Pool: ${a.linked_pool_id}</div>`;
+        }
+        
+        const canResolve = isAdmin() || a.submitter_username === _s.username;
+        const resolveBtn = canResolve ? `<button onclick="resolveHomeIssue('${a.id}')" style="background:#fee2e2;color:#b91c1c;border:none;padding:0.25rem 0.5rem;border-radius:4px;cursor:pointer;font-size:0.75rem;font-weight:600;">Resolve</button>` : '';
+
+        return `
+          <div class="ia-pool-row" style="align-items:flex-start;">
+            <div style="font-size:1.2rem;margin-right:0.5rem;">${icon}</div>
+            <div style="flex:1;">
+              <div style="font-weight:600;font-size:0.9rem;display:flex;justify-content:space-between;">
+                <span>${a.submitter_name} <span style="color:var(--muted);font-weight:400;font-size:0.75rem;">(${new Date(a.timestamp).toLocaleDateString()})</span></span>
+                ${resolveBtn}
+              </div>
+              <div style="font-size:0.85rem;color:var(--text);margin-top:0.2rem;white-space:pre-wrap;">${a.message}</div>
+              ${poolHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    } else {
+      banner.style.display = 'none';
+      countSpan.textContent = '0';
+      body.innerHTML = '';
+    }
+  }).catch(e => {
+    body.innerHTML = '<div style="padding:1rem;color:var(--warn);text-align:center;">Failed to load alerts.</div>';
+  });
+}
+
+function resolveHomeIssue(id) {
+  if(!confirm("Are you sure you want to resolve this?")) return;
+  
+  api({
+    action: 'resolve_issue_alert',
+    token: _s.token,
+    default_secret: true,
+    alert_id: id
+  }).then(res => {
+    if(res.ok) {
+      loadHomeIssues(); // refresh
+    } else {
+      alert("Failed to resolve: " + res.error);
+    }
+  }).catch(e => alert("Network error"));
+}
