@@ -32,13 +32,24 @@ function loadRoutes(opOverride) {
   const params = {action:'route_data', token:_s.token, operator:op, week_start: _weekStartForOffset_(_weekOffset)};
   if(_weekOffset !== 0) params.week_offset = _weekOffset;
 
-  const fetchPromise = apiGet(params)
-    .then(res=>{
+  const svParams = {action:'scheduled_visits', token:_s.token, operator:op, week_start: _weekStartForOffset_(_weekOffset)};
+
+  const fetchPromise = Promise.all([
+    apiGet(params),
+    apiGet(svParams)
+  ])
+    .then(([res, svRes]) => {
       _routeFetchInFlight = null;
       if(!res.ok){
         document.getElementById('route-content').innerHTML=`<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error}</div></div>`;
         return;
       }
+      
+      // Merge scheduled visits into route data days
+      if (svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
+        _mergeScheduledVisits_(res.days, svRes.visits);
+      }
+
       _routeData = res;
       _setRouteCache(op, _weekOffset, res);
       renderRoutePage();
@@ -50,6 +61,53 @@ function loadRoutes(opOverride) {
     });
 
   _routeFetchInFlight = { key: fetchKey, promise: fetchPromise };
+}
+
+// ── Merge Scheduled Visits Logic ──
+function _mergeScheduledVisits_(days, visits) {
+  if (!days || !visits) return;
+  const dayMap = {};
+  days.forEach(d => {
+    if (d.date) dayMap[d.date] = d;
+  });
+
+  visits.forEach(v => {
+    if (!v.scheduled_date) return;
+    const dayObj = dayMap[v.scheduled_date];
+    if (dayObj) {
+      if (!dayObj.pools) dayObj.pools = [];
+      // Deduplication: Avoid adding if there's already a regular route stop for this pool,
+      // UNLESS we want both to show. For startups, we typically want the scheduled visit to 
+      // replace or augment. For now, we will add it directly but mark it as a scheduled_visit.
+      const existingIdx = dayObj.pools.findIndex(p => p.pool_id === v.pool_id);
+      if (existingIdx !== -1) {
+        // If a recurring route already exists, we can tag it or skip
+        // We'll tag it with the visit info to update the badge later
+        dayObj.pools[existingIdx]._is_scheduled_visit = true;
+        dayObj.pools[existingIdx]._visit_type = v.visit_type;
+        dayObj.pools[existingIdx]._scheduled_visit_id = v.scheduled_visit_id;
+      } else {
+        // Build a pool-like object for the scheduled visit
+        dayObj.pools.push({
+          pool_id: v.pool_id,
+          customer_name: v.customer_name,
+          address: v.address,
+          city: v.city,
+          service: v.service_type || v.visit_type,
+          maps_url: '', // We can lazily recompute maps urls later if needed
+          lat: '',
+          lng: '',
+          operator: v.assigned_technician,
+          pinned: false,
+          
+          // Flags for renderer
+          _is_scheduled_visit: true,
+          _visit_type: v.visit_type,
+          _scheduled_visit_id: v.scheduled_visit_id
+        });
+      }
+    }
+  });
 }
 
 // ── Map Calendar Logic ──
@@ -78,11 +136,12 @@ function _weekStartForOffset_(offset) {
   return `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`;
 }
 
-// Duplicate startup pools onto the following 2 days so they appear as a 3-day block
 function _extendStartupPools_(origDays) {
   const days = origDays.map(d => ({ ...d, pools: (d.pools || []).map(p => ({ ...p })) }));
   days.forEach((d, dIdx) => {
     d.pools.forEach(pool => {
+      // Do not duplicate explicitly scheduled visits
+      if (pool._is_scheduled_visit) return;
       if (pool._startupDay) return; // already a ghost
       if (!(pool.service || '').toLowerCase().includes('startup')) return;
       pool._startupDay = 1;
@@ -505,7 +564,10 @@ function recalculateRoutes() {
 function loadUnassigned() {
   apiGet({action:'get_unassigned', token:_s.token}).then(res=>{
     if(res.ok && res.pools && res.pools.length){
-      _unassignedPools = res.pools.filter(p => (p.service||'').toLowerCase().includes('weekly full service'));
+      _unassignedPools = res.pools.filter(p => {
+        const s = (p.service||'').toLowerCase();
+        return s.includes('weekly full service') || s.includes('startup');
+      });
       renderNewPoolsBanner();
     } else {
       _unassignedPools = [];
@@ -795,15 +857,22 @@ function renderDayCard(dayData){
           ${pool.operator && isAdmin()?`<span class="ps-label svc-other">${pool.op_name||pool.operator}</span>`:''}
         </div>
         <div class="ps-btns" onclick="event.stopPropagation()">
-          <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name||'')}')">
-            📝 Log Service
-          </button>
-          <a class="ps-btn ps-nav" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool"></a>
+          <a href="${indivMaps}" target="_blank" rel="noopener" class="ps-btn map-mini-btn" title="Open Map">🗺️</a>
         </div>
       </div>
-      <div class="ps-action-col" style="opacity:.3;pointer-events:none"><div class="ps-check"></div></div>
     </div>`;
       return;
+    }
+
+    // Formatted visit type label for scheduled visits
+    let scheduledBadgeHtml = '';
+    if (pool._is_scheduled_visit) {
+       let badgeText = 'Scheduled Visit';
+       if (pool._visit_type) {
+         badgeText = pool._visit_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+       }
+       // Different styling to distinguish from standard recurring routes
+       scheduledBadgeHtml = `<span class="ps-label svc-startup" style="background:rgba(147, 51, 234, 0.15);color:#7e22ce">${badgeText}</span>`;
     }
 
     // Startup Day 1: add "Day 1/3" badge alongside service label
@@ -823,8 +892,7 @@ function renderDayCard(dayData){
           <span>📍 ${pool.address}${pool.city?', '+pool.city:''}</span>
         </div>
         <div class="ps-label-row">
-          <span class="ps-label ${svcClass}">${svcLabel}</span>
-          ${startupDayBadge}
+          ${scheduledBadgeHtml ? scheduledBadgeHtml : `<span class="ps-label ${svcClass}">${svcLabel}</span>` + startupDayBadge}
           ${pool.operator && isAdmin()?`<span class="ps-label svc-other">${pool.op_name||pool.operator}</span>`:''}
           ${pool.priority?`<span class="ps-label" style="background:#fee2e2;color:#ef4444">High Priority</span>`:''}
         </div>
@@ -1399,7 +1467,7 @@ function applyPoolAction() {
     };
     // For startup permanent moves, send the start date so GAS can filter by week
     if(_pasState.isStartup) {
-      const startupDate = _dateForDay_(_pasState.newDay);
+      const startupDate = _pasState.startup_start_date || _dateForDay_(_pasState.newDay);
       if(startupDate) payload.startup_start_date = startupDate;
     }
     api(payload).then(res => {
@@ -1447,7 +1515,8 @@ function autoPlaceAll() {
 function openPlacePool(poolId) {
   // Open pool action sheet in "place" mode for an unassigned pool
   const pool = _unassignedPools ? _unassignedPools.find(p => p.pool_id === poolId) : null;
-  _pasState = { pool_id: poolId, day: 'Monday', operator: '', pinned: true, newDay: 'Monday', newOp: '', newPinned: true };
+  const isStartup = !!(pool && (pool.service || '').toLowerCase().includes('startup'));
+  _pasState = { pool_id: poolId, day: 'Monday', operator: '', pinned: true, newDay: 'Monday', newOp: '', newPinned: true, isStartup, startup_start_date: pool ? pool.startup_start_date : null, isUnassigned: true };
   document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
   document.getElementById('pas-sub').textContent = pool ? `${pool.address||''}, ${pool.city||''} · ${pool.service||''}` : 'New pool — choose a day and operator';
   const dayGrid = document.getElementById('pas-day-grid');
@@ -1458,6 +1527,10 @@ function openPlacePool(poolId) {
   const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
   opSel.innerHTML = ops.map((op,i) => {const un=op.username||op,nm=op.name||op;return`<option value="${un}"${i===0?' selected':''}>${nm}</option>`;}).join('');
   updatePasPin_(true);
+  pasSetScope('permanent');
+  _updateStartupSpanPreview_();
+  const startupActionsEl = document.getElementById('pas-startup-actions');
+  if(startupActionsEl) startupActionsEl.style.display = 'none'; // Unassigned startups shouldn't show actions
   document.getElementById('pas-backdrop').classList.add('open');
   document.getElementById('pas-sheet').classList.add('open');
 }

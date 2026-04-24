@@ -636,7 +636,7 @@
         <div class="q-sec-lbl">Startup Services</div>
         <div class="q-checks" style="margin-bottom:.75rem">
           <div class="q-chk active" id="qchk-chem" onclick="qChk('chem')">Chemical Work <span style="font-size:.7rem;opacity:.7">$287.86</span></div>
-          <div class="q-chk active" id="qchk-prog" onclick="qChk('prog')">Programming <span style="font-size:.7rem;opacity:.7">$125</span></div>
+          <div class="q-chk active" id="qchk-prog" onclick="qChk('prog')">Programming <span style="font-size:.7rem;opacity:.7">$62.50</span></div>
           <div class="q-chk" id="qchk-school" onclick="qChk('school')">Pool School <span style="font-size:.7rem;opacity:.7">$62.50</span></div>
         </div>
         <div class="q-1col">
@@ -644,10 +644,9 @@
           <input class="q-inp" id="q-startup-co" type="text" placeholder="e.g. XYZ Plaster" oninput="qField('startup_company',this.value)">
         </div>
         <div class="q-checks" style="margin-bottom:.5rem">
-          <div class="q-chk" id="qchk-mcp" onclick="qChk('mcp')">MCP Paid First Month <span style="font-size:.7rem;opacity:.7">creates 2 CRM entries</span></div>
-          <div class="q-chk" id="qchk-override" onclick="qChk('override')">Override status to SIGNED</div>
+          <div class="q-chk" id="qchk-mcp" onclick="qChk('mcp')">MCP Paid First Month <span style="font-size:.7rem;opacity:.7">sets status to Active Customer</span></div>
         </div>
-        <div id="q-startup-date-row" style="display:none">
+        <div id="q-startup-date-row">
           <div class="q-1col">
             <label class="q-flabel">Startup Start Date</label>
             <input class="q-inp" id="q-startup-date" type="date" onchange="qField('startup_start_date',this.value)">
@@ -1003,6 +1002,19 @@
             <tbody id="chem-tbody"></tbody>
           </table>
         </div>
+      </div>
+
+      <!-- Tab: Visit History -->
+      <div id="fin-view-visits" style="display:none">
+        <div id="vh-filters" style="padding:0 1rem 0.5rem"></div>
+        <div id="vh-stats" style="padding:0 1rem 0.5rem"></div>
+        <div id="vh-table-wrap" style="overflow-x:auto;padding:0 1rem 1rem">
+          <table class="adm-table" style="width:100%">
+            <thead id="vh-thead"></thead>
+            <tbody id="vh-tbody"></tbody>
+          </table>
+        </div>
+        <div id="vh-pagination" style="padding:0 1rem 1rem"></div>
       </div>
 
     </div><!-- /page-financial_hub -->
@@ -1390,6 +1402,7 @@
 <script src="/js/features/training.js"></script>
 <script src="/js/features/onboarding.js"></script>
 <script src="/js/features/financial.js"></script>
+<script src="/js/features/visit-history.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

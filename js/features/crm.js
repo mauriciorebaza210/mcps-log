@@ -19,6 +19,10 @@ function _applyPendingCrmFilter_() {
   if (statusEl && f.status) statusEl.value = f.status;
   if (contractEl && f.contractStatus) contractEl.value = f.contractStatus;
   filterCRM();
+  if (f.sponsoredByMcp) {
+    _crmFiltered = _crmFiltered.filter(item => item.sponsored_by_mcp === true);
+    renderCRM(_crmFiltered, true);
+  }
 }
 
 async function loadCRM() {
@@ -227,8 +231,10 @@ function filterCRM() {
   renderCRM(filtered, true);
 }
 
-function _crmFilterActiveClients() {
-  window._pendingCrmFilter = { status: 'ACTIVE_CUSTOMER', contractStatus: 'SIGNED' };
+function _crmFilterActiveClients_(view) {
+  const filter = { status: 'ACTIVE_CUSTOMER', contractStatus: 'SIGNED' };
+  if (view === 'mcp') filter.sponsoredByMcp = true;
+  window._pendingCrmFilter = filter;
   navigateTo('crm');
 }
 
@@ -339,7 +345,23 @@ function buildLeadDrawerHTML(item) {
       <div class="lead-section">
         <div class="lead-sec-label">Active Customer</div>
         <div class="lead-info-grid">
-          ${item.pool_id ? `<div><b>Pool ID</b><code style="font-size:.82rem">${item.pool_id}</code></div>` : '<div style="color:var(--muted);font-size:.82rem;grid-column:1/-1">No pool ID assigned yet. Update status to reassign.</div>'}
+          ${item.pool_id
+            ? `<div><b>Pool ID</b><code style="font-size:.82rem">${item.pool_id}</code></div>`
+            : `<div style="grid-column:1/-1">
+                <div style="font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:.35rem">Assign Pool ID</div>
+                <div style="display:flex;gap:.4rem;align-items:center">
+                  <input id="assign-pool-id-input" class="im-input" type="text"
+                    value="${_nextMcpsPoolId_()}"
+                    style="flex:1;font-family:monospace;font-size:.85rem;padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--text)"
+                    placeholder="MCPS-0001">
+                  <button onclick="assignPoolId('${item.quote_id}')"
+                    style="padding:.35rem .75rem;border-radius:6px;border:none;background:var(--teal);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">
+                    Assign →
+                  </button>
+                </div>
+                <div id="assign-pool-id-msg" style="display:none;font-size:.78rem;margin-top:.3rem;padding:.25rem .5rem;border-radius:5px"></div>
+              </div>`
+          }
           <div><b>Origin</b>${item.sponsored_by_mcp ? '<span style="color:#7c3aed;font-weight:600">Startup Transfer</span>' : 'Standard Contract'}</div>
         </div>
       </div>
@@ -348,6 +370,44 @@ function buildLeadDrawerHTML(item) {
       <div class="lead-section">
         <div class="lead-sec-label">Billing</div>
         <div id="billing-section-body">${_buildBillingSectionHTML_(item)}</div>
+      </div>` : ''}
+
+      ${status === 'ACTIVE_CUSTOMER' && (item.service || '').toLowerCase().includes('startup') ? `
+      <!-- Startup Actions -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Startup Actions</div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:.85rem;display:flex;flex-direction:column;gap:.6rem" id="drawer-startup-actions">
+          <div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">When the startup is finished, convert them to a regular weekly schedule or remove them.</div>
+          <button onclick="crmConvertStartupShow('${item.quote_id}')" id="drawer-convert-btn" style="padding:.6rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:.85rem;font-weight:600;cursor:pointer">
+            ✅ Convert to Weekly Full Service
+          </button>
+          
+          <div id="drawer-convert-picker" style="display:none;flex-direction:column;gap:.5rem;margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border)">
+            <div style="font-size:.8rem;font-weight:600;color:var(--muted)">Select Weekly Service Day</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem" id="drawer-convert-day-grid">
+              ${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d => `<button data-day="${d}" onclick="crmSelectConvertDay(this,'${d}')" style="padding:.4rem 0;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.78rem;font-weight:600;cursor:pointer">${d.slice(0,3)}</button>`).join('')}
+            </div>
+            
+            <div style="margin-top:.5rem;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:.8rem;font-weight:600">First month service (4 visits)</div>
+                <div style="font-size:.75rem;color:var(--muted)">Included with MCP sponsorship</div>
+              </div>
+              <div id="drawer-fm-toggle" onclick="crmToggleFirstMonth()" style="width:36px;height:20px;background:#ccc;border-radius:20px;position:relative;cursor:pointer;transition:background .2s">
+                <div id="drawer-fm-knob" style="width:16px;height:16px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:left .2s"></div>
+              </div>
+            </div>
+            
+              <div style="display:flex;gap:.5rem;margin-top:.5rem">
+                <button onclick="crmConfirmConvertToWeekly('${item.quote_id}','${item.pool_id || ''}')" id="drawer-convert-confirm-btn" style="flex:1;padding:.6rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:.85rem">Confirm</button>
+                <button onclick="crmCancelConvertToWeekly()" style="padding:.6rem 1rem;background:transparent;border:1px solid var(--border);border-radius:8px;font-weight:600;cursor:pointer;font-size:.85rem">Cancel</button>
+              </div>
+          </div>
+          
+          <button onclick="crmMarkStartupDone('${item.quote_id}','${item.pool_id || ''}')" id="drawer-mark-done-btn" style="padding:.6rem 1rem;background:transparent;color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:Oswald;font-size:.85rem;font-weight:600;cursor:pointer;margin-top:.3rem">
+            ✗ Startup complete — remove from schedule
+          </button>
+        </div>
       </div>` : ''}
 
       <!-- Status -->
@@ -740,6 +800,166 @@ async function confirmActivateCustomer(quoteId) {
   } catch (e) {
     msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Confirm Activation';
+  }
+}
+
+async function assignPoolId(quoteId) {
+  const input = document.getElementById('assign-pool-id-input');
+  const msg   = document.getElementById('assign-pool-id-msg');
+  const poolId = (input ? input.value : '').trim();
+  if (!poolId) {
+    msg.className = 'im err'; msg.textContent = 'Pool ID is required.'; msg.style.display = 'block';
+    return;
+  }
+  const btn = input.nextElementSibling;
+  btn.disabled = true; btn.textContent = 'Assigning…';
+
+  try {
+    const item = _crmCache.find(i => i.quote_id === quoteId) || {};
+    const res = await api({
+      action: 'update_lead', token: _s.token, quote_id: quoteId,
+      status: item.status || 'ACTIVE_CUSTOMER',
+      pool_id: poolId,
+      sponsored_by_mcp: item.sponsored_by_mcp,
+      notes: item.notes || ''
+    });
+    if (res.ok) {
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) _crmCache[idx].pool_id = poolId;
+      const updated = _crmCache.find(i => i.quote_id === quoteId);
+      if (updated) document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+    } else {
+      msg.className = 'im err'; msg.textContent = res.error || 'Failed to assign.'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Assign →';
+    }
+  } catch (e) {
+    msg.className = 'im err'; msg.textContent = 'Network error.'; msg.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Assign →';
+  }
+}
+
+let _drawerConvertDay = null;
+let _drawerFirstMonth = false;
+
+function crmConvertStartupShow(quoteId) {
+  document.getElementById('drawer-convert-btn').style.display = 'none';
+  document.getElementById('drawer-convert-picker').style.display = 'flex';
+  const grid = document.getElementById('drawer-convert-day-grid');
+  // Reset selection
+  if (grid) {
+    grid.querySelectorAll('button').forEach(b => {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--text)';
+    });
+  }
+  _drawerConvertDay = null;
+  _drawerFirstMonth = false;
+  // Reset toggle
+  const track = document.getElementById('drawer-fm-toggle');
+  const knob = document.getElementById('drawer-fm-knob');
+  if (track) track.style.background = '#ccc';
+  if (knob) knob.style.left = '2px';
+}
+
+function crmSelectConvertDay(btn, day) {
+  const grid = document.getElementById('drawer-convert-day-grid');
+  if (grid) {
+    grid.querySelectorAll('button').forEach(b => {
+      b.style.background = 'transparent';
+      b.style.color = 'var(--text)';
+    });
+  }
+  btn.style.background = 'var(--teal)';
+  btn.style.color = '#fff';
+  _drawerConvertDay = day;
+}
+
+function crmToggleFirstMonth() {
+  _drawerFirstMonth = !_drawerFirstMonth;
+  const track = document.getElementById('drawer-fm-toggle');
+  const knob = document.getElementById('drawer-fm-knob');
+  if (track) track.style.background = _drawerFirstMonth ? 'var(--teal)' : '#ccc';
+  if (knob) knob.style.left = _drawerFirstMonth ? '16px' : '2px';
+}
+
+function crmCancelConvertToWeekly() {
+  document.getElementById('drawer-convert-btn').style.display = '';
+  document.getElementById('drawer-convert-picker').style.display = 'none';
+}
+
+async function crmConfirmConvertToWeekly(quoteId, poolId) {
+  if (!poolId || poolId === 'undefined') {
+    alert("Please assign a Pool ID first before converting.");
+    return;
+  }
+  if (!_drawerConvertDay) {
+    alert("Please select the weekly service day first.");
+    return;
+  }
+  
+  const btn = document.getElementById('drawer-convert-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Converting...';
+  
+  try {
+    const res = await api({
+      secret: SEC, 
+      action: 'convert_startup_to_weekly', 
+      token: _s.token,
+      pool_id: poolId, 
+      new_day: _drawerConvertDay, 
+      first_month: !!_drawerFirstMonth
+    });
+    
+    if (res.ok) {
+      alert("Successfully converted to weekly service.");
+      // Update cache
+      const item = _crmCache.find(i => i.quote_id === quoteId);
+      if (item) item.service = 'Weekly Full Service';
+      viewCRMDetail(quoteId); // Reload drawer
+    } else {
+      alert("Error: " + (res.error || "Unknown"));
+    }
+  } catch (e) {
+    alert("Network error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirm';
+  }
+}
+
+async function crmMarkStartupDone(quoteId, poolId) {
+  if (!poolId || poolId === 'undefined') {
+    alert("Please assign a Pool ID first.");
+    return;
+  }
+  if (!confirm(`Mark this startup as complete?\n\nThe pool will be removed from the schedule. Use "Convert to Weekly" if they're becoming a regular customer.`)) return;
+  
+  const btn = document.getElementById('drawer-mark-done-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  
+  try {
+    const res = await api({ 
+      secret: SEC, 
+      action: 'mark_startup_complete', 
+      token: _s.token, 
+      pool_id: poolId 
+    });
+    
+    if (res.ok) {
+      alert("Startup marked as complete.");
+      const item = _crmCache.find(i => i.quote_id === quoteId);
+      if (item) item.service = 'Weekly Full Service';
+      viewCRMDetail(quoteId);
+    } else {
+      alert("Error: " + (res.error || "Unknown"));
+    }
+  } catch (e) {
+    alert("Network error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✗ Startup complete — remove from schedule';
   }
 }
 

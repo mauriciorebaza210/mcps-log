@@ -667,6 +667,9 @@ function showGraduationModal() {
 
 // ── Active Clients Helpers ────────────────────────────────────────────────────
 
+let _activeClientsView = 'signed'; // 'signed' | 'mcp'
+let _crmDataCache = null;          // last get_crm_data payload — lets view switches re-render without re-fetching
+
 function _parseClientDate_(str) {
   if (!str) return null;
   const s = String(str).trim();
@@ -677,18 +680,25 @@ function _parseClientDate_(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function _computeActiveClients_(data) {
+function _computeClientsForView_(data, view) {
   if (!data || !data.length) return { count: 0, history: Array(12).fill(0), vsLastWeek: 0 };
 
-  // Current active count: both contract signed AND currently in active service
+  const isMcp = view === 'mcp';
+
+  // Current active count
   const count = data.filter(item => {
     const cs = String(item.contract_status || '').toUpperCase();
     const st = String(item.status || '').toUpperCase();
+    if (isMcp) {
+      return st === 'ACTIVE_CUSTOMER' && item.sponsored_by_mcp === true;
+    }
     return cs === 'SIGNED' && st === 'ACTIVE_CUSTOMER';
   }).length;
 
   // Build 12-week history using ONLY date fields — avoids survivorship bias.
   // A churned client (status=LOST) still counts in weeks when they were active.
+  // sponsored_by_mcp is immutable (set at quote creation), so MCP status is
+  // stable across time — no need to track when it was set.
   const now = new Date();
   const curWeekStart = new Date(now);
   curWeekStart.setDate(now.getDate() - now.getDay());
@@ -705,6 +715,7 @@ function _computeActiveClients_(data) {
     const weekCount = data.filter(item => {
       const cs = String(item.contract_status || '').toUpperCase();
       if (cs !== 'SIGNED') return false;
+      if (isMcp && item.sponsored_by_mcp !== true) return false;
       const signedAt = _parseClientDate_(item.signed_at);
       if (!signedAt || signedAt > weekEnd) return false;
       const serviceEnd = _parseClientDate_(item.service_end);
@@ -777,8 +788,10 @@ async function loadHomeStats() {
     let weeklyHistory = Array(12).fill(0);
     let vsLastWeek = 0;
     if(crmRes.ok && crmRes.data){
+      _crmDataCache = crmRes.data;
+      _appCacheSet('crm_data', _crmDataCache); // share with CRM page 15-min cache
       signedCount = crmRes.data.filter(i => (i.status||'').toUpperCase() === 'SIGNED').length;
-      const ac = _computeActiveClients_(crmRes.data);
+      const ac = _computeClientsForView_(crmRes.data, _activeClientsView);
       activeCount = ac.count;
       weeklyHistory = ac.history;
       vsLastWeek = ac.vsLastWeek;
@@ -791,7 +804,7 @@ async function loadHomeStats() {
       ? unRes.pools.filter(p => (p.service||'').toLowerCase().includes('weekly full service')).length
       : 0;
 
-    renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount, activeCount, weeklyHistory, vsLastWeek);
+    renderHomeStats(signedCount, weeklySigned, weeklyGoal, unassignedCount, activeCount, weeklyHistory, vsLastWeek, _activeClientsView);
     renderInvoiceAlerts(alertsRes);
   } catch(e) {
     console.error("Home stats error:", e);
@@ -799,10 +812,11 @@ async function loadHomeStats() {
   }
 }
 
-function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned, activeCount, weeklyHistory, vsLastWeek) {
+function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned, activeCount, weeklyHistory, vsLastWeek, view) {
   const container = document.getElementById('home-stats');
   if(!container) return;
 
+  view = view || 'signed';
   activeCount = activeCount || 0;
   weeklyHistory = weeklyHistory || Array(12).fill(0);
   vsLastWeek = vsLastWeek || 0;
@@ -812,10 +826,12 @@ function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned, acti
   const deltaClass = vsLastWeek > 0 ? 'pos' : vsLastWeek < 0 ? 'neg' : '';
 
   container.innerHTML = `
-    <div class="hs-card hs-card--clients" onclick="_crmFilterActiveClients()">
+    <div class="hs-card hs-card--clients" onclick="_crmFilterActiveClients_(_activeClientsView)">
       <div class="hs-card-top">
         <div>
-          <div class="hs-label">Active Clients</div>
+          <div class="hs-label-row">
+            ${_buildClientsViewSelect_(view)}
+          </div>
           <div class="hs-value">${activeCount}</div>
           ${vsLastWeek !== 0 || weeklyHistory.some(v => v > 0)
             ? `<div class="hs-sub hs-sub--${deltaClass}">${deltaSign}${vsLastWeek} vs last week</div>`
@@ -843,6 +859,44 @@ function renderHomeStats(totalSigned, weeklySigned, weeklyGoal, unassigned, acti
       <div class="hs-value" style="color: ${unassigned > 0 ? 'var(--warn)' : 'var(--teal)'}">${unassigned}</div>
       <div class="hs-sub">Pools without a schedule</div>
     </div>
+  `;
+}
+
+function _buildClientsViewSelect_(view) {
+  return `<select class="hs-view-select" onclick="event.stopPropagation()" onchange="_onActiveClientsViewChange_(this.value)">
+    <option value="signed"${view === 'signed' ? ' selected' : ''}>Signed Customers</option>
+    <option value="mcp"${view === 'mcp' ? ' selected' : ''}>Signed + MCP</option>
+  </select>`;
+}
+
+function _onActiveClientsViewChange_(view) {
+  _activeClientsView = view;
+  if (!_crmDataCache) return;
+  const ac = _computeClientsForView_(_crmDataCache, view);
+  _refreshClientsCard_(ac, view);
+}
+
+function _refreshClientsCard_(ac, view) {
+  const card = document.querySelector('.hs-card--clients');
+  if (!card) return;
+
+  const deltaSign = ac.vsLastWeek > 0 ? '+' : '';
+  const deltaClass = ac.vsLastWeek > 0 ? 'pos' : ac.vsLastWeek < 0 ? 'neg' : '';
+
+  card.innerHTML = `
+    <div class="hs-card-top">
+      <div>
+        <div class="hs-label-row">
+          ${_buildClientsViewSelect_(view)}
+        </div>
+        <div class="hs-value">${ac.count}</div>
+        ${ac.vsLastWeek !== 0 || ac.history.some(v => v > 0)
+          ? `<div class="hs-sub hs-sub--${deltaClass}">${deltaSign}${ac.vsLastWeek} vs last week</div>`
+          : `<div class="hs-sub">vs last week</div>`}
+      </div>
+      <div class="hs-icon-circle">${SVG_PEOPLE}</div>
+    </div>
+    <div class="hs-sparkline-wrap">${_buildSparklineSVG_(ac.history)}</div>
   `;
 }
 

@@ -31,6 +31,11 @@ const SVG_LOCK     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const SVG_STAR     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
 const SVG_PEOPLE   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 
+// ── Shared utilities ─────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Sidebar accordion group definitions ──────────────────────────────────────
 const SIDEBAR_GROUPS = [
   {
@@ -58,7 +63,8 @@ const SIDEBAR_GROUPS = [
     children: [
       { page:'financial_hub', label:'Payouts',             icon:SVG_CHART, hubTab:'payouts',   id:'ni-financial_hub-payouts' },
       { page:'financial_hub', label:'Profitability',       icon:SVG_CHART, hubTab:'profit',    id:'ni-financial_hub-profit' },
-      { page:'financial_hub', label:'Chemical Analysis',  icon:SVG_CLIP,  hubTab:'chemicals', id:'ni-financial_hub-chemicals' }
+      { page:'financial_hub', label:'Chemical Analysis',  icon:SVG_CLIP,  hubTab:'chemicals', id:'ni-financial_hub-chemicals' },
+      { page:'financial_hub', label:'Visit History',       icon:SVG_CLIP,  hubTab:'visits',    id:'ni-financial_hub-visits' }
     ]
   }
 ];

@@ -12,7 +12,7 @@ const _qDef = () => ({
   spa:false, finish:'light', debris:'light', has_robot:false,
   high_sun_exposure:false, has_pets:false,
   startup_chemical:true, startup_programming:true, startup_pool_school:false,
-  startup_company:'', sponsored_by_mcp:false, startup_start_date:'', override_signed:false,
+  startup_company:'', sponsored_by_mcp:false, startup_start_date:'',
   repair_type:'repair_replacement', repair_company:'', repair_address:'',
   repair_desc:'', repair_amount:0, repair_sku:'',
   discount_type:'none', discount_value:0, custom_price:0,
@@ -32,6 +32,17 @@ function qSetService(svc) {
   document.getElementById('q-pool-sec').style.display    = (!isRepair && !isStartup) ? '' : 'none';
   document.getElementById('q-startup-sec').style.display = isStartup ? '' : 'none';
   document.getElementById('q-repair-sec').style.display  = isRepair  ? '' : 'none';
+
+  if (isStartup && !_qS.startup_start_date) {
+    const d = new Date(), diff = (8 - d.getDay()) % 7 || 7;
+    const nm = new Date(d); nm.setDate(d.getDate() + diff);
+    const ds = nm.toISOString().slice(0, 10);
+    _qS.startup_start_date = ds;
+    const dateInput = document.getElementById('q-startup-date');
+    if (dateInput) dateInput.value = ds;
+    qStartupDateHint(ds);
+  }
+
   qRecalc();
 }
 
@@ -45,22 +56,10 @@ function qPill(el, grp) {
 function qChk(key) {
   const map = { spa:'spa', robot:'has_robot', sun:'high_sun_exposure', pets:'has_pets',
     chem:'startup_chemical', prog:'startup_programming', school:'startup_pool_school',
-    mcp:'sponsored_by_mcp', override:'override_signed' };
+    mcp:'sponsored_by_mcp'};
   const field = map[key];
   _qS[field] = !_qS[field];
   document.getElementById('qchk-' + key).classList.toggle('active', _qS[field]);
-  if (key === 'mcp') {
-    const show = _qS.sponsored_by_mcp;
-    document.getElementById('q-startup-date-row').style.display = show ? '' : 'none';
-    if (show && !_qS.startup_start_date) {
-      const d = new Date(), diff = (8 - d.getDay()) % 7 || 7;
-      const nm = new Date(d); nm.setDate(d.getDate() + diff);
-      const ds = nm.toISOString().slice(0, 10);
-      _qS.startup_start_date = ds;
-      document.getElementById('q-startup-date').value = ds;
-      qStartupDateHint(ds);
-    }
-  }
   qRecalc();
 }
 
@@ -137,7 +136,7 @@ function qCalcEngine(s) {
   } else if (service === 'pool_startup') {
     svcLabel = 'Pool Startup'; sizeLabel = 'startup';
     if (startup_chemical)    { base += 287.86; chem += 162.86; qbNames.push('Startup Chemicals','Pool Startup Chemical Work'); qbSkus.push('START-CHEM','START-CHEM-LABOR'); }
-    if (startup_programming) { base += 125;    qbNames.push('Pool Startup Programming'); qbSkus.push('START-PROGRAM'); }
+    if (startup_programming) { base += 62.5;   qbNames.push('Pool Startup Programming'); qbSkus.push('START-PROGRAM'); }
     if (startup_pool_school) { base += 62.5;   qbNames.push('Pool School'); qbSkus.push('POOL-SCHOOL'); }
   } else if (service === 'repair_job') {
     base = Math.max(parseFloat(repair_amount) || 0, 0);
@@ -281,9 +280,9 @@ function qReset() {
   document.getElementById('q-pool-sec').style.display    = '';
   document.getElementById('q-startup-sec').style.display = 'none';
   document.getElementById('q-repair-sec').style.display  = 'none';
-  document.getElementById('q-startup-date-row').style.display = 'none';
+  document.getElementById('q-repair-sec').style.display  = 'none';
   const hint = document.getElementById('q-startup-date-hint'); if(hint) hint.textContent='';
-  ['spa','robot','sun','pets','school','mcp','override'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
+  ['spa','robot','sun','pets','school','mcp'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
   document.getElementById('qchk-chem')?.classList.add('active');
   document.getElementById('qchk-prog')?.classList.add('active');
   ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
@@ -331,7 +330,7 @@ async function qSave() {
     chem_cost_est:eng.chem_cost, net_profit_est:net, margin_percent:margin,
     specs_summary:eng.specs_summary, quickbooks_skus:eng.qb_skus.join(', '), quickbooks_item_names:eng.qb_names.join(', '),
     created_by:(_s&&_s.name)||'portal', quote_source:'portal', quote_version:'2.0',
-    status:(_qS.service==='pool_startup'&&_qS.override_signed)?'SIGNED':'UNSENT'
+    status: _qS.service === 'pool_startup' ? 'ACTIVE_CUSTOMER' : 'UNSENT'
   };
 
   try {

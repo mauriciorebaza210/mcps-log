@@ -322,10 +322,6 @@ function renderTraining() {
   root.innerHTML = html;
 }
 
-function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
 function toggleModule(moduleId) {
   if (_trOpenModules.has(moduleId)) _trOpenModules.delete(moduleId);
   else _trOpenModules.add(moduleId);

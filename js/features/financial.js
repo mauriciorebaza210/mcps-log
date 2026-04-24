@@ -262,7 +262,7 @@ function switchFinTab(tab) {
   }
 
   // Toggle view visibility
-  ['payouts', 'profit', 'chemicals'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === tab ? 'block' : 'none';
   });
@@ -283,7 +283,7 @@ async function loadFinancialHub() {
     _finActiveTab = hash.split('/')[1];
   }
 
-  ['payouts', 'profit', 'chemicals'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
   });
@@ -301,6 +301,7 @@ async function loadFinancialHub() {
     if (_finActiveTab === 'payouts') _finApplyAndRender();
     else if (_finActiveTab === 'profit') _renderProfitTab();
     else if (_finActiveTab === 'chemicals') _renderChemTab();
+    else if (_finActiveTab === 'visits') loadVisitHistoryTab();
   } else {
     if (loading) loading.style.display = 'block';
   }
@@ -337,11 +338,12 @@ async function loadFinancialHub() {
       if (_finActiveTab === 'payouts') _finApplyAndRender();
       else if (_finActiveTab === 'profit') _renderProfitTab();
       else if (_finActiveTab === 'chemicals') _renderChemTab();
+      else if (_finActiveTab === 'visits') loadVisitHistoryTab();
     }
   } catch(e) {
     console.error('Financial Hub load error:', e);
     if (!cachedVisits || !cachedCrm) {
-      const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : 'chem-tbody');
+      const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : (_finActiveTab === 'chemicals' ? 'chem-tbody' : 'vh-tbody'));
       const el = document.getElementById(targetId);
       if (el) el.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Failed to load data. Network error.</td></tr>`;
     }
