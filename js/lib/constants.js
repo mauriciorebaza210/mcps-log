@@ -71,8 +71,8 @@ const SIDEBAR_GROUPS = [
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['live_map','service_log'],           // training + myjobs accessed via hub tabs
-  lead:['live_map','service_log'],                  // training + myjobs accessed via hub tabs
+  technician:['home','live_map','service_log'],           // training + myjobs accessed via hub tabs
+  lead:['home','live_map','service_log'],                  // training + myjobs accessed via hub tabs
   trainee:['live_map'],                             // hub-only: training tab shown exclusively
   new_hire:['onboarding'],
   office:['home','inventory'],

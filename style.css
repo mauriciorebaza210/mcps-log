@@ -1836,3 +1836,50 @@ select.q-inp{cursor:pointer}
   transform: translateY(0);
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+
+/* ══ TECH HOME ══════════════════════════════════════════════════════════════ */
+#th-kpi-row { grid-template-columns: repeat(3, 1fr) !important; }
+@media (min-width: 640px) { #th-kpi-row { grid-template-columns: repeat(6, 1fr) !important; } }
+#th-body { grid-template-columns: 1fr; }
+@media (min-width: 640px) { #th-body { grid-template-columns: 1fr 1fr; } }
+#th-widgets { grid-template-columns: 1fr; }
+@media (min-width: 480px) { #th-widgets { grid-template-columns: repeat(2, 1fr); } }
+.th-kpi-ph { background: repeating-linear-gradient(45deg,#fafafa,#fafafa 6px,#fff 6px,#fff 12px) !important; }
+.th-ph-note { font-size:.72rem;color:var(--muted);font-style:italic;margin-top:.2rem; }
+.th-ph-block { display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.25rem 0;color:var(--muted);font-size:.85rem;font-weight:500;gap:.4rem; }
+.th-ph-ico { font-size:1.6rem;opacity:.45; }
+.th-sec-hdr { font-family:'Barlow Condensed',sans-serif;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--teal);padding:.65rem 1rem .5rem;display:flex;align-items:center;gap:.45rem;border-bottom:1px solid var(--border);margin:-.25rem -1.1rem .7rem; }
+.th-hdr-ct { margin-left:auto;font-size:.7rem;color:var(--muted);font-weight:600;text-transform:none; }
+.th-badge { font-size:.58rem;font-weight:800;padding:.1rem .4rem;border-radius:4px;text-transform:uppercase;letter-spacing:.05em; }
+.th-badge-live { background:#dcfce7;color:#15803d; }
+.th-badge-ph { background:#fef3c7;color:#92400e; }
+.th-sched-stop { cursor:pointer;transition:background .12s; }
+.th-sched-stop:hover { background:var(--bg); }
+.th-stop-sel { background:color-mix(in srgb, var(--teal) 7%, transparent) !important;border-left:3px solid var(--teal) !important; }
+.svc-done { background:#dcfce7;color:#15803d; }
+.th-map-link { display:flex;align-items:center;gap:.4rem;margin-top:.45rem;font-size:.78rem;font-weight:700;color:var(--teal);cursor:pointer;padding:.35rem .1rem; }
+.th-map-link:hover { text-decoration:underline; }
+.th-detail-card { gap:.4rem; }
+.th-drow { display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid rgba(0,0,0,.04);font-size:.88rem; }
+.th-drow:last-child { border-bottom:none; }
+.th-dlabel { color:var(--muted);font-weight:600;font-size:.8rem;flex-shrink:0;margin-right:.5rem; }
+.th-dval { font-weight:600;color:var(--text);text-align:right; }
+.th-map-val { color:var(--teal);text-decoration:none; }
+.th-act-row { display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.65rem;padding-top:.65rem;border-top:1px solid var(--border); }
+.th-chem-grid { padding:.15rem 0; }
+.th-chem-ts { font-size:.68rem;color:var(--muted);font-weight:600;margin-bottom:.4rem; }
+.th-chem-row { display:grid;grid-template-columns:repeat(4,1fr);gap:.35rem; }
+.th-cb { border-radius:8px;padding:.4rem .2rem;text-align:center; }
+.th-cb-n { font-family:'Barlow Condensed',sans-serif;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted); }
+.th-cb-v { font-family:'Oswald',sans-serif;font-size:1.05rem;font-weight:700;margin-top:.1rem; }
+.th-cb-ok { background:#dcfce7; } .th-cb-ok .th-cb-v { color:#15803d; }
+.th-cb-warn { background:#fef3c7; } .th-cb-warn .th-cb-v { color:#92400e; }
+.th-cb-na { background:var(--bg); } .th-cb-na .th-cb-v { color:var(--muted); }
+.th-ck-list { display:flex;flex-direction:column;gap:.35rem;padding:.15rem 0; }
+.th-ck-item { display:flex;align-items:center;gap:.55rem;font-size:.88rem;font-weight:500;cursor:pointer;padding:.25rem 0;color:var(--text); }
+.th-ck-item input[type=checkbox] { accent-color:var(--teal);width:15px;height:15px;flex-shrink:0; }
+.th-ck-done { color:var(--muted);text-decoration:line-through; }
+.th-prog-wrap { height:8px;background:var(--bg);border-radius:4px;overflow:hidden; }
+.th-prog-fill { height:100%;background:var(--teal);border-radius:4px;transition:width .5s ease; }
+.th-weather-chip { background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.25rem .6rem;font-size:.8rem;font-weight:600;color:var(--text);margin-left:.4rem; }
+.th-empty { color:var(--muted);font-size:.88rem;text-align:center;padding:1.5rem; }

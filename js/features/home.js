@@ -153,30 +153,63 @@ function _onActiveClientsViewChange_(view) {
 }
 
 async function loadHomeStats() {
-  const ds = document.getElementById('home-dashboard');
+  const ds  = document.getElementById('home-dashboard');
+  const tds = document.getElementById('tech-home-dashboard');
   if (!ds) return;
-  if (!isAdmin()) {
-    ds.style.display = 'none';
-    return;
-  }
-  ds.style.display = 'flex';
 
-  // Update Header Info
+  // Greeting + date — rendered for ALL roles
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const greetingEl = document.getElementById('greeting-text');
-  if (greetingEl) {
-  const nameEl = document.getElementById('home-name');
-  if (nameEl && _s.user) {
-    nameEl.textContent = _s.user.split(' ')[0] || 'Team';
-  }
+  if (greetingEl) greetingEl.innerHTML = `${greeting}, <span id="home-name">${(_s.name || '').split(' ')[0] || 'there'}</span>`;
+  const dateEl = document.getElementById('current-date-text');
+  if (dateEl) dateEl.textContent = now.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+
+  const isTech = hasRole('technician') || hasRole('lead');
+  const isAdm  = isAdmin();
+  
+  const toggleWrap = document.getElementById('home-view-toggle-wrap');
+  if (toggleWrap) {
+    toggleWrap.style.display = (isTech && isAdm) ? 'block' : 'none';
   }
 
-  const dateEl = document.getElementById('current-date-text');
-  if (dateEl) {
-    dateEl.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  // Determine current applied role
+  let viewAs = 'none';
+  if (isTech && isAdm) {
+    viewAs = window._homeViewOverride || 'admin';
+    const btn = document.getElementById('home-view-toggle-btn');
+    if (btn) {
+      btn.innerHTML = viewAs === 'admin' 
+        ? `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg> View as Technician`
+        : `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg> View as Admin`;
+    }
+  } else if (isTech) {
+    viewAs = 'technician';
+  } else if (isAdm) {
+    viewAs = 'admin';
   }
+
+  // Role branch implementation based on `viewAs`
+  if (viewAs === 'technician') {
+    ds.style.display  = 'none';
+    if (tds) tds.style.display = 'flex';
+    const subtitleEl = document.getElementById('home-subtitle');
+    if (subtitleEl) subtitleEl.textContent = "Here's your plan for today.";
+    const qaWrap = document.getElementById('home-quick-action-wrap');
+    if (qaWrap) qaWrap.style.display = 'none';
+    await loadTechHome();
+    return;
+  }
+
+  // Admin/manager/office branch (existing code continues below, unchanged)
+  if (viewAs !== 'admin') { ds.style.display = 'none'; if(tds) tds.style.display = 'none'; return; }
+  ds.style.display = 'flex';
+  if (tds) tds.style.display = 'none';
+  const subtitleEl_adm = document.getElementById('home-subtitle');
+  if (subtitleEl_adm) subtitleEl_adm.textContent = "Here's what's happening with MCPS today.";
+  const qaWrap_adm = document.getElementById('home-quick-action-wrap');
+  if (qaWrap_adm) qaWrap_adm.style.display = 'block';
 
   try {
     // Inject premium CSS styles
@@ -588,3 +621,294 @@ function renderKPICard(title, value, iconHTML, iconColor = 'var(--teal)', animDe
     </div>
   `;
 }
+
+// ══ TECHNICIAN HOME ═══════════════════════════════════════════════════════════
+
+async function loadTechHome() {
+  if (!_routeData) await _ensureRouteData_();
+
+  const ALL_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const todayName = ALL_DAYS[new Date().getDay()];
+  const todayData = _routeData && (_routeData.days || []).find(d => d.day === todayName);
+  const pools = (todayData && todayData.pools) || [];
+
+  const doneKey = _routeData ? `mcps_done_${_routeData.week_start}_${todayName}` : null;
+  const doneSet = doneKey ? new Set(JSON.parse(localStorage.getItem(doneKey) || '[]')) : new Set();
+  const completedCount = pools.filter(p => doneSet.has(p.pool_id || '')).length;
+  const nextPool = pools.find(p => !doneSet.has(p.pool_id || ''));
+
+  const cacheKey = _routeData && _routeData.week_start;
+  const weatherMap = cacheKey ? (_getWeatherCache(cacheKey) || {}) : {};
+  const todayWeather = weatherMap[todayName];
+
+  _renderTechKPIs_(pools.length, completedCount, nextPool, todayWeather);
+  _renderTechBody_(pools, doneSet, doneKey, nextPool);
+  _renderTechWidgets_(pools.length, completedCount);
+}
+
+async function _ensureRouteData_() {
+  if (_routeData) return;
+  loadRoutes();  // safe — deduplicates via _routeFetchInFlight, updates _routeData global
+  return new Promise(resolve => {
+    let tries = 0;
+    const check = setInterval(() => {
+      if (_routeData || ++tries > 16) { clearInterval(check); resolve(); }
+    }, 500);
+  });
+}
+
+function _renderTechKPIs_(total, done, nextPool, weather) {
+  const kpiRow = document.getElementById('th-kpi-row');
+  if (!kpiRow) return;
+
+  // Weather chip injected into date display area
+  if (weather) {
+    const dateWrap = document.getElementById('dash-date-display');
+    if (dateWrap && !document.getElementById('th-weather-chip')) {
+      const chip = document.createElement('span');
+      chip.id = 'th-weather-chip';
+      chip.className = 'th-weather-chip';
+      chip.textContent = `${weather.icon} ${weather.high}°`;
+      chip.title = `High ${weather.high}° / Low ${weather.low}°`;
+      dateWrap.appendChild(chip);
+    }
+  }
+
+  const nextAddr = nextPool
+    ? escHtml((nextPool.address || '') + (nextPool.city ? ', ' + nextPool.city : ''))
+    : (total > 0 ? 'All done!' : 'No jobs today');
+  const nextColor = nextPool ? 'var(--teal)' : 'var(--success)';
+
+  kpiRow.innerHTML =
+    _thKpiCard_('Jobs Today',   String(total),  'var(--teal)',    false) +
+    _thKpiCard_('Completed',    `${done}<small style="font-size:.75em;color:var(--muted)"> / ${total}</small>`, 'var(--success)', false) +
+    _thKpiCard_('On-Time %',    '--', 'var(--muted)', true, 'GPS tracking required') +
+    _thKpiCard_('Drive Time',   '--', 'var(--muted)', true, 'GPS tracking required') +
+    _thKpiCard_('Next Job ETA', '--', 'var(--muted)', true, 'No schedule times yet') +
+    _thKpiCard_('Next Stop',    nextAddr, nextColor, false);
+}
+
+function _thKpiCard_(label, value, color, isPlaceholder, note) {
+  return `<div class="hs-card th-kpi-card${isPlaceholder ? ' th-kpi-ph' : ''}">
+    <div class="hs-label">${escHtml(label)}</div>
+    <div class="hs-value" style="color:${color};font-size:1.3rem;line-height:1.2;">${value}</div>
+    ${isPlaceholder ? `<div class="th-ph-note">${escHtml(note || 'Coming soon')}</div>` : ''}
+  </div>`;
+}
+
+function _renderTechBody_(pools, doneSet, doneKey, nextPool) {
+  const body = document.getElementById('th-body');
+  if (!body) return;
+
+  const stopsHtml = pools.length === 0
+    ? `<div class="th-empty">No pools scheduled today.</div>`
+    : pools.map((pool, idx) => {
+        const pId = pool.pool_id || String(idx);
+        const done = doneSet.has(pId);
+        const svcCls = getSvcClass_(pool.service);
+        const svcLbl = getSvcLabel_(pool.service);
+        return `<div class="pool-stop th-sched-stop${done ? ' ps-done' : ''}" id="th-stop-${idx}" onclick="selectTechStop(${idx})">
+          <div class="stop-num-wrap"><div class="stop-num">${idx + 1}</div></div>
+          <div class="stop-body">
+            <div class="stop-name">${escHtml(pool.customer_name || '—')}</div>
+            <div class="stop-addr">📍 ${escHtml(pool.address || '')}${pool.city ? ', ' + escHtml(pool.city) : ''}</div>
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.25rem;">
+              <span class="stop-svc ${svcCls}">${svcLbl}</span>
+              ${done ? '<span class="stop-svc svc-done">Done</span>' : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+  body.innerHTML = `
+    <div class="th-sched-col">
+      <div class="hs-card" style="padding:0;overflow:hidden;">
+        <div class="th-sec-hdr">Today's Schedule <span class="th-hdr-ct">${pools.length} stops</span></div>
+        <div class="pool-stops" id="th-stop-list" style="max-height:420px;overflow-y:auto;">${stopsHtml}</div>
+      </div>
+      <div class="th-map-link" onclick="navigateTo('live_map')">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+        View Full Route Map
+      </div>
+    </div>
+    <div class="th-detail-col" id="th-detail-panel">
+      ${_renderStopDetail_(nextPool || pools[0])}
+    </div>`;
+
+  window._techPools   = pools;
+  window._techDoneKey = doneKey;
+
+  if (nextPool || pools[0]) {
+    _loadStopChemistry_(nextPool || pools[0]);
+    // Highlight first selected row
+    const firstIdx = nextPool ? pools.indexOf(nextPool) : 0;
+    if (firstIdx >= 0) {
+      const el = document.getElementById(`th-stop-${firstIdx}`);
+      if (el) el.classList.add('th-stop-sel');
+    }
+  }
+}
+
+function _renderStopDetail_(pool) {
+  if (!pool) return `<div class="hs-card" style="min-height:180px;display:flex;align-items:center;justify-content:center;">
+    <div class="th-empty">Select a stop to see details.</div></div>`;
+
+  const mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' +
+    encodeURIComponent(`${pool.address || ''} ${pool.city || ''} TX`);
+
+  return `<div class="hs-card th-detail-card">
+    <div class="th-sec-hdr">${escHtml(pool.customer_name || 'Stop Details')}</div>
+    <div class="th-drow"><span class="th-dlabel">Address</span>
+      <a class="th-dval th-map-val" href="${mapsUrl}" target="_blank" rel="noopener">📍 ${escHtml(pool.address || '')}${pool.city ? ', '+escHtml(pool.city) : ''}</a></div>
+    <div class="th-drow"><span class="th-dlabel">Service</span>
+      <span class="th-dval">${escHtml(pool.service || '—')}</span></div>
+    <div class="th-drow"><span class="th-dlabel">Phone</span>
+      <span class="th-dval th-ph-note">Not in route data</span></div>
+    ${pool.notes ? `<div class="th-drow"><span class="th-dlabel">Notes</span>
+      <span class="th-dval">${escHtml(pool.notes)}</span></div>` : ''}
+    <div class="th-act-row">
+      <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pool.pool_id||'')}','${escHtml(pool.customer_name||'')}')">📝 Log Service</button>
+      <button class="ps-btn ps-sms" data-pool-id="${escHtml(pool.pool_id||'')}" data-cust-name="${escHtml(pool.customer_name||'')}" onclick="headsUp(event,this)">📲 On My Way</button>
+    </div>
+    <div class="th-sec-hdr" style="margin-top:.75rem;">Last Water Reading
+      <span class="th-badge th-badge-live">LIVE</span></div>
+    <div id="th-chem-${escHtml(pool.pool_id||'x')}" class="th-chem-grid">
+      <div class="th-ph-note" style="padding:.4rem 0;">Loading...</div>
+    </div>
+  </div>`;
+}
+
+const _chemCache_ = {};
+
+function _loadStopChemistry_(pool) {
+  if (!pool || !pool.pool_id) return;
+  const pId = pool.pool_id;
+  const elId = `th-chem-${escHtml(pId)}`;
+
+  if (_chemCache_[pId]) { _injectChem_(elId, _chemCache_[pId]); return; }
+
+  apiGet({ action: 'get_visit_history', token: _s.token, pool_id: pId, limit: 5 })
+    .then(res => {
+      const container = document.getElementById(elId);
+      if (!container) return;
+      if (!res || !res.ok || !res.rows || !res.rows.length) {
+        container.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">No readings on file.</div>`; return;
+      }
+      const row = res.rows
+        .filter(r => r.detail && (r.detail['pH'] != null || r.detail['Chlorine (Cl)'] != null))
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      if (!row) { container.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">No chemistry data found.</div>`; return; }
+      _chemCache_[pId] = row;
+      _injectChem_(elId, row);
+    })
+    .catch(() => {
+      const c = document.getElementById(elId);
+      if (c) c.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">Could not load readings.</div>`;
+    });
+}
+
+function _injectChem_(elId, row) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const d = row.detail || {};
+  const ts = row.timestamp ? new Date(row.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+  el.innerHTML = `
+    <div class="th-chem-ts">Last visit: ${ts}</div>
+    <div class="th-chem-row">
+      ${_chemBub_('pH', d['pH'], 6.8, 7.6)}
+      ${_chemBub_('Cl', d['Chlorine (Cl)'], 1.0, 3.0)}
+      ${_chemBub_('TA', d['Total Alkalinity (TA)'], 80, 120)}
+      ${_chemBub_('CH', d['Calcium Hardness (CH)'], 200, 400)}
+    </div>`;
+}
+
+function _chemBub_(name, val, lo, hi) {
+  if (val == null || val === '') return `<div class="th-cb th-cb-na"><div class="th-cb-n">${name}</div><div class="th-cb-v">—</div></div>`;
+  const v = parseFloat(val);
+  const cls = (!isNaN(v) && v >= lo && v <= hi) ? 'th-cb-ok' : 'th-cb-warn';
+  return `<div class="th-cb ${cls}"><div class="th-cb-n">${name}</div><div class="th-cb-v">${val}</div></div>`;
+}
+
+window.selectTechStop = function(idx) {
+  const pools = window._techPools || [];
+  const pool  = pools[idx];
+  if (!pool) return;
+  document.querySelectorAll('.th-sched-stop').forEach((el, i) => el.classList.toggle('th-stop-sel', i === idx));
+  const panel = document.getElementById('th-detail-panel');
+  if (panel) { panel.innerHTML = _renderStopDetail_(pool); _loadStopChemistry_(pool); }
+};
+
+function _renderTechWidgets_(total, done) {
+  const row = document.getElementById('th-widgets');
+  if (!row) return;
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+  // Drive checklist items
+  const items = ['Chemicals loaded', 'Test kit stocked', 'Brush & net aboard', 'Safety gear ready', 'Phone charged'];
+  const storKey = `mcps_drive_ck_${new Date().toISOString().split('T')[0]}`;
+  const ckd = JSON.parse(localStorage.getItem(storKey) || '[]');
+  const checkRows = items.map((item, i) => {
+    const isChecked = ckd.includes(i);
+    return `<label class="th-ck-item${isChecked ? ' th-ck-done' : ''}">
+      <input type="checkbox" ${isChecked?'checked':''} onchange="toggleDriveCheck(${i})">
+      ${escHtml(item)}</label>`;
+  }).join('');
+
+  row.innerHTML = `
+    <div class="hs-card">
+      <div class="th-sec-hdr">Drive Checklist <span class="th-badge th-badge-live">LIVE</span></div>
+      <div class="th-ck-list" id="th-ck-list">${checkRows}</div>
+    </div>
+    <div class="hs-card">
+      <div class="th-sec-hdr">Today's Progress <span class="th-badge th-badge-live">LIVE</span></div>
+      <div style="padding:.25rem 0;">
+        <div style="display:flex;justify-content:space-between;font-size:.85rem;font-weight:700;color:var(--muted);margin-bottom:.4rem;">
+          <span>${done} of ${total} complete</span><span>${pct}%</span>
+        </div>
+        <div class="th-prog-wrap"><div class="th-prog-fill" style="width:${pct}%"></div></div>
+      </div>
+    </div>
+    <div class="hs-card th-kpi-ph">
+      <div class="th-sec-hdr">Equipment Status <span class="th-badge th-badge-ph">SOON</span></div>
+      <div class="th-ph-block"><div class="th-ph-ico">🔧</div><div>No equipment endpoint yet</div></div>
+    </div>
+    <div class="hs-card th-kpi-ph">
+      <div class="th-sec-hdr">Messages & Alerts <span class="th-badge th-badge-ph">SOON</span></div>
+      <div class="th-ph-block"><div class="th-ph-ico">💬</div><div>Messaging system not yet available</div></div>
+    </div>`;
+}
+
+window.toggleDriveCheck = function(idx) {
+  const storKey = `mcps_drive_ck_${new Date().toISOString().split('T')[0]}`;
+  const ckd = JSON.parse(localStorage.getItem(storKey) || '[]');
+  const pos = ckd.indexOf(idx);
+  if (pos === -1) ckd.push(idx); else ckd.splice(pos, 1);
+  localStorage.setItem(storKey, JSON.stringify(ckd));
+  // Re-render just the checklist (find first hs-card in th-widgets)
+  const list = document.getElementById('th-ck-list');
+  if (list) {
+    const items = ['Chemicals loaded', 'Test kit stocked', 'Brush & net aboard', 'Safety gear ready', 'Phone charged'];
+    list.innerHTML = items.map((item, i) => {
+      const isChecked = ckd.includes(i);
+      return `<label class="th-ck-item${isChecked?' th-ck-done':''}">
+        <input type="checkbox" ${isChecked?'checked':''} onchange="toggleDriveCheck(${i})">
+        ${escHtml(item)}</label>`;
+    }).join('');
+  }
+};
+
+window.techCheckOut = function() {
+  if (typeof Swal === 'undefined') { alert('Check-out recorded! Have a great day.'); return; }
+  Swal.fire({
+    title: 'Check Out for the Day?',
+    text: 'This will be logged. Make sure all pools are completed.',
+    icon: 'question', showCancelButton: true,
+    confirmButtonText: 'Yes, Check Out', confirmButtonColor: '#0d4d44',
+  }).then(r => { if (r.isConfirmed) Swal.fire('Checked Out!', 'Great work today.', 'success'); });
+};
+
+window.toggleHomeView = function() {
+  window._homeViewOverride = window._homeViewOverride === 'technician' ? 'admin' : 'technician';
+  loadHomeStats();
+};
+
