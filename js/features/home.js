@@ -295,8 +295,15 @@ async function loadHomeStats() {
       poolsCompletedToday = histRes.rows.filter(r => (r.timestamp || '').startsWith(todayStr)).length;
     }
 
+    const crmData = (crmRes.ok && crmRes.data) ? crmRes.data : [];
     const unassignedCount = (unRes.ok && unRes.pools)
-      ? unRes.pools.filter(p => (p.service || '').toLowerCase().includes('weekly full service')).length
+      ? unRes.pools.filter(p => {
+          const s = (p.service || '').toLowerCase();
+          const crmItem = crmData.find(c => c.pool_id === p.pool_id || c.quote_id === p.pool_id);
+          const st = (p.status || (crmItem ? crmItem.status : '') || '').toUpperCase();
+          const isEligible = s.includes('weekly full service') || s.includes('startup');
+          return isEligible && st !== 'LOST' && st !== 'COMPLETED';
+        }).length
       : 0;
 
     const criticalAlerts = (alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts.length : 0;
