@@ -281,7 +281,9 @@ async function loadHomeStats() {
       document.head.appendChild(style);
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const localNow = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const todayStr = `${localNow.getFullYear()}-${pad(localNow.getMonth() + 1)}-${pad(localNow.getDate())}`;
 
     // Fetch enriched data for accurate metrics
     const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes] = await Promise.all([
@@ -325,7 +327,23 @@ async function loadHomeStats() {
 
     let poolsCompletedToday = 0;
     if (histRes.ok && histRes.rows) {
-      poolsCompletedToday = histRes.rows.filter(r => (r.timestamp || '').startsWith(todayStr)).length;
+      const doneToday = new Set();
+      const normalize = (val) => {
+        if (!val) return '';
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return String(val);
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      };
+
+      histRes.rows.forEach(r => {
+        const ts = r.timestamp;
+        if (normalize(ts) === todayStr) {
+          const pId = r.pool_id || (r.detail && r.detail.pool_id);
+          if (pId) doneToday.add(pId);
+          else doneToday.add(String(ts) + (r.customer_name || ''));
+        }
+      });
+      poolsCompletedToday = doneToday.size;
     }
 
     const crmData = (crmRes.ok && crmRes.data) ? crmRes.data : [];
@@ -408,10 +426,7 @@ async function loadHomeStats() {
       }
     }
 
-    poolsCompletedToday = 0;
-    if (visitsRes.ok && visitsRes.visits) {
-      poolsCompletedToday = visitsRes.visits.filter(v => (v.date || '').startsWith(todayStr) && (v.status || '').toUpperCase() === 'COMPLETED').length;
-    }
+    // Logic removed to prevent overwriting service log-based completed count
 
     const snapsRow = document.getElementById('dash-row-snapshots');
     if (snapsRow) {
@@ -425,7 +440,7 @@ async function loadHomeStats() {
       ], '0.35s')}
         ${renderSnapshotDOM('Operations', [
         { label: 'Pools Scheduled Today', value: todayScheduled },
-        { label: 'Pools Completed Today', value: poolsCompletedToday },
+        { label: 'Pools Completed Today', value: `${poolsCompletedToday} / ${todayScheduled}` },
         { label: 'Pools Needing Routing', value: unassignedCount },
         { label: 'Missing Service Logs', value: '---' },
         { label: 'Maintenance Alerts', value: '---' }
