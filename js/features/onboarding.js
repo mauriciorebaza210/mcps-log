@@ -9,8 +9,6 @@ function loadOnboarding() {
   const nameEl = document.getElementById('onb-welcome-name');
   if (nameEl) nameEl.textContent = 'Welcome, ' + (_s.name ? _s.name.split(' ')[0] : '') + '!';
 
-  const authHdr = { 'Authorization': 'Bearer ' + _s.token, 'Content-Type': 'application/json' };
-
   // Fetch status and contract context in parallel
   Promise.all([
     apiGet({ action: 'onboarding_get_status', token: _s.token }).then(r => r),

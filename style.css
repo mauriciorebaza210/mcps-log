@@ -1374,8 +1374,9 @@ select.q-inp{cursor:pointer}
 .sc-sent    { background: #e0f2fe; color: #075985; }
 .sc-signed  { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
 .sc-active  { background: #bbf7d0; color: #14532d; border: 1px solid #16a34a; font-weight: 700; }
-.sc-lost    { background: #fee2e2; color: #991b1b; }
-.sc-lead    { background: #f1f5f9; color: #475569; }
+.sc-lost      { background: #fee2e2; color: #991b1b; }
+.sc-lead      { background: #f1f5f9; color: #475569; }
+.sc-completed { background: #e2e8f0; color: #475569; }
 
 .crm-detail-wrap h3 { font-family: 'Oswald', sans-serif; font-size: 1.25rem; margin-bottom: 1rem; color: var(--teal); }
 .crm-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; }

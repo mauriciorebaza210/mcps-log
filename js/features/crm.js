@@ -108,6 +108,7 @@ function renderCRM(data, resetPage = true) {
     if (status === 'LOST') statusClass = 'sc-lost';
     if (status === 'LEAD') statusClass = 'sc-lead';
     if (status === 'SENT') statusClass = 'sc-sent';
+    if (status === 'COMPLETED_JOB') statusClass = 'sc-completed';
 
     return `
       <tr onclick="viewCRMDetail('${item.quote_id}')" style="cursor:pointer">
@@ -164,10 +165,11 @@ function crmGoToPage(n) {
 function renderCRMStats() {
   const bar = document.getElementById('crm-stats-bar');
   if (!bar) return;
-  const counts = { all: _crmCache.length, LEAD: 0, UNSENT: 0, SENT: 0, SIGNED: 0, ACTIVE_CUSTOMER: 0, LOST: 0 };
+  const counts = { all: _crmCache.length, LEAD: 0, UNSENT: 0, SENT: 0, SIGNED: 0, ACTIVE_CUSTOMER: 0, LOST: 0, COMPLETED_JOB: 0 };
   _crmCache.forEach(i => {
     const s = (i.status || 'UNSENT').toUpperCase();
     if (counts[s] !== undefined) counts[s]++;
+    if (s === 'ACTIVE_CUSTOMER' && (i.contract_status || '').toUpperCase() === 'SIGNED') counts.SIGNED++;
   });
   const pills = [
     { label: 'All', key: 'all', color: '#0f172a', bg: '#f1f5f9' },
@@ -176,6 +178,7 @@ function renderCRMStats() {
     { label: 'Signed', key: 'SIGNED', color: '#065f46', bg: '#d1fae5' },
     { label: 'Active', key: 'ACTIVE_CUSTOMER', color: '#14532d', bg: '#bbf7d0' },
     { label: 'Lost', key: 'LOST', color: '#991b1b', bg: '#fee2e2' },
+    { label: 'Completed', key: 'COMPLETED_JOB', color: '#475569', bg: '#e2e8f0' },
   ];
   bar.innerHTML = pills.map(p =>
     `<button class="crm-stat-pill" onclick="crmStatFilter('${p.key}')"
@@ -221,7 +224,12 @@ function filterCRM() {
   const filtered = _crmCache.filter(item => {
     const name = item.client_name || `${item.first_name || ''} ${item.last_name || ''}`;
     const clientMatch = `${name} ${item.email || ''} ${item.city || ''}`.toLowerCase().includes(q);
-    const statusMatch = status === 'all' || (item.status || 'UNSENT').toUpperCase() === status.toUpperCase();
+    const itemStatus = (item.status || 'UNSENT').toUpperCase();
+    const itemContract = (item.contract_status || '').toUpperCase();
+    const statusMatch = status === 'all'
+      || (status.toUpperCase() === 'SIGNED'
+          ? itemStatus === 'ACTIVE_CUSTOMER' && itemContract === 'SIGNED'
+          : itemStatus === status.toUpperCase());
     const areaMatch = area === 'all' || (item.area || '').toUpperCase() === area.toUpperCase();
     const yearMatch = yearMatchVal === 'all' || String(item.year_built || '').trim() === yearMatchVal;
     const contractMatch = contractFilter === 'all' || (item.contract_status || '').toUpperCase() === contractFilter.toUpperCase();
@@ -267,7 +275,7 @@ function closeCRMDetail() { closeLeadDrawer(); }
 function buildLeadDrawerHTML(item) {
   const status = (item.status || 'UNSENT').toUpperCase();
   const contactLog = Array.isArray(item.contact_log) ? item.contact_log : [];
-  const STATUSES = ['LEAD','UNSENT','SENT','SIGNED','ACTIVE_CUSTOMER','LOST'];
+  const STATUSES = ['LEAD','UNSENT','SENT','SIGNED','ACTIVE_CUSTOMER','LOST','COMPLETED_JOB'];
 
   const logHTML = contactLog.length
     ? contactLog.slice().reverse().map(e => `
@@ -419,10 +427,10 @@ function buildLeadDrawerHTML(item) {
       </div>
 
       <!-- Service End Date (shown when LOST or already has a value) -->
-      <div class="lead-section" id="lead-svc-end-section" style="display:${status === 'LOST' || item.service_end ? '' : 'none'}">
+      <div class="lead-section" id="lead-svc-end-section" style="display:${status === 'LOST' || status === 'COMPLETED_JOB' || item.service_end ? '' : 'none'}">
         <div class="lead-sec-label">Service End Date</div>
-        <input class="si" type="date" id="lead-service-end" value="${item.service_end ? String(item.service_end).split('T')[0] : (status === 'LOST' ? new Date().toISOString().split('T')[0] : '')}" style="width:100%">
-        <div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Auto-filled when marked LOST. Edit to backdate if needed.</div>
+        <input class="si" type="date" id="lead-service-end" value="${item.service_end ? String(item.service_end).split('T')[0] : (status === 'LOST' || status === 'COMPLETED_JOB' ? new Date().toISOString().split('T')[0] : '')}" style="width:100%">
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Auto-filled when marked LOST or Completed. Edit to backdate if needed.</div>
       </div>
 
       <!-- Notes -->
@@ -636,7 +644,7 @@ function selectLeadStatus(status) {
   const svcEndSection = document.getElementById('lead-svc-end-section');
   const svcEndInput = document.getElementById('lead-service-end');
   if (svcEndSection && svcEndInput) {
-    if (status === 'LOST') {
+    if (status === 'LOST' || status === 'COMPLETED_JOB') {
       svcEndSection.style.display = '';
       if (!svcEndInput.value) {
         svcEndInput.value = new Date().toISOString().split('T')[0];

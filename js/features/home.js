@@ -23,22 +23,36 @@ window.toggleQuickActionMenu = function () {
 
 window.requestHomeReport = function (type) {
   toggleQuickActionMenu();
+  if (typeof Swal === 'undefined') {
+    if (type === 'issue') {
+      const msg = prompt('Enter the issue description:');
+      if (msg) apiPost({ action: 'submit_issue', message: msg, token: _s.token }).then(() => alert('Issue submitted.'));
+    } else {
+      alert('Action not available without library.');
+    }
+    return;
+  }
+  
   if (type === 'issue') {
-    // Navigate to a "Report Issue" flow - for now show alert or open modal
-    Swal.fire({
-      title: 'Report New Issue',
-      html: '<input id="issue-msg" class="swal2-input" placeholder="Describe the issue...">',
-      showCancelButton: true,
-      confirmButtonText: 'Submit Alert',
-      preConfirm: () => document.getElementById('issue-msg').value
-    }).then(res => {
-      if (res.isConfirmed && res.value) {
-        apiPost({ action: 'submit_issue', message: res.value, token: _s.token }).then(() => {
-          Swal.fire('Submitted!', 'The operations team has been notified.', 'success');
-          loadHomeStats();
-        });
-      }
-    });
+    if (typeof openReportIssueModal === 'function') {
+      openReportIssueModal();
+    } else {
+      // Fallback if the modal function isn't globally available for some reason
+      Swal.fire({
+        title: 'Report New Issue',
+        html: '<input id="issue-msg" class="swal2-input" placeholder="Describe the issue...">',
+        showCancelButton: true,
+        confirmButtonText: 'Submit Alert',
+        preConfirm: () => document.getElementById('issue-msg').value
+      }).then(res => {
+        if (res.isConfirmed && res.value) {
+          apiPost({ action: 'submit_issue', message: res.value, token: _s.token }).then(() => {
+            Swal.fire('Submitted!', 'The operations team has been notified.', 'success');
+            loadHomeStats();
+          });
+        }
+      });
+    }
   } else if (type === 'lead') {
     navigateTo('crm'); // Navigate to lead page
   } else {
@@ -59,8 +73,11 @@ function _computeClientsForView_(data, view) {
   const count = data.filter(item => {
     const cs = String(item.contract_status || '').toUpperCase();
     const st = String(item.status || '').toUpperCase();
-    if (isMcp) return st === 'ACTIVE_CUSTOMER' && item.sponsored_by_mcp === true;
-    return cs === 'SIGNED' && st === 'ACTIVE_CUSTOMER';
+    const svc = String(item.service || '').toLowerCase();
+    const isFullSvc = svc.includes('full service');
+    
+    if (isMcp) return st === 'ACTIVE_CUSTOMER' && item.sponsored_by_mcp === true && isFullSvc;
+    return cs === 'SIGNED' && st === 'ACTIVE_CUSTOMER' && isFullSvc;
   }).length;
 
   const now = new Date();
@@ -78,6 +95,11 @@ function _computeClientsForView_(data, view) {
 
     const weekCount = data.filter(item => {
       const cs = String(item.contract_status || '').toUpperCase();
+      const st = String(item.status || '').toUpperCase();
+      const svc = String(item.service || '').toLowerCase();
+      const isFullSvc = svc.includes('full service');
+
+      if (!isFullSvc) return false;
       if (cs !== 'SIGNED') return false;
       if (isMcp && item.sponsored_by_mcp !== true) return false;
       const signedAt = _parseClientDate_(item.signed_at);
@@ -303,13 +325,96 @@ async function loadHomeStats() {
 
     let openOpportunities = 0;
     let ac = { count: 0, history: Array(12).fill(0), vsLastWeek: 0 };
+    let monthlyRevenue = 0;
+    let invoicesSentCount = 0;
+    let collectedThisMonth = 0;
+    let overdueInvoicesCount = 0;
+    let billingAlerts = [];
+
+    const nowMo = new Date();
+    const curMoStr = `${nowMo.getFullYear()}-${String(nowMo.getMonth() + 1).padStart(2, '0')}`;
+    const todayDay = nowMo.getDate();
 
     if (crmRes.ok && crmRes.data) {
       _crmDataCache = crmRes.data;
       ac = _computeClientsForView_(crmRes.data, _activeClientsView);
-      openOpportunities = crmRes.data
-        .filter(i => ['LEAD', 'QUOTED'].includes((i.status || '').toUpperCase()))
-        .reduce((sum, item) => sum + (parseFloat(String(item.price || 0).replace(/[^0-9.]/g, '')) || 0), 0);
+      
+      const revenueBreakdown = [];
+      crmRes.data.forEach(item => {
+        const status = (item.status || '').toUpperCase();
+        const contractStatus = (item.contract_status || '').toUpperCase();
+        const service = (item.service || '').toLowerCase();
+        
+        const price = parseFloat(item.total_with_tax) || parseFloat(String(item.price || 0).replace(/[^0-9.]/g, '')) || 0;
+
+        if (['LEAD', 'QUOTED'].includes(status)) {
+          openOpportunities += price;
+        }
+
+        const isRevenueEligible = (
+          status === 'ACTIVE_CUSTOMER' && 
+          contractStatus === 'SIGNED' && 
+          service.includes('full service')
+        );
+
+        if (isRevenueEligible) {
+          monthlyRevenue += price;
+          revenueBreakdown.push({
+            Client: (item.client_name || `${item.first_name || ''} ${item.last_name || ''}`).trim() || item.quote_id,
+            Service: item.service,
+            "Monthly Price": price,
+            "Tax Included": !!item.total_with_tax
+          });
+        }
+
+        // Processing for alerts/finance - still based on general ACTIVE_CUSTOMER status
+        if (status === 'ACTIVE_CUSTOMER') {
+          // Billing Logic
+          let payLog = [];
+          try { 
+            const r = item.payment_log; 
+            payLog = Array.isArray(r) ? r : (r ? JSON.parse(r) : []); 
+          } catch(e) {}
+          
+          const curMonthEntry = payLog.find(e => e.month === curMoStr);
+          const payStatus = curMonthEntry ? curMonthEntry.status : 'pending';
+
+          const iDay = parseInt(item.invoice_day);
+          const clientName = (item.client_name || `${item.first_name || ''} ${item.last_name || ''}`).trim() || item.quote_id;
+
+          if (payStatus === 'invoiced' || payStatus === 'paid') {
+            invoicesSentCount++;
+          }
+          if (payStatus === 'paid') {
+            collectedThisMonth += price;
+          }
+
+          // Alerts and Overdue logic
+          if (iDay && payStatus !== 'paid') {
+            if (payStatus === 'pending' && iDay === todayDay) {
+              billingAlerts.push({
+                type: 'high_issue',
+                message: `Invoice Ready: ${clientName} (Day ${iDay})`,
+                timestamp: new Date().toISOString(),
+                submitter: 'Billing System'
+              });
+            } else if (payStatus === 'pending' && iDay < todayDay) {
+              overdueInvoicesCount++;
+              billingAlerts.push({
+                type: 'medium_issue',
+                message: `MISSING INVOICE: ${clientName} (Was due on ${iDay}${_ordSuffix_(iDay)})`,
+                timestamp: new Date().toISOString(),
+                submitter: 'Billing System'
+              });
+            } else if (payStatus === 'invoiced' && iDay < todayDay) {
+              overdueInvoicesCount++; // Invoiced but not paid after due date
+            }
+          }
+        }
+      });
+      console.log("%c--- MONTHLY REVENUE BREAKDOWN ---", "color:var(--teal); font-weight:bold; font-size:1.2rem;");
+      console.table(revenueBreakdown);
+      console.log("Total Calculated:", monthlyRevenue);
     }
 
     // Accurate calculation for today's volume
@@ -357,7 +462,7 @@ async function loadHomeStats() {
         }).length
       : 0;
 
-    const criticalAlerts = (alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts.length : 0;
+    const criticalAlerts = ((alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts.length : 0) + billingAlerts.length;
 
     let crmLeads = 0, crmQuoted = 0, crmSigned = 0;
     if (crmRes.ok && crmRes.data) {
@@ -390,7 +495,7 @@ async function loadHomeStats() {
           <div style="margin-top:auto;padding-top:1.5rem;">${_buildSparklineSVG_(ac.history)}</div>
         </div>
 
-        ${renderKPICard('Monthly Revenue', '$0', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 18V6"></path></svg>', 'var(--teal)', '0.1s', Array(12).fill(0))}
+        ${renderKPICard('Monthly Revenue', _finFmtCurrency(monthlyRevenue), '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 18V6"></path></svg>', 'var(--teal)', '0.1s', Array(12).fill(0))}
         ${renderKPICard('Open Opportunities', openOpportunities > 0 ? '$' + Math.round(openOpportunities).toLocaleString() : '0', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>', 'var(--teal)', '0.15s')}
         ${renderKPICard("Today's Stops", todayScheduled, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>', 'var(--teal-mid)', '0.2s')}
         ${renderKPICard('Needing Routes', unassignedCount, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>', unassignedCount > 0 ? '#b45309' : 'var(--teal)', '0.25s')}
@@ -446,9 +551,9 @@ async function loadHomeStats() {
         { label: 'Maintenance Alerts', value: '---' }
       ], '0.4s')}
         ${renderSnapshotDOM('Admin & Finance', [
-        { label: 'Invoices Sent', value: '---' },
-        { label: 'Collected (This Week)', value: '---' },
-        { label: 'Overdue Invoices', value: '---' },
+        { label: 'Invoices Sent', value: invoicesSentCount },
+        { label: 'Collected (This Month)', value: _finFmtCurrency(collectedThisMonth) },
+        { label: 'Overdue Invoices', value: overdueInvoicesCount },
         { label: 'Payroll Status', value: 'On Track' },
         { label: 'Monthly Expenses', value: '---' }
       ], '0.45s')}
@@ -458,7 +563,10 @@ async function loadHomeStats() {
     // Row 4: Attention Widget (as a specialized snapshot in row 2 or standalone row 3)
     const attentionRow = document.getElementById('dash-row-attention');
     if (attentionRow) {
-      const activeAlerts = (alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts : [];
+      const activeAlerts = [
+        ...((alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts : []),
+        ...billingAlerts
+      ];
       attentionRow.innerHTML = renderAttentionWidget(activeAlerts);
     }
 
@@ -927,3 +1035,13 @@ window.toggleHomeView = function() {
   loadHomeStats();
 };
 
+function _ordSuffix_(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th';
+  return ['th','st','nd','rd'][n % 10] || 'th';
+}
+
+function _finFmtCurrency(val) {
+  const n = parseFloat(val) || 0;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+}

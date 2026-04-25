@@ -308,6 +308,8 @@ function buildHomeCards(){
 // HOME: ISSUES AND ALERTS
 // ══════════════════════════════════════════════════════════════════════════════
 
+let _poolListCache = null;
+
 function openReportIssueModal() {
   document.getElementById('report-issue-backdrop').style.display = 'flex';
   document.getElementById('report-issue-type').value = 'issue';
@@ -316,16 +318,32 @@ function openReportIssueModal() {
   document.getElementById('report-issue-msg').style.display = 'none';
   
   const select = document.getElementById('report-issue-pool');
-  select.innerHTML = '<option value="">Loading pools...</option>';
-  apiGet({ action: 'get_pool_list', token: _s.token }).then(res => {
+  
+  if (_poolListCache) {
+    select.innerHTML = '<option value="">-- No specific pool --</option>' + 
+      _poolListCache.map(p => `<option value="${p}">${p}</option>`).join('');
+    return;
+  }
+
+  select.innerHTML = '<option value="">Loading pools list...</option>';
+  
+  // Set a safety timeout to prevent hanging on CORS/Network errors
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+  apiGet({ action: 'get_pool_list', token: _s.token }, { signal: controller.signal }).then(res => {
+    clearTimeout(timeoutId);
     if(res.ok && res.pools) {
+      _poolListCache = res.pools;
       select.innerHTML = '<option value="">-- No specific pool --</option>' + 
         res.pools.map(p => `<option value="${p}">${p}</option>`).join('');
     } else {
-      select.innerHTML = '<option value="">Error loading pools</option>';
+      select.innerHTML = '<option value="">-- List unavailable (Type ID in message) --</option>';
     }
   }).catch(() => {
-    select.innerHTML = '<option value="">Error loading pools</option>';
+    clearTimeout(timeoutId);
+    select.innerHTML = '<option value="">-- List unavailable (Type ID in message) --</option>';
+    console.warn("Pool list could not be loaded due to network/security policy. Report can still be submitted.");
   });
 }
 

@@ -262,7 +262,7 @@ function switchFinTab(tab) {
   }
 
   // Toggle view visibility
-  ['payouts', 'profit', 'chemicals', 'visits'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === tab ? 'block' : 'none';
   });
@@ -283,7 +283,7 @@ async function loadFinancialHub() {
     _finActiveTab = hash.split('/')[1];
   }
 
-  ['payouts', 'profit', 'chemicals', 'visits'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
   });
@@ -302,6 +302,7 @@ async function loadFinancialHub() {
     else if (_finActiveTab === 'profit') _renderProfitTab();
     else if (_finActiveTab === 'chemicals') _renderChemTab();
     else if (_finActiveTab === 'visits') loadVisitHistoryTab();
+    else if (_finActiveTab === 'clients') _renderClientsTab();
   } else {
     if (loading) loading.style.display = 'block';
   }
@@ -339,11 +340,12 @@ async function loadFinancialHub() {
       else if (_finActiveTab === 'profit') _renderProfitTab();
       else if (_finActiveTab === 'chemicals') _renderChemTab();
       else if (_finActiveTab === 'visits') loadVisitHistoryTab();
+      else if (_finActiveTab === 'clients') _renderClientsTab();
     }
   } catch(e) {
     console.error('Financial Hub load error:', e);
     if (!cachedVisits || !cachedCrm) {
-      const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : (_finActiveTab === 'chemicals' ? 'chem-tbody' : 'vh-tbody'));
+      const targetId = _finActiveTab === 'payouts' ? 'fin-tbody' : (_finActiveTab === 'profit' ? 'profit-tbody' : (_finActiveTab === 'chemicals' ? 'chem-tbody' : (_finActiveTab === 'clients' ? 'clients-tbody' : 'vh-tbody')));
       const el = document.getElementById(targetId);
       if (el) el.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--error)">Failed to load data. Network error.</td></tr>`;
     }
@@ -367,6 +369,7 @@ function _finApplyAndRender() {
 function _renderFinFilters() {
   const el = document.getElementById('fin-shared-filters');
   if (!el) return;
+  if (_finActiveTab === 'clients') { el.innerHTML = ''; return; }
 
   const rangeText = (_finPeriod !== 'all' && _finPeriod !== 'custom') ? _finDateRangeText(_finPeriod) : '';
 
@@ -1098,4 +1101,183 @@ function _renderChemTab() {
       `;
     }).join('');
   }
+}
+
+// ── Clients Tab ────────────────────────────────────────────────────────────────
+
+let _clientsSearch = '';
+let _clientsAreaFilter = '';
+let _clientsBillingFilter = '';
+
+function _renderClientsTab() {
+  // Hide the period/tech shared filters — not relevant for clients
+  const sharedFilters = document.getElementById('fin-shared-filters');
+  if (sharedFilters) sharedFilters.innerHTML = '';
+
+  // Seed the CRM drawer's cache so viewCRMDetail works from this tab
+  if (typeof _crmCache !== 'undefined' && _finCrmCache && _finCrmCache.length) {
+    _crmCache = [..._finCrmCache];
+  }
+
+  const clients = (_finCrmCache || []).filter(r => r.status === 'ACTIVE_CUSTOMER');
+
+  // Build set of pool_ids seen in visits from the last 60 days
+  const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  const inRouteIds = new Set(
+    (_finCache || [])
+      .filter(r => r.pool_id && new Date(r.date).getTime() >= cutoff)
+      .map(r => r.pool_id)
+  );
+
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Days of the current week (Mon–Sun) that fall within the current month
+  const dow = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+  const weekDaysInMonth = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+      weekDaysInMonth.push(d.getDate());
+    }
+  }
+
+  const enriched = clients.map(c => {
+    const inRoutes = !!(c.pool_id && inRouteIds.has(c.pool_id));
+    const log = Array.isArray(c.payment_log) ? c.payment_log : [];
+    const entry = log.find(e => e.month === currentMonthKey);
+    const thisMonthStatus = entry ? entry.status : 'none';
+    const monthlyRate = parseFloat(c.total_with_tax) || 0;
+    const name = c.client_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || '—';
+    const dueThisWeek = !!(c.invoice_day && weekDaysInMonth.includes(Number(c.invoice_day)));
+    return { ...c, inRoutes, thisMonthStatus, monthlyRate, name, dueThisWeek };
+  });
+
+  const totalMRR = enriched.reduce((s, c) => s + c.monthlyRate, 0);
+  const inRoutesCount = enriched.filter(c => c.inRoutes).length;
+  const billingIssues = enriched.filter(c => ['pending', 'none'].includes(c.thisMonthStatus)).length;
+
+  const statsEl = document.getElementById('clients-stats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div style="display:flex;gap:.75rem;flex-wrap:wrap;padding:0 1rem .5rem">
+        ${_finStatCard('Active Clients', enriched.length)}
+        ${_finStatCard('Total MRR', _finFmtCurrency(totalMRR))}
+        ${_finStatCard('In Routes', inRoutesCount)}
+        ${_finStatCard('Billing Issues', `<span style="color:var(--error)">${billingIssues}</span>`)}
+      </div>`;
+  }
+
+  const areas = [...new Set(enriched.map(c => c.area).filter(Boolean))].sort();
+  const filtersEl = document.getElementById('clients-filters');
+  if (filtersEl) {
+    filtersEl.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;padding-bottom:.25rem">
+        <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:.3rem">
+          <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Search</label>
+          <input type="text" class="si" placeholder="Name, email, or pool ID…"
+            value="${_clientsSearch}" oninput="_clientsSearch=this.value;_renderClientsTable()">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.3rem">
+          <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Area</label>
+          <select class="si" style="width:auto" onchange="_clientsAreaFilter=this.value;_renderClientsTable()">
+            <option value="">All Areas</option>
+            ${areas.map(a => `<option value="${a}" ${_clientsAreaFilter===a?'selected':''}>${a}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.3rem">
+          <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Billing</label>
+          <select class="si" style="width:auto" onchange="_clientsBillingFilter=this.value;_renderClientsTable()">
+            <option value="">All</option>
+            <option value="due_this_week" ${_clientsBillingFilter==='due_this_week'?'selected':''}>Due This Week</option>
+            <option value="paid" ${_clientsBillingFilter==='paid'?'selected':''}>Paid</option>
+            <option value="invoiced" ${_clientsBillingFilter==='invoiced'?'selected':''}>Invoiced</option>
+            <option value="pending" ${_clientsBillingFilter==='pending'?'selected':''}>Pending</option>
+            <option value="none" ${_clientsBillingFilter==='none'?'selected':''}>No Record</option>
+          </select>
+        </div>
+      </div>`;
+  }
+
+  window._clientsEnriched = enriched;
+  _renderClientsTable(enriched);
+}
+
+function _renderClientsTable(enriched) {
+  const all = window._clientsEnriched || enriched || [];
+  let rows = [...all];
+
+  if (_clientsSearch) {
+    const q = _clientsSearch.toLowerCase();
+    rows = rows.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.pool_id || '').toLowerCase().includes(q)
+    );
+  }
+  if (_clientsAreaFilter) rows = rows.filter(c => c.area === _clientsAreaFilter);
+  if (_clientsBillingFilter) {
+    if (_clientsBillingFilter === 'due_this_week') {
+      rows = rows.filter(c => c.dueThisWeek);
+    } else {
+      rows = rows.filter(c => c.thisMonthStatus === _clientsBillingFilter);
+    }
+  }
+
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+
+  const thead = document.getElementById('clients-thead');
+  const tbody = document.getElementById('clients-tbody');
+  if (!thead || !tbody) return;
+
+  thead.innerHTML = `<tr>
+    <th style="padding-left:1rem">Client</th>
+    <th>City / Area</th>
+    <th>Service</th>
+    <th style="text-align:right">Monthly Rate</th>
+    <th style="text-align:center">Invoice Day</th>
+    <th>This Month</th>
+    <th>In Routes</th>
+    <th></th>
+  </tr>`;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No active clients match your filters.</td></tr>`;
+    return;
+  }
+
+
+  const billingBadge = (s, due) => {
+    const map = {
+      paid:     ['#d1fae5','#065f46','Paid'],
+      invoiced: ['#fef3c7','#92400e','Invoiced'],
+      pending:  ['#fee2e2','#991b1b','Pending'],
+      none:     ['#f3f4f6','#6b7280','No Record']
+    };
+    const [bg, color, label] = map[s] || map.none;
+    const duePill = due ? ` <span style="background:#fef3c7;color:#b45309;padding:.1rem .4rem;border-radius:99px;font-size:.72rem;font-weight:600">Due</span>` : '';
+    return `<span style="background:${bg};color:${color};padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">${label}</span>${duePill}`;
+  };
+
+  const routeBadge = inR => inR
+    ? `<span style="background:#ccfbf1;color:#0f766e;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Yes</span>`
+    : `<span style="color:var(--muted);font-size:.85rem">No</span>`;
+
+  tbody.innerHTML = rows.map(c => `
+    <tr style="cursor:pointer" onclick="viewCRMDetail('${c.quote_id}')">
+      <td style="padding-left:1rem">
+        <div style="font-weight:600">${c.name}</div>
+        ${c.email ? `<div style="font-size:.8rem;color:var(--muted)">${c.email}</div>` : ''}
+      </td>
+      <td>${[c.city, c.area].filter(Boolean).join(' · ') || '—'}</td>
+      <td style="font-size:.88rem">${c.service || '—'}</td>
+      <td style="text-align:right;font-weight:600">${c.monthlyRate ? _finFmtCurrency(c.monthlyRate) : '—'}</td>
+      <td style="text-align:center;font-weight:${c.dueThisWeek?'700':'400'};color:${c.dueThisWeek?'#b45309':'inherit'}">${c.invoice_day ? `Day ${c.invoice_day}` : '—'}</td>
+      <td>${billingBadge(c.thisMonthStatus, c.dueThisWeek)}</td>
+      <td>${routeBadge(c.inRoutes)}</td>
+      <td style="text-align:right;color:var(--muted);font-size:.85rem">›</td>
+    </tr>`).join('');
 }

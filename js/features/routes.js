@@ -574,7 +574,7 @@ function loadUnassigned() {
         const st = (p.status || (crmItem ? crmItem.status : '') || '').toUpperCase();
         p._status = st || 'N/A';
 
-        const isEligible = s.includes('weekly full service') || s.includes('startup');
+        const isEligible = s.includes('weekly full service');
         const isActive = st !== 'LOST' && st !== 'COMPLETED';
         return isEligible && isActive;
       });

@@ -64,7 +64,8 @@ const SIDEBAR_GROUPS = [
       { page:'financial_hub', label:'Payouts',             icon:SVG_CHART, hubTab:'payouts',   id:'ni-financial_hub-payouts' },
       { page:'financial_hub', label:'Profitability',       icon:SVG_CHART, hubTab:'profit',    id:'ni-financial_hub-profit' },
       { page:'financial_hub', label:'Chemical Analysis',  icon:SVG_CLIP,  hubTab:'chemicals', id:'ni-financial_hub-chemicals' },
-      { page:'financial_hub', label:'Visit History',       icon:SVG_CLIP,  hubTab:'visits',    id:'ni-financial_hub-visits' }
+      { page:'financial_hub', label:'Visit History',       icon:SVG_CLIP,  hubTab:'visits',    id:'ni-financial_hub-visits' },
+      { page:'financial_hub', label:'Clients',             icon:SVG_CLIP,  hubTab:'clients',   id:'ni-financial_hub-clients' }
     ]
   }
 ];
