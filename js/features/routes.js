@@ -1128,9 +1128,21 @@ function renderProfileTab() {
     return;
   }
 
-  // Avatar initials
+  // Avatar initials/photo
   const initials = (user.name || user.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-  document.getElementById('profile-avatar').textContent = initials;
+  const initialsEl = document.getElementById('profile-initials');
+  const imgEl = document.getElementById('profile-img');
+  const avatarUrl = user.avatar_url || localStorage.getItem('mcps_avatar_' + user.username);
+
+  if (avatarUrl && initialsEl && imgEl) {
+    imgEl.src = avatarUrl;
+    imgEl.style.display = 'block';
+    initialsEl.style.display = 'none';
+  } else if (initialsEl && imgEl) {
+    imgEl.style.display = 'none';
+    initialsEl.style.display = 'block';
+    initialsEl.textContent = initials;
+  }
 
   // Name + meta
   document.getElementById('profile-name').textContent = user.name || user.username;
@@ -1698,3 +1710,52 @@ function markStartupDone(evt) {
     });
 }
 
+
+// ── Profile Photo Upload ──────────────────────────────────────────────────────
+function triggerProfilePhotoUpload() {
+  // Only allow editing own profile unless admin
+  if (_profileOp !== _s.username && !isAdmin()) return;
+  document.getElementById('profile-photo-input').click();
+}
+
+function handleProfilePhotoSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  // Max 2MB for profile photo
+  if (file.size > 2 * 1024 * 1024) {
+    alert('Photo is too large (max 2MB).');
+    input.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64 = e.target.result;
+    
+    // Update UI immediately
+    const imgEl = document.getElementById('profile-img');
+    const initialsEl = document.getElementById('profile-initials');
+    if (imgEl && initialsEl) {
+      imgEl.src = base64;
+      imgEl.style.display = 'block';
+      initialsEl.style.display = 'none';
+    }
+
+    // Persist locally for "personal use" first as requested
+    localStorage.setItem('mcps_avatar_' + _profileOp, base64);
+    if (_profileOp === _s.username && typeof updateSidebarAvatar === 'function') {
+      updateSidebarAvatar();
+    }
+
+    // Also attempt to save to backend if configured
+    api({
+      secret: SEC, action: 'update_user', token: _s.token,
+      username: _profileOp,
+      fields: { avatar_base64: base64 }
+    }).then(res => {
+      if (!res.ok) console.warn('Backend avatar save failed:', res.error);
+    }).catch(err => console.error('Network error saving avatar:', err));
+  };
+  reader.readAsDataURL(file);
+}

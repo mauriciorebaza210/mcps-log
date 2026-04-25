@@ -138,6 +138,19 @@ function showApp(startPage) {
 
   const pg = (_s.pages||[]).includes(startPage)?startPage:_defaultLandingPage_();
   navigateTo(pg);
+  updateSidebarAvatar();
+}
+
+function updateSidebarAvatar() {
+  const avatarEl = document.getElementById('sb-avatar');
+  if (!avatarEl) return;
+  const avatarUrl = localStorage.getItem('mcps_avatar_' + _s.username);
+  if (avatarUrl) {
+    avatarEl.innerHTML = `<img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%">`;
+  } else {
+    const initials = (_s.name || _s.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    avatarEl.textContent = initials;
+  }
 
   // Trainees land on the Training tab (no Schedule/Profile access)
   const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
@@ -200,10 +213,7 @@ function buildNav() {
     html += `<button class="sb-item" id="ni-onboarding" onclick="navigateTo('onboarding')">${SVG_STAR}<span>Get Started</span></button>`;
   }
 
-  // Operator Profile — standalone at the bottom
-  if (pages.includes('live_map') && !traineeOnly) {
-    html += `<button class="sb-item sb-item-bottom" id="sb-child-profile" onclick="navigateTo('live_map');switchHubTab('profile')">${SVG_USER}<span>Operator Profile</span></button>`;
-  }
+
 
   document.getElementById('sb-nav').innerHTML = html;
 }
@@ -426,4 +436,10 @@ function resolveHomeIssue(id) {
       alert("Failed to resolve: " + res.error);
     }
   }).catch(e => alert("Network error"));
+}
+function handleProfileClick() {
+  const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
+  if (traineeOnly) return; 
+  _profileOp = _s.username;
+  navigateTo('live_map/profile');
 }

@@ -57,9 +57,12 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .sb-child.active svg{opacity:1}
 /* Sidebar footer */
 .sb-footer{padding:.75rem 1rem;border-top:1px solid rgba(255,255,255,.1);flex-shrink:0}
-.sb-user-info{margin-bottom:.5rem}
+.sb-user-info{margin-bottom:.5rem;cursor:pointer;padding:.4rem .6rem;margin-left:-.6rem;margin-right:-.6rem;border-radius:10px;transition:background .15s;display:flex;align-items:center;gap:.75rem}
+.sb-user-info:hover{background:rgba(255,255,255,.08)}
+.sb-avatar{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;font-family:Oswald;flex-shrink:0;overflow:hidden}
+.sb-user-details{min-width:0;flex:1}
 .sb-name{display:block;color:#fff;font-size:.875rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-footer .r-badge{font-size:.65rem;margin-top:.15rem;display:inline-block}
+.sb-footer .r-badge{font-size:.65rem;margin-top:.1rem;display:inline-block}
 .sb-logout{width:100%;padding:.38rem .75rem;background:rgba(255,255,255,.1);color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.2);border-radius:7px;cursor:pointer;font-size:.8rem;font-family:'Barlow',sans-serif;transition:background .15s;margin-top:.5rem}
 .sb-logout:hover{background:rgba(255,255,255,.2);color:#fff}
 /* Mobile overlay */
@@ -484,11 +487,16 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
   padding:1.1rem 1.25rem;
 }
 .phc-avatar{
-  width:48px;height:48px;border-radius:50%;
+  width:64px;height:64px;border-radius:50%;
   background:linear-gradient(135deg,var(--teal),var(--teal-mid));
-  color:#fff;font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;
+  color:#fff;font-family:'Oswald',sans-serif;font-size:1.4rem;font-weight:700;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  position:relative;cursor:pointer;overflow:hidden;border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.1);transition:transform .2s;
 }
+.phc-avatar:hover{transform:scale(1.05)}
+.phc-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar-edit-overlay{position:absolute;bottom:0;left:0;right:0;height:40%;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;opacity:0;transition:opacity .2s}
+.phc-avatar:hover .avatar-edit-overlay{opacity:1}
 .phc-name{font-family:'Oswald',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.04em}
 .phc-meta{font-size:.8rem;color:var(--muted);margin-top:.15rem}
 
@@ -1038,6 +1046,7 @@ select.q-inp{cursor:pointer}
 .qw-footer { padding:1rem 1.5rem; border-top:1px solid #dadce0; background:#fff; display:flex; justify-content:flex-end; }
 .qw-preview-toggle { padding:0.5rem 1.5rem; background:#fff; border-top:1px solid #e8eaed; display:flex; justify-content:center; }
 .qw-preview { padding:1.5rem; flex:1; overflow-y:auto; background:#fff; }
+
 
 
 /* ── Final Quiz source selector ─────────────────────────── */
