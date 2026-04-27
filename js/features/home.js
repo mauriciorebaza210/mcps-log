@@ -308,7 +308,7 @@ async function loadHomeStats() {
     const todayStr = `${localNow.getFullYear()}-${pad(localNow.getMonth() + 1)}-${pad(localNow.getDate())}`;
 
     // Fetch enriched data for accurate metrics
-    const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes] = await Promise.all([
+    const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes, goalRes] = await Promise.all([
       apiGet({ action: 'get_crm_data', token: _s.token }),
       apiGet({ action: 'get_unassigned', token: _s.token }),
       apiGet({ action: 'get_issue_alerts', token: _s.token }),
@@ -320,7 +320,8 @@ async function loadHomeStats() {
           const mon = new Date(d.getFullYear(), d.getMonth(), diff);
           return mon.getFullYear() + '-' + String(mon.getMonth() + 1).padStart(2, '0') + '-' + String(mon.getDate()).padStart(2, '0');
         })()
-      })
+      }),
+      apiGet({ action: 'get_weekly_goal', token: _s.token })
     ]);
 
     let openOpportunities = 0;
@@ -474,6 +475,9 @@ async function loadHomeStats() {
       });
     }
 
+    const signedCount = (goalRes && goalRes.ok) ? (goalRes.signed_this_week || 0) : 0;
+    const signedGoal  = (goalRes && goalRes.ok) ? (goalRes.goal || 5) : 5;
+
     // Row 1: KPIs
     const kpiRow = document.getElementById('dash-row-kpi');
     if (kpiRow) {
@@ -497,9 +501,10 @@ async function loadHomeStats() {
 
         ${renderKPICard('Monthly Revenue', _finFmtCurrency(monthlyRevenue), '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 18V6"></path></svg>', 'var(--teal)', '0.1s', Array(12).fill(0))}
         ${renderKPICard('Open Opportunities', openOpportunities > 0 ? '$' + Math.round(openOpportunities).toLocaleString() : '0', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>', 'var(--teal)', '0.15s')}
-        ${renderKPICard("Today's Stops", todayScheduled, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>', 'var(--teal-mid)', '0.2s')}
+        ${buildHomeOdometerCard(signedCount, signedGoal)}
         ${renderKPICard('Needing Routes', unassignedCount, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>', unassignedCount > 0 ? '#b45309' : 'var(--teal)', '0.25s')}
         ${renderKPICard('Alerts', criticalAlerts, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>', criticalAlerts > 0 ? 'var(--warn)' : 'var(--muted)', '0.3s')}
+        ${renderKPICard("Today's Stops", todayScheduled, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>', 'var(--teal-mid)', '0.2s')}
       `;
     }
 
@@ -560,13 +565,13 @@ async function loadHomeStats() {
       `;
     }
 
-    // Row 4: Attention Widget (as a specialized snapshot in row 2 or standalone row 3)
     const attentionRow = document.getElementById('dash-row-attention');
     if (attentionRow) {
       const activeAlerts = [
         ...((alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts : []),
         ...billingAlerts
       ];
+      attentionRow.style = '';
       attentionRow.innerHTML = renderAttentionWidget(activeAlerts);
     }
 
@@ -623,6 +628,37 @@ async function loadHomeStats() {
   } catch (e) {
     console.error("Dashboard error:", e);
   }
+}
+
+function buildHomeOdometerCard(count, goal) {
+  const pct   = Math.min(count / Math.max(goal, 1), 1);
+  const filled = Math.round(pct * 100);
+  const R = 62, CX = 80, CY = 80;
+  const arcLen  = Math.PI * R;
+  const fillLen = arcLen * pct;
+  const gapLen  = arcLen - fillLen + 0.001;
+  const color   = pct >= 1 ? '#16a34a' : pct >= 0.5 ? '#d97706' : '#ef4444';
+  const angle   = Math.PI - Math.PI * pct;
+  const nx = CX + R * 0.72 * Math.cos(angle);
+  const ny = CY - R * 0.72 * Math.sin(Math.PI * pct);
+  return `
+    <div class="dash-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5rem;padding:1.25rem;min-height:180px;">
+      <div class="kpi-title" style="color:var(--teal);width:100%;text-align:left;">WEEKLY SIGNED GOAL</div>
+      <svg viewBox="0 0 160 90" width="160" height="90">
+        <path d="M ${CX-R},${CY} A ${R},${R} 0 0 1 ${CX+R},${CY}"
+          fill="none" stroke="#e2e8f0" stroke-width="12" stroke-linecap="round"/>
+        <path d="M ${CX-R},${CY} A ${R},${R} 0 0 1 ${CX+R},${CY}"
+          fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+          stroke-dasharray="${fillLen} ${gapLen}"/>
+        <line x1="${CX}" y1="${CY}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}"
+          stroke="#0f172a" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="${CX}" cy="${CY}" r="4" fill="#0f172a"/>
+        <text x="${CX}" y="${CY - 12}" text-anchor="middle"
+          font-family="Oswald,sans-serif" font-size="13" font-weight="700" fill="${color}">${filled}%</text>
+      </svg>
+      <div style="font-family:'Oswald',sans-serif;font-size:2rem;font-weight:700;color:var(--text);line-height:1;">${count}</div>
+      <div style="font-size:0.78rem;color:var(--muted);font-weight:500;">signed this week &nbsp;·&nbsp; Goal: <strong>${goal}</strong></div>
+    </div>`;
 }
 
 function buildFunnelSVG(leads, quoted, signed) {

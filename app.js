@@ -107,7 +107,7 @@ function _appCacheSet(key, data) {
 window.onload = () => {
   const stored = localStorage.getItem('mcps_s');
   if (stored) {
-    try { _s = JSON.parse(stored); showApp(location.hash.replace('#','') || _defaultLandingPage_()); return; } catch(e) { localStorage.removeItem('mcps_s'); }
+    try { _s = JSON.parse(stored); if (!_s.username) { _s = null; localStorage.removeItem('mcps_s'); } else { showApp(location.hash.replace('#','') || _defaultLandingPage_()); return; } } catch(e) { localStorage.removeItem('mcps_s'); }
   }
   const deep = location.hash.replace('#','');
   if (deep) sessionStorage.setItem('mcps_deep', deep);
@@ -144,7 +144,7 @@ function showApp(startPage) {
 function updateSidebarAvatar() {
   const avatarEl = document.getElementById('sb-avatar');
   if (!avatarEl) return;
-  const avatarUrl = localStorage.getItem('mcps_avatar_' + _s.username);
+  const avatarUrl = localStorage.getItem('mcps_avatar_' + _s.username) || _s.avatar_url;
   if (avatarUrl) {
     avatarEl.innerHTML = `<img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%">`;
   } else {

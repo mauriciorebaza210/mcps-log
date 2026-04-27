@@ -1132,7 +1132,7 @@ function renderProfileTab() {
   const initials = (user.name || user.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const initialsEl = document.getElementById('profile-initials');
   const imgEl = document.getElementById('profile-img');
-  const avatarUrl = user.avatar_url || localStorage.getItem('mcps_avatar_' + user.username);
+  const avatarUrl = localStorage.getItem('mcps_avatar_' + user.username) || user.avatar_url;
 
   if (avatarUrl && initialsEl && imgEl) {
     imgEl.src = avatarUrl;
@@ -1721,8 +1721,13 @@ function triggerProfilePhotoUpload() {
 function handleProfilePhotoSelect(input) {
   const file = input.files[0];
   if (!file) return;
-  
-  // Max 2MB for profile photo
+
+  if (/heic|heif/i.test(file.type) || /\.heic$/i.test(file.name)) {
+    alert('HEIC photos aren\'t supported. Please convert to JPEG or PNG first (on iPhone: share → save as JPEG).');
+    input.value = '';
+    return;
+  }
+
   if (file.size > 2 * 1024 * 1024) {
     alert('Photo is too large (max 2MB).');
     input.value = '';
@@ -1731,31 +1736,61 @@ function handleProfilePhotoSelect(input) {
 
   const reader = new FileReader();
   reader.onload = function(e) {
-    const base64 = e.target.result;
-    
-    // Update UI immediately
-    const imgEl = document.getElementById('profile-img');
-    const initialsEl = document.getElementById('profile-initials');
-    if (imgEl && initialsEl) {
-      imgEl.src = base64;
-      imgEl.style.display = 'block';
-      initialsEl.style.display = 'none';
-    }
+    const original = e.target.result;
 
-    // Persist locally for "personal use" first as requested
-    localStorage.setItem('mcps_avatar_' + _profileOp, base64);
-    if (_profileOp === _s.username && typeof updateSidebarAvatar === 'function') {
-      updateSidebarAvatar();
-    }
+    // Resize to 160×160 JPEG before sending — avoids Drive URL serving issues
+    const img = new Image();
+    img.onload = function() {
+      const SIZE = 160;
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(SIZE / img.width, SIZE / img.height);
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL('image/jpeg', 0.82);
 
-    // Also attempt to save to backend if configured
-    api({
-      secret: SEC, action: 'update_user', token: _s.token,
-      username: _profileOp,
-      fields: { avatar_base64: base64 }
-    }).then(res => {
-      if (!res.ok) console.warn('Backend avatar save failed:', res.error);
-    }).catch(err => console.error('Network error saving avatar:', err));
+      // Show preview immediately
+      const imgEl = document.getElementById('profile-img');
+      const initialsEl = document.getElementById('profile-initials');
+      if (imgEl && initialsEl) {
+        imgEl.src = base64;
+        imgEl.style.display = 'block';
+        imgEl.style.opacity = '0.5';
+        initialsEl.style.display = 'none';
+      }
+
+      // Show uploading badge
+      const badge = document.getElementById('profile-photo-badge');
+      if (badge) { badge.textContent = '⏳'; badge.title = 'Uploading…'; }
+
+      api({
+        secret: SEC, action: 'update_user', token: _s.token,
+        username: _profileOp,
+        fields: { avatar_base64: base64 }
+      }).then(res => {
+        if (!res.ok) {
+          console.warn('Avatar save failed:', res.error);
+          if (imgEl) imgEl.style.opacity = '1';
+          if (badge) { badge.textContent = '📷'; badge.title = 'Change photo'; }
+          return;
+        }
+
+        // GAS stores base64 directly — no Drive URL needed
+        localStorage.setItem('mcps_avatar_' + _profileOp, base64);
+
+        if (imgEl) { imgEl.src = base64; imgEl.style.opacity = '1'; }
+        if (badge) { badge.textContent = '📷'; badge.title = 'Change photo'; }
+
+        if (_profileOp === _s.username) {
+          if (typeof updateSidebarAvatar === 'function') updateSidebarAvatar();
+        }
+      }).catch(err => {
+        console.error('Network error saving avatar:', err);
+        if (imgEl) imgEl.style.opacity = '1';
+        if (badge) { badge.textContent = '📷'; badge.title = 'Change photo'; }
+      });
+    };
+    img.src = original;
   };
   reader.readAsDataURL(file);
 }
