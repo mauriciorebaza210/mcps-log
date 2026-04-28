@@ -564,10 +564,13 @@ function recalculateRoutes() {
 let _gtcPools = [];
 
 function loadUnassigned() {
+  const _unC  = _appCacheGet('unassigned',  15*60*1000);
+  const _crmC = _appCacheGet('crm_data',    15*60*1000);
+  const _gtcC = _appCacheGet('gtc_pools',   15*60*1000);
   Promise.all([
-    apiGet({ action: 'get_unassigned', token: _s.token }),
-    apiGet({ action: 'get_crm_data', token: _s.token }),
-    api({ action: 'get_gtc_pools', token: _s.token })
+    _unC  ? Promise.resolve(_unC)                  : apiGet({ action: 'get_unassigned', token: _s.token }).then(r => { if (r.ok) _appCacheSet('unassigned', r); return r; }),
+    _crmC ? Promise.resolve({ ok: true, data: _crmC }) : apiGet({ action: 'get_crm_data', token: _s.token }).then(r => { if (r.ok && r.data) _appCacheSet('crm_data', r.data); return r; }),
+    _gtcC ? Promise.resolve(_gtcC)                 : api({ action: 'get_gtc_pools', token: _s.token }).then(r => { if (r.ok) _appCacheSet('gtc_pools', r); return r; })
   ]).then(([unRes, crmRes, gtcRes]) => {
     if (unRes.ok && unRes.pools) {
       const crmData = (crmRes.ok && crmRes.data) ? crmRes.data : [];

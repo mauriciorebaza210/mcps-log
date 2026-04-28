@@ -307,21 +307,35 @@ async function loadHomeStats() {
     const pad = n => String(n).padStart(2, '0');
     const todayStr = `${localNow.getFullYear()}-${pad(localNow.getMonth() + 1)}-${pad(localNow.getDate())}`;
 
-    // Fetch enriched data for accurate metrics
+    // Fetch enriched data — serve from localStorage cache where available
+    const _homeWeekStart = (() => {
+      const d = new Date(); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const mon = new Date(d.getFullYear(), d.getMonth(), diff);
+      return mon.getFullYear() + '-' + String(mon.getMonth() + 1).padStart(2, '0') + '-' + String(mon.getDate()).padStart(2, '0');
+    })();
+    const _or = (cached, fetch) => cached !== null ? Promise.resolve(cached) : fetch;
+    const _crmC  = _appCacheGet('crm_data',    15*60*1000);
+    const _unC   = _appCacheGet('unassigned',  15*60*1000);
+    const _altC  = _appCacheGet('issue_alerts',  5*60*1000);
+    const _svC   = _appCacheGet('sched_visits', 15*60*1000);
+    const _histC = _appCacheGet('visit_history', 5*60*1000);
+    const _rdC   = _getRouteCache('all', 0);
+    const _glC   = _appCacheGet('weekly_goal',   5*60*1000);
     const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes, goalRes] = await Promise.all([
-      apiGet({ action: 'get_crm_data', token: _s.token }),
-      apiGet({ action: 'get_unassigned', token: _s.token }),
-      apiGet({ action: 'get_issue_alerts', token: _s.token }),
-      apiGet({ action: 'scheduled_visits', token: _s.token }),
-      apiGet({ action: 'get_visit_history', token: _s.token }),
-      apiGet({
-        action: 'route_data', token: _s.token, operator: 'all', week_start: (function () {
-          const d = new Date(); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-          const mon = new Date(d.getFullYear(), d.getMonth(), diff);
-          return mon.getFullYear() + '-' + String(mon.getMonth() + 1).padStart(2, '0') + '-' + String(mon.getDate()).padStart(2, '0');
-        })()
-      }),
-      apiGet({ action: 'get_weekly_goal', token: _s.token })
+      _or(_crmC  !== null ? { ok: true, data: _crmC } : null,
+        apiGet({ action: 'get_crm_data', token: _s.token }).then(r => { if (r.ok && r.data) _appCacheSet('crm_data', r.data); return r; })),
+      _or(_unC,
+        apiGet({ action: 'get_unassigned', token: _s.token }).then(r => { if (r.ok) _appCacheSet('unassigned', r); return r; })),
+      _or(_altC,
+        apiGet({ action: 'get_issue_alerts', token: _s.token }).then(r => { if (r.ok) _appCacheSet('issue_alerts', r); return r; })),
+      _or(_svC,
+        apiGet({ action: 'scheduled_visits', token: _s.token }).then(r => { if (r.ok) _appCacheSet('sched_visits', r); return r; })),
+      _or(_histC,
+        apiGet({ action: 'get_visit_history', token: _s.token }).then(r => { if (r.ok) _appCacheSet('visit_history', r); return r; })),
+      _or(_rdC,
+        apiGet({ action: 'route_data', token: _s.token, operator: 'all', week_start: _homeWeekStart }).then(r => { if (r.ok) _setRouteCache('all', 0, r); return r; })),
+      _or(_glC,
+        apiGet({ action: 'get_weekly_goal', token: _s.token }).then(r => { if (r.ok) _appCacheSet('weekly_goal', r); return r; })),
     ]);
 
     let openOpportunities = 0;

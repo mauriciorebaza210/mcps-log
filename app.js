@@ -182,10 +182,7 @@ function _migrateAvatarToBase64_(username, url) {
 }
 
 function _prefetchCommon() {
-  if (isAdmin() && !_appCacheGet('crm_data', 15*60*1000)) {
-    apiGet({ action: 'get_crm_data', token: _s.token })
-      .then(r => { if (r.ok) _appCacheSet('crm_data', r.data); }).catch(()=>{});
-  }
+  // CRM prefetch removed — home.js loadHomeStats caches it on page load for admins
   if (hasRole('technician') || hasRole('lead')) {
     api({ action: 'get_metadata' })
       .then(r => { if (r.ok) _appCacheSet('svc_meta', r); }).catch(()=>{});
@@ -468,6 +465,7 @@ function loadHomeIssues() {
   body.innerHTML = '<div style="padding:1rem;color:var(--muted);text-align:center;">Loading...</div>';
   
   apiGet({ action: 'get_issue_alerts', token: _s.token }).then(res => {
+    if (res.ok) _appCacheSet('issue_alerts', res);
     if(res.ok && res.alerts && res.alerts.length > 0) {
       banner.style.display = 'block';
       countSpan.textContent = res.alerts.length;
