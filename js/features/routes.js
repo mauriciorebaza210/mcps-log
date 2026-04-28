@@ -567,7 +567,7 @@ function loadUnassigned() {
   Promise.all([
     apiGet({ action: 'get_unassigned', token: _s.token }),
     apiGet({ action: 'get_crm_data', token: _s.token }),
-    apiGet({ action: 'get_gtc_pools', token: _s.token })
+    api({ action: 'get_gtc_pools', token: _s.token })
   ]).then(([unRes, crmRes, gtcRes]) => {
     if (unRes.ok && unRes.pools) {
       const crmData = (crmRes.ok && crmRes.data) ? crmRes.data : [];
@@ -1175,9 +1175,19 @@ function renderProfileTab() {
   const avatarUrl = localStorage.getItem('mcps_avatar_' + user.username) || user.avatar_url;
 
   if (avatarUrl && initialsEl && imgEl) {
-    imgEl.src = avatarUrl;
-    imgEl.style.display = 'block';
-    initialsEl.style.display = 'none';
+    if (avatarUrl.startsWith('data:')) {
+      imgEl.src = avatarUrl;
+      imgEl.style.display = 'block';
+      initialsEl.style.display = 'none';
+    } else {
+      // External Drive URL — show initials, migrate to base64 in background
+      imgEl.style.display = 'none';
+      initialsEl.style.display = 'block';
+      initialsEl.textContent = initials;
+      if (typeof _migrateAvatarToBase64_ === 'function') {
+        _migrateAvatarToBase64_(user.username, avatarUrl);
+      }
+    }
   } else if (initialsEl && imgEl) {
     imgEl.style.display = 'none';
     initialsEl.style.display = 'block';

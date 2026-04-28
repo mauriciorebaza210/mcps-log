@@ -144,11 +144,17 @@ function showApp(startPage) {
 function updateSidebarAvatar() {
   const avatarEl = document.getElementById('sb-avatar');
   if (!avatarEl) return;
+  const initials = (_s.name || _s.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const avatarUrl = localStorage.getItem('mcps_avatar_' + _s.username) || _s.avatar_url;
-  if (avatarUrl) {
+
+  if (avatarUrl && avatarUrl.startsWith('data:')) {
+    // Already a base64 data URL — render directly, no network request
     avatarEl.innerHTML = `<img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%">`;
+  } else if (avatarUrl) {
+    // External Drive URL (legacy) — show initials immediately, fetch+cache as base64 in background
+    avatarEl.textContent = initials;
+    _migrateAvatarToBase64_(_s.username, avatarUrl);
   } else {
-    const initials = (_s.name || _s.username || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
     avatarEl.textContent = initials;
   }
 
@@ -157,6 +163,22 @@ function updateSidebarAvatar() {
   if(traineeOnly){
     switchHubTab('training');
   }
+}
+
+function _migrateAvatarToBase64_(username, url) {
+  fetch(url)
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+    .then(blob => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    }))
+    .then(dataUrl => {
+      localStorage.setItem('mcps_avatar_' + username, dataUrl);
+      if (username === _s.username) updateSidebarAvatar();
+    })
+    .catch(() => {}); // 429 or network error — initials remain, retry next session
 }
 
 function _prefetchCommon() {
