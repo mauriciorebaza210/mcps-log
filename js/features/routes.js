@@ -561,11 +561,14 @@ function recalculateRoutes() {
     });
 }
 
+let _gtcPools = [];
+
 function loadUnassigned() {
   Promise.all([
     apiGet({ action: 'get_unassigned', token: _s.token }),
-    apiGet({ action: 'get_crm_data', token: _s.token })
-  ]).then(([unRes, crmRes]) => {
+    apiGet({ action: 'get_crm_data', token: _s.token }),
+    apiGet({ action: 'get_gtc_pools', token: _s.token })
+  ]).then(([unRes, crmRes, gtcRes]) => {
     if (unRes.ok && unRes.pools) {
       const crmData = (crmRes.ok && crmRes.data) ? crmRes.data : [];
       _unassignedPools = unRes.pools.filter(p => {
@@ -584,6 +587,9 @@ function loadUnassigned() {
       const existing = document.getElementById('new-pools-banner');
       if (existing) existing.remove();
     }
+
+    _gtcPools = (gtcRes && gtcRes.ok && gtcRes.pools) ? gtcRes.pools : [];
+    renderGtcJobsBanner();
   }).catch(() => { });
 }
 
@@ -614,6 +620,35 @@ function renderNewPoolsBanner() {
     content.insertAdjacentHTML('afterbegin', html);
   } else {
     banner.outerHTML = html;
+  }
+}
+
+function renderGtcJobsBanner() {
+  const existing = document.getElementById('gtc-jobs-banner');
+  if (!_gtcPools || !_gtcPools.length) {
+    if (existing) existing.remove();
+    return;
+  }
+  const html = `<div class="new-pools-banner gtc-jobs-banner" id="gtc-jobs-banner">
+    <div class="npb-header" onclick="document.getElementById('gtc-jobs-body').classList.toggle('open')">
+      <span class="npb-title" style="color:var(--teal)">🌿 ${_gtcPools.length} Green-to-Clean job${_gtcPools.length > 1 ? 's' : ''} — schedule visits</span>
+      <span class="npb-count">▼</span>
+    </div>
+    <div class="npb-body" id="gtc-jobs-body">
+      ${_gtcPools.map(p => `<div class="npb-pool">
+        <div class="npb-pool-info">
+          <div class="npb-pool-name">${escHtml(p.customer_name || p.pool_id)} <span style="font-size:.7rem;color:var(--muted);font-weight:700;background:rgba(0,0,0,.05);padding:1px 4px;border-radius:3px;margin-left:4px">${escHtml(p.pool_id)}</span></div>
+          <div class="npb-pool-addr">${escHtml(p.address || '')}${p.city ? ', ' + escHtml(p.city) : ''}</div>
+        </div>
+        <button class="npb-place-btn" style="background:var(--teal);color:#fff;border-color:var(--teal)" onclick="openGtcModal('${escHtml(p.pool_id)}','${escHtml(p.customer_name || '')}','${escHtml(p.operator || '')}')">Schedule ▸</button>
+      </div>`).join('')}
+    </div>
+  </div>`;
+  if (!existing) {
+    const content = document.getElementById('route-content');
+    content.insertAdjacentHTML('afterbegin', html);
+  } else {
+    existing.outerHTML = html;
   }
 }
 
@@ -876,13 +911,17 @@ function renderDayCard(dayData) {
 
     // Formatted visit type label for scheduled visits
     let scheduledBadgeHtml = '';
+    const isGtcVisit = pool._is_scheduled_visit && (pool.service || '').toLowerCase().includes('green');
     if (pool._is_scheduled_visit) {
-      let badgeText = 'Scheduled Visit';
-      if (pool._visit_type) {
-        badgeText = pool._visit_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      if (isGtcVisit) {
+        scheduledBadgeHtml = `<span class="ps-label ps-label-gtc">Green-to-Clean</span>`;
+      } else {
+        let badgeText = 'Scheduled Visit';
+        if (pool._visit_type) {
+          badgeText = pool._visit_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        }
+        scheduledBadgeHtml = `<span class="ps-label svc-startup" style="background:rgba(147, 51, 234, 0.15);color:#7e22ce">${badgeText}</span>`;
       }
-      // Different styling to distinguish from standard recurring routes
-      scheduledBadgeHtml = `<span class="ps-label svc-startup" style="background:rgba(147, 51, 234, 0.15);color:#7e22ce">${badgeText}</span>`;
     }
 
     // Startup Day 1: add "Day 1/3" badge alongside service label
@@ -916,6 +955,7 @@ function renderDayCard(dayData) {
             📲 On My Way
           </button>
           <a class="ps-btn ps-nav" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool"></a>
+          ${isGtcVisit ? `<button class="ps-btn ps-gtc-next" onclick="openGtcModal('${escHtml(pId)}','${escHtml(pool.customer_name || '')}','${escHtml(pool.operator || '')}')">+ Next Visit</button>` : ''}
         </div>
       </div>
       <div class="ps-action-col" onclick="event.stopPropagation();toggleDoneInHub(this,${idx},'${escHtml(pId)}','${doneKey}')">
@@ -1793,4 +1833,72 @@ function handleProfilePhotoSelect(input) {
     img.src = original;
   };
   reader.readAsDataURL(file);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GREEN-TO-CLEAN — Schedule Next Visit Modal
+// ══════════════════════════════════════════════════════════════════════════════
+let _gtcModal = { poolId: '', customerName: '' };
+
+function openGtcModal(poolId, customerName, operator) {
+  _gtcModal = { poolId, customerName };
+  const overlay = document.getElementById('gtc-modal-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  const custEl = document.getElementById('gtc-modal-customer');
+  if (custEl) custEl.textContent = customerName + ' · ' + poolId;
+  const techEl = document.getElementById('gtc-modal-tech');
+  if (techEl) techEl.value = operator || '';
+  const dateEl = document.getElementById('gtc-modal-date');
+  if (dateEl) dateEl.value = '';
+  const notesEl = document.getElementById('gtc-modal-notes');
+  if (notesEl) notesEl.value = '';
+  const msgEl = document.getElementById('gtc-modal-msg');
+  if (msgEl) { msgEl.textContent = ''; msgEl.style.color = ''; }
+  const btn = document.getElementById('gtc-modal-submit');
+  if (btn) btn.disabled = false;
+}
+
+function closeGtcModal() {
+  const overlay = document.getElementById('gtc-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function submitGtcModal() {
+  const date  = document.getElementById('gtc-modal-date')?.value;
+  const tech  = document.getElementById('gtc-modal-tech')?.value || '';
+  const notes = document.getElementById('gtc-modal-notes')?.value || '';
+  const msg   = document.getElementById('gtc-modal-msg');
+  const btn   = document.getElementById('gtc-modal-submit');
+
+  if (!date) {
+    if (msg) { msg.textContent = 'Please select a date.'; msg.style.color = 'var(--error, #dc2626)'; }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await api({
+      action: 'schedule_gtc_visit',
+      token:  _s ? _s.token : '',
+      pool_id: _gtcModal.poolId,
+      customer_name: _gtcModal.customerName,
+      scheduled_date: date,
+      assigned_technician: tech,
+      notes
+    });
+
+    if (res.ok) {
+      if (msg) { msg.textContent = 'Scheduled for ' + date; msg.style.color = 'var(--accent, #0d4d44)'; }
+      _clearRouteCache();
+      setTimeout(() => closeGtcModal(), 1400);
+    } else {
+      if (msg) { msg.textContent = res.error || 'Failed to schedule.'; msg.style.color = 'var(--error, #dc2626)'; }
+      if (btn) btn.disabled = false;
+    }
+  } catch(e) {
+    if (msg) { msg.textContent = 'Network error — check connection.'; msg.style.color = 'var(--error, #dc2626)'; }
+    if (btn) btn.disabled = false;
+  }
 }

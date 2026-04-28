@@ -330,7 +330,7 @@ async function qSave() {
     chem_cost_est:eng.chem_cost, net_profit_est:net, margin_percent:margin,
     specs_summary:eng.specs_summary, quickbooks_skus:eng.qb_skus.join(', '), quickbooks_item_names:eng.qb_names.join(', '),
     created_by:(_s&&_s.name)||'portal', quote_source:'portal', quote_version:'2.0',
-    status: _qS.service === 'pool_startup' ? 'ACTIVE_CUSTOMER' : 'UNSENT'
+    status: (_qS.service === 'pool_startup' || _qS.service === 'green_to_clean') ? 'ACTIVE_CUSTOMER' : 'UNSENT'
   };
 
   try {
@@ -339,6 +339,16 @@ async function qSave() {
     const msg = document.getElementById('q-save-msg');
     if (res.ok) {
       _qS.saved_id = res.quote_id || '✓';
+      _qS.pool_id = res.pool_id || null;
+      _qS.gtc_visits = [];
+      _qS.gtc_operators = [];
+      _qS.gtc_scheduling = false;
+      // Load operator list for the scheduling dropdown (background, non-blocking)
+      if (res.pool_id && _qS.service === 'green_to_clean') {
+        apiGet({ action: 'route_data', token: _s ? _s.token : '' })
+          .then(r => { _qS.gtc_operators = Array.isArray(r.all_operators) ? r.all_operators : []; qRenderSavedCard(); })
+          .catch(() => {});
+      }
       msg.className = 'q-msg ok';
       msg.textContent = `Saved! Quote ID: ${res.quote_id || '—'}`;
       msg.scrollIntoView({ behavior:'smooth', block:'nearest' });
@@ -415,6 +425,37 @@ function qRenderSavedCard() {
     </div>`;
   }
 
+  // G2C scheduling section
+  let gtcHtml = '';
+  if (_qS.service === 'green_to_clean' && _qS.pool_id) {
+    const visitRows = (_qS.gtc_visits || []).map(v => {
+      const d = v.scheduled_date
+        ? new Date(v.scheduled_date + 'T12:00:00').toLocaleDateString([], { weekday:'short', month:'short', day:'numeric' })
+        : '—';
+      const statusBadge = v.status === 'completed'
+        ? `<span class="q-visit-badge done">Done</span>`
+        : `<span class="q-visit-badge">Scheduled</span>`;
+      return `<div class="q-visit-row">${statusBadge}<span>${d}</span><span class="q-visit-tech">${esc(v.assigned_technician || 'Unassigned')}</span></div>`;
+    }).join('');
+
+    const opOptions = (_qS.gtc_operators || [])
+      .map(op => `<option value="${esc(op)}">${esc(op)}</option>`).join('');
+
+    gtcHtml = `<div class="q-gtc-section">
+      <div class="q-gtc-header">Schedule Visits <span class="q-pool-badge">${esc(_qS.pool_id)}</span></div>
+      ${visitRows ? `<div class="q-visit-list">${visitRows}</div>` : ''}
+      <div class="q-gtc-form">
+        <input type="date" id="q-gtc-date" class="q-inp">
+        <select id="q-gtc-tech" class="q-inp">${opOptions || '<option value="">—</option>'}</select>
+        <input type="text" id="q-gtc-notes" class="q-inp" placeholder="Notes (optional)">
+        <button class="q-btn-primary" onclick="qScheduleGtcVisit()" ${_qS.gtc_scheduling ? 'disabled' : ''}>
+          ${_qS.gtc_scheduling ? 'Scheduling…' : '+ Schedule Visit'}
+        </button>
+      </div>
+      <div id="q-gtc-msg" class="q-msg" style="display:none"></div>
+    </div>`;
+  }
+
   // Edit panel (hidden initially)
   const editPanel = `<div class="q-edit-panel" id="q-edit-panel" style="display:none">
     <div class="q-edit-grid">
@@ -462,12 +503,55 @@ function qRenderSavedCard() {
     </div>
 
     ${editPanel}
+    ${gtcHtml}
     ${contractHtml}
   </div>`;
 }
 
 function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function qScheduleGtcVisit() {
+  const date  = document.getElementById('q-gtc-date')?.value;
+  const tech  = document.getElementById('q-gtc-tech')?.value;
+  const notes = document.getElementById('q-gtc-notes')?.value || '';
+  const msg   = document.getElementById('q-gtc-msg');
+
+  if (!date) {
+    if (msg) { msg.style.display = ''; msg.className = 'q-msg err'; msg.textContent = 'Please select a date.'; }
+    return;
+  }
+
+  _qS.gtc_scheduling = true;
+  qRenderSavedCard();
+
+  try {
+    const res = await api({
+      action: 'schedule_gtc_visit',
+      token:  _s ? _s.token : '',
+      pool_id: _qS.pool_id,
+      customer_name: [_qS.first_name, _qS.last_name].filter(Boolean).join(' '),
+      scheduled_date: date,
+      assigned_technician: tech || '',
+      notes
+    });
+    _qS.gtc_scheduling = false;
+    if (res.ok) {
+      _qS.gtc_visits = Array.isArray(res.visits) ? res.visits : _qS.gtc_visits;
+      if (typeof _clearRouteCache === 'function') _clearRouteCache();
+    }
+    qRenderSavedCard();
+    if (!res.ok && msg) {
+      const el = document.getElementById('q-gtc-msg');
+      if (el) { el.style.display = ''; el.className = 'q-msg err'; el.textContent = res.error || 'Failed to schedule.'; }
+    }
+  } catch(e) {
+    _qS.gtc_scheduling = false;
+    qRenderSavedCard();
+    const el = document.getElementById('q-gtc-msg');
+    if (el) { el.style.display = ''; el.className = 'q-msg err'; el.textContent = 'Network error — check connection.'; }
+  }
 }
 
 async function qGenerateContract() {

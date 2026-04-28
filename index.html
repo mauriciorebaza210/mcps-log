@@ -1555,5 +1555,27 @@
 <script src="/js/features/financial.js"></script>
 <script src="/js/features/visit-history.js"></script>
 <script src="/app.js"></script>
+
+<!-- Green-to-Clean Schedule Next Visit Modal -->
+<div id="gtc-modal-overlay" style="display:none">
+  <div class="gtc-modal">
+    <div class="gtc-modal-hdr">
+      <span class="gtc-modal-title">Schedule G2C Visit</span>
+      <button class="gtc-modal-close" onclick="closeGtcModal()">&#x2715;</button>
+    </div>
+    <p id="gtc-modal-customer" class="gtc-modal-sub"></p>
+    <label class="q-flabel">Date</label>
+    <input type="date" id="gtc-modal-date" class="q-inp" style="width:100%;margin-bottom:.75rem">
+    <label class="q-flabel">Technician</label>
+    <input type="text" id="gtc-modal-tech" class="q-inp" placeholder="Technician name" style="width:100%;margin-bottom:.75rem">
+    <label class="q-flabel">Notes</label>
+    <input type="text" id="gtc-modal-notes" class="q-inp" placeholder="Optional" style="width:100%;margin-bottom:1rem">
+    <div class="gtc-modal-foot">
+      <button class="q-btn-primary" id="gtc-modal-submit" onclick="submitGtcModal()">Schedule Visit</button>
+      <button class="q-btn-ghost" onclick="closeGtcModal()">Cancel</button>
+      <span id="gtc-modal-msg" style="font-size:.8rem;margin-left:.5rem"></span>
+    </div>
+  </div>
+</div>
 </body>
 </html>

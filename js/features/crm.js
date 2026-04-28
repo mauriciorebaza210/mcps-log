@@ -380,6 +380,31 @@ function buildLeadDrawerHTML(item) {
         <div id="billing-section-body">${_buildBillingSectionHTML_(item)}</div>
       </div>` : ''}
 
+      ${status === 'ACTIVE_CUSTOMER' && (item.service || '').toLowerCase().includes('green') && item.pool_id ? `
+      <!-- G2C Scheduling -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Schedule Visit <span style="font-size:.72rem;font-weight:400;color:var(--muted)">${item.pool_id}</span></div>
+        <div style="background:var(--surface-2);border:1px solid rgba(13,77,68,.2);border-radius:10px;padding:.85rem;display:flex;flex-direction:column;gap:.55rem">
+          <div style="display:flex;flex-direction:column;gap:.4rem">
+            <label style="font-size:.75rem;font-weight:600;color:var(--muted)">Date</label>
+            <input type="date" id="drawer-gtc-date" class="im-input" style="width:100%">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:.4rem">
+            <label style="font-size:.75rem;font-weight:600;color:var(--muted)">Technician</label>
+            <input type="text" id="drawer-gtc-tech" class="im-input" placeholder="Technician name" style="width:100%">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:.4rem">
+            <label style="font-size:.75rem;font-weight:600;color:var(--muted)">Notes</label>
+            <input type="text" id="drawer-gtc-notes" class="im-input" placeholder="Optional" style="width:100%">
+          </div>
+          <button onclick="crmScheduleGtcVisit('${escHtml(item.pool_id)}','${escHtml(((item.first_name||'') + ' ' + (item.last_name||'')).trim())}')" id="drawer-gtc-btn"
+            style="padding:.6rem 1rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:Oswald;font-size:.85rem;font-weight:600;cursor:pointer">
+            + Schedule Visit
+          </button>
+          <div id="drawer-gtc-msg" style="display:none;font-size:.8rem;padding:.3rem .5rem;border-radius:6px"></div>
+        </div>
+      </div>` : ''}
+
       ${status === 'ACTIVE_CUSTOMER' && (item.service || '').toLowerCase().includes('startup') ? `
       <!-- Startup Actions -->
       <div class="lead-section">
@@ -968,6 +993,49 @@ async function crmMarkStartupDone(quoteId, poolId) {
   } finally {
     btn.disabled = false;
     btn.textContent = '✗ Startup complete — remove from schedule';
+  }
+}
+
+async function crmScheduleGtcVisit(poolId, customerName) {
+  const date  = document.getElementById('drawer-gtc-date')?.value;
+  const tech  = document.getElementById('drawer-gtc-tech')?.value || '';
+  const notes = document.getElementById('drawer-gtc-notes')?.value || '';
+  const btn   = document.getElementById('drawer-gtc-btn');
+  const msg   = document.getElementById('drawer-gtc-msg');
+
+  if (!date) {
+    if (msg) { msg.style.display = ''; msg.style.background = '#fee2e2'; msg.style.color = '#dc2626'; msg.textContent = 'Please select a date.'; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Scheduling…'; }
+
+  try {
+    const res = await api({
+      action: 'schedule_gtc_visit',
+      token:  _s ? _s.token : '',
+      pool_id: poolId,
+      customer_name: (customerName || '').trim(),
+      scheduled_date: date,
+      assigned_technician: tech,
+      notes
+    });
+
+    if (btn) { btn.disabled = false; btn.textContent = '+ Schedule Visit'; }
+
+    if (res.ok) {
+      if (msg) { msg.style.display = ''; msg.style.background = 'rgba(13,77,68,.1)'; msg.style.color = 'var(--teal)'; msg.textContent = 'Scheduled for ' + date + '.'; }
+      const dateEl = document.getElementById('drawer-gtc-date');
+      const notesEl = document.getElementById('drawer-gtc-notes');
+      if (dateEl) dateEl.value = '';
+      if (notesEl) notesEl.value = '';
+      if (typeof _clearRouteCache === 'function') _clearRouteCache();
+    } else {
+      if (msg) { msg.style.display = ''; msg.style.background = '#fee2e2'; msg.style.color = '#dc2626'; msg.textContent = res.error || 'Failed to schedule.'; }
+    }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '+ Schedule Visit'; }
+    if (msg) { msg.style.display = ''; msg.style.background = '#fee2e2'; msg.style.color = '#dc2626'; msg.textContent = 'Network error.'; }
   }
 }
 

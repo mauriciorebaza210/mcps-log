@@ -331,6 +331,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .npb-place-btn:hover{background:var(--teal-glow)}
 .npb-auto-btn{width:100%;margin-top:.65rem;padding:.6rem;border-radius:10px;background:var(--teal);color:#fff;border:none;font-family:'Oswald',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:background .15s}
 .npb-auto-btn:hover{background:var(--teal-mid)}
+.gtc-jobs-banner{background:rgba(13,77,68,.04);border-color:rgba(13,77,68,.25)}
+.gtc-jobs-banner .npb-header:hover{background:rgba(13,77,68,.07)}
+.gtc-jobs-banner .npb-body{border-top-color:rgba(13,77,68,.15)}
+.gtc-jobs-banner .npb-pool{border-bottom-color:rgba(13,77,68,.08)}
 .npb-auto-btn:disabled{background:#cbd5e1;cursor:not-allowed}
 
 /* ── Invoice Action Alerts (Home page) ─────────────────────────────────── */
@@ -850,6 +854,30 @@ select.q-inp{cursor:pointer}
 .q-edit-actions{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .q-edit-msg{font-size:.8rem;font-weight:500}
 .q-edit-msg.err{color:var(--error)}
+/* ── G2C SCHEDULING (quote card) ─────────────────────────────────────────── */
+.q-gtc-section{margin-top:.9rem;padding-top:.85rem;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:.6rem}
+.q-gtc-header{font-size:.82rem;font-weight:700;color:var(--teal);display:flex;align-items:center;gap:.5rem}
+.q-pool-badge{font-size:.72rem;font-weight:700;background:var(--teal-glow,rgba(13,77,68,.1));color:var(--teal);border:1px solid rgba(13,77,68,.2);border-radius:6px;padding:.1rem .45rem;letter-spacing:.03em}
+.q-gtc-form{display:flex;gap:.45rem;flex-wrap:wrap;align-items:stretch}
+.q-gtc-form .q-inp{flex:1;min-width:110px}
+.q-visit-list{display:flex;flex-direction:column;gap:.3rem}
+.q-visit-row{display:flex;align-items:center;gap:.55rem;font-size:.8rem;padding:.3rem .4rem;background:var(--surface);border-radius:8px}
+.q-visit-badge{font-size:.68rem;font-weight:700;padding:.1rem .4rem;border-radius:5px;background:rgba(13,77,68,.12);color:var(--teal);white-space:nowrap}
+.q-visit-badge.done{background:rgba(22,163,74,.12);color:#15803d}
+.q-visit-tech{margin-left:auto;color:var(--muted);font-size:.75rem}
+/* ── G2C SCHEDULING (schedule page) ──────────────────────────────────────── */
+.ps-label-gtc{background:rgba(13,77,68,.12);color:var(--teal,#0d4d44);font-size:.72rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;white-space:nowrap}
+.ps-gtc-next{font-size:.75rem;padding:.28rem .6rem;background:rgba(13,77,68,.1);color:var(--teal,#0d4d44);border:1.5px solid rgba(13,77,68,.25);border-radius:8px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.ps-gtc-next:hover{background:rgba(13,77,68,.18)}
+/* ── GTC MODAL ───────────────────────────────────────────────────────────── */
+#gtc-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;display:none;align-items:center;justify-content:center;padding:1rem}
+.gtc-modal{background:var(--card,#fff);border-radius:18px;padding:1.4rem 1.5rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:0}
+.gtc-modal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}
+.gtc-modal-title{font-size:1rem;font-weight:700;color:var(--teal,#0d4d44)}
+.gtc-modal-close{background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--muted);line-height:1;padding:.1rem .3rem}
+.gtc-modal-close:hover{color:var(--text)}
+.gtc-modal-sub{font-size:.82rem;color:var(--muted);margin:0 0 1rem;font-weight:500}
+.gtc-modal-foot{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.75rem}
 /* ── PHOTO UPLOAD ─────────────────────────────────────────────────────────── */
 .photo-upload-area{border:2px dashed var(--border);border-radius:12px;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);position:relative}
 .photo-upload-area:hover,.photo-upload-area.drag-over{border-color:var(--teal-mid);background:var(--teal-glow)}
