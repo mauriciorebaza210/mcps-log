@@ -8,7 +8,7 @@
 function loadRoutes(opOverride) {
   const op = opOverride || _activeOp;
 
-  // ── Cache hit: skip network call entirely ──
+  // ── Cache hit: render immediately, then patch in scheduled visits ──
   const cached = _getRouteCache(op, _weekOffset);
   if (cached) {
     _routeData = cached;
@@ -16,6 +16,14 @@ function loadRoutes(opOverride) {
     document.getElementById('route-content').style.display = 'block';
     renderRoutePage();
     if (isAdmin()) loadUnassigned();
+    // Scheduled visits are not stored in cache — always fetch fresh
+    apiGet({ action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) })
+      .then(svRes => {
+        if (svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
+          _mergeScheduledVisits_(_routeData.days, svRes.visits);
+          renderRoutePage();
+        }
+      }).catch(() => {});
     return;
   }
 
