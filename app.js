@@ -180,17 +180,13 @@ function buildNav() {
     html += `<button class="sb-item" id="ni-home" onclick="navigateTo('home')">${SVG_HOME}<span>Home</span></button>`;
   }
 
-  // Sales Hub accordion
-  const salesChildren = SIDEBAR_GROUPS[0].children.filter(c => pages.includes(c.page));
-  if (salesChildren.length) html += _makeSbGroup('sales', 'Sales Hub', salesChildren);
-
   // Technician Hub accordion
   let techChildren;
   if (!pages.includes('live_map') && pages.includes('inventory')) {
     // Office users: only show Inventory under Tech Hub
-    techChildren = SIDEBAR_GROUPS[1].children.filter(c => c.page === 'inventory');
+    techChildren = SIDEBAR_GROUPS[2].children.filter(c => c.page === 'inventory');
   } else {
-    techChildren = SIDEBAR_GROUPS[1].children.filter(c => {
+    techChildren = SIDEBAR_GROUPS[2].children.filter(c => {
       if (!pages.includes(c.page)) return false;
       if (traineeOnly && c.page === 'live_map' && !c.hubTab) return false;
       if (traineeOnly && c.hubTab === 'profile') return false;
@@ -201,8 +197,12 @@ function buildNav() {
   }
   if (techChildren.length) html += _makeSbGroup('tech', 'Technician Hub', techChildren);
 
+  // Sales Hub accordion
+  const salesChildren = SIDEBAR_GROUPS[1].children.filter(c => pages.includes(c.page));
+  if (salesChildren.length) html += _makeSbGroup('sales', 'Sales Hub', salesChildren);
+
   // Financial Hub accordion
-  const finChildren = SIDEBAR_GROUPS[2].children.filter(c => pages.includes(c.page));
+  const finChildren = SIDEBAR_GROUPS[3].children.filter(c => pages.includes(c.page));
   if (finChildren.length) html += _makeSbGroup('finance', 'Financial Hub', finChildren);
 
   // Admin / Onboarding — direct links

@@ -42,8 +42,4 @@ function unionPages_(roles) {
 
 function hasRole(role){return _s&&(_s.roles||[]).includes(role);}
 function isAdmin(){return hasRole('admin')||hasRole('manager');}
-// Technicians, leads, and trainees land directly on the Hub; everyone else on Home
-function _defaultLandingPage_(){
-  if (hasRole('trainee') && !hasRole('technician') && !hasRole('lead')) return 'live_map';
-  return 'home';
-}
+function _defaultLandingPage_(){ return 'home'; }

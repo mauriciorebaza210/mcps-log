@@ -82,7 +82,7 @@ const SIDEBAR_GROUPS = [
 const ROLE_PAGES = {
   technician:['home','live_map','service_log','alerts'],
   lead:['home','live_map','service_log','alerts'],
-  trainee:['live_map'],
+  trainee:['home','live_map'],
   new_hire:['onboarding'],
   office:['home','inventory','alerts'],
   manager:['home','crm','live_map','service_log','inventory','quotes','financial_hub','alerts'],
