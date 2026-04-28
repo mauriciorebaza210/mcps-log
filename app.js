@@ -316,6 +316,10 @@ function openReportIssueModal() {
   document.getElementById('report-issue-message').value = '';
   document.getElementById('report-issue-visibility').value = 'admin_only';
   document.getElementById('report-issue-msg').style.display = 'none';
+  const photosInput = document.getElementById('report-issue-photos');
+  if (photosInput) photosInput.value = '';
+  const preview = document.getElementById('report-issue-photo-preview');
+  if (preview) preview.innerHTML = '';
   
   const select = document.getElementById('report-issue-pool');
   
@@ -358,6 +362,8 @@ function submitReportIssue() {
   const visibility = document.getElementById('report-issue-visibility').value;
   const msgEl = document.getElementById('report-issue-msg');
   const btn = document.getElementById('report-issue-submit-btn');
+  const photosInput = document.getElementById('report-issue-photos');
+  const photoFiles = photosInput ? Array.from(photosInput.files) : [];
 
   if(!message) {
     showMsg(msgEl, 'Please enter a message.', false);
@@ -373,18 +379,59 @@ function submitReportIssue() {
     default_secret: true,
     type, message, linked_pool_id, visibility
   }).then(res => {
-    if(res.ok) {
-      showMsg(msgEl, 'Submitted successfully!', true);
-      setTimeout(() => {
-        closeReportIssueModal();
-        loadHomeIssues(); // refresh list
-      }, 1000);
-    } else {
+    if(!res.ok) {
       showMsg(msgEl, res.error || 'Failed to submit', false);
+      btn.disabled = false;
+      btn.textContent = 'Submit Report';
+      return;
     }
-  }).catch(e => {
+
+    const alertId = res.id;
+
+    if (!photoFiles.length) {
+      showMsg(msgEl, 'Submitted!', true);
+      setTimeout(() => { closeReportIssueModal(); loadHomeIssues(); }, 900);
+      return;
+    }
+
+    // Upload photos sequentially
+    let chain = Promise.resolve();
+    photoFiles.forEach((file, i) => {
+      chain = chain.then(() => {
+        btn.textContent = `Uploading photo ${i + 1} of ${photoFiles.length}…`;
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            const comma = dataUrl.indexOf(',');
+            const b64 = dataUrl.slice(comma + 1);
+            api({
+              action: 'upload_alert_photo',
+              token: _s.token,
+              default_secret: true,
+              alert_id: alertId,
+              photo_base64: b64,
+              mime_type: file.type || 'image/jpeg',
+              file_name: file.name || 'photo.jpg'
+            }).then(resolve).catch(resolve);
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+    });
+
+    chain.then(() => {
+      showMsg(msgEl, 'Submitted!', true);
+      setTimeout(() => { closeReportIssueModal(); loadHomeIssues(); }, 900);
+    }).catch(() => {
+      showMsg(msgEl, 'Alert saved but some photos failed to upload.', true);
+      setTimeout(() => { closeReportIssueModal(); loadHomeIssues(); }, 1500);
+    }).finally(() => {
+      btn.disabled = false;
+      btn.textContent = 'Submit Report';
+    });
+  }).catch(() => {
     showMsg(msgEl, 'Network error', false);
-  }).finally(() => {
     btn.disabled = false;
     btn.textContent = 'Submit Report';
   });
@@ -457,7 +504,80 @@ function resolveHomeIssue(id) {
 }
 function handleProfileClick() {
   const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
-  if (traineeOnly) return; 
+  if (traineeOnly) return;
   _profileOp = _s.username;
   navigateTo('live_map/profile');
+}
+
+// ── Alert detail modal ────────────────────────────────────────────────────────
+
+function openAlertDetail(alert) {
+  if (typeof alert === 'string') { try { alert = JSON.parse(alert); } catch(e) { return; } }
+
+  const typeMeta = { issue: { label:'Issue', icon:'⚠️', bg:'#fee2e2', fg:'#b91c1c' }, alert: { label:'Alert', icon:'📢', bg:'#dbeafe', fg:'#1d4ed8' }, kudos: { label:'Kudos', icon:'🌟', bg:'#fef9c3', fg:'#854d0e' } };
+  const m = typeMeta[(alert.type||'issue').toLowerCase()] || typeMeta.issue;
+  const date = new Date(alert.timestamp).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const canResolve = (isAdmin() || (typeof _s !== 'undefined' && alert.submitter_username === _s.username)) && alert.status !== 'resolved';
+
+  const poolRow = alert.linked_pool_id
+    ? `<div class="adm-detail-row"><span class="adm-detail-label">Pool</span><span class="adm-detail-val" style="color:var(--teal);font-weight:700;">${escHtml(alert.linked_pool_id)}</span></div>`
+    : '';
+
+  const photos = Array.isArray(alert.photo_urls) ? alert.photo_urls : [];
+  const photosHTML = photos.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1rem;">${photos.map(url => `<a href="${url.replace('thumbnail','uc').replace('sz=w600','export=view')}" target="_blank" rel="noopener"><img src="${url}" alt="Alert photo" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;" loading="lazy"></a>`).join('')}</div>`
+    : '';
+
+  const resolvedSection = alert.status === 'resolved' && alert.resolved_by
+    ? `<div style="margin-top:1rem;padding:0.75rem 1rem;background:#ecfdf5;border-radius:8px;border:1px solid #6ee7b7;font-size:0.85rem;color:#065f46;font-weight:600;">✓ Resolved by <strong>${escHtml(alert.resolved_by)}</strong>${alert.resolved_at ? ' on ' + new Date(alert.resolved_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''}</div>`
+    : '';
+
+  const resolveBtn = canResolve
+    ? `<button class="conf-submit-btn" style="background:#10b981;" onclick="resolveAlertFromDetail('${alert.id}')">Mark as Done ✓</button>`
+    : '';
+
+  document.getElementById('alert-detail-type-badge').innerHTML = `<span style="background:${m.bg};color:${m.fg};padding:0.25rem 0.75rem;border-radius:20px;font-size:0.8rem;font-weight:700;">${m.icon} ${m.label}</span>`;
+  document.getElementById('alert-detail-body').innerHTML = `
+    <div style="font-size:1rem;font-weight:600;color:var(--text);white-space:pre-wrap;line-height:1.6;">${escHtml(alert.message)}</div>
+    <div style="margin-top:1rem;display:flex;flex-direction:column;gap:0.5rem;font-size:0.85rem;">
+      <div class="adm-detail-row"><span class="adm-detail-label">Submitted by</span><span class="adm-detail-val">${escHtml(alert.submitter_name || alert.submitter_username || 'System')}</span></div>
+      <div class="adm-detail-row"><span class="adm-detail-label">Date</span><span class="adm-detail-val">${date}</span></div>
+      ${poolRow}
+    </div>
+    ${photosHTML}
+    ${resolvedSection}
+  `;
+  document.getElementById('alert-detail-resolve-wrap').innerHTML = resolveBtn;
+  document.getElementById('alert-detail-backdrop').style.display = 'flex';
+}
+
+function closeAlertDetail() {
+  document.getElementById('alert-detail-backdrop').style.display = 'none';
+}
+
+function resolveAlertFromDetail(id) {
+  api({ action: 'resolve_issue_alert', token: _s.token, default_secret: true, alert_id: id })
+    .then(res => {
+      if (res.ok) {
+        closeAlertDetail();
+        loadHomeIssues();
+        if (typeof loadAlertsPage === 'function') loadAlertsPage();
+        if (typeof loadHomeStats === 'function') loadHomeStats();
+      } else {
+        alert('Failed to resolve: ' + (res.error || 'Unknown error'));
+      }
+    })
+    .catch(() => alert('Network error'));
+}
+
+// ── Photo preview for submit modal ───────────────────────────────────────────
+
+function previewAlertPhotos(input) {
+  const preview = document.getElementById('report-issue-photo-preview');
+  if (!preview) return;
+  preview.innerHTML = '';
+  Array.from(input.files).forEach(file => {
+    const url = URL.createObjectURL(file);
+    preview.innerHTML += `<img src="${url}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" loading="lazy">`;
+  });
 }

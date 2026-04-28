@@ -117,14 +117,14 @@
           <!-- 6 KPI widgets injected here -->
         </div>
 
-        <!-- Row 2: Snapshots -->
-        <div class="dash-row-snapshots" id="dash-row-snapshots" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
-          <!-- Sales, Ops, Finance snapshots injected here -->
-        </div>
-
-        <!-- Row 3: Attention Widget -->
+        <!-- Row 2: Attention Widget -->
         <div class="dash-row-attention" id="dash-row-attention">
           <!-- "Today Needs Attention" list injected here -->
+        </div>
+
+        <!-- Row 3: Snapshots -->
+        <div class="dash-row-snapshots" id="dash-row-snapshots" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
+          <!-- Sales, Ops, Finance snapshots injected here -->
         </div>
 
         <!-- Row 4: Charts -->
@@ -1125,6 +1125,23 @@
 
     </div><!-- /page-financial_hub -->
 
+    <!-- ── Alerts & Issues page ── -->
+    <div class="pf" id="page-alerts">
+      <div class="fin-page-hdr" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+        <h2 style="margin:0;">Alerts &amp; Issues</h2>
+        <button class="adm-new-btn" style="background:var(--teal);" onclick="openReportIssueModal()">+ Submit New</button>
+      </div>
+
+      <!-- Tab bar -->
+      <div style="display:flex; gap:0.5rem; padding:0 1rem 1rem;">
+        <button id="alert-tab-open" onclick="switchAlertTab('open')" style="padding:0.45rem 1.2rem; border-radius:20px; border:1.5px solid var(--teal); background:var(--teal); color:#fff; font-weight:700; font-size:0.85rem; cursor:pointer; transition:all 0.15s;">Open</button>
+        <button id="alert-tab-history" onclick="switchAlertTab('history')" style="padding:0.45rem 1.2rem; border-radius:20px; border:1.5px solid var(--border); background:transparent; color:var(--muted); font-weight:700; font-size:0.85rem; cursor:pointer; transition:all 0.15s;">History</button>
+      </div>
+
+      <div id="alerts-open-panel" style="padding:0 1rem 2rem;"></div>
+      <div id="alerts-history-panel" style="padding:0 1rem 2rem; display:none;"></div>
+    </div><!-- /page-alerts -->
+
   </div><!-- /page-wrap -->
   </main>
 </div>
@@ -1529,11 +1546,33 @@
           <option value="all">Everyone (Including Technicians)</option>
         </select>
       </div>
+      <div class="q-1col">
+        <label class="q-flabel">Photos <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
+        <input type="file" id="report-issue-photos" accept="image/*" multiple onchange="previewAlertPhotos(this)" style="font-size:0.85rem;color:var(--text);width:100%;cursor:pointer;">
+        <div id="report-issue-photo-preview" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;"></div>
+      </div>
       <div class="im" id="report-issue-msg" style="display:none;"></div>
     </div>
     <div class="conf-modal-foot">
       <button class="conf-cancel-btn" onclick="closeReportIssueModal()">Cancel</button>
       <button class="conf-submit-btn" id="report-issue-submit-btn" onclick="submitReportIssue()">Submit Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Alert Detail Modal ── -->
+<div class="conf-modal-backdrop" id="alert-detail-backdrop" onclick="closeAlertDetail()" style="display:none">
+  <div class="conf-modal" style="max-width:520px;width:95%" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <div id="alert-detail-type-badge"></div>
+      <button class="drawer-close" onclick="closeAlertDetail()">✕</button>
+    </div>
+    <div class="conf-modal-body" style="padding:1.25rem;">
+      <div id="alert-detail-body"></div>
+    </div>
+    <div class="conf-modal-foot">
+      <button class="conf-cancel-btn" onclick="closeAlertDetail()">Close</button>
+      <div id="alert-detail-resolve-wrap"></div>
     </div>
   </div>
 </div>
@@ -1554,6 +1593,7 @@
 <script src="/js/features/onboarding.js"></script>
 <script src="/js/features/financial.js"></script>
 <script src="/js/features/visit-history.js"></script>
+<script src="/js/features/alerts.js"></script>
 <script src="/app.js"></script>
 
 <!-- Green-to-Clean Schedule Next Visit Modal -->

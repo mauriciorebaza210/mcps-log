@@ -49,6 +49,7 @@ function navigateTo(pageWithSub){
       loadFinancialHub();
     }
   }
+  if(page==='alerts') loadAlertsPage();
 }
 
 function _setSidebarActive(page, hubTab) {
@@ -65,6 +66,7 @@ function _setSidebarActive(page, hubTab) {
   if (page === 'crm' || page === 'quotes') _setAccordionOpen('sales', true);
   if (['live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
   if (page === 'financial_hub') _setAccordionOpen('finance', true);
+  if (page === 'alerts') _setAccordionOpen('alerts', true);
 }
 
 function switchHubTab(tab) {

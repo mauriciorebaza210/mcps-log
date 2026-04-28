@@ -9,7 +9,7 @@ const SEC = '220ed543794285b632c27dec0b1b6529';
 const PAGE_META = {
   home:'Home', live_map:'Technician Hub', service_log:'Service Log',
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
-  onboarding:'Get Started', financial_hub:'Financial Hub'
+  onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
@@ -30,6 +30,7 @@ const SVG_CHART    = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const SVG_LOCK     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 const SVG_STAR     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
 const SVG_PEOPLE   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+const SVG_BELL     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
 
 // ── Shared utilities ─────────────────────────────────────────────────────────
 function escHtml(s) {
@@ -38,6 +39,13 @@ function escHtml(s) {
 
 // ── Sidebar accordion group definitions ──────────────────────────────────────
 const SIDEBAR_GROUPS = [
+  {
+    id: 'alerts',
+    label: 'Alerts & Issues',
+    children: [
+      { page:'alerts', label:'Alerts',  icon:SVG_BELL }
+    ]
+  },
   {
     id: 'sales',
     label: 'Sales Hub',
@@ -72,13 +80,13 @@ const SIDEBAR_GROUPS = [
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['home','live_map','service_log'],           // training + myjobs accessed via hub tabs
-  lead:['home','live_map','service_log'],                  // training + myjobs accessed via hub tabs
-  trainee:['live_map'],                             // hub-only: training tab shown exclusively
+  technician:['home','live_map','service_log','alerts'],
+  lead:['home','live_map','service_log','alerts'],
+  trainee:['live_map'],
   new_hire:['onboarding'],
-  office:['home','inventory'],
-  manager:['home','crm','live_map','service_log','inventory','quotes','financial_hub'],
-  admin:['home','crm','live_map','service_log','inventory','quotes','admin','financial_hub'],
+  office:['home','inventory','alerts'],
+  manager:['home','crm','live_map','service_log','inventory','quotes','financial_hub','alerts'],
+  admin:['home','crm','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

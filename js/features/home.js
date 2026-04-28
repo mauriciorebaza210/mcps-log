@@ -718,15 +718,15 @@ function renderAttentionWidget(alerts) {
     else if (t.includes('low')) { tagColor = '#ecfdf5'; textColor = '#10b981'; level = 'Low'; }
 
     return `
-      <div class="attention-row">
-        <div style="width:28px; height:28px; border-radius:50%; background:rgba(0,0,0,0.03); display:flex; align-items:center; justify-content:center;">
+      <div class="attention-row" style="cursor:pointer;" onclick="openAlertDetail(${JSON.stringify(a).replace(/"/g, '&quot;')})">
+        <div style="width:28px; height:28px; border-radius:50%; background:rgba(0,0,0,0.03); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
         </div>
-        <div style="flex:1">
-          <div style="font-weight:700; font-size:0.95rem; color:var(--text);">${a.message}</div>
-          <div style="font-size:0.75rem; color:var(--muted); font-weight:600; margin-top:0.1rem;">${new Date(a.timestamp).toLocaleDateString()} &bull; ${a.submitter || 'System'}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:700; font-size:0.95rem; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${a.message}</div>
+          <div style="font-size:0.75rem; color:var(--muted); font-weight:600; margin-top:0.1rem;">${new Date(a.timestamp).toLocaleDateString()} &bull; ${a.submitter_name || a.submitter || 'System'}</div>
         </div>
-        <div class="attention-badge" style="background:${tagColor}; color:${textColor};">${level}</div>
+        <div class="attention-badge" style="background:${tagColor}; color:${textColor}; flex-shrink:0;">${level}</div>
       </div>
     `;
   }).join('');
@@ -735,7 +735,7 @@ function renderAttentionWidget(alerts) {
     <div id="attention-widget" class="dash-card" style="padding: 1.5rem;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
         <h3 class="kpi-title" style="color:var(--text); margin:0;">Today Needs Attention</h3>
-        <span style="font-size:0.75rem; color:var(--teal); font-weight:700; cursor:pointer;" onclick="navigateTo('crm')">View all tasks &rarr;</span>
+        <span style="font-size:0.75rem; color:var(--teal); font-weight:700; cursor:pointer;" onclick="navigateTo('alerts')">View all alerts &rarr;</span>
       </div>
       <div>
         ${rows}
