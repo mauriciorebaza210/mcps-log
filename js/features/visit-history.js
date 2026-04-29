@@ -57,8 +57,8 @@ function _vhRenderFilters() {
   el.innerHTML = `
     <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;padding:.5rem 0 .75rem">
       <div style="display:flex;flex-direction:column;gap:.3rem">
-        <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Date Range</label>
-        <select class="si" style="min-width:130px" onchange="_vhDays=this.value;loadVisitHistoryTab()">
+        <label for="vh-days-select" style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Date Range</label>
+        <select id="vh-days-select" name="vh-days-select" class="si" style="min-width:130px" onchange="_vhDays=this.value;loadVisitHistoryTab()">
           <option value="7"  ${_vhDays==='7'  ?'selected':''}>Last 7 days</option>
           <option value="30" ${_vhDays==='30' ?'selected':''}>Last 30 days</option>
           <option value="90" ${_vhDays==='90' ?'selected':''}>Last 90 days</option>
@@ -67,23 +67,23 @@ function _vhRenderFilters() {
       </div>
       ${techs.length > 1 ? `
       <div style="display:flex;flex-direction:column;gap:.3rem">
-        <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Technician</label>
-        <select class="si" style="min-width:160px" onchange="_vhTech=this.value;_vhPage=1;_vhApplyAndRender()">
+        <label for="vh-tech-select" style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Technician</label>
+        <select id="vh-tech-select" name="vh-tech-select" class="si" style="min-width:160px" onchange="_vhTech=this.value;_vhPage=1;_vhApplyAndRender()">
           <option value="">All Techs</option>
           ${techs.map(t => `<option value="${t}" ${_vhTech===t?'selected':''}>${t}</option>`).join('')}
         </select>
       </div>` : ''}
       ${svcs.length > 1 ? `
       <div style="display:flex;flex-direction:column;gap:.3rem">
-        <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Service Type</label>
-        <select class="si" style="min-width:180px" onchange="_vhSvcType=this.value;_vhPage=1;_vhApplyAndRender()">
+        <label for="vh-svc-select" style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Service Type</label>
+        <select id="vh-svc-select" name="vh-svc-select" class="si" style="min-width:180px" onchange="_vhSvcType=this.value;_vhPage=1;_vhApplyAndRender()">
           <option value="">All Services</option>
           ${svcs.map(s => `<option value="${s}" ${_vhSvcType===s?'selected':''}>${s}</option>`).join('')}
         </select>
       </div>` : ''}
       <div style="display:flex;flex-direction:column;gap:.3rem">
-        <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Search</label>
-        <input class="si" type="text" placeholder="Pool ID or customer…" style="min-width:180px"
+        <label for="vh-search-inp" style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Search</label>
+        <input id="vh-search-inp" name="vh-search-inp" class="si" type="text" placeholder="Pool ID or customer…" style="min-width:180px"
           value="${_vhSearch.replace(/"/g,'&quot;')}"
           oninput="_vhSearch=this.value;_vhPage=1;_vhApplyAndRender()">
       </div>

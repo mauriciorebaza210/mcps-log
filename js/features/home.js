@@ -140,7 +140,7 @@ function _buildSparklineSVG_(data) {
 }
 
 function _buildClientsViewSelect_(view) {
-  return `<select class="hs-view-select" onclick="event.stopPropagation()" onchange="_onActiveClientsViewChange_(this.value)" style="background:transparent;border:none;font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);outline:none;cursor:pointer;padding:0;appearance:none;-webkit-appearance:none;position:relative;z-index:2;">
+  return `<select id="hs-view-select" name="hs-view-select" class="hs-view-select" onclick="event.stopPropagation()" onchange="_onActiveClientsViewChange_(this.value)" style="background:transparent;border:none;font-family:'Barlow Condensed',sans-serif;font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);outline:none;cursor:pointer;padding:0;appearance:none;-webkit-appearance:none;position:relative;z-index:2;">
     <option value="signed"${view === 'signed' ? ' selected' : ''}>Active Clients ▼</option>
     <option value="mcp"${view === 'mcp' ? ' selected' : ''}>Active (MCP) ▼</option>
   </select>`;

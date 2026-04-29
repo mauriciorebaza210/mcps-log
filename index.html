@@ -24,8 +24,8 @@
       <h1>MCPS Employee Portal</h1>
       <p>Mission Custom Pool Solutions</p>
     </div>
-    <div class="fg"><label>Username</label><input type="text" id="u" autocomplete="username" autocapitalize="none" placeholder="your username"></div>
-    <div class="fg"><label>Password</label><input type="password" id="p" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="fg"><label for="u">Username</label><input type="text" id="u" autocomplete="username" autocapitalize="none" placeholder="your username"></div>
+    <div class="fg"><label for="p">Password</label><input type="password" id="p" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn-login" id="btn-login" onclick="doLogin()">Sign In</button>
     <div class="err-msg" id="lerr"></div>
   </div>
@@ -349,8 +349,8 @@
       <div style="border-top:1px solid var(--border);padding-top:.85rem">
         <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.5rem">Add Field</div>
         <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.5rem;align-items:end">
-          <div class="dfg" style="margin:0"><label>Title</label><input class="si" id="new-field-title" placeholder="Field name"></div>
-          <div class="dfg" style="margin:0"><label>Type</label>
+          <div class="dfg" style="margin:0"><label for="new-field-title">Title</label><input class="si" id="new-field-title" placeholder="Field name"></div>
+          <div class="dfg" style="margin:0"><label for="new-field-type">Type</label>
             <select class="sl" id="new-field-type">
               <option value="TEXT">Text / Number</option>
               <option value="PARAGRAPH_TEXT">Paragraph</option>
@@ -445,7 +445,7 @@
         </div>
       </div>
       <div id="crm-goal-editor" style="display:none;padding:.75rem 1rem;border-top:1px solid var(--border)">
-        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.4rem">Weekly Goal (signed contracts)</label>
+        <label for="crm-goal-input" style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.4rem">Weekly Goal (signed contracts)</label>
         <div style="display:flex;gap:.5rem;margin-top:.2rem;flex-wrap:wrap">
           <input class="si" type="number" id="crm-goal-input" min="1" max="999" style="width:100px">
           <button class="conf-submit-btn" onclick="saveWeeklyGoal()">Save</button>
@@ -570,18 +570,18 @@
     <div class="drawer-body">
  
       <div class="dfg">
-        <label>Full Name</label>
+        <label for="d-name">Full Name</label>
         <input class="si" type="text" id="d-name" placeholder="Eduardo García">
       </div>
  
       <div class="dfg">
-        <label>Username</label>
+        <label for="d-uname">Username</label>
         <input class="si" type="text" id="d-uname" placeholder="eduardo" autocapitalize="none">
         <span class="dfg-hint" id="uname-hint">Cannot be changed after creation.</span>
       </div>
  
       <div class="dfg" id="d-pass-wrap">
-        <label>Password <span id="d-pass-optional" style="font-weight:400;color:var(--muted)">(leave blank to keep current)</span></label>
+        <label for="d-pass">Password <span id="d-pass-optional" style="font-weight:400;color:var(--muted)">(leave blank to keep current)</span></label>
         <input class="si" type="password" id="d-pass" placeholder="••••••••">
       </div>
  
@@ -622,7 +622,7 @@
       </div>
 
       <div class="dfg">
-        <label>Pay Rate <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+        <label for="usr-pay-rate">Pay Rate <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
         <input class="si" type="text" id="usr-pay-rate" placeholder="$25/pool">
         <span class="dfg-hint">Contractor pay rate — shown in their onboarding contract.</span>
       </div>
@@ -800,27 +800,27 @@
             <input class="q-inp" id="q-email" type="email" placeholder="tony@email.com" oninput="qField('email',this.value)">
           </div>
           <div>
-            <label class="q-flabel">Phone</label>
+            <label for="q-phone" class="q-flabel">Phone</label>
             <input class="q-inp" id="q-phone" type="tel" placeholder="(555) 555-5555" oninput="qField('phone',this.value)">
           </div>
         </div>
         <div class="q-1col">
-          <label class="q-flabel">Property Address</label>
+          <label for="q-address" class="q-flabel">Property Address</label>
           <input class="q-inp" id="q-address" type="text" placeholder="123 Pool Lane, San Antonio TX" oninput="qField('address',this.value)">
         </div>
         <div class="q-2col" style="margin-bottom:0">
           <div>
-            <label class="q-flabel">ZIP Code <span style="font-weight:400;color:var(--muted);font-size:.72rem">→ travel fee</span></label>
+            <label for="q-zip" class="q-flabel">ZIP Code <span style="font-weight:400;color:var(--muted);font-size:.72rem">→ travel fee</span></label>
             <input class="q-inp" id="q-zip" type="text" placeholder="78245" oninput="qField('zip_code',this.value)" onblur="qLookupTravel()">
           </div>
           <div>
-            <label class="q-flabel">City</label>
+            <label for="q-city" class="q-flabel">City</label>
             <input class="q-inp" id="q-city" type="text" placeholder="San Antonio" oninput="qField('city',this.value)">
           </div>
         </div>
         <div class="q-2col" style="margin-bottom:0;margin-top:.75rem">
           <div>
-            <label class="q-flabel">Service Area</label>
+            <label for="q-area" class="q-flabel">Service Area</label>
             <select class="q-inp" id="q-area" onchange="qField('area',this.value)">
               <option value="">— Select area —</option>
               <option value="NW">NW – Northwest SA</option>
@@ -839,7 +839,7 @@
         <div class="q-sec-lbl">Discount <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(optional)</span></div>
         <div class="q-2col" style="margin-bottom:0">
           <div>
-            <label class="q-flabel">Discount Type</label>
+            <label for="q-disc-type" class="q-flabel">Discount Type</label>
             <select class="q-inp" id="q-disc-type" onchange="qDiscTypeChange(this.value)">
               <option value="none">No Discount</option>
               <option value="Percentage">Percentage (%)</option>
@@ -848,7 +848,7 @@
             </select>
           </div>
           <div id="q-disc-val-wrap" style="display:none">
-            <label class="q-flabel" id="q-disc-val-lbl">Discount Value</label>
+            <label for="q-disc-val" class="q-flabel" id="q-disc-val-lbl">Discount Value</label>
             <input class="q-inp" id="q-disc-val" type="number" min="0" step="0.01" placeholder="0" oninput="qDiscValChange(this.value)">
           </div>
         </div>
@@ -896,23 +896,23 @@
         <div class="onb-task-body" id="onb-body-info" style="display:none">
 
           <div class="onb-row2">
-            <div class="onb-fg"><label>Legal Full Name</label><input class="onb-inp" id="onb-legal-name" placeholder="First Middle Last"></div>
-            <div class="onb-fg"><label>Date of Birth</label><input class="onb-inp" id="onb-dob" type="date"></div>
+            <div class="onb-fg"><label for="onb-legal-name">Legal Full Name</label><input class="onb-inp" id="onb-legal-name" placeholder="First Middle Last"></div>
+            <div class="onb-fg"><label for="onb-dob">Date of Birth</label><input class="onb-inp" id="onb-dob" type="date"></div>
           </div>
-          <div class="onb-fg"><label>Phone Number</label><input class="onb-inp" id="onb-phone" type="tel" placeholder="(555) 555-5555"></div>
+          <div class="onb-fg"><label for="onb-phone">Phone Number</label><input class="onb-inp" id="onb-phone" type="tel" placeholder="(555) 555-5555"></div>
 
           <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Home Address</div>
-          <div class="onb-fg"><label>Street Address</label><input class="onb-inp" id="onb-addr1" placeholder="123 Main St"></div>
+          <div class="onb-fg"><label for="onb-addr1">Street Address</label><input class="onb-inp" id="onb-addr1" placeholder="123 Main St"></div>
           <div class="onb-row3">
-            <div class="onb-fg"><label>City</label><input class="onb-inp" id="onb-city" placeholder="San Antonio"></div>
-            <div class="onb-fg"><label>State</label><input class="onb-inp" id="onb-state" placeholder="TX" maxlength="2"></div>
-            <div class="onb-fg"><label>ZIP</label><input class="onb-inp" id="onb-zip" placeholder="78201" maxlength="10"></div>
+            <div class="onb-fg"><label for="onb-city">City</label><input class="onb-inp" id="onb-city" placeholder="San Antonio"></div>
+            <div class="onb-fg"><label for="onb-state">State</label><input class="onb-inp" id="onb-state" placeholder="TX" maxlength="2"></div>
+            <div class="onb-fg"><label for="onb-zip">ZIP</label><input class="onb-inp" id="onb-zip" placeholder="78201" maxlength="10"></div>
           </div>
 
           <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Emergency Contact</div>
           <div class="onb-row2">
-            <div class="onb-fg"><label>Name</label><input class="onb-inp" id="onb-ec-name" placeholder="Jane Doe"></div>
-            <div class="onb-fg"><label>Phone</label><input class="onb-inp" id="onb-ec-phone" type="tel" placeholder="(555) 555-5555"></div>
+            <div class="onb-fg"><label for="onb-ec-name">Name</label><input class="onb-inp" id="onb-ec-name" placeholder="Jane Doe"></div>
+            <div class="onb-fg"><label for="onb-ec-phone">Phone</label><input class="onb-inp" id="onb-ec-phone" type="tel" placeholder="(555) 555-5555"></div>
           </div>
 
           <div id="onb-w9-module">
@@ -926,7 +926,7 @@
             </div>
             
             <div class="onb-fg" id="onb-ein-type-fg" style="display:none">
-              <label>Tax Classification</label>
+              <label for="onb-ein-type">Tax Classification</label>
               <select class="onb-inp" id="onb-ein-type" style="padding:.6rem 1rem">
                 <option value="ccorp">C Corporation</option>
                 <option value="scorp">S Corporation</option>
@@ -939,7 +939,7 @@
             </div>
 
             <div class="onb-fg">
-              <label>Full Tax ID Number</label>
+              <label for="onb-tax-full">Full Tax ID Number</label>
               <input class="onb-inp" id="onb-tax-full" placeholder="Please select SSN or EIN first" maxlength="11" oninput="onbFormatTaxId(this)" disabled>
             </div>
 
@@ -1215,15 +1215,15 @@
   <div class="mod-drawer-body">
     <input type="hidden" id="mod-id">
     <div class="mod-dfg">
-      <label>Module Title</label>
+      <label for="mod-title">Module Title</label>
       <input type="text" id="mod-title" placeholder="e.g. The P(I)MP Program – Step 1">
     </div>
     <div class="mod-dfg">
-      <label>Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+      <label for="mod-desc">Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
       <textarea id="mod-desc" rows="3" placeholder="Brief summary of what this module covers..."></textarea>
     </div>
     <div class="mod-dfg">
-      <label>Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
+      <label for="mod-order">Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
       <input type="number" id="mod-order" min="1" placeholder="1">
     </div>
     <div class="mod-dfg">
@@ -1268,11 +1268,11 @@
       </div>
     </div>
     <div class="mod-dfg">
-      <label>Title</label>
+      <label for="vid-title">Title</label>
       <input type="text" id="vid-title" placeholder="e.g. PMP Step 1 – Arrival &amp; Assessment">
     </div>
     <div class="mod-dfg" id="content-url-group">
-      <label id="content-url-label">Google Drive Share URL</label>
+      <label for="vid-url" id="content-url-label">Google Drive Share URL</label>
       <input type="text" id="vid-url" placeholder="https://drive.google.com/file/d/…/view">
       <div class="hint" id="content-url-hint">Paste the Share link from Google Drive. Supports videos, PDFs, Google Docs, PPTX, Excel, and more.</div>
     </div>
@@ -1294,7 +1294,7 @@
       </div>
     </div>
     <div class="mod-dfg">
-      <label>Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+      <label for="vid-desc">Description <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
       <textarea id="vid-desc" rows="2" placeholder="What is covered in this content..."></textarea>
     </div>
     <div class="mod-dfg" id="content-gate-group">
@@ -1312,7 +1312,7 @@
       <input type="number" id="content-pass-threshold" min="1" max="100" value="80" placeholder="80">
     </div>
     <div class="mod-dfg">
-      <label>Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
+      <label for="vid-order">Display Order <span style="font-weight:400;color:var(--muted);font-size:.72rem">(lower = first)</span></label>
       <input type="number" id="vid-order" min="1" placeholder="1">
     </div>
     <div class="mod-drawer-msg" id="vid-drawer-msg"></div>
@@ -1407,11 +1407,11 @@
     </div>
     <div class="conf-modal-body">
       <div class="q-1col">
-        <label class="q-flabel">Date</label>
+        <label for="adhoc-date" class="q-flabel">Date</label>
         <input type="date" class="q-inp" id="adhoc-date">
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Event Type</label>
+        <label for="adhoc-type" class="q-flabel">Event Type</label>
         <select class="q-inp" id="adhoc-type">
           <option value="Proposal">Proposal</option>
           <option value="One-Time Service">One-Time Service</option>
@@ -1420,21 +1420,21 @@
         </select>
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Customer Name / Pool</label>
+        <label for="adhoc-customer" class="q-flabel">Customer Name / Pool</label>
         <input type="text" class="q-inp" id="adhoc-customer" placeholder="John Doe">
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Address &amp; City</label>
+        <label for="adhoc-address" class="q-flabel">Address &amp; City</label>
         <input type="text" class="q-inp" id="adhoc-address" placeholder="123 Main St, San Antonio">
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Operator</label>
+        <label for="adhoc-operator" class="q-flabel">Operator</label>
         <select class="q-inp" id="adhoc-operator">
           <option value="UNASSIGNED">Unassigned</option>
         </select>
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Notes <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
+        <label for="adhoc-notes" class="q-flabel">Notes <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
         <input type="text" class="q-inp" id="adhoc-notes" placeholder="Needs pressure wash...">
       </div>
     </div>
@@ -1526,7 +1526,7 @@
     </div>
     <div class="conf-modal-body" style="padding:1rem;display:flex;flex-direction:column;gap:1rem;">
       <div class="q-1col">
-        <label class="q-flabel">Type</label>
+        <label for="report-issue-type" class="q-flabel">Type</label>
         <select class="q-inp" id="report-issue-type">
           <option value="issue">Equipment / Site Issue</option>
           <option value="alert">General Alert / Route Update</option>
@@ -1534,25 +1534,25 @@
         </select>
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Message</label>
+        <label for="report-issue-message" class="q-flabel">Message</label>
         <textarea class="q-inp" id="report-issue-message" rows="4" placeholder="Describe the issue or write your message..."></textarea>
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Linked Pool <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
+        <label for="report-issue-pool" class="q-flabel">Linked Pool <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
         <select class="q-inp" id="report-issue-pool">
           <option value="">-- No specific pool --</option>
           <!-- Filled by JS -->
         </select>
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Visibility</label>
+        <label for="report-issue-visibility" class="q-flabel">Visibility</label>
         <select class="q-inp" id="report-issue-visibility">
           <option value="admin_only">Admins & Managers Only</option>
           <option value="all">Everyone (Including Technicians)</option>
         </select>
       </div>
       <div class="q-1col">
-        <label class="q-flabel">Photos <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
+        <label for="report-issue-photos" class="q-flabel">Photos <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
         <input type="file" id="report-issue-photos" accept="image/*" multiple onchange="previewAlertPhotos(this)" style="font-size:0.85rem;color:var(--text);width:100%;cursor:pointer;">
         <div id="report-issue-photo-preview" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem;"></div>
       </div>

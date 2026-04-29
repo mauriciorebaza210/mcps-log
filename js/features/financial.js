@@ -397,8 +397,8 @@ function _renderFinFilters() {
 
   const periodSelect = `
     <div style="display:flex;flex-direction:column;gap:.3rem">
-      <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Report Period</label>
-      <select class="si" style="min-width:170px" onchange="
+      <label for="fin-period-select" style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Report Period</label>
+      <select id="fin-period-select" name="fin-period-select" class="si" style="min-width:170px" onchange="
         _finPeriod=this.value;
         if(_finPeriod==='custom'){_finCustomFrom='';_finCustomTo='';}
         _finLoaded=true;loadFinancialHub()">

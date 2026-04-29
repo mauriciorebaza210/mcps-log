@@ -218,7 +218,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .svc-weekly{background:rgba(26,122,110,.1);color:var(--teal-mid)}
 .svc-startup{background:rgba(200,168,75,.15);color:#92400e}
 .svc-monthly{background:rgba(59,130,246,.1);color:#1d4ed8}
-.svc-gtc{background:rgba(239,68,68,.1);color:#b91c1c}
+.svc-gtc{background:rgba(16,185,129,.12);color:#059669}
 .svc-other{background:var(--surface);color:var(--muted)}
 
 .stop-notes{
@@ -1683,7 +1683,7 @@ select.q-inp{cursor:pointer}
 .svc-biweekly { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
 .svc-startup  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 .svc-monthly  { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
-.svc-gtc      { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.svc-gtc      { background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; }
 .svc-other    { background: #f1f5f9; color: #475569; border: 1px solid var(--border); }
 
 /* ── 1H: Action Button Touch-Target Sizing ── */
