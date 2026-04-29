@@ -262,7 +262,7 @@ function switchFinTab(tab) {
   }
 
   // Toggle view visibility
-  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === tab ? 'block' : 'none';
   });
@@ -283,7 +283,7 @@ async function loadFinancialHub() {
     _finActiveTab = hash.split('/')[1];
   }
 
-  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
   });
@@ -304,8 +304,10 @@ async function loadFinancialHub() {
     else if (_finActiveTab === 'visits') loadVisitHistoryTab();
     else if (_finActiveTab === 'clients') _renderClientsTab();
     else if (_finActiveTab === 'payroll') _loadAndRenderPayroll();
+    else if (_finActiveTab === 'unmatched') _loadAndRenderUnmatched();
   } else {
     if (loading) loading.style.display = 'block';
+    if (_finActiveTab === 'unmatched') _loadAndRenderUnmatched();
   }
 
   try {
@@ -343,6 +345,7 @@ async function loadFinancialHub() {
       else if (_finActiveTab === 'visits') loadVisitHistoryTab();
       else if (_finActiveTab === 'clients') _renderClientsTab();
       else if (_finActiveTab === 'payroll') _loadAndRenderPayroll();
+      // unmatched is loaded independently — skip here to avoid double-fetch
     }
   } catch(e) {
     console.error('Financial Hub load error:', e);
@@ -1787,5 +1790,163 @@ async function _finPayrollSetupSave() {
   } catch (e) {
     showErr('Error: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = 'Save Setup'; }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UNMATCHED SUBMISSIONS TAB
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _unmatchedRows  = [];
+let _unmatchedPools = [];
+
+async function _loadAndRenderUnmatched() {
+  const el = document.getElementById('unmatched-content');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:2rem;text-align:center"><div class="spinner"></div></div>';
+
+  try {
+    const [umRes, poolsRes] = await Promise.all([
+      apiGet({ action: 'get_unmatched_submissions', token: _s.token }),
+      apiGet({ action: 'get_pools_for_matching',    token: _s.token })
+    ]);
+
+    _unmatchedRows  = (umRes.ok  && umRes.rows)  ? umRes.rows  : [];
+    _unmatchedPools = (poolsRes.ok && poolsRes.pools) ? poolsRes.pools : [];
+  } catch(e) {
+    el.innerHTML = `<p style="color:var(--error);padding:1rem">Failed to load: ${escHtml(String(e))}</p>`;
+    return;
+  }
+
+  _renderUnmatchedTab();
+}
+
+function _fmtUnmatchedDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString([], { weekday:'short', month:'short', day:'numeric', year:'numeric' })
+    + ' at ' + d.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+}
+
+function _fmtChemTags(chemsStr) {
+  if (!chemsStr || chemsStr.trim() === 'none' || chemsStr.trim() === '') return '<em style="color:var(--text-muted)">none</em>';
+  return chemsStr.split(',').map(c => c.trim()).filter(Boolean).map(c => {
+    const parts = c.split(':');
+    const name  = escHtml(parts[0].trim());
+    const qty   = parts[1] ? escHtml(parts[1].trim()) : '';
+    return `<span style="display:inline-block;background:var(--surface-2,#f1f5f9);border:1px solid var(--border);border-radius:12px;padding:2px 10px;font-size:0.8rem;margin:2px">${name}${qty ? ': <strong>' + qty + '</strong>' : ''}</span>`;
+  }).join(' ');
+}
+
+function _renderUnmatchedTab() {
+  const el = document.getElementById('unmatched-content');
+  if (!el) return;
+
+  if (!_unmatchedRows.length) {
+    el.innerHTML = '<p style="padding:1.5rem;color:var(--text-muted)">No pending unmatched submissions.</p>';
+    return;
+  }
+
+  const poolOpts = _unmatchedPools.map(p =>
+    `<option value="${escHtml(p.poolId)}">${escHtml(p.label)}</option>`
+  ).join('');
+
+  const cards = _unmatchedRows.map(r => {
+    const row       = Number(r.rowIndex || 0);
+    const tech      = escHtml(r.technician       || '—');
+    const visitDate = _fmtUnmatchedDate(r.timestamp);
+    const flagDate  = _fmtUnmatchedDate(r.flagged_at);
+    const desc      = escHtml(r.pool_description || '(none entered)');
+    const notes     = escHtml(r.notes            || '—');
+    const chemTags  = _fmtChemTags(r.chemicals_used || '');
+    const logRow    = Number(r.log_row_index    || 0);
+    const pricedRow = Number(r.priced_row_index || 0);
+
+    return `
+<div class="unmatched-card" id="unmatched-card-${row}" style="border:1px solid var(--border);border-radius:10px;margin-bottom:0.75rem;background:var(--surface);overflow:hidden">
+  <div onclick="_unmatchedToggle(${row})" style="display:flex;justify-content:space-between;align-items:center;padding:0.85rem 1.1rem;cursor:pointer;gap:0.75rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+      <strong style="font-size:1rem">${tech}</strong>
+      <span style="color:var(--text-muted);font-size:0.85rem">${visitDate}</span>
+      <span style="color:var(--text-muted);font-size:0.85rem;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${desc}">${desc}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+      <span style="font-size:0.72rem;background:#fef3c7;color:#92400e;padding:2px 9px;border-radius:12px;font-weight:600">PENDING</span>
+      <span id="unmatched-chevron-${row}" style="font-size:0.85rem;color:var(--text-muted);transition:transform 0.2s">▼</span>
+    </div>
+  </div>
+  <div id="unmatched-detail-${row}" style="display:none;padding:0 1.1rem 1rem;border-top:1px solid var(--border)">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.6rem;margin:0.85rem 0">
+      <div><span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Technician</span><div style="margin-top:2px;font-weight:600">${tech}</div></div>
+      <div><span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Visit Date &amp; Time</span><div style="margin-top:2px">${visitDate}</div></div>
+      <div><span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Flagged At</span><div style="margin-top:2px">${flagDate}</div></div>
+      <div><span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Pool Description</span><div style="margin-top:2px">${desc}</div></div>
+      <div><span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Notes</span><div style="margin-top:2px">${notes}</div></div>
+      ${logRow ? `<div><span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Log / Priced Rows</span><div style="margin-top:2px;font-family:monospace;font-size:0.85rem">#${logRow} / #${pricedRow || '—'}</div></div>` : ''}
+    </div>
+    <div style="margin-bottom:0.85rem">
+      <span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Chemicals Used</span>
+      <div style="margin-top:6px">${chemTags}</div>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;padding-top:0.5rem;border-top:1px solid var(--border)">
+      <select id="unmatched-sel-${row}" style="flex:1;min-width:220px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.95rem">
+        <option value="">— Select pool to match —</option>
+        ${poolOpts}
+      </select>
+      <button class="adm-new-btn" style="white-space:nowrap" onclick="_resolveUnmatched(${row}, this)">Resolve</button>
+    </div>
+    <div id="unmatched-err-${row}" style="color:var(--error);font-size:0.85rem;margin-top:0.4rem"></div>
+  </div>
+</div>`;
+  }).join('');
+
+  el.innerHTML = `
+<div style="padding:0 0 1rem">
+  <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.35rem">
+    <h3 style="margin:0">Unmatched Submissions</h3>
+    <span style="font-size:0.85rem;color:var(--text-muted)">${_unmatchedRows.length} pending</span>
+  </div>
+  <p style="margin:0 0 1rem;font-size:0.9rem;color:var(--text-muted)">Visits submitted with "Other / Pool not listed". Click a row to expand and match it to the correct pool.</p>
+  ${cards}
+</div>`;
+}
+
+function _unmatchedToggle(row) {
+  const detail   = document.getElementById(`unmatched-detail-${row}`);
+  const chevron  = document.getElementById(`unmatched-chevron-${row}`);
+  if (!detail) return;
+  const open = detail.style.display === 'none';
+  detail.style.display  = open ? 'block' : 'none';
+  if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+}
+
+async function _resolveUnmatched(rowIndex, btn) {
+  const sel = document.getElementById(`unmatched-sel-${rowIndex}`);
+  const err = document.getElementById(`unmatched-err-${rowIndex}`);
+  if (!sel || !sel.value) {
+    if (err) err.textContent = 'Select a pool first.';
+    return;
+  }
+  if (err) err.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res = await api({ action: 'resolve_unmatched', token: _s.token, row_index: rowIndex, pool_id: sel.value });
+    if (!res.ok) throw new Error(res.error || 'Failed');
+    const card = document.getElementById(`unmatched-card-${rowIndex}`);
+    if (card) {
+      card.style.opacity = '0.5';
+      card.innerHTML = `<div style="padding:0.5rem;color:var(--text-muted)">✓ Resolved — matched to <strong>${escHtml(sel.options[sel.selectedIndex].text)}</strong></div>`;
+    }
+    _unmatchedRows = _unmatchedRows.filter(r => Number(r.rowIndex) !== rowIndex);
+    if (!_unmatchedRows.length) {
+      setTimeout(() => _renderUnmatchedTab(), 1200);
+    }
+  } catch(e) {
+    if (err) err.textContent = 'Error: ' + String(e.message || e);
+    btn.disabled = false;
+    btn.textContent = 'Resolve';
   }
 }

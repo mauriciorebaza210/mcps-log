@@ -177,6 +177,7 @@
           <button class="hub-tab" id="htab-training" onclick="switchHubTab('training')">🎓 Training</button>
           <button class="hub-tab" id="htab-profile" onclick="switchHubTab('profile')">👤 My Operator Profile</button>
           <button class="hub-tab" id="htab-myjobs" onclick="switchHubTab('myjobs')" style="display:none">💰 My Jobs</button>
+          <button class="hub-tab" id="htab-startup_checklists" onclick="switchHubTab('startup_checklists')" style="display:none">📋 Startup Checklists</button>
         </div>
 
         <!-- ══ SCHEDULE TAB ══ -->
@@ -304,6 +305,20 @@
         <div id="hub-tab-myjobs" style="display:none">
           <div id="myjobs-root"></div>
         </div><!-- /hub-tab-myjobs -->
+
+        <!-- ══ STARTUP CHECKLISTS TAB ══ -->
+        <div id="hub-tab-startup_checklists" style="display:none">
+          <div class="scl-tab-hdr">
+            <div>
+              <h2 style="font-family:'Oswald',sans-serif;font-size:1.25rem;font-weight:700;color:var(--text)">Startup Checklists</h2>
+              <p style="font-size:.82rem;color:var(--muted);margin-top:.15rem">Technician and Pool School checklists for new pools</p>
+            </div>
+            <button class="scl-new-btn" onclick="openSclTypePicker()">+ New Checklist</button>
+          </div>
+          <div id="scl-list-wrap" style="margin-top:1rem">
+            <div class="scl-empty">Select this tab to load checklists.</div>
+          </div>
+        </div><!-- /hub-tab-startup_checklists -->
 
       </div>
     </div>
@@ -1128,6 +1143,11 @@
         <div id="payroll-content" style="padding:0 1rem 2rem"></div>
       </div>
 
+      <!-- Tab: Unmatched Submissions -->
+      <div id="fin-view-unmatched" style="display:none">
+        <div id="unmatched-content" style="padding:0 1rem 2rem"></div>
+      </div>
+
     </div><!-- /page-financial_hub -->
 
     <!-- ── Alerts & Issues page ── -->
@@ -1393,6 +1413,7 @@
         </div>
       </div>
       <button onclick="markStartupDone(event)" style="padding:.5rem .75rem;border-radius:7px;border:none;background:#fee2e2;color:#b91c1c;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">✗ Startup complete — remove from schedule</button>
+      <button id="pas-checklist-btn" onclick="openSclTypePickerFromPool()" style="padding:.5rem .75rem;border-radius:7px;border:none;background:rgba(200,168,75,.15);color:#92600a;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📋 Startup Checklists</button>
     </div>
   </div>
   <button class="pas-apply-btn" id="pas-apply-btn" onclick="applyPoolAction()">Apply Changes</button>
@@ -1599,7 +1620,53 @@
 <script src="/js/features/financial.js"></script>
 <script src="/js/features/visit-history.js"></script>
 <script src="/js/features/alerts.js"></script>
+<script src="/js/features/startup_checklists.js"></script>
 <script src="/app.js"></script>
+
+<!-- ── Startup Checklist Type Picker ── -->
+<div class="conf-modal-backdrop" id="scl-type-picker-backdrop" onclick="closeSclTypePicker(event)" style="display:none">
+  <div class="conf-modal" style="max-width:520px;width:95%" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">New Checklist</div>
+      <button class="drawer-close" onclick="closeSclTypePicker()">✕</button>
+    </div>
+    <div class="conf-modal-body" style="padding:1.25rem">
+      <div class="scl-picker-grid">
+        <button class="scl-picker-card" onclick="pickSclType('technician')">
+          <div class="scl-picker-icon">🔧</div>
+          <div class="scl-picker-name">Technician Checklist</div>
+          <div class="scl-picker-desc">Pool startup procedure — remove, install, program, check, adjust</div>
+        </button>
+        <button class="scl-picker-card" onclick="pickSclType('pool_school')">
+          <div class="scl-picker-icon">🎓</div>
+          <div class="scl-picker-name">Pool School Checklist</div>
+          <div class="scl-picker-desc">Customer walkthrough — performance check, pool school, chemical levels, sign-off</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Startup Checklist Drawer ── -->
+<div class="drawer-backdrop" id="scl-backdrop" onclick="closeSclDrawer()" style="display:none"></div>
+<div class="drawer scl-drawer" id="scl-drawer">
+  <div class="drawer-inner">
+    <div class="drawer-hdr">
+      <div>
+        <div class="drawer-title" id="scl-drawer-title">New Checklist</div>
+        <div class="drawer-sub" style="font-size:.8rem;color:var(--muted)" id="scl-drawer-sub">Fill out all sections, sign, and submit</div>
+      </div>
+      <button class="drawer-close" onclick="closeSclDrawer()">✕</button>
+    </div>
+    <div class="drawer-body" id="scl-drawer-body" style="overflow-y:auto;flex:1;padding:0"></div>
+    <div class="drawer-footer" style="padding:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem;align-items:center">
+      <button class="scl-draft-btn" onclick="sclSaveDraft()">Save Draft</button>
+      <div style="flex:1"></div>
+      <button class="conf-cancel-btn" onclick="closeSclDrawer()">Cancel</button>
+      <button class="conf-submit-btn" id="scl-submit-btn" onclick="submitStartupChecklist()">Submit Checklist</button>
+    </div>
+  </div>
+</div>
 
 <!-- Green-to-Clean Schedule Next Visit Modal -->
 <div id="gtc-modal-overlay" style="display:none">

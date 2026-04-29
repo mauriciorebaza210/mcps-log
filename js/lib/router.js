@@ -4,7 +4,31 @@
 // Uses globals: _s, _curPage, _routeData, _activeHubTab, _usersCache, _invLoaded
 // ══════════════════════════════════════════════════════════════════════════════
 
+function _resolvePageFromHash_(hash) {
+  if (!hash) return null;
+  if (hash === 'technicianhub' || hash.startsWith('technicianhub/')) {
+    const sub = hash.split('/')[1] || 'schedule';
+    return (sub === 'service_log' || sub === 'inventory') ? sub : 'live_map';
+  }
+  return hash.split('/')[0];
+}
+
+function _pageToHash_(page, sub) {
+  if (page === 'home') return '';
+  if (page === 'live_map') return 'technicianhub/' + (sub || 'schedule');
+  if (page === 'service_log') return 'technicianhub/service_log';
+  if (page === 'inventory') return 'technicianhub/inventory';
+  return page + (sub ? '/' + sub : '');
+}
+
 function navigateTo(pageWithSub){
+  // Translate public technicianhub/ URLs to internal page IDs
+  if (pageWithSub === 'technicianhub' || pageWithSub.startsWith('technicianhub/')) {
+    const thSub = pageWithSub.split('/')[1] || 'schedule';
+    pageWithSub = (thSub === 'service_log' || thSub === 'inventory')
+      ? thSub
+      : (thSub === 'schedule' ? 'live_map' : 'live_map/' + thSub);
+  }
   const parts = pageWithSub.split('/');
   const page = parts[0];
   const sub  = parts[1] || null;
@@ -22,7 +46,7 @@ function navigateTo(pageWithSub){
   
   _setSidebarActive(page, sub);
   _curPage = page;
-  location.hash = (page === 'home' ? '' : page) + (sub ? '/' + sub : '');
+  location.hash = _pageToHash_(page, sub);
   _closeSidebar();
 
   // Scroll content area back to top
@@ -71,9 +95,10 @@ function _setSidebarActive(page, hubTab) {
 
 function switchHubTab(tab) {
   _activeHubTab = tab;
+  location.hash = 'technicianhub/' + tab;
 
   // Update tab button active states (only for buttons that exist / are visible)
-  ['schedule','training','profile','myjobs'].forEach(t => {
+  ['schedule','training','profile','myjobs','startup_checklists'].forEach(t => {
     const btn = document.getElementById('htab-'+t);
     if(btn) btn.classList.toggle('active', t === tab);
   });
@@ -84,6 +109,8 @@ function switchHubTab(tab) {
   document.getElementById('hub-tab-profile').style.display  = tab === 'profile'  ? 'block' : 'none';
   const myJobsPanel = document.getElementById('hub-tab-myjobs');
   if(myJobsPanel) myJobsPanel.style.display = tab === 'myjobs' ? 'block' : 'none';
+  const sclPanel = document.getElementById('hub-tab-startup_checklists');
+  if(sclPanel) sclPanel.style.display = tab === 'startup_checklists' ? 'block' : 'none';
 
   if (tab === 'profile') {
     if(isAdmin() && !_usersCache.length){
@@ -96,6 +123,9 @@ function switchHubTab(tab) {
   }
   if (tab === 'myjobs') {
     loadMyJobsTab();
+  }
+  if (tab === 'startup_checklists') {
+    loadStartupChecklistsTab();
   }
   // Sync sidebar: schedule maps to the parent live_map item; training/profile map to their child items
   _setSidebarActive('live_map', tab === 'schedule' ? null : tab);

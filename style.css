@@ -2046,3 +2046,88 @@ select.q-inp{cursor:pointer}
 .adm-detail-row:last-child { border-bottom:none; }
 .adm-detail-label { color:var(--muted); font-size:0.8rem; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
 .adm-detail-val { font-weight:600; color:var(--text); font-size:0.88rem; text-align:right; }
+
+/* ── STARTUP CHECKLISTS ──────────────────────────────────────────────────── */
+.scl-tab-hdr{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1rem .5rem;gap:1rem}
+.scl-new-btn{padding:.5rem 1.1rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:.9rem;font-weight:600;letter-spacing:.04em;cursor:pointer;white-space:nowrap;transition:background .15s}
+.scl-new-btn:hover{background:var(--teal-mid)}
+.scl-empty{text-align:center;padding:2.5rem 1rem;color:var(--muted);font-size:.9rem}
+
+/* List table */
+.scl-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-bottom:1rem}
+.scl-table thead tr{background:var(--surface);border-bottom:2px solid var(--border)}
+.scl-table th{padding:.55rem .75rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.scl-table td{padding:.6rem .75rem;border-bottom:1px solid var(--border)}
+.scl-table tr:last-child td{border-bottom:none}
+.scl-type-badge{display:inline-block;padding:.2rem .55rem;border-radius:20px;font-size:.72rem;font-weight:700}
+.scl-type-tech{background:rgba(13,77,68,.1);color:var(--teal)}
+.scl-type-ps{background:rgba(200,168,75,.15);color:#7c5a00}
+.scl-pdf-btn{display:inline-block;padding:.25rem .6rem;background:var(--teal);color:#fff;border-radius:6px;font-size:.75rem;font-weight:600;text-decoration:none;white-space:nowrap}
+.scl-pdf-btn:hover{background:var(--teal-mid)}
+
+/* Drawer overrides */
+.scl-drawer{width:min(600px,100vw)}
+
+/* Form layout */
+.scl-section{padding:.85rem 1rem;border-bottom:1px solid var(--border)}
+.scl-section:last-child{border-bottom:none}
+.scl-section-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.6rem}
+.scl-field{display:flex;flex-direction:column;gap:.25rem;flex:1}
+.scl-field-row{display:flex;gap:.75rem;margin-bottom:.5rem}
+.scl-field:last-child{margin-bottom:0}
+.scl-label{font-size:.78rem;font-weight:600;color:var(--text)}
+.scl-inp{padding:.55rem .75rem;border:1.5px solid var(--border);border-radius:8px;font-family:'Barlow',sans-serif;font-size:.88rem;color:var(--text);background:#fff;width:100%;transition:border-color .15s}
+.scl-inp:focus{outline:none;border-color:var(--teal-mid);box-shadow:0 0 0 3px rgba(26,122,110,.12)}
+textarea.scl-inp{resize:vertical;min-height:60px}
+
+/* Checklist type tabs */
+.scl-type-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface)}
+.scl-type-tab{flex:1;padding:.65rem 1rem;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:transparent;font-family:'Barlow Condensed',sans-serif;font-size:.88rem;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.03em}
+.scl-type-tab:hover{color:var(--text);background:rgba(0,0,0,.03)}
+.scl-type-tab.active{color:var(--teal);border-bottom-color:var(--teal);background:#fff}
+
+/* Checklist items */
+.scl-items-grid{display:flex;flex-direction:column;gap:.1rem}
+.scl-item-label{display:flex;align-items:flex-start;gap:.55rem;padding:.35rem .4rem;border-radius:6px;cursor:pointer;font-size:.85rem;transition:background .1s;line-height:1.4}
+.scl-item-label:hover{background:rgba(13,77,68,.05)}
+.scl-chk{width:16px;height:16px;border-radius:4px;accent-color:var(--teal);cursor:pointer;flex-shrink:0;margin-top:.1rem}
+
+/* Signature pad */
+.scl-sig-wrap{margin-top:.5rem}
+.scl-sig-label{display:flex;align-items:center;justify-content:space-between;font-size:.78rem;font-weight:600;color:var(--text);margin-bottom:.4rem}
+.scl-sig-clear{background:none;border:1px solid var(--border);border-radius:5px;padding:.15rem .5rem;font-size:.75rem;color:var(--muted);cursor:pointer}
+.scl-sig-clear:hover{border-color:var(--teal);color:var(--teal)}
+.scl-sig-canvas{display:block;width:100%;max-width:460px;height:140px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:crosshair;touch-action:none}
+.scl-sig-line-hint{font-size:.72rem;color:var(--muted);text-align:center;margin-top:.25rem}
+.scl-draft-btn{padding:.45rem .9rem;border:1.5px solid var(--gold);background:rgba(200,168,75,.1);color:#7c5a00;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:.88rem;font-weight:600;cursor:pointer;transition:all .15s}
+.scl-draft-btn:hover{background:rgba(200,168,75,.2)}
+
+/* ── SCL TYPE PICKER ─────────────────────────────────────────────────────── */
+.scl-picker-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:420px){.scl-picker-grid{grid-template-columns:1fr}}
+.scl-picker-card{display:flex;flex-direction:column;align-items:center;gap:.5rem;padding:1.25rem 1rem;border:2px solid var(--border);border-radius:14px;background:#fff;cursor:pointer;transition:all .18s;text-align:center}
+.scl-picker-card:hover{border-color:var(--teal);background:rgba(13,77,68,.04);transform:translateY(-2px);box-shadow:0 6px 20px rgba(13,77,68,.1)}
+.scl-picker-icon{font-size:2rem;line-height:1}
+.scl-picker-name{font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;color:var(--text)}
+.scl-picker-desc{font-size:.78rem;color:var(--muted);line-height:1.4}
+
+/* ── SCL YES/NO GRID ─────────────────────────────────────────────────────── */
+.scl-yn-grid{display:flex;flex-direction:column;gap:.1rem}
+.scl-yn-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.4rem .4rem;border-radius:6px;transition:background .1s}
+.scl-yn-row:hover{background:rgba(13,77,68,.04)}
+.scl-yn-starred .scl-yn-label{color:var(--teal);font-weight:600}
+.scl-yn-label{flex:1;font-size:.84rem;color:var(--text);line-height:1.35}
+.scl-yn-btns{display:flex;gap:.3rem;flex-shrink:0}
+.scl-yn-btn{padding:.22rem .65rem;border-radius:20px;border:1.5px solid var(--border);background:transparent;font-size:.72rem;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.03em}
+.scl-yn-yes{color:#16a34a;border-color:#bbf7d0}
+.scl-yn-yes.active{background:#16a34a;color:#fff;border-color:#16a34a}
+.scl-yn-no{color:#dc2626;border-color:#fecaca}
+.scl-yn-no.active{background:#dc2626;color:#fff;border-color:#dc2626}
+
+/* ── SCL CHEMICAL LEVELS ─────────────────────────────────────────────────── */
+.scl-chem-grid{display:flex;flex-direction:column}
+.scl-chem-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.5rem .4rem;border-bottom:1px solid var(--border)}
+.scl-chem-row:last-child{border-bottom:none}
+.scl-chem-label{font-size:.87rem;font-weight:700;color:var(--text)}
+.scl-chem-range{font-weight:400;color:var(--muted);font-size:.78rem;margin-left:.3rem}
+.scl-chem-inp{width:80px!important;padding:.3rem .5rem!important;text-align:center;font-weight:600}

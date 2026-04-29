@@ -627,8 +627,7 @@ function renderNewPoolsBanner() {
     </div>
   </div>`;
   if (!banner) {
-    const content = document.getElementById('route-content');
-    content.insertAdjacentHTML('afterbegin', html);
+    document.getElementById('hub-tab-schedule').insertAdjacentHTML('afterbegin', html);
   } else {
     banner.outerHTML = html;
   }
@@ -656,8 +655,7 @@ function renderGtcJobsBanner() {
     </div>
   </div>`;
   if (!existing) {
-    const content = document.getElementById('route-content');
-    content.insertAdjacentHTML('afterbegin', html);
+    document.getElementById('hub-tab-schedule').insertAdjacentHTML('afterbegin', html);
   } else {
     existing.outerHTML = html;
   }

@@ -136,7 +136,8 @@ function showApp(startPage) {
   // Configure which hub tabs are visible based on role
   _configureHubTabs();
 
-  const pg = (_s.pages||[]).includes(startPage)?startPage:_defaultLandingPage_();
+  const resolvedPage = _resolvePageFromHash_(startPage);
+  const pg = resolvedPage && (_s.pages||[]).includes(resolvedPage) ? startPage : _defaultLandingPage_();
   navigateTo(pg);
   updateSidebarAvatar();
 }
@@ -222,6 +223,7 @@ function buildNav() {
   } else {
     techChildren = SIDEBAR_GROUPS[2].children.filter(c => {
       if (!pages.includes(c.page)) return false;
+      if (c.adminOnly && !isAdmin() && !hasRole('manager')) return false;
       if (traineeOnly && c.page === 'live_map' && !c.hubTab) return false;
       if (traineeOnly && c.hubTab === 'profile') return false;
       if (traineeOnly && c.page === 'inventory') return false;
@@ -301,9 +303,11 @@ function _configureHubTabs(){
   const schedBtn  = document.getElementById('htab-schedule');
   const profBtn   = document.getElementById('htab-profile');
   const myJobsBtn = document.getElementById('htab-myjobs');
+  const sclBtn    = document.getElementById('htab-startup_checklists');
   if(schedBtn)  schedBtn.style.display  = traineeOnly ? 'none' : '';
   if(profBtn)   profBtn.style.display   = traineeOnly ? 'none' : '';
   if(myJobsBtn) myJobsBtn.style.display = isField ? '' : 'none';
+  if(sclBtn)    sclBtn.style.display    = (isAdmin() || hasRole('manager')) ? '' : 'none';
   // Also hide the schedule/profile/myjobs tab content for trainees
   if(traineeOnly){
     document.getElementById('hub-tab-schedule').style.display = 'none';

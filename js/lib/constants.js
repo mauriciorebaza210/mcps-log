@@ -58,11 +58,12 @@ const SIDEBAR_GROUPS = [
     id: 'tech',
     label: 'Technician Hub',
     children: [
-      { page:'live_map',    label:'Schedule',         icon:SVG_CALENDAR },
-      { page:'live_map',    label:'My Jobs',           icon:SVG_CHART,    hubTab:'myjobs', id:'sb-child-myjobs' },
-      { page:'live_map',    label:'Training',          icon:SVG_PLAY,     hubTab:'training', id:'sb-child-training' },
-      { page:'inventory',   label:'Inventory',         icon:SVG_BOX      },
-      { page:'service_log', label:'Service Log',       icon:SVG_CLIP     }
+      { page:'live_map',    label:'Schedule',              icon:SVG_CALENDAR },
+      { page:'live_map',    label:'My Jobs',               icon:SVG_CHART, hubTab:'myjobs',              id:'sb-child-myjobs' },
+      { page:'live_map',    label:'Training',              icon:SVG_PLAY,  hubTab:'training',            id:'sb-child-training' },
+      { page:'live_map',    label:'Startup Checklists',    icon:SVG_CLIP,  hubTab:'startup_checklists',  id:'sb-child-startup_checklists', adminOnly:true },
+      { page:'inventory',   label:'Inventory',             icon:SVG_BOX      },
+      { page:'service_log', label:'Service Log',           icon:SVG_CLIP     }
     ]
   },
   {
@@ -74,7 +75,8 @@ const SIDEBAR_GROUPS = [
       { page:'financial_hub', label:'Chemical Analysis',  icon:SVG_CLIP,  hubTab:'chemicals', id:'ni-financial_hub-chemicals' },
       { page:'financial_hub', label:'Visit History',       icon:SVG_CLIP,  hubTab:'visits',    id:'ni-financial_hub-visits' },
       { page:'financial_hub', label:'Clients',             icon:SVG_CLIP,  hubTab:'clients',   id:'ni-financial_hub-clients' },
-      { page:'financial_hub', label:'Payroll',             icon:SVG_CLIP,  hubTab:'payroll',   id:'ni-financial_hub-payroll' }
+      { page:'financial_hub', label:'Payroll',             icon:SVG_CLIP,  hubTab:'payroll',   id:'ni-financial_hub-payroll' },
+      { page:'financial_hub', label:'Unmatched',           icon:SVG_CLIP,  hubTab:'unmatched', id:'ni-financial_hub-unmatched' }
     ]
   }
 ];
