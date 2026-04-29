@@ -151,8 +151,13 @@ function updateSidebarAvatar() {
     // Already a base64 data URL — render directly, no network request
     avatarEl.innerHTML = `<img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%">`;
   } else if (avatarUrl) {
-    // External Drive URL (legacy) — show initials immediately, fetch+cache as base64 in background
-    avatarEl.textContent = initials;
+    // External URL — show directly and attempt background migration if possible
+    let displayUrl = avatarUrl;
+    if (avatarUrl.includes('drive.google.com') || avatarUrl.includes('googleusercontent.com')) {
+      const match = avatarUrl.match(/[?&]id=([^&#]+)/) || avatarUrl.match(/\/d\/([^/?#]+)/);
+      if (match) displayUrl = `/api/avatar?id=${match[1]}`;
+    }
+    avatarEl.innerHTML = `<img src="${displayUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%" onerror="this.style.display='none'; this.parentElement.textContent='${initials}'">`;
     _migrateAvatarToBase64_(_s.username, avatarUrl);
   } else {
     avatarEl.textContent = initials;
@@ -166,7 +171,17 @@ function updateSidebarAvatar() {
 }
 
 function _migrateAvatarToBase64_(username, url) {
-  fetch(url)
+  if (!url || url.startsWith('data:')) return;
+  
+  let fetchUrl = url;
+  // Use proxy for Google-hosted images to avoid CORS and 429
+  if (url.includes('drive.google.com') || url.includes('googleusercontent.com')) {
+    const match = url.match(/[?&]id=([^&#]+)/) || url.match(/\/d\/([^/?#]+)/);
+    if (!match) return;
+    fetchUrl = `/api/avatar?id=${match[1]}`;
+  }
+
+  fetch(fetchUrl)
     .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
     .then(blob => new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -178,7 +193,7 @@ function _migrateAvatarToBase64_(username, url) {
       localStorage.setItem('mcps_avatar_' + username, dataUrl);
       if (username === _s.username) updateSidebarAvatar();
     })
-    .catch(() => {}); // 429 or network error — initials remain, retry next session
+    .catch(() => {}); // 429 or network error — fallback remains external URL or initials
 }
 
 function _prefetchCommon() {

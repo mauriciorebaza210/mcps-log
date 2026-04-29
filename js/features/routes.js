@@ -1191,10 +1191,20 @@ function renderProfileTab() {
       imgEl.style.display = 'block';
       initialsEl.style.display = 'none';
     } else {
-      // External Drive URL — show initials, migrate to base64 in background
-      imgEl.style.display = 'none';
-      initialsEl.style.display = 'block';
-      initialsEl.textContent = initials;
+      // External URL — show directly and attempt background migration if possible
+      let displayUrl = avatarUrl;
+      if (avatarUrl.includes('drive.google.com') || avatarUrl.includes('googleusercontent.com')) {
+        const match = avatarUrl.match(/[?&]id=([^&#]+)/) || avatarUrl.match(/\/d\/([^/?#]+)/);
+        if (match) displayUrl = `/api/avatar?id=${match[1]}`;
+      }
+      imgEl.src = displayUrl;
+      imgEl.style.display = 'block';
+      imgEl.onerror = () => {
+        imgEl.style.display = 'none';
+        initialsEl.style.display = 'block';
+        initialsEl.textContent = initials;
+      };
+      initialsEl.style.display = 'none';
       if (typeof _migrateAvatarToBase64_ === 'function') {
         _migrateAvatarToBase64_(user.username, avatarUrl);
       }
