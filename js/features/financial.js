@@ -16,7 +16,7 @@ let _finCustomTo   = '';           // 'YYYY-MM-DD'
 let _finTechFilter = '';           // '' = all techs (admin only)
 let _finLoaded     = false;
 
-let _finActiveTab  = 'payouts'; // 'payouts', 'profit', 'chemicals'
+let _finActiveTab  = 'payouts'; // 'payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll'
 let _finCrmCache   = [];        // cache for CRM/Quote data
 
 const FIN_PAGE_SIZE = 15;
@@ -262,7 +262,7 @@ function switchFinTab(tab) {
   }
 
   // Toggle view visibility
-  ['payouts', 'profit', 'chemicals', 'visits', 'clients'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === tab ? 'block' : 'none';
   });
@@ -283,7 +283,7 @@ async function loadFinancialHub() {
     _finActiveTab = hash.split('/')[1];
   }
 
-  ['payouts', 'profit', 'chemicals', 'visits', 'clients'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
   });
@@ -303,6 +303,7 @@ async function loadFinancialHub() {
     else if (_finActiveTab === 'chemicals') _renderChemTab();
     else if (_finActiveTab === 'visits') loadVisitHistoryTab();
     else if (_finActiveTab === 'clients') _renderClientsTab();
+    else if (_finActiveTab === 'payroll') _loadAndRenderPayroll();
   } else {
     if (loading) loading.style.display = 'block';
   }
@@ -341,6 +342,7 @@ async function loadFinancialHub() {
       else if (_finActiveTab === 'chemicals') _renderChemTab();
       else if (_finActiveTab === 'visits') loadVisitHistoryTab();
       else if (_finActiveTab === 'clients') _renderClientsTab();
+      else if (_finActiveTab === 'payroll') _loadAndRenderPayroll();
     }
   } catch(e) {
     console.error('Financial Hub load error:', e);
@@ -369,7 +371,7 @@ function _finApplyAndRender() {
 function _renderFinFilters() {
   const el = document.getElementById('fin-shared-filters');
   if (!el) return;
-  if (_finActiveTab === 'clients') { el.innerHTML = ''; return; }
+  if (_finActiveTab === 'clients' || _finActiveTab === 'payroll') { el.innerHTML = ''; return; }
 
   const rangeText = (_finPeriod !== 'all' && _finPeriod !== 'custom') ? _finDateRangeText(_finPeriod) : '';
 
@@ -1280,4 +1282,510 @@ function _renderClientsTable(enriched) {
       <td>${routeBadge(c.inRoutes)}</td>
       <td style="text-align:right;color:var(--muted);font-size:.85rem">›</td>
     </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAYROLL TAB — K-1 partner distributions + W-2 owner-employee (Texas, Single)
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _finPayrollData  = null; // { w2, partners, log }
+let _finPayrollMonth = '';   // 'YYYY-MM'
+
+// ── IRS Pub 15-T 2025/2026 Percentage Method (Single, no adjustments) ─────────
+function _calcW2Withholding(grossMonthly) {
+  const annual = grossMonthly * 12;
+  const brackets = [
+    { floor: 0,       base: 0,           rate: 0.10 },
+    { floor: 11925,   base: 1192.50,     rate: 0.12 },
+    { floor: 47150,   base: 5418.50,     rate: 0.22 },
+    { floor: 100525,  base: 17161.00,    rate: 0.24 },
+    { floor: 191950,  base: 39105.00,    rate: 0.32 },
+    { floor: 243725,  base: 56172.00,    rate: 0.35 },
+    { floor: 609350,  base: 184015.75,   rate: 0.37 },
+  ];
+  let annualFed = 0;
+  for (let i = brackets.length - 1; i >= 0; i--) {
+    if (annual > brackets[i].floor) {
+      annualFed = brackets[i].base + (annual - brackets[i].floor) * brackets[i].rate;
+      break;
+    }
+  }
+  const r = n => Math.round(n * 100) / 100;
+  const fed = annualFed / 12;
+  const ss  = grossMonthly * 0.062;
+  const med = grossMonthly * 0.0145;
+  return {
+    fed:    r(fed),
+    ss:     r(ss),
+    med:    r(med),
+    net:    r(grossMonthly - fed - ss - med),
+    er_ss:  r(ss),
+    er_med: r(med),
+  };
+}
+
+async function _loadAndRenderPayroll() {
+  const now = new Date();
+  if (!_finPayrollMonth) {
+    _finPayrollMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+  const el = document.getElementById('payroll-content');
+  if (el) el.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted)">Loading payroll data…</div>`;
+  try {
+    const year = _finPayrollMonth.slice(0, 4);
+    const [configRes, logRes] = await Promise.all([
+      apiGet({ action: 'get_payroll_config', token: _s.token }),
+      apiGet({ action: 'get_payroll_log',    token: _s.token, year }),
+    ]);
+    _finPayrollData = {
+      w2:       configRes.w2       || null,
+      partners: configRes.partners || [],
+      log:      logRes.rows        || [],
+    };
+  } catch (e) {
+    if (el) el.innerHTML = `<div style="padding:2rem;color:var(--error)">Failed to load payroll data.</div>`;
+    return;
+  }
+  _renderPayrollTab();
+}
+
+function _payrollPrevMonth() {
+  const [y, m] = _finPayrollMonth.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  _finPayrollMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  _loadAndRenderPayroll();
+}
+
+function _payrollNextMonth() {
+  const [y, m] = _finPayrollMonth.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  _finPayrollMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  _loadAndRenderPayroll();
+}
+
+function _renderPayrollTab() {
+  const el = document.getElementById('payroll-content');
+  if (!el) return;
+
+  const data = _finPayrollData;
+  const notConfigured = !data || (!data.w2 && (!data.partners || data.partners.length === 0));
+
+  const [selYear, selMon] = _finPayrollMonth.split('-').map(Number);
+  const monthLabel = new Date(selYear, selMon - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const setupBtn = isAdmin()
+    ? `<button class="adm-new-btn" style="background:var(--teal)" onclick="_finPayrollSetupModal()">⚙ Setup Payroll</button>`
+    : '';
+
+  if (notConfigured) {
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
+        <h3 style="margin:0;color:var(--teal)">Payroll</h3>
+        ${setupBtn}
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2rem;text-align:center;color:var(--muted)">
+        <div style="font-size:2rem;margin-bottom:.75rem">💼</div>
+        <div style="font-weight:600;margin-bottom:.5rem">Payroll not configured</div>
+        <div style="font-size:.9rem">Set up your W-2 employee and K-1 partners to get started.</div>
+        ${isAdmin() ? `<button class="adm-new-btn" style="margin-top:1.25rem;background:var(--teal)" onclick="_finPayrollSetupModal()">Setup Payroll</button>` : ''}
+      </div>`;
+    return;
+  }
+
+  // ── Month nav ────────────────────────────────────────────────────────────────
+  const nav = `
+    <div style="display:flex;align-items:center;gap:1rem">
+      <button class="mvt-btn" onclick="_payrollPrevMonth()">←</button>
+      <span style="font-weight:600;font-size:1rem;min-width:130px;text-align:center">${monthLabel}</span>
+      <button class="mvt-btn" onclick="_payrollNextMonth()">→</button>
+    </div>`;
+
+  // ── Shared profit estimate (used by both W-2 and K-1 sections) ───────────────
+  const monthlyRevenue = _finCrmCache
+    .filter(c => c.status === 'ACTIVE_CUSTOMER')
+    .reduce((s, c) => s + (parseFloat(c.discounted_service_subtotal) || parseFloat(c.total_with_tax) || 0), 0);
+  const monthVisits = _finCache.filter(r => {
+    const d = new Date(r.timestamp || r.date || '');
+    return !isNaN(d) && d.getFullYear() === selYear && (d.getMonth() + 1) === selMon;
+  });
+  const monthChem  = monthVisits.reduce((s, r) => s + (parseFloat(r.chem_cost)  || 0), 0);
+  const monthLabor = monthVisits.reduce((s, r) => s + (parseFloat(r.labor_cost) || 0), 0);
+  const estNet     = monthlyRevenue - monthChem - monthLabor; // gross profit — split by % for each owner
+
+  // ── W-2 owner section ────────────────────────────────────────────────────────
+  let w2Html = '';
+  if (data.w2) {
+    const w2Pct    = parseFloat(data.w2.pct) || 0;
+    const w2Gross  = estNet > 0 ? estNet * w2Pct / 100 : 0;
+    const wh       = _calcW2Withholding(w2Gross);
+    const paidEntry = data.log.find(r => r.type === 'w2' && r.period === _finPayrollMonth);
+
+    const ytdEntries  = data.log.filter(r => r.type === 'w2' && r.period.startsWith(String(selYear)));
+    const ytdGross    = ytdEntries.reduce((s, r) => s + (r.gross || 0), 0);
+    const futuaWageBase = 7000;
+    const sutaWageBase  = 9000;
+    const prevYtd     = ytdGross - (paidEntry ? (paidEntry.gross || 0) : 0);
+    const futaWages   = Math.max(0, Math.min(w2Gross, futuaWageBase - prevYtd));
+    const sutaWages   = Math.max(0, Math.min(w2Gross, sutaWageBase  - prevYtd));
+
+    const statusBadge = paidEntry
+      ? `<span style="background:#dcfce7;color:#166534;padding:.25rem .75rem;border-radius:99px;font-size:.82rem;font-weight:600">
+           Paid ${_finFmtCurrency(paidEntry.net)} net on ${paidEntry.timestamp ? paidEntry.timestamp.split(' ')[0] : '—'}
+         </span>`
+      : (isAdmin()
+          ? `<button class="adm-new-btn" style="background:var(--teal)" onclick="_finPayrollLogModal('w2',${JSON.stringify(data.w2.name).replace(/"/g, '&quot;')},${w2Gross.toFixed(2)},${wh.net.toFixed(2)},'${_finPayrollMonth}')">Log W-2 Payment (net ${_finFmtCurrency(wh.net)})</button>`
+          : `<span style="color:var(--muted)">Not yet logged</span>`);
+
+    w2Html = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:1rem">
+          <span style="font-weight:700;font-size:1rem;color:var(--teal)">W-2 Owner: ${escHtml(data.w2.name)}</span>
+          <span style="background:#dbeafe;color:#1d4ed8;padding:.15rem .55rem;border-radius:99px;font-size:.75rem;font-weight:600">${w2Pct}% ownership → W-2 wages</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem 2rem;font-size:.9rem;margin-bottom:1rem">
+          <span style="color:var(--muted)">Gross wages (${w2Pct}% of est. net)</span><span style="font-weight:600">${_finFmtCurrency(w2Gross)}</span>
+          <span style="color:var(--muted)">Federal income tax</span><span style="color:#dc2626">−${_finFmtCurrency(wh.fed)}</span>
+          <span style="color:var(--muted)">Social Security (6.2%)</span><span style="color:#dc2626">−${_finFmtCurrency(wh.ss)}</span>
+          <span style="color:var(--muted)">Medicare (1.45%)</span><span style="color:#dc2626">−${_finFmtCurrency(wh.med)}</span>
+          <span style="border-top:1px solid var(--border);padding-top:.4rem;font-weight:600">Net take-home</span>
+          <span style="border-top:1px solid var(--border);padding-top:.4rem;font-weight:700;color:var(--teal)">${_finFmtCurrency(wh.net)}</span>
+        </div>
+        <div style="margin-bottom:1rem">${statusBadge}</div>
+        <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.75rem;font-size:.83rem;color:var(--muted)">
+          <strong style="color:var(--text)">Employer taxes also owed (EFTPS, separately):</strong><br>
+          SS ${_finFmtCurrency(wh.er_ss)} · Medicare ${_finFmtCurrency(wh.er_med)}
+          ${futaWages > 0 ? ` · FUTA ${_finFmtCurrency(futaWages * 0.006)} (${_finFmtCurrency(prevYtd)} of $7,000 YTD)` : ' · FUTA $0 (wage base met)'}
+          ${sutaWages > 0 ? ` · SUTA TX ${_finFmtCurrency(sutaWages * 0.027)} (${_finFmtCurrency(prevYtd)} of $9,000 YTD)` : ' · SUTA TX $0 (wage base met)'}
+        </div>
+        <div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">YTD gross paid: <strong>${_finFmtCurrency(ytdGross)}</strong> · IRS Pub 15-T 2025/2026 (Single, TX)</div>
+      </div>`;
+  }
+
+  // ── K-1 section ──────────────────────────────────────────────────────────────
+  let k1Html = '';
+  if (data.partners && data.partners.length > 0) {
+    const partnerRows = data.partners.map(p => {
+      const suggested = estNet > 0 ? (estNet * p.pct / 100) : 0;
+      const paidEntry = data.log.find(r => r.type === 'k1' && r.person === p.name && r.period === _finPayrollMonth);
+      const ytdPaid   = data.log.filter(r => r.type === 'k1' && r.person === p.name && r.period.startsWith(String(selYear))).reduce((s, r) => s + (r.gross || 0), 0);
+      const actionCell = paidEntry
+        ? `<span style="background:#dcfce7;color:#166534;padding:.2rem .6rem;border-radius:99px;font-size:.8rem;font-weight:600">Paid ${_finFmtCurrency(paidEntry.gross)}</span>`
+        : (isAdmin() ? `<button class="mvt-btn" style="font-size:.82rem" onclick="_finPayrollLogModal('k1',${JSON.stringify(p.name).replace(/"/g, '&quot;')},${suggested.toFixed(2)},${suggested.toFixed(2)},'${_finPayrollMonth}')">Log Distribution</button>` : '—');
+      return `<tr>
+        <td style="font-weight:600">${escHtml(p.name)}</td>
+        <td style="color:var(--muted)">${p.pct}%</td>
+        <td style="font-weight:600;color:var(--teal)">${estNet > 0 ? _finFmtCurrency(suggested) : '—'}</td>
+        <td>${actionCell}</td>
+        <td style="color:var(--muted);font-size:.85rem">${_finFmtCurrency(ytdPaid)} YTD</td>
+      </tr>`;
+    }).join('');
+
+    k1Html = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+        <div style="font-weight:700;font-size:1rem;margin-bottom:1rem;color:var(--teal)">K-1 Partner Distributions</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem 2rem;font-size:.88rem;margin-bottom:1rem">
+          <span style="color:var(--muted)">Est. monthly revenue</span><span style="font-weight:600">${_finFmtCurrency(monthlyRevenue)}</span>
+          <span style="color:var(--muted)">Est. costs (labor + chemicals)</span><span style="color:#dc2626">−${_finFmtCurrency(monthChem + monthLabor)}</span>
+          <span style="border-top:1px solid var(--border);padding-top:.35rem;font-weight:600">Est. net (split pool)</span>
+          <span style="border-top:1px solid var(--border);padding-top:.35rem;font-weight:700;color:${estNet > 0 ? 'var(--teal)' : '#dc2626'}">${_finFmtCurrency(estNet)}</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:1rem">⚠ Estimate from service data only. K-1 partners pay their own quarterly estimated taxes (Form 1040-ES).</div>
+        <table class="adm-table" style="width:100%">
+          <thead><tr><th>Partner</th><th>Share</th><th>Suggested</th><th>Action</th><th>YTD Paid</th></tr></thead>
+          <tbody>${partnerRows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── IRS deposit tracker ──────────────────────────────────────────────────────
+  let trackerHtml = '';
+  if (data.w2) {
+    const ytdEntries = data.log.filter(r => r.type === 'w2' && r.period.startsWith(String(selYear)));
+    const ytdGross = ytdEntries.reduce((s, r) => s + (r.gross || 0), 0);
+    const ytdNet   = ytdEntries.reduce((s, r) => s + (r.net   || 0), 0);
+    const ytdWithheld = ytdGross - ytdNet;
+    const ytdSS   = ytdGross * 0.062 * 2;
+    const ytdMed  = ytdGross * 0.0145 * 2;
+    const futaBase = Math.min(ytdGross, 7000);
+    const sutaBase = Math.min(ytdGross, 9000);
+    const ytdFuta = futaBase * 0.006;
+    const ytdSuta = sutaBase * 0.027;
+    const totalEftps = ytdWithheld + ytdSS + ytdMed;
+
+    // Next Form 941 due date (last day of month following quarter end)
+    const quarter941Dates = ['Apr 30', 'Jul 31', 'Oct 31', 'Jan 31'];
+    const curQ = Math.floor((selMon - 1) / 3);
+    const next941 = quarter941Dates[curQ];
+
+    trackerHtml = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+        <div style="font-weight:700;font-size:1rem;margin-bottom:1rem;color:var(--teal)">IRS Tax Deposit Tracker — YTD ${selYear}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.35rem 2rem;font-size:.88rem">
+          <span style="color:var(--muted)">Federal income tax withheld</span><span style="font-weight:600">${_finFmtCurrency(ytdWithheld)}</span>
+          <span style="color:var(--muted)">Total SS (employee + employer)</span><span style="font-weight:600">${_finFmtCurrency(ytdSS)}</span>
+          <span style="color:var(--muted)">Total Medicare (employee + employer)</span><span style="font-weight:600">${_finFmtCurrency(ytdMed)}</span>
+          <span style="border-top:1px solid var(--border);padding-top:.35rem;font-weight:600">Deposit via EFTPS (Form 941)</span>
+          <span style="border-top:1px solid var(--border);padding-top:.35rem;font-weight:700;color:var(--teal)">${_finFmtCurrency(totalEftps)} <span style="font-size:.8rem;color:var(--muted)">due ${next941}</span></span>
+          <span style="color:var(--muted);padding-top:.5rem">FUTA owed YTD (Form 940)</span><span style="padding-top:.5rem">${_finFmtCurrency(ytdFuta)} <span style="font-size:.8rem;color:var(--muted)">(${_finFmtCurrency(futaBase)} of $7,000 wage base)</span></span>
+          <span style="color:var(--muted)">SUTA TX owed YTD</span><span>${_finFmtCurrency(ytdSuta)} <span style="font-size:.8rem;color:var(--muted)">(${_finFmtCurrency(sutaBase)} of $9,000 wage base)</span></span>
+        </div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:.75rem">All amounts based on logged W-2 payments only. Confirm totals with your accountant before filing.</div>
+      </div>`;
+  }
+
+  // ── Payment history ──────────────────────────────────────────────────────────
+  const yearLog = data.log.filter(r => r.period && r.period.startsWith(String(selYear)));
+  const histRows = yearLog.map(r => `
+    <tr>
+      <td style="color:var(--muted);font-size:.85rem">${r.timestamp ? r.timestamp.split(' ')[0] : '—'}</td>
+      <td style="font-weight:600">${escHtml(r.person)}</td>
+      <td><span style="background:${r.type==='w2'?'#dbeafe':'#fef9c3'};color:${r.type==='w2'?'#1d4ed8':'#854d0e'};padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">${r.type.toUpperCase()}</span></td>
+      <td style="text-align:right;font-weight:600">${_finFmtCurrency(r.gross)}</td>
+      <td style="text-align:right;color:var(--muted)">${r.net && r.net !== r.gross ? _finFmtCurrency(r.net) : '—'}</td>
+      <td style="color:var(--muted);font-size:.85rem">${r.period}</td>
+      <td style="color:var(--muted);font-size:.82rem">${escHtml(r.note || '')}</td>
+    </tr>`).join('');
+
+  // YTD totals per person
+  const allPersons = [...new Set(data.log.map(r => r.person))];
+  const ytdTotals = allPersons.map(p => {
+    const t = data.log.filter(r => r.person === p && r.period.startsWith(String(selYear)));
+    const gross = t.reduce((s, r) => s + (r.gross || 0), 0);
+    return `${escHtml(p)}: <strong>${_finFmtCurrency(gross)}</strong>`;
+  }).join(' &nbsp;·&nbsp; ');
+
+  const histHtml = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem">
+      <div style="font-weight:700;font-size:1rem;margin-bottom:1rem;color:var(--teal)">${selYear} Payment History</div>
+      ${yearLog.length === 0 ? `<div style="color:var(--muted);text-align:center;padding:1rem">No payments logged for ${selYear} yet.</div>` : `
+      <div style="overflow-x:auto">
+        <table class="adm-table" style="width:100%">
+          <thead><tr><th>Date</th><th>Person</th><th>Type</th><th style="text-align:right">Gross</th><th style="text-align:right">Net</th><th>Period</th><th>Note</th></tr></thead>
+          <tbody>${histRows}</tbody>
+        </table>
+      </div>`}
+      ${allPersons.length > 0 ? `<div style="font-size:.85rem;margin-top:.75rem;color:var(--muted)">YTD ${selYear}: ${ytdTotals}</div>` : ''}
+    </div>`;
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:1rem">
+        <h3 style="margin:0;color:var(--teal)">Payroll</h3>
+        ${nav}
+      </div>
+      ${isAdmin() ? `<button class="mvt-btn" onclick="_finPayrollSetupModal()">⚙ Edit Setup</button>` : ''}
+    </div>
+    ${w2Html}
+    ${k1Html}
+    ${trackerHtml}
+    ${histHtml}`;
+}
+
+// ── Generic payroll modal helper ──────────────────────────────────────────────
+function _prlOpenModal(title, bodyHtml) {
+  _prlCloseModal();
+  const el = document.createElement('div');
+  el.id = 'prl-modal-backdrop';
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  el.innerHTML = `
+    <div onclick="event.stopPropagation()" style="background:var(--card);border-radius:14px;padding:1.5rem;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+        <div style="font-weight:700;font-size:1.05rem">${title}</div>
+        <button onclick="_prlCloseModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+      </div>
+      <div id="prl-modal-body">${bodyHtml}</div>
+    </div>`;
+  el.addEventListener('click', _prlCloseModal);
+  document.body.appendChild(el);
+}
+
+function _prlCloseModal() {
+  const el = document.getElementById('prl-modal-backdrop');
+  if (el) el.remove();
+}
+
+function _prlUpdatePctTotal() {
+  const w2  = parseFloat(document.getElementById('prl-w2-pct')?.value)  || 0;
+  const p1  = parseFloat(document.getElementById('prl-p1-pct')?.value)  || 0;
+  const p2  = parseFloat(document.getElementById('prl-p2-pct')?.value)  || 0;
+  const tot = w2 + p1 + p2;
+  const el  = document.getElementById('prl-pct-total');
+  if (el) {
+    el.textContent = `Total: ${tot.toFixed(2)}%`;
+    el.style.color = Math.abs(tot - 100) < 0.01 ? '#166534' : (tot > 100 ? 'var(--error)' : 'var(--muted)');
+  }
+}
+
+// ── Log payment modal ─────────────────────────────────────────────────────────
+function _finPayrollLogModal(type, person, grossAmount, netAmount, period) {
+  const isW2 = type === 'w2';
+  const gross = parseFloat(grossAmount) || 0;
+  const net   = parseFloat(netAmount)   || gross;
+
+  let withholding = '';
+  if (isW2) {
+    const wh = _calcW2Withholding(gross);
+    withholding = `
+      <div style="background:rgba(0,0,0,.04);border-radius:8px;padding:.75rem;font-size:.83rem;margin-bottom:1rem">
+        <div id="prl-wh-breakdown" style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem">
+          <span style="color:var(--muted)">Federal income tax</span><span>−${_finFmtCurrency(wh.fed)}</span>
+          <span style="color:var(--muted)">Social Security</span><span>−${_finFmtCurrency(wh.ss)}</span>
+          <span style="color:var(--muted)">Medicare</span><span>−${_finFmtCurrency(wh.med)}</span>
+          <span style="font-weight:600">Net take-home</span><span style="font-weight:700">${_finFmtCurrency(wh.net)}</span>
+        </div>
+      </div>`;
+  }
+
+  _prlOpenModal(`Log ${isW2 ? 'W-2 Payment' : 'K-1 Distribution'} — ${escHtml(person)}`, `
+    <input id="prl-type"   type="hidden" value="${escHtml(type)}">
+    <input id="prl-person" type="hidden" value="${escHtml(person)}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.9rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Person</label><div style="padding:.45rem .75rem;background:rgba(0,0,0,.04);border-radius:8px;font-weight:600">${escHtml(person)}</div></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Type</label><div style="padding:.45rem .75rem;background:rgba(0,0,0,.04);border-radius:8px;font-weight:600">${escHtml(type).toUpperCase()}</div></div>
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Period</label>
+      <input id="prl-period" class="si" type="month" value="${escHtml(period)}" style="width:100%">
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Gross amount ($)</label>
+      <input id="prl-gross" class="si" type="number" min="0" step="0.01" value="${gross.toFixed(2)}" style="width:100%" oninput="_finPayrollModalSync()">
+    </div>
+    ${withholding}
+    ${isW2 ? `<div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Net amount paid to employee ($)</label>
+      <input id="prl-net" class="si" type="number" min="0" step="0.01" value="${net.toFixed(2)}" style="width:100%">
+    </div>` : `<input id="prl-net" type="hidden" value="${gross.toFixed(2)}">`}
+    <div style="margin-bottom:1.25rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Note (optional)</label>
+      <input id="prl-note" class="si" type="text" placeholder="e.g. Zelle, bank transfer, check #…" style="width:100%">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="mvt-btn" onclick="_prlCloseModal()">Cancel</button>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="_finPayrollSave()">Save Payment</button>
+    </div>`);
+}
+
+function _finPayrollModalSync() {
+  const type = document.getElementById('prl-type')?.value;
+  const grossIn = document.getElementById('prl-gross');
+  const netIn = document.getElementById('prl-net');
+  const whCont = document.getElementById('prl-wh-breakdown');
+  
+  const gross = parseFloat(grossIn?.value) || 0;
+  
+  if (type === 'w2') {
+    const wh = _calcW2Withholding(gross);
+    if (netIn) netIn.value = wh.net.toFixed(2);
+    if (whCont) {
+      whCont.innerHTML = `
+        <span style="color:var(--muted)">Federal income tax</span><span>−${_finFmtCurrency(wh.fed)}</span>
+        <span style="color:var(--muted)">Social Security</span><span>−${_finFmtCurrency(wh.ss)}</span>
+        <span style="color:var(--muted)">Medicare</span><span>−${_finFmtCurrency(wh.med)}</span>
+        <span style="font-weight:600">Net take-home</span><span style="font-weight:700">${_finFmtCurrency(wh.net)}</span>
+      `;
+    }
+  } else {
+    // K-1: Gross = Net
+    if (netIn) netIn.value = gross.toFixed(2);
+  }
+}
+
+async function _finPayrollSave() {
+  const type   = document.getElementById('prl-type')?.value   || '';
+  const person = document.getElementById('prl-person')?.value || '';
+  const period = document.getElementById('prl-period')?.value || _finPayrollMonth;
+  const gross  = parseFloat(document.getElementById('prl-gross')?.value)  || 0;
+  const net    = parseFloat(document.getElementById('prl-net')?.value)    || gross;
+  const note   = document.getElementById('prl-note')?.value?.trim()       || '';
+
+  if (!gross) { alert('Amount is required.'); return; }
+
+  const btn = document.querySelector('#prl-modal-backdrop .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const res = await api({ action: 'log_payroll_payment', token: _s.token, type, person, period, gross_amount: gross, net_amount: net, note });
+    if (!res.ok) throw new Error(res.error || 'Failed to save');
+    _prlCloseModal();
+    const year = period.slice(0, 4);
+    const logRes = await apiGet({ action: 'get_payroll_log', token: _s.token, year });
+    if (_finPayrollData) _finPayrollData.log = logRes.rows || [];
+    _finPayrollMonth = period;
+    _renderPayrollTab();
+  } catch (e) {
+    alert('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Payment'; }
+  }
+}
+
+// ── Partner setup modal ───────────────────────────────────────────────────────
+function _finPayrollSetupModal() {
+  const existing = _finPayrollData || { w2: null, partners: [] };
+  const w2 = existing.w2 || {};
+  const p1 = existing.partners[0] || {};
+  const p2 = existing.partners[1] || {};
+
+  _prlOpenModal('Payroll Setup', `
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">All three ownership percentages must sum to 100. The W-2 owner receives their share as payroll wages (with withholding); K-1 partners receive distributions.</div>
+    <div style="font-weight:600;margin-bottom:.5rem;font-size:.9rem">W-2 Owner (F-1 OPT)</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:.5rem;margin-bottom:1rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Name</label><input id="prl-w2-name" class="si" type="text" value="${escHtml(w2.name || '')}" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Ownership %</label><input id="prl-w2-pct" class="si" type="number" min="0" max="100" step="0.01" value="${w2.pct || ''}" oninput="_prlUpdatePctTotal()" style="width:100%"></div>
+    </div>
+    <div style="font-weight:600;margin-bottom:.5rem;font-size:.9rem">K-1 Partners</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:.5rem;margin-bottom:.5rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Partner 1 Name</label><input id="prl-p1-name" class="si" type="text" value="${escHtml(p1.name || '')}" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Ownership %</label><input id="prl-p1-pct" class="si" type="number" min="0" max="100" step="0.01" value="${p1.pct || ''}" oninput="_prlUpdatePctTotal()" style="width:100%"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Partner 2 Name</label><input id="prl-p2-name" class="si" type="text" value="${escHtml(p2.name || '')}" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Ownership %</label><input id="prl-p2-pct" class="si" type="number" min="0" max="100" step="0.01" value="${p2.pct || ''}" oninput="_prlUpdatePctTotal()" style="width:100%"></div>
+    </div>
+    <div id="prl-pct-total" style="font-size:.82rem;text-align:right;color:var(--muted);margin-bottom:.5rem">Total: ${((w2.pct||0)+(p1.pct||0)+(p2.pct||0)).toFixed(2)}%</div>
+    <div id="prl-setup-err" style="color:var(--error);font-size:.85rem;display:none;margin-bottom:.5rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="mvt-btn" onclick="_prlCloseModal()">Cancel</button>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="_finPayrollSetupSave()">Save Setup</button>
+    </div>`);
+}
+
+async function _finPayrollSetupSave() {
+  const w2Name   = document.getElementById('prl-w2-name')?.value?.trim();
+  const w2Pct    = parseFloat(document.getElementById('prl-w2-pct')?.value);
+  const p1Name   = document.getElementById('prl-p1-name')?.value?.trim();
+  const p1Pct    = parseFloat(document.getElementById('prl-p1-pct')?.value);
+  const p2Name   = document.getElementById('prl-p2-name')?.value?.trim();
+  const p2Pct    = parseFloat(document.getElementById('prl-p2-pct')?.value);
+  const errEl    = document.getElementById('prl-setup-err');
+
+  const showErr = msg => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
+
+  if (!w2Name || isNaN(w2Pct)) { showErr('W-2 owner name and ownership % are required.'); return; }
+  if (!p1Name || isNaN(p1Pct) || !p2Name || isNaN(p2Pct)) { showErr('Both partner names and percentages are required.'); return; }
+  const totalPct = w2Pct + p1Pct + p2Pct;
+  if (Math.abs(totalPct - 100) > 0.01) { showErr(`All percentages must sum to 100 (currently ${totalPct.toFixed(2)}%).`); return; }
+
+  const config = {
+    w2: { name: w2Name, pct: w2Pct, filing_status: 'single' },
+    partners: [
+      { name: p1Name, pct: p1Pct },
+      { name: p2Name, pct: p2Pct },
+    ],
+  };
+
+  const btn = document.querySelector('#prl-modal-backdrop .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const res = await api({ action: 'save_payroll_config', token: _s.token, config });
+    if (!res.ok) throw new Error(res.error || 'Failed to save');
+    _prlCloseModal();
+    if (_finPayrollData) { _finPayrollData.w2 = config.w2; _finPayrollData.partners = config.partners; }
+    else _finPayrollData = { w2: config.w2, partners: config.partners, log: [] };
+    _renderPayrollTab();
+  } catch (e) {
+    showErr('Error: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Setup'; }
+  }
 }
