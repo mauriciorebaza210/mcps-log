@@ -104,6 +104,106 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 }
 
 /* ── HOME ────────────────────────────────────────────────────────────────── */
+.dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 2rem;
+  padding: 0.5rem 0;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#dash-date-display {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+#home-view-toggle-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+}
+
+#quick-action-trigger {
+  background: var(--teal);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 12px rgba(42,157,143,0.3);
+  transition: all 0.2s;
+}
+
+@media (max-width: 767px) {
+  .dash-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .header-right {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  #dash-date-display,
+  #home-view-toggle-wrap,
+  #home-quick-action-wrap {
+    flex: 1 1 auto;
+    min-width: 100px;
+  }
+  #home-view-toggle-wrap {
+    margin-right: 0 !important;
+  }
+  #home-quick-action-wrap button, 
+  #home-view-toggle-btn,
+  #dash-date-display {
+    width: 100%;
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem; /* Slightly smaller for mobile row */
+  }
+  #home-quick-action-wrap button svg,
+  #home-view-toggle-btn svg,
+  #dash-date-display svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 .home-hi{margin-bottom:1.5rem}
 .home-hi h2{font-family:'Oswald',sans-serif;font-size:1.6rem;font-weight:700;letter-spacing:-.01em}
 .home-hi p{font-size:.9rem;color:var(--muted);margin-top:.2rem}
