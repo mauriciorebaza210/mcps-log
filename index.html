@@ -677,6 +677,25 @@
         <button class="q-newbtn" onclick="qReset()">+ New Quote</button>
       </div>
 
+      <!-- Sales Path -->
+      <div class="q-sec">
+        <div class="q-sec-lbl">Sales Path</div>
+        <div class="q-svc-grid">
+          <div class="q-svc-card q-flow-card active" data-flow="proposal_first" onclick="qSetSalesFlow('proposal_first')">
+            <div class="q-svc-name">Proposal First</div>
+            <div class="q-svc-desc">Send pricing for approval before the agreement</div>
+          </div>
+          <div class="q-svc-card q-flow-card" data-flow="agreement_direct" onclick="qSetSalesFlow('agreement_direct')">
+            <div class="q-svc-name">Agreement Direct</div>
+            <div class="q-svc-desc">Price is agreed; generate the service agreement</div>
+          </div>
+          <div class="q-svc-card q-flow-card" data-flow="operational_override" onclick="qSetSalesFlow('operational_override')">
+            <div class="q-svc-name">Activate Now</div>
+            <div class="q-svc-desc">Admin override for immediate scheduling</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Service Type -->
       <div class="q-sec">
         <div class="q-sec-lbl">Service Type</div>

@@ -8,6 +8,7 @@
 const Q_TAX = 0.0825;
 
 const _qDef = () => ({
+  sales_flow:'proposal_first', signature_required:true, activation_method:'',
   service:'weekly_full', size:'medium', pool_type:'inground', material:'plaster',
   spa:false, finish:'light', debris:'light', has_robot:false,
   high_sun_exposure:false, has_pets:false,
@@ -19,14 +20,37 @@ const _qDef = () => ({
   void_travel:false, travel:null, travel_loading:false, travel_error:'',
   first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'', area:'',
   _calc:null, saved_id:null, saving:false,
+  proposal_status:'none', proposal_url:'', proposal_image_data_url:'', proposal_image_preview:'', proposal_error:'',
+  proposal_send_status:'none', proposal_sent_at:'', proposal_approval_url:'',
+  proposal_scope_options:{
+    pool_cleaning:true, chemical_treatment:true, filter_cleaning:true,
+    equipment_inspection:true, baskets:true, service_report:true,
+    startup_chemical_work:true, equipment_programming:true, water_balance:true,
+    follow_up:true, repair_labor:true, job_documentation:true,
+    parts_coordination:true, completion_report:true
+  },
+  proposal_plan_options:{
+    main_service:true, spa_service:false, equipment_inspections:true,
+    chemicals_included:true, service_reports:true, priority_service:false
+  },
   contract_status:'none', contract_url:'', contract_download_url:'', contract_error:'',
   send_contract_status:'none', sent_at:''
 });
 let _qS = _qDef();
 
+function qSetSalesFlow(flow) {
+  _qS.sales_flow = flow;
+  _qS.signature_required = flow !== 'operational_override';
+  _qS.activation_method = flow === 'agreement_direct' ? 'AGREEMENT_DIRECT'
+    : flow === 'operational_override' ? 'ADMIN_OVERRIDE'
+    : 'SIGNED_AGREEMENT';
+  document.querySelectorAll('.q-flow-card').forEach(c => c.classList.toggle('active', c.dataset.flow === flow));
+  qRecalc();
+}
+
 function qSetService(svc) {
   _qS.service = svc;
-  document.querySelectorAll('.q-svc-card').forEach(c => c.classList.toggle('active', c.dataset.svc === svc));
+  document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => c.classList.toggle('active', c.dataset.svc === svc));
   const isRepair  = svc === 'repair_job';
   const isStartup = svc === 'pool_startup';
   document.getElementById('q-pool-sec').style.display    = (!isRepair && !isStartup) ? '' : 'none';
@@ -59,8 +83,28 @@ function qChk(key) {
     mcp:'sponsored_by_mcp'};
   const field = map[key];
   _qS[field] = !_qS[field];
+  if (key === 'spa') _qS.proposal_plan_options.spa_service = !!_qS[field];
   document.getElementById('qchk-' + key).classList.toggle('active', _qS[field]);
   qRecalc();
+}
+
+function qToggleProposalScope(key) {
+  _qS.proposal_scope_options = _qS.proposal_scope_options || {};
+  _qS.proposal_scope_options[key] = !_qS.proposal_scope_options[key];
+  qRenderSavedCard();
+}
+
+function qToggleProposalPlan(key) {
+  _qS.proposal_plan_options = _qS.proposal_plan_options || {};
+  _qS.proposal_plan_options[key] = !_qS.proposal_plan_options[key];
+  qRenderSavedCard();
+}
+
+function qProposalOptionChip(type, key, label) {
+  const map = type === 'scope' ? _qS.proposal_scope_options : _qS.proposal_plan_options;
+  const fn = type === 'scope' ? 'qToggleProposalScope' : 'qToggleProposalPlan';
+  const active = map && map[key];
+  return `<button type="button" class="q-chk ${active ? 'active' : ''}" style="border-radius:8px;padding:.34rem .55rem;font-size:.76rem" onclick="${fn}('${key}')">${esc(label)}</button>`;
 }
 
 function qStartupDateHint(ds) {
@@ -269,12 +313,16 @@ function qRenderSummary() {
   document.getElementById('q-sum-content').innerHTML = html;
   const btn = document.getElementById('q-save-btn');
   btn.disabled = !eng.pricing_ready || _qS.saving;
-  btn.textContent = _qS.saving ? 'Saving…' : (_qS.saved_id ? `Saved ✓ (${_qS.saved_id})` : 'Save to CRM');
+  const label = _qS.sales_flow === 'agreement_direct' ? 'Save Agreement Draft'
+    : _qS.sales_flow === 'operational_override' ? 'Activate Service'
+    : 'Save Proposal';
+  btn.textContent = _qS.saving ? 'Saving…' : (_qS.saved_id ? `Saved ✓ (${_qS.saved_id})` : label);
 }
 
 function qReset() {
   _qS = _qDef();
-  document.querySelectorAll('.q-svc-card').forEach(c => c.classList.toggle('active', c.dataset.svc==='weekly_full'));
+  document.querySelectorAll('.q-flow-card').forEach(c => c.classList.toggle('active', c.dataset.flow === 'proposal_first'));
+  document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => c.classList.toggle('active', c.dataset.svc==='weekly_full'));
   const pd = { size:'medium', pool_type:'inground', material:'plaster', finish:'light', debris:'light', repair_type:'repair_replacement' };
   Object.entries(pd).forEach(([g,v]) => document.querySelectorAll(`.q-pill[data-grp="${g}"]`).forEach(p => p.classList.toggle('active', p.dataset.val===v)));
   document.getElementById('q-pool-sec').style.display    = '';
@@ -301,6 +349,12 @@ async function qSave() {
   if (!c || !c.eng.pricing_ready || _qS.saving) return;
   const { eng, tFee, da, discounted, sub, tax, total, net, margin } = c;
   _qS.saving = true; qRenderSummary();
+  const autoOperational = _qS.service === 'pool_startup' || _qS.service === 'green_to_clean';
+  const activationMethod = _qS.sales_flow === 'operational_override' ? 'ADMIN_OVERRIDE'
+    : _qS.service === 'pool_startup' ? 'STARTUP_AUTO'
+    : _qS.service === 'green_to_clean' ? 'GTC_AUTO'
+    : _qS.sales_flow === 'agreement_direct' ? 'AGREEMENT_DIRECT'
+    : 'SIGNED_AGREEMENT';
 
   const payload = {
     action: 'save_quote', token: _s ? _s.token : '',
@@ -330,7 +384,10 @@ async function qSave() {
     chem_cost_est:eng.chem_cost, net_profit_est:net, margin_percent:margin,
     specs_summary:eng.specs_summary, quickbooks_skus:eng.qb_skus.join(', '), quickbooks_item_names:eng.qb_names.join(', '),
     created_by:(_s&&_s.name)||'portal', quote_source:'portal', quote_version:'2.0',
-    status: (_qS.service === 'pool_startup' || _qS.service === 'green_to_clean') ? 'ACTIVE_CUSTOMER' : 'UNSENT'
+    sales_flow: _qS.sales_flow,
+    signature_required: (_qS.signature_required && !autoOperational) ? 'TRUE' : 'FALSE',
+    activation_method: activationMethod,
+    status: (autoOperational || _qS.sales_flow === 'operational_override') ? 'ACTIVE_CUSTOMER' : 'UNSENT'
   };
 
   try {
@@ -340,6 +397,8 @@ async function qSave() {
     if (res.ok) {
       _qS.saved_id = res.quote_id || '✓';
       _qS.pool_id = res.pool_id || null;
+      _qS.agreement_id = res.agreement_id || null;
+      _qS.service_account_id = res.service_account_id || null;
       _qS.gtc_visits = [];
       _qS.gtc_operators = [];
       _qS.gtc_scheduling = false;
@@ -387,6 +446,86 @@ function qRenderSavedCard() {
   const fullName = [_qS.first_name, _qS.last_name].filter(Boolean).join(' ') || '—';
   const serviceLabel = eng ? eng.service_label : (_qS.service || '—');
   const specs = eng ? (eng.specs_summary || '') : '';
+  const flowLabel = _qS.sales_flow === 'agreement_direct' ? 'Agreement direct'
+    : _qS.sales_flow === 'operational_override' ? 'Activated by override'
+    : 'Proposal first';
+
+  // Contract section
+  let proposalHtml = '';
+  if (_qS.sales_flow === 'proposal_first') {
+    const isStartup = _qS.service === 'pool_startup';
+    const isGtc = _qS.service === 'green_to_clean';
+    const isRepair = _qS.service === 'repair_job';
+    const scopeOptions = isStartup
+      ? [
+          ['startup_chemical_work','Chemical work'], ['equipment_programming','Programming'],
+          ['water_balance','Water balance'], ['service_report','Service report']
+        ]
+      : isRepair
+        ? [
+            ['repair_labor','Repair labor'], ['job_documentation','Job documentation'],
+            ['parts_coordination','Parts coordination'], ['completion_report','Completion report']
+          ]
+        : isGtc
+          ? [
+              ['pool_cleaning', _qS.spa ? 'Pool + spa cleanup' : 'Cleanup'],
+              ['chemical_treatment','Chemical treatment'], ['baskets','Brushing + debris'],
+              ['follow_up','Follow-up scheduling']
+            ]
+          : [
+            ['pool_cleaning', _qS.spa ? 'Pool + spa cleaning' : (isGtc ? 'Cleanup' : 'Pool cleaning')],
+            ['chemical_treatment','Chemical treatment'], ['filter_cleaning','Filter cleaning'],
+            ['equipment_inspection','Equipment inspection'], ['baskets','Baskets'],
+            [isGtc ? 'follow_up' : 'service_report', isGtc ? 'Follow-up scheduling' : 'Service report']
+          ];
+    const planOptions = [
+      ['main_service','Main service'],
+      ...(_qS.spa ? [['spa_service','Spa included']] : []),
+      ['equipment_inspections','Equipment inspections'],
+      ['chemicals_included','Chemical treatment'],
+      ['service_reports','Service reports'],
+      ['priority_service','Priority service']
+    ];
+    const scopeChips = scopeOptions.map(([key,label]) => qProposalOptionChip('scope', key, label)).join('');
+    const planChips = planOptions.map(([key,label]) => qProposalOptionChip('plan', key, label)).join('');
+    const imgPreview = _qS.proposal_image_preview
+      ? `<img src="${_qS.proposal_image_preview}" alt="Proposal pool" style="width:100%;max-width:220px;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`
+      : `<div style="width:100%;max-width:220px;aspect-ratio:4/3;border:1px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;padding:.75rem;font-size:.78rem;color:var(--muted);background:var(--surface)">Pool / property photo</div>`;
+    const proposalReady = _qS.proposal_status === 'generated' && _qS.proposal_url;
+    const proposalSent = _qS.proposal_send_status === 'sent' || !!_qS.proposal_sent_at;
+    const proposalSendLabel = _qS.proposal_send_status === 'sending'
+      ? 'Sending…'
+      : proposalSent ? 'Resend Approval Email' : 'Send for Approval';
+    proposalHtml = `<div class="q-contract-section">
+      <span class="q-contract-status ${proposalSent || proposalReady ? 'ok' : 'none'}">${proposalSent ? 'Proposal sent for approval' : (proposalReady ? 'Proposal ready' : 'Proposal document')}</span>
+      ${_qS.proposal_error ? `<span class="q-contract-err">${esc(_qS.proposal_error)}</span>` : ''}
+      ${proposalSent ? `<span style="font-size:.75rem;color:var(--muted)">Sent ${new Date(_qS.proposal_sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>` : ''}
+      <div style="font-size:.78rem;color:var(--muted);margin-top:.2rem">This image appears in the proposal. Use a pool or property photo, not the MCPS logo.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.45rem">
+        <div>
+          <div class="q-flabel" style="margin-bottom:.35rem">Scope included</div>
+          <div style="display:flex;flex-wrap:wrap;gap:.35rem">${scopeChips}</div>
+        </div>
+        <div>
+          <div class="q-flabel" style="margin-bottom:.35rem">Service plan included</div>
+          <div style="display:flex;flex-wrap:wrap;gap:.35rem">${planChips}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(0,220px) 1fr;gap:.75rem;align-items:center;margin-top:.5rem">
+        <div>${imgPreview}</div>
+        <div class="q-contract-btns">
+          <input type="file" id="q-proposal-photo-input" accept="image/*" style="display:none" onchange="qProposalPhotoSelected(this)">
+          <button class="q-btn-outline" onclick="document.getElementById('q-proposal-photo-input').click()">Choose Pool Photo</button>
+          <button class="q-btn-primary" onclick="qGenerateProposal()" ${_qS.proposal_status === 'generating' ? 'disabled' : ''}>
+            ${_qS.proposal_status === 'generating' ? 'Generating…' : (proposalReady ? 'Regenerate Proposal' : 'Generate Proposal PDF')}
+          </button>
+          ${proposalReady ? `<a class="q-btn-outline" href="${_qS.proposal_url}" target="_blank" rel="noopener">View Proposal</a>` : ''}
+          ${proposalReady ? `<button class="q-btn-primary" onclick="qSendProposalApproval()" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>${proposalSendLabel}</button>` : ''}
+          ${_qS.proposal_approval_url ? `<a class="q-btn-outline" href="${_qS.proposal_approval_url}" target="_blank" rel="noopener">Approval Link</a>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
 
   // Contract section
   let contractHtml = '';
@@ -396,8 +535,8 @@ function qRenderSavedCard() {
     </div>`;
   } else if (_qS.contract_status === 'generated') {
     const sendLabel = _qS.send_contract_status === 'sending' ? 'Sending…'
-                    : _qS.sent_at ? 'Resend Contract'
-                    : 'Send Contract ✉';
+                    : _qS.sent_at ? 'Resend Agreement'
+                    : 'Send Agreement';
     const sentNote = _qS.sent_at
       ? `<span style="font-size:.75rem;color:var(--muted)">Sent ${new Date(_qS.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`
       : '';
@@ -417,10 +556,10 @@ function qRenderSavedCard() {
     const errHtml = _qS.contract_error
       ? `<span class="q-contract-err">${_qS.contract_error}</span>` : '';
     contractHtml = `<div class="q-contract-section">
-      <span class="q-contract-status none">No contract yet</span>
+      <span class="q-contract-status none">No service agreement yet</span>
       ${errHtml}
       <div class="q-contract-btns">
-        <button class="q-btn-primary" onclick="qGenerateContract()">Generate Contract</button>
+        <button class="q-btn-primary" onclick="qGenerateContract()">Generate Service Agreement</button>
       </div>
     </div>`;
   }
@@ -488,6 +627,9 @@ function qRenderSavedCard() {
       ${_qS.phone    ? `<div class="q-scf"><span class="q-scf-lbl">Phone</span><span>${esc(_qS.phone)}</span></div>` : ''}
       ${_qS.address  ? `<div class="q-scf q-scf-full"><span class="q-scf-lbl">Address</span><span>${esc(_qS.address)}</span></div>` : ''}
       ${(_qS.city || _qS.zip_code) ? `<div class="q-scf"><span class="q-scf-lbl">City / ZIP</span><span>${esc([_qS.city,_qS.zip_code].filter(Boolean).join(', '))}</span></div>` : ''}
+      <div class="q-scf"><span class="q-scf-lbl">Sales Path</span><span>${esc(flowLabel)}</span></div>
+      ${_qS.agreement_id ? `<div class="q-scf"><span class="q-scf-lbl">Agreement</span><span>${esc(_qS.agreement_id)}</span></div>` : ''}
+      ${_qS.pool_id ? `<div class="q-scf"><span class="q-scf-lbl">Pool ID</span><span>${esc(_qS.pool_id)}</span></div>` : ''}
     </div>
 
     <div class="q-saved-card-service">
@@ -503,6 +645,7 @@ function qRenderSavedCard() {
     </div>
 
     ${editPanel}
+    ${proposalHtml}
     ${gtcHtml}
     ${contractHtml}
   </div>`;
@@ -565,6 +708,7 @@ async function qGenerateContract() {
       _qS.contract_status = 'generated';
       _qS.contract_url = res.contract_url || '';
       _qS.contract_download_url = res.contract_download_url || '';
+      _qS.agreement_id = res.agreement_id || _qS.agreement_id || null;
     } else {
       _qS.contract_status = 'none';
       _qS.contract_error = res.error || 'Contract generation failed.';
@@ -572,6 +716,89 @@ async function qGenerateContract() {
   } catch(e) {
     _qS.contract_status = 'none';
     _qS.contract_error = 'Network error — check connection.';
+  }
+  qRenderSavedCard();
+}
+
+function qProposalPhotoSelected(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) {
+    _qS.proposal_error = 'Please choose an image file.';
+    qRenderSavedCard();
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 1400;
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.84);
+      _qS.proposal_image_data_url = dataUrl;
+      _qS.proposal_image_preview = dataUrl;
+      _qS.proposal_error = '';
+      qRenderSavedCard();
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function qGenerateProposal() {
+  if (!_qS.saved_id || _qS.proposal_status === 'generating') return;
+  _qS.proposal_status = 'generating';
+  _qS.proposal_error = '';
+  qRenderSavedCard();
+  try {
+    const res = await api({
+      action: 'generate_proposal',
+      token: _s ? _s.token : '',
+      quote_id: _qS.saved_id,
+      proposal_image_data_url: _qS.proposal_image_data_url || '',
+      proposal_scope_options: _qS.proposal_scope_options || {},
+      proposal_plan_options: _qS.proposal_plan_options || {}
+    });
+    if (res.ok) {
+      _qS.proposal_status = 'generated';
+      _qS.proposal_url = res.proposal_pdf_url || '';
+      _qS.proposal_number = res.proposal_number || _qS.proposal_number || '';
+      _qS.proposal_send_status = 'none';
+      _qS.proposal_sent_at = '';
+    } else {
+      _qS.proposal_status = 'none';
+      _qS.proposal_error = res.error || 'Proposal generation failed.';
+    }
+  } catch(e) {
+    _qS.proposal_status = 'none';
+    _qS.proposal_error = 'Network error — check connection.';
+  }
+  qRenderSavedCard();
+}
+
+async function qSendProposalApproval() {
+  if (!_qS.saved_id || !_qS.proposal_url || _qS.proposal_send_status === 'sending') return;
+  _qS.proposal_send_status = 'sending';
+  _qS.proposal_error = '';
+  qRenderSavedCard();
+  try {
+    const res = await api({ action: 'send_proposal_for_approval', token: _s ? _s.token : '', quote_id: _qS.saved_id });
+    if (res.ok) {
+      _qS.proposal_send_status = 'sent';
+      _qS.proposal_sent_at = res.sent_at || new Date().toISOString();
+      _qS.proposal_approval_url = res.approval_url || '';
+    } else {
+      _qS.proposal_send_status = 'none';
+      _qS.proposal_error = res.error || 'Proposal approval email failed.';
+    }
+  } catch(e) {
+    _qS.proposal_send_status = 'none';
+    _qS.proposal_error = 'Network error — check connection.';
   }
   qRenderSavedCard();
 }
@@ -648,5 +875,3 @@ async function qSaveQuoteInfo() {
     if (msgEl) { msgEl.textContent = 'Network error.'; msgEl.className = 'q-edit-msg err'; }
   }
 }
-
-

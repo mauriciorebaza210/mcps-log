@@ -286,6 +286,12 @@ function buildLeadDrawerHTML(item) {
     : '<div style="color:var(--muted);font-size:.82rem;padding:.25rem 0">No contact attempts logged yet.</div>';
 
   const hasQuoteData = item.total_with_tax || item.service;
+  const proposalStatus = item.proposal_accepted_at ? 'Approved'
+    : item.proposal_declined_at ? 'Declined'
+    : item.proposal_change_requested_at ? 'Changes requested'
+    : item.proposal_sent_at ? 'Sent for approval'
+    : item.proposal_pdf_url ? 'Generated'
+    : 'Not generated';
 
   return `
     <div style="padding:1rem">
@@ -313,6 +319,39 @@ function buildLeadDrawerHTML(item) {
           ${item.pool_type ? `<div><b>Pool Type</b>${item.pool_type}</div>` : ''}
           ${typeof item.total_with_tax === 'number' ? `<div><b>Total</b>$${item.total_with_tax.toFixed(2)}</div>` : ''}
           ${typeof item.net_profit_est === 'number' ? `<div><b>Est. Profit</b><span style="color:var(--success)">$${item.net_profit_est.toFixed(2)}</span></div>` : ''}
+        </div>
+      </div>` : ''}
+
+      ${item.quote_id ? `
+      <!-- Proposal -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Proposal</div>
+        <div style="display:flex;flex-direction:column;gap:.45rem">
+          <div style="font-size:.8rem;color:var(--muted)">Status: <b style="color:var(--text)">${proposalStatus}</b></div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+            ${item.proposal_pdf_url ? `
+              <a href="${escHtml(item.proposal_pdf_url)}" target="_blank" rel="noopener"
+                 style="padding:.45rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--teal);text-decoration:none;font-weight:600">
+                View Proposal
+              </a>` : ''}
+            <button id="drawer-generate-proposal-btn" onclick="generateCrmProposal('${item.quote_id}')"
+              style="padding:.45rem .9rem;border:1px solid var(--border);background:#fff;color:var(--teal);border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer">
+              ${item.proposal_pdf_url ? 'Regenerate Proposal' : 'Generate Proposal'}
+            </button>
+            ${item.proposal_pdf_url ? `
+              <button id="drawer-send-proposal-btn" onclick="sendProposalApproval('${item.quote_id}')"
+                style="padding:.45rem .9rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer">
+                ${item.proposal_sent_at ? 'Resend Approval' : 'Send for Approval'}
+              </button>` : ''}
+            ${item.proposal_approval_url ? `
+              <a href="${escHtml(item.proposal_approval_url)}" target="_blank" rel="noopener"
+                 style="padding:.45rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--teal);text-decoration:none;font-weight:600">
+                Approval Link
+              </a>` : ''}
+          </div>
+          ${item.proposal_sent_at ? `<div style="font-size:.75rem;color:var(--muted)">Proposal sent: ${new Date(item.proposal_sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+          ${item.proposal_response_note ? `<div style="font-size:.8rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.5rem"><b>Customer note:</b> ${escHtml(item.proposal_response_note)}</div>` : ''}
+          <div id="proposal-action-msg" style="display:none;font-size:.8rem;padding:.3rem .5rem;border-radius:6px"></div>
         </div>
       </div>` : ''}
 
@@ -1071,6 +1110,62 @@ async function sendContract(quoteId) {
   }
 }
 
+async function generateCrmProposal(quoteId) {
+  const btn = document.getElementById('drawer-generate-proposal-btn');
+  const msg = document.getElementById('proposal-action-msg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  if (msg) { msg.style.display = 'none'; }
+
+  try {
+    const res = await api({ action: 'generate_proposal', token: _s.token, quote_id: quoteId });
+    if (res.ok) {
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) {
+        _crmCache[idx].proposal_pdf_url = res.proposal_pdf_url || _crmCache[idx].proposal_pdf_url || '';
+        _crmCache[idx].proposal_number = res.proposal_number || _crmCache[idx].proposal_number || '';
+      }
+      renderCRM(_crmFiltered, false);
+      const updated = _crmCache.find(i => i.quote_id === quoteId);
+      if (updated) document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+    } else {
+      if (msg) { msg.className = 'im err'; msg.textContent = res.error || 'Proposal generation failed.'; msg.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Generate Proposal'; }
+    }
+  } catch(e) {
+    if (msg) { msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate Proposal'; }
+  }
+}
+
+async function sendProposalApproval(quoteId) {
+  const btn = document.getElementById('drawer-send-proposal-btn');
+  const msg = document.getElementById('proposal-action-msg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  if (msg) { msg.style.display = 'none'; }
+
+  try {
+    const res = await api({ action: 'send_proposal_for_approval', token: _s.token, quote_id: quoteId });
+    if (res.ok) {
+      const sentAt = res.sent_at || new Date().toISOString();
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) {
+        _crmCache[idx].proposal_sent_at = sentAt;
+        _crmCache[idx].proposal_approval_url = res.approval_url || '';
+        _crmCache[idx].proposal_number = res.proposal_number || _crmCache[idx].proposal_number || '';
+      }
+      renderCRM(_crmFiltered, false);
+      const updated = _crmCache.find(i => i.quote_id === quoteId);
+      if (updated) document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+    } else {
+      if (msg) { msg.className = 'im err'; msg.textContent = res.error || 'Failed to send proposal.'; msg.style.display = 'block'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Send for Approval'; }
+    }
+  } catch(e) {
+    if (msg) { msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Send for Approval'; }
+  }
+}
+
 async function confirmImportLeads() {
   const btn = document.getElementById('import-leads-confirm-btn');
   const msg = document.getElementById('import-leads-msg');
@@ -1364,4 +1459,3 @@ async function saveWeeklyGoal() {
     msg.className = 'im err'; msg.textContent = 'Network error.'; msg.style.display = 'block';
   }
 }
-
