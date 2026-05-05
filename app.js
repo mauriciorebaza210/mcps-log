@@ -104,6 +104,10 @@ function _appCacheSet(key, data) {
   }
 }
 
+function _appCacheRemove(key) {
+  try { localStorage.removeItem('mcps_' + key); } catch(e) {}
+}
+
 window.onload = () => {
   const stored = localStorage.getItem('mcps_s');
   if (stored) {

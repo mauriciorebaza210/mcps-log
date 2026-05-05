@@ -15,7 +15,7 @@ function loadRoutes(opOverride) {
     document.getElementById('route-loading').style.display = 'none';
     document.getElementById('route-content').style.display = 'block';
     renderRoutePage();
-    if (isAdmin()) loadUnassigned();
+    if (isAdmin()) loadUnassigned(true);
     // Scheduled visits are not stored in cache — always fetch fresh
     apiGet({ action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) })
       .then(svRes => {
@@ -61,7 +61,7 @@ function loadRoutes(opOverride) {
       _routeData = res;
       _setRouteCache(op, _weekOffset, res);
       renderRoutePage();
-      if (isAdmin()) loadUnassigned();
+      if (isAdmin()) loadUnassigned(true);
     })
     .catch(e => {
       _routeFetchInFlight = null;
@@ -571,10 +571,14 @@ function recalculateRoutes() {
 
 let _gtcPools = [];
 
-function loadUnassigned() {
-  const _unC  = _appCacheGet('unassigned',  15*60*1000);
+function loadUnassigned(forceFresh) {
+  if (forceFresh && typeof _appCacheRemove === 'function') {
+    _appCacheRemove('unassigned');
+    _appCacheRemove('gtc_pools');
+  }
+  const _unC  = forceFresh ? null : _appCacheGet('unassigned',  15*60*1000);
   const _crmC = _appCacheGet('crm_data',    15*60*1000);
-  const _gtcC = _appCacheGet('gtc_pools',   15*60*1000);
+  const _gtcC = forceFresh ? null : _appCacheGet('gtc_pools',   15*60*1000);
   Promise.all([
     _unC  ? Promise.resolve(_unC)                  : apiGet({ action: 'get_unassigned', token: _s.token }).then(r => { if (r.ok) _appCacheSet('unassigned', r); return r; }),
     _crmC ? Promise.resolve({ ok: true, data: _crmC }) : apiGet({ action: 'get_crm_data', token: _s.token }).then(r => { if (r.ok && r.data) _appCacheSet('crm_data', r.data); return r; }),
@@ -1541,10 +1545,18 @@ function applyPoolAction() {
       secret: SEC, action: 'move_pool_week', token: _s.token,
       pool_id: _pasState.pool_id,
       new_day: _pasState.newDay,
+      new_operator: _pasState.newOp,
       week_start: _routeData && _routeData.week_start
     }).then(res => {
       btn.disabled = false; btn.textContent = 'Apply Changes';
-      if (res.ok) { closePoolAction(); _routeData = null; _clearRouteCache(); loadRoutes(); }
+      if (res.ok) {
+        closePoolAction();
+        _routeData = null;
+        _unassignedPools = null;
+        if (typeof _appCacheRemove === 'function') _appCacheRemove('unassigned');
+        _clearRouteCache();
+        loadRoutes();
+      }
       else alert('Error: ' + (res.error || 'Unknown'));
     }).catch(e => {
       btn.disabled = false; btn.textContent = 'Apply Changes';
@@ -1566,7 +1578,14 @@ function applyPoolAction() {
     }
     api(payload).then(res => {
       btn.disabled = false; btn.textContent = 'Apply Changes';
-      if (res.ok) { closePoolAction(); _routeData = null; _clearRouteCache(); loadRoutes(); }
+      if (res.ok) {
+        closePoolAction();
+        _routeData = null;
+        _unassignedPools = null;
+        if (typeof _appCacheRemove === 'function') _appCacheRemove('unassigned');
+        _clearRouteCache();
+        loadRoutes();
+      }
       else alert('Error: ' + (res.error || 'Unknown'));
     }).catch(e => {
       btn.disabled = false; btn.textContent = 'Apply Changes';
@@ -1580,7 +1599,13 @@ function pinAllDay(day) {
   api({
     secret: SEC, action: 'pin_day', token: _s.token, day: day, pinned: true
   }).then(res => {
-    if (res.ok) { _routeData = null; loadRoutes(); }
+    if (res.ok) {
+      _routeData = null;
+      _unassignedPools = null;
+      if (typeof _appCacheRemove === 'function') _appCacheRemove('unassigned');
+      _clearRouteCache();
+      loadRoutes();
+    }
     else alert('Error: ' + (res.error || 'Unknown'));
   }).catch(e => alert('Network error: ' + e.message));
 }
@@ -1596,6 +1621,8 @@ function autoPlaceAll() {
     if (res.ok) {
       _routeData = null;
       _unassignedPools = null;
+      if (typeof _appCacheRemove === 'function') _appCacheRemove('unassigned');
+      _clearRouteCache();
       loadRoutes();
     } else {
       alert('Error: ' + (res.error || 'Unknown'));

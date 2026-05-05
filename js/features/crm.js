@@ -54,7 +54,13 @@ async function loadCRM() {
   }
 
   try {
-    const res = await apiGet({ action: 'get_crm_data', token: _s.token });
+    let res;
+    try {
+      res = await apiLocalGet('/api/crm/list', { token: _s.token });
+    } catch (fastErr) {
+      console.warn('Fast CRM list failed, falling back to Apps Script:', fastErr);
+      res = await apiGet({ action: 'get_crm_data', token: _s.token });
+    }
     if (res.ok) {
       if (!cachedCrm || JSON.stringify(cachedCrm) !== JSON.stringify(res.data)) {
         _crmCache = res.data || [];
@@ -248,7 +254,7 @@ function _crmFilterActiveClients_(view) {
 
 let _activeLeadId = null;
 
-function viewCRMDetail(quoteId) {
+async function viewCRMDetail(quoteId) {
   const item = _crmCache.find(i => i.quote_id === quoteId);
   if (!item) return;
   _activeLeadId = quoteId;
@@ -257,10 +263,28 @@ function viewCRMDetail(quoteId) {
   const status = (item.status || 'UNSENT').toUpperCase();
   document.getElementById('lead-drawer-title').textContent = name;
   document.getElementById('lead-drawer-sub').textContent = status + (item.area ? '  ·  Area ' + item.area.toUpperCase() : '');
-  document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(item);
+  document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(item) +
+    '<div id="crm-detail-loading" style="padding:0 1rem 1rem;color:var(--muted);font-size:.8rem">Loading full details...</div>';
 
   document.getElementById('lead-backdrop').classList.add('open');
   document.getElementById('lead-drawer').classList.add('open');
+
+  try {
+    const res = await apiLocalGet('/api/crm/detail', { token: _s.token, quote_id: quoteId });
+    if (res.ok && res.item && _activeLeadId === quoteId) {
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) _crmCache[idx] = { ..._crmCache[idx], ...res.item };
+      const updated = _crmCache.find(i => i.quote_id === quoteId) || res.item;
+      const updatedName = (updated.client_name || `${updated.first_name || ''} ${updated.last_name || ''}`).trim() || 'Lead Detail';
+      const updatedStatus = (updated.status || 'UNSENT').toUpperCase();
+      document.getElementById('lead-drawer-title').textContent = updatedName;
+      document.getElementById('lead-drawer-sub').textContent = updatedStatus + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
+      document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
+    }
+  } catch (detailErr) {
+    const marker = document.getElementById('crm-detail-loading');
+    if (marker) marker.textContent = 'Full detail load is using the lightweight cached record.';
+  }
 }
 
 function closeLeadDrawer() {

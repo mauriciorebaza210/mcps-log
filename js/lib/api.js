@@ -64,3 +64,14 @@ function apiGet(params, options = {}) {
     return res.json();
   });
 }
+
+function apiLocalGet(path, params = {}, options = {}) {
+  const url = new URL(path, window.location.origin);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+  });
+  return fetch(url.toString(), { method: 'GET', ...options }).then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  });
+}
