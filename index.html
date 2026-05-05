@@ -767,9 +767,25 @@
           <div class="q-chk active" id="qchk-prog" onclick="qChk('prog')">Programming <span style="font-size:.7rem;opacity:.7">$62.50</span></div>
           <div class="q-chk" id="qchk-school" onclick="qChk('school')">Pool School <span style="font-size:.7rem;opacity:.7">$62.50</span></div>
         </div>
+        <div class="q-2col">
+          <div>
+            <label class="q-flabel">Saved Pool Company</label>
+            <select class="q-inp" id="q-startup-company-select" onchange="qStartupCompanySelect(this.value)">
+              <option value="">Custom / not saved</option>
+            </select>
+          </div>
+          <div>
+            <label class="q-flabel">Report BCC Email</label>
+            <input class="q-inp" id="q-startup-company-email" type="email" placeholder="reports@example.com" oninput="qField('startup_company_email',this.value)">
+          </div>
+        </div>
         <div class="q-1col">
           <label class="q-flabel">Startup Coming From (Builder / Plaster Co.)</label>
           <input class="q-inp" id="q-startup-co" type="text" placeholder="e.g. XYZ Plaster" oninput="qField('startup_company',this.value)">
+          <div style="display:flex;align-items:center;gap:.6rem;margin-top:.45rem;flex-wrap:wrap">
+            <button type="button" class="q-voidbtn" id="q-startup-company-save" onclick="qSaveStartupCompany()">Save Company</button>
+            <span id="q-startup-company-msg" style="font-size:.75rem;color:var(--muted)"></span>
+          </div>
         </div>
         <div class="q-checks" style="margin-bottom:.5rem">
           <div class="q-chk" id="qchk-mcp" onclick="qChk('mcp')">MCP Paid First Month <span style="font-size:.7rem;opacity:.7">sets status to Active Customer</span></div>

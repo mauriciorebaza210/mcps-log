@@ -663,6 +663,9 @@ function submitStartupChecklist() {
   if (!_sclHasSig) {
     msg.textContent='Please sign the checklist before submitting.'; msg.className='im im-err'; msg.style.display='block'; return;
   }
+  if (_sclType === 'pool_school' && !_sclHasCustSig) {
+    msg.textContent='Please capture the customer signature before submitting.'; msg.className='im im-err'; msg.style.display='block'; return;
+  }
 
   msg.textContent='Saving… generating PDF (this may take a moment)…';
   msg.className='im'; msg.style.display='block';

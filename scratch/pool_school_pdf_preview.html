@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MCPS Pool School Checklist Preview</title>
+  <style>
+    @page { size: letter; margin: 0.55in; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #17202a;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    .header {
+      border-bottom: 3px solid #0d4d44;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+    .brand {
+      font-size: 18px;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+      color: #0d4d44;
+    }
+    .title {
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 8px 18px;
+      border: 1px solid #d9e3df;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    .meta div span {
+      display: inline-block;
+      min-width: 82px;
+      color: #667085;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 8px;
+      letter-spacing: 0.05em;
+    }
+    .section {
+      break-inside: avoid;
+      margin-bottom: 10px;
+      border: 1px solid #d9e3df;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .section h2 {
+      margin: 0;
+      padding: 6px 8px;
+      background: #f3f7f6;
+      color: #0d4d44;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .rows { padding: 6px 8px; }
+    .row {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 8px;
+      padding: 3px 0;
+      border-bottom: 1px solid #edf2f0;
+    }
+    .row:last-child { border-bottom: 0; }
+    .answer {
+      font-weight: 800;
+      color: #0d4d44;
+    }
+    .answer.no { color: #b42318; }
+    .chem {
+      display: grid;
+      grid-template-columns: 1fr 90px 80px;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid #edf2f0;
+    }
+    .chem:last-child { border-bottom: 0; }
+    .muted { color: #667085; }
+    .notes {
+      min-height: 42px;
+      padding: 8px;
+      border: 1px solid #d9e3df;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .signatures {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 10px;
+    }
+    .sig-box {
+      border: 1px solid #d9e3df;
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 118px;
+    }
+    .sig-label {
+      font-size: 9px;
+      color: #667085;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .sig-img {
+      height: 56px;
+      width: 100%;
+      object-fit: contain;
+      object-position: left center;
+      border-bottom: 1px solid #17202a;
+      margin-bottom: 6px;
+    }
+    .footer {
+      margin-top: 14px;
+      padding-top: 8px;
+      border-top: 1px solid #d9e3df;
+      text-align: center;
+      color: #667085;
+      font-size: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">MISSION CUSTOM POOL SOLUTIONS</div>
+    <div class="title">Pool School Checklist</div>
+  </div>
+
+  <div class="meta">
+    <div><span>Customer</span> Jordan Sample</div>
+    <div><span>Date</span> May 5, 2026</div>
+    <div><span>Address</span> 123 Bluewater Bend, San Antonio, TX</div>
+    <div><span>Pool ID</span> MCPS-2026</div>
+    <div><span>Phone</span> (210) 555-0184</div>
+    <div><span>Equipment</span> Salt System</div>
+  </div>
+
+  <div class="section">
+    <h2>Performance Check</h2>
+    <div class="rows">
+      <div class="row"><div class="answer">YES</div><div>Check Pool Circulation System</div></div>
+      <div class="row"><div class="answer">YES</div><div>Check Filter (correct operation/leaks)</div></div>
+      <div class="row"><div class="answer">YES</div><div>Check Pump(s) (correct operation/leaks)</div></div>
+      <div class="row"><div class="answer no">NO</div><div>Check Heater (turn on at panel and app)</div></div>
+      <div class="row"><div class="answer">YES</div><div>Check Chlorinator (correct operation/use)</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Understanding My Pool</h2>
+    <div class="rows">
+      <div class="row"><div class="answer">YES</div><div>Main Pump(s) Labeled</div></div>
+      <div class="row"><div class="answer">YES</div><div>Pool Filter Labeled</div></div>
+      <div class="row"><div class="answer">YES</div><div>Controlled Set Up (panel/app)</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Chemical Levels</h2>
+    <div class="rows">
+      <div class="chem"><strong>PH</strong><span class="muted">7.2-7.6</span><span>7.4</span></div>
+      <div class="chem"><strong>Chlorine</strong><span class="muted">2.0-4.0</span><span>3.0</span></div>
+      <div class="chem"><strong>Acid</strong><span class="muted">110-150</span><span>125</span></div>
+      <div class="chem"><strong>Salt System</strong><span class="muted">250-325</span><span>300</span></div>
+      <div class="chem"><strong>Levels Are Normal</strong><span></span><span class="answer">YES</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Pool School - Taught Me How To</h2>
+    <div class="rows">
+      <div class="row"><div class="answer">YES</div><div>How to Use the System on the Panel</div></div>
+      <div class="row"><div class="answer">YES</div><div>How to Use the System on the App</div></div>
+      <div class="row"><div class="answer">YES</div><div>How to Brush My Pool</div></div>
+      <div class="row"><div class="answer">YES</div><div>How to Check My Water Chemicals</div></div>
+      <div class="row"><div class="answer">YES</div><div>How to Use My Equipment</div></div>
+    </div>
+  </div>
+
+  <div class="sig-label">Notes from Customer</div>
+  <div class="notes">Customer understood app controls and asked for a follow-up on heater scheduling once gas inspection is complete.</div>
+
+  <div class="signatures">
+    <div class="sig-box">
+      <div class="sig-label">Customer Signature</div>
+      <img class="sig-img" alt="Customer signature" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0NjAiIGhlaWdodD0iMTMwIiB2aWV3Qm94PSIwIDAgNDYwIDEzMCI+PHBhdGggZD0iTTIwIDgyQzYwIDUyIDc2IDQ5IDgxIDY3YzYgMjItMzIgMzYtMjEgMThjMTUtMzUgNzMtNjAgNjUgLTMyLTcgMzEgLTQxIDUzIC00MCAzMCAxIC0xNiAzMyAtMzkgNDggLTIzIDkgMTAgLTggMjMgLTEgMjggMjIgMTYgLTggMzggLTEzIDUyIC0xMiAyNSA0IDUxIDIwIDgxIC0xNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTcyMDJhIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==">
+      <div>Jordan Sample</div>
+      <div class="muted">I understand how my pool works.</div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-label">Technician Signature</div>
+      <img class="sig-img" alt="Technician signature" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwIDAgNDYwIDEzMCIgdmlld0JveD0iMCAwIDQ2MCAxMzAiPjxwYXRoIGQ9Ik0yNSA3NWMzOCAtMzEgNTMgLTI5IDQ3IC0xMSAtNiAyMCAtNDcgNDQgLTQwIDI0IDExIC0yOSA4NyAtNzggODAgLTM5IC0zIDI0IC00MSA1MyAtMzQgMzMgMyAtMTMgMTIgLTI4IDMzIC0yNSA4IDIgMTEgMjMgMzMgMjAgNDQgLTcgMTcgLTQ0IDUxIC0yMyA3MiAtMTYgMTYgNyAzNSAtMTMgNjAgLTI1IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzIwMmEiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+">
+      <div>Avery Tech</div>
+      <div class="muted">Date Completed: May 5, 2026</div>
+    </div>
+  </div>
+
+  <div class="footer">Mission Custom Pool Solutions - San Antonio, TX - Confidential</div>
+</body>
+</html>

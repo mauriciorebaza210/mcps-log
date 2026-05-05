@@ -13,7 +13,8 @@ const _qDef = () => ({
   spa:false, finish:'light', debris:'light', has_robot:false,
   high_sun_exposure:false, has_pets:false,
   startup_chemical:true, startup_programming:true, startup_pool_school:false,
-  startup_company:'', sponsored_by_mcp:false, startup_start_date:'',
+  startup_company:'', startup_company_email:'', startup_companies:[], startup_company_saving:false,
+  sponsored_by_mcp:false, startup_start_date:'',
   repair_type:'repair_replacement', repair_company:'', repair_address:'',
   repair_desc:'', repair_amount:0, repair_sku:'',
   discount_type:'none', discount_value:0, custom_price:0,
@@ -66,6 +67,7 @@ function qSetService(svc) {
     if (dateInput) dateInput.value = ds;
     qStartupDateHint(ds);
   }
+  if (isStartup) qLoadStartupCompanies();
 
   qRecalc();
 }
@@ -119,7 +121,105 @@ function qStartupDateHint(ds) {
 function qField(field, val) {
   _qS[field] = val;
   if (field === 'startup_start_date') qStartupDateHint(val);
+  if (field === 'startup_company') qSyncStartupCompanySelection();
   qRecalc();
+}
+
+async function qLoadStartupCompanies() {
+  if (_qS.startup_companies && _qS.startup_companies.length) {
+    qRenderStartupCompanyOptions();
+    return;
+  }
+  try {
+    const res = await apiGet({ action: 'get_startup_companies', token: _s ? _s.token : '' });
+    _qS.startup_companies = res.ok && Array.isArray(res.companies) ? res.companies : [];
+    qRenderStartupCompanyOptions();
+  } catch(e) {}
+}
+
+function qRenderStartupCompanyOptions() {
+  const sel = document.getElementById('q-startup-company-select');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Custom / not saved</option>' + (_qS.startup_companies || []).map(c =>
+    `<option value="${esc(c.pool_company_id || c.company_name)}">${esc(c.company_name || '')}</option>`
+  ).join('');
+  sel.value = current;
+  qSyncStartupCompanySelection();
+}
+
+function qSyncStartupCompanySelection() {
+  const sel = document.getElementById('q-startup-company-select');
+  if (!sel) return;
+  const company = (_qS.startup_companies || []).find(c =>
+    String(c.company_name || '').trim().toLowerCase() === String(_qS.startup_company || '').trim().toLowerCase()
+  );
+  sel.value = company ? String(company.pool_company_id || company.company_name || '') : '';
+  if (company && !_qS.startup_company_email) {
+    _qS.startup_company_email = company.report_bcc_email || '';
+    const emailEl = document.getElementById('q-startup-company-email');
+    if (emailEl) emailEl.value = _qS.startup_company_email;
+  }
+}
+
+function qStartupCompanySelect(value) {
+  if (!value) {
+    _qS.startup_company = '';
+    _qS.startup_company_email = '';
+    const nameEl = document.getElementById('q-startup-co');
+    const emailEl = document.getElementById('q-startup-company-email');
+    if (nameEl) nameEl.value = '';
+    if (emailEl) emailEl.value = '';
+    qRecalc();
+    return;
+  }
+  const company = (_qS.startup_companies || []).find(c =>
+    String(c.pool_company_id || c.company_name || '') === String(value || '')
+  );
+  if (!company) return;
+  _qS.startup_company = company.company_name || '';
+  _qS.startup_company_email = company.report_bcc_email || '';
+  const nameEl = document.getElementById('q-startup-co');
+  const emailEl = document.getElementById('q-startup-company-email');
+  if (nameEl) nameEl.value = _qS.startup_company;
+  if (emailEl) emailEl.value = _qS.startup_company_email;
+  qRecalc();
+}
+
+async function qSaveStartupCompany() {
+  const name = (_qS.startup_company || '').trim();
+  const email = (_qS.startup_company_email || '').trim();
+  const msg = document.getElementById('q-startup-company-msg');
+  if (!name) {
+    if (msg) { msg.textContent = 'Company name required.'; msg.style.color = 'var(--error)'; }
+    return;
+  }
+  if (!email) {
+    if (msg) { msg.textContent = 'Report BCC email required.'; msg.style.color = 'var(--error)'; }
+    return;
+  }
+  _qS.startup_company_saving = true;
+  const btn = document.getElementById('q-startup-company-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  try {
+    const res = await api({
+      action: 'upsert_startup_company',
+      token: _s ? _s.token : '',
+      company: { company_name: name, report_bcc_email: email, active: 'TRUE' }
+    });
+    if (res.ok) {
+      _qS.startup_companies = [];
+      await qLoadStartupCompanies();
+      if (msg) { msg.textContent = 'Saved for future startups.'; msg.style.color = 'var(--success)'; }
+    } else if (msg) {
+      msg.textContent = res.error || 'Could not save company.';
+      msg.style.color = 'var(--error)';
+    }
+  } catch(e) {
+    if (msg) { msg.textContent = 'Network error saving company.'; msg.style.color = 'var(--error)'; }
+  }
+  _qS.startup_company_saving = false;
+  if (btn) { btn.disabled = false; btn.textContent = 'Save Company'; }
 }
 
 function qDiscTypeChange(val) {
@@ -334,8 +434,12 @@ function qReset() {
   document.getElementById('qchk-chem')?.classList.add('active');
   document.getElementById('qchk-prog')?.classList.add('active');
   ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
-   'q-startup-co','q-startup-date','q-rep-co','q-rep-sku','q-rep-addr','q-rep-desc','q-rep-amt'
+   'q-startup-co','q-startup-company-email','q-startup-date','q-rep-co','q-rep-sku','q-rep-addr','q-rep-desc','q-rep-amt'
   ].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const startupCompanyMsg = document.getElementById('q-startup-company-msg');
+  if (startupCompanyMsg) startupCompanyMsg.textContent = '';
+  const startupCompanySelect = document.getElementById('q-startup-company-select');
+  if (startupCompanySelect) startupCompanySelect.value = '';
   document.getElementById('q-disc-type').value = 'none';
   document.getElementById('q-disc-val-wrap').style.display = 'none';
   document.getElementById('q-disc-val').value = '';
@@ -365,6 +469,7 @@ async function qSave() {
     has_robot:_qS.has_robot, high_sun_exposure:_qS.high_sun_exposure, has_pets:_qS.has_pets,
     startup_chemical_work:_qS.startup_chemical, startup_programming:_qS.startup_programming,
     startup_pool_school:_qS.startup_pool_school, startup_company:_qS.startup_company,
+    startup_company_email:_qS.startup_company_email,
     sponsored_by_mcp:_qS.sponsored_by_mcp, startup_start_date:_qS.startup_start_date,
     startup_total_days:_qS.sponsored_by_mcp ? 3 : 0,
     repair_job_type:        _qS.service==='repair_job' ? _qS.repair_type    : '',
