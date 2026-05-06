@@ -10,6 +10,7 @@ const SG={small:12000,medium:17500,large:25000};
 const SM=[6,7,8,9];
 
 const _SVC_META_TTL = 4 * 60 * 60 * 1000; // 4 hours — force fresh metadata after this
+let _svcContextReqId = 0;
 
 function loadServiceLog(prefillPoolId){
   window._lastLoadedPoolId = null;
@@ -247,7 +248,16 @@ function prefillSvcForm_(poolId) {
   // but kept for compatibility with other triggers
 }
 
+function clearPoolContextBanners_() {
+  const oldNotes = document.getElementById('pool-last-notes-banner');
+  if (oldNotes) oldNotes.remove();
+  const oldTrend = document.getElementById('pool-trend-banner');
+  if (oldTrend) oldTrend.remove();
+}
+
 function applyPoolContext_(ctx, poolId) {
+  clearPoolContextBanners_();
+
   // Prefill pool size
   if (ctx.last_size) {
     const sizeSel = document.getElementById('svc-size');
@@ -266,6 +276,13 @@ function applyPoolContext_(ctx, poolId) {
         if (matSel.options[i].value === ctx.last_material) { matSel.selectedIndex = i; break; }
       }
     }
+  }
+
+  // Prefill last known tablet level
+  if (ctx.last_tablet) {
+    const tablet = String(ctx.last_tablet).toLowerCase();
+    const pill = document.querySelector(`.tbpill[data-val="${tablet}"]`);
+    if (pill && !pill.classList.contains('tactive')) tTablet(pill, tablet);
   }
 
   // Trigger recs recalc after prefill
@@ -287,17 +304,30 @@ function applyPoolContext_(ctx, poolId) {
       banner.style.background = '#fffbeb';
       banner.style.color = '#92400e';
       banner.style.borderLeft = '4px solid #f59e0b';
-      banner.innerHTML = '<strong>📝 Notes from last visit:</strong> ' + lastNotes;
+      banner.innerHTML = '<strong>Notes from last visit:</strong> ' + escHtml(lastNotes);
       root.insertBefore(banner, root.firstChild);
     }
   }
 }
 
+function loadPoolContextForSelection_(poolId) {
+  if (!poolId || poolId === 'Other / Pool not listed') {
+    clearPoolContextBanners_();
+    return Promise.resolve();
+  }
+  const reqId = ++_svcContextReqId;
+  return api({ secret:SEC, action:'get_pool_context', token:_s.token, pool_id:poolId })
+    .then(res => {
+      if (reqId !== _svcContextReqId) return;
+      if (res && res.ok && res.data && res.data.found) applyPoolContext_(res.data, poolId);
+      else clearPoolContextBanners_();
+    })
+    .catch(e => console.warn('Pool context load failed', e));
+}
+
 function renderTrendBanner_(trends, visitCount) {
   const root = document.getElementById('svc-root');
   if (!root) return;
-  const existing = document.getElementById('pool-trend-banner');
-  if (existing) existing.remove();
 
   const banner = document.createElement('div');
   banner.id = 'pool-trend-banner';
@@ -406,7 +436,7 @@ function handlePoolChange() {
   const poolId = pe ? pe.value : null;
   if (poolId && window._lastLoadedPoolId !== poolId) {
     window._lastLoadedPoolId = poolId;
-    loadDraft(poolId);
+    loadPoolContextForSelection_(poolId).then(() => loadDraft(poolId));
   } else if (!poolId) {
     window._lastLoadedPoolId = null;
   }
@@ -577,6 +607,9 @@ function submitSvc(){
   const matSel = document.getElementById('svc-mat');
   if (matSel && matSel.value) payload['Pool Material'] = matSel.value;
 
+  const tabletLevel = getTabletLevel();
+  if (tabletLevel) payload['Tablet Level'] = tabletLevel;
+
   const internalNotes = document.getElementById('svc-internal-notes');
   if (internalNotes && internalNotes.value) payload['Internal Notes'] = internalNotes.value;
 
@@ -707,4 +740,3 @@ function resetSvc(){
   document.getElementById('svc-loading').style.display='block';
   loadServiceLog();
 }
-
