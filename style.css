@@ -1523,6 +1523,111 @@ select.q-inp{cursor:pointer}
 .crm-detail-wrap b { color: var(--muted); font-weight: 500; font-size:var(--text-sm); text-transform: uppercase; display: block; margin-bottom: .1rem; }
 .crm-detail-wrap code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-size:var(--text-base); font-family: monospace; }
 
+/* ── FINANCIAL HUB CLIENT OPS ───────────────────────────────────────────── */
+.clients-ops-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:.75rem;
+  padding:0 1rem .85rem;
+}
+.clients-op-card{
+  appearance:none;
+  text-align:left;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:.85rem 1rem;
+  cursor:pointer;
+  color:var(--text);
+  box-shadow:var(--shadow-xs);
+  transition:border-color .15s,transform .15s,box-shadow .15s;
+}
+.clients-op-card:hover{
+  border-color:var(--teal-light);
+  transform:translateY(-1px);
+  box-shadow:var(--shadow-sm);
+}
+.clients-op-card span{
+  display:block;
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:var(--text-xs);
+  font-weight:700;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.clients-op-card strong{
+  display:block;
+  margin-top:.1rem;
+  color:var(--teal);
+  font-size:var(--text-2xl);
+  line-height:1.05;
+}
+.clients-op-card small{
+  display:block;
+  margin-top:.25rem;
+  color:var(--muted);
+  font-size:var(--text-sm);
+}
+.clients-op-card--money{cursor:default}
+.clients-op-card--money:hover{transform:none;border-color:var(--border);box-shadow:var(--shadow-xs)}
+.clients-toolbar{display:flex;flex-direction:column;gap:.7rem;padding-bottom:.25rem}
+.clients-quick-filters{display:flex;gap:.45rem;flex-wrap:wrap}
+.clients-chip{
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--muted);
+  border-radius:999px;
+  padding:.32rem .75rem;
+  font-size:var(--text-sm);
+  font-weight:700;
+  cursor:pointer;
+  transition:all .15s;
+}
+.clients-chip:hover,.clients-chip.active{background:var(--teal);border-color:var(--teal);color:#fff}
+.clients-filter-grid{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end}
+.clients-row{cursor:pointer}
+.clients-row td{border-top:1px solid rgba(0,0,0,.09)}
+.clients-row:hover{background:rgba(13,77,68,.04)}
+.clients-name{font-weight:800;font-size:var(--text-md);line-height:1.15}
+.clients-sub{font-size:var(--text-sm);color:var(--muted);margin-top:.12rem}
+.clients-contact{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.3rem;font-size:var(--text-sm)}
+.clients-contact a,.clients-map{color:var(--teal-mid);font-weight:700;text-decoration:none}
+.clients-contact a:hover,.clients-map:hover{text-decoration:underline}
+.clients-map{display:inline-block;font-size:var(--text-sm);margin-top:.32rem}
+.clients-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:.12rem .52rem;
+  border-radius:999px;
+  font-size:var(--text-sm);
+  font-weight:800;
+  white-space:nowrap;
+}
+.clients-pill.ok{background:#d1fae5;color:#065f46}
+.clients-pill.warn{background:#fef3c7;color:#92400e}
+.clients-actions{display:flex;justify-content:flex-end;gap:.35rem;flex-wrap:wrap}
+.clients-actions button{
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--teal);
+  border-radius:var(--r-sm);
+  padding:.34rem .58rem;
+  font-size:var(--text-sm);
+  font-weight:800;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.clients-actions button:hover{background:var(--teal-glow);border-color:var(--teal-light)}
+@media(max-width:900px){
+  .clients-ops-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:640px){
+  .clients-ops-grid{grid-template-columns:1fr}
+  .clients-actions{justify-content:flex-start}
+}
+
 /* ── SALES HUB — EXTENDED STYLES ──────────────────────────────────────────── */
 
 /* Pipeline stats pills */

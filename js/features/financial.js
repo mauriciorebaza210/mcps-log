@@ -1113,6 +1113,87 @@ function _renderChemTab() {
 let _clientsSearch = '';
 let _clientsAreaFilter = '';
 let _clientsBillingFilter = '';
+let _clientsQuickFilter = '';
+let _clientsSort = 'attention';
+
+function _clientsPaymentLog(item) {
+  try {
+    const raw = item?.payment_log;
+    const parsed = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+    return parsed.map(e => ({ ...e }));
+  } catch(e) {
+    return [];
+  }
+}
+
+function _clientsCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function _clientsMonthStatus(item, monthKey = _clientsCurrentMonthKey()) {
+  const entry = _clientsPaymentLog(item).find(e => e.month === monthKey);
+  if (entry?.status) return entry.status;
+  return item.invoice_day && item.billing_start ? 'pending' : 'none';
+}
+
+function _clientsDaysAgo(dateStr) {
+  const d = new Date(dateStr || '');
+  if (isNaN(d)) return null;
+  return Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function _clientsSetQuickFilter(filter) {
+  _clientsQuickFilter = _clientsQuickFilter === filter ? '' : filter;
+  _renderClientsTable();
+}
+
+function _clientsSetBillingFilter(filter) {
+  _clientsBillingFilter = filter || '';
+  _renderClientsTable();
+}
+
+async function _clientsMarkBilling(quoteId, status) {
+  const item = (_finCrmCache || []).find(i => i.quote_id === quoteId);
+  if (!item) return;
+
+  const month = _clientsCurrentMonthKey();
+  const log = _clientsPaymentLog(item);
+  const entryIdx = log.findIndex(e => e.month === month);
+  if (entryIdx > -1) log[entryIdx].status = status;
+  else log.push({ month, status });
+
+  const prevLog = item.payment_log;
+  item.payment_log = log;
+  if (typeof _crmCache !== 'undefined') {
+    const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+    if (idx > -1) _crmCache[idx].payment_log = log;
+  }
+  _appCacheSet('crm_data', _finCrmCache);
+  _renderClientsTab();
+
+  const res = await api({
+    action: 'update_lead',
+    token: _s.token,
+    quote_id: quoteId,
+    status: item.status || 'ACTIVE_CUSTOMER',
+    notes: item.notes || '',
+    payment_log: log
+  });
+
+  if (!res.ok) {
+    item.payment_log = prevLog;
+    if (typeof _crmCache !== 'undefined') {
+      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+      if (idx > -1) _crmCache[idx].payment_log = prevLog;
+    }
+    _appCacheSet('crm_data', _finCrmCache);
+    _renderClientsTab();
+    alert(res.error || 'Billing update failed.');
+  } else {
+    _appCacheSet('crm_data', _finCrmCache);
+  }
+}
 
 function _renderClientsTab() {
   // Hide the period/tech shared filters — not relevant for clients
@@ -1126,16 +1207,33 @@ function _renderClientsTab() {
 
   const clients = (_finCrmCache || []).filter(r => r.status === 'ACTIVE_CUSTOMER');
 
-  // Build set of pool_ids seen in visits from the last 60 days
+  // Build route and last-visit signals from service submissions.
   const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  const visitRows = (_finCache || []).filter(r => r.pool_id);
   const inRouteIds = new Set(
-    (_finCache || [])
-      .filter(r => r.pool_id && new Date(r.date).getTime() >= cutoff)
-      .map(r => r.pool_id)
+    visitRows
+      .filter(r => {
+        const ts = new Date(r.timestamp || r.date || '').getTime();
+        return !isNaN(ts) && ts >= cutoff;
+      })
+      .map(r => _finNormalizePoolId(r.pool_id))
   );
+  const lastVisitByPool = {};
+  const visitsThisMonthByPool = {};
+  const currentMonthKey = _clientsCurrentMonthKey();
+  visitRows.forEach(r => {
+    const normPoolId = _finNormalizePoolId(r.pool_id);
+    const ts = new Date(r.timestamp || r.date || '');
+    if (!isNaN(ts)) {
+      if (!lastVisitByPool[normPoolId] || ts > new Date(lastVisitByPool[normPoolId].timestamp || lastVisitByPool[normPoolId].date || '')) {
+        lastVisitByPool[normPoolId] = r;
+      }
+      const key = `${ts.getFullYear()}-${String(ts.getMonth() + 1).padStart(2, '0')}`;
+      if (key === currentMonthKey) visitsThisMonthByPool[normPoolId] = (visitsThisMonthByPool[normPoolId] || 0) + 1;
+    }
+  });
 
   const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
   // Days of the current week (Mon–Sun) that fall within the current month
   const dow = now.getDay();
@@ -1151,28 +1249,45 @@ function _renderClientsTab() {
   }
 
   const enriched = clients.map(c => {
-    const inRoutes = !!(c.pool_id && inRouteIds.has(c.pool_id));
-    const log = Array.isArray(c.payment_log) ? c.payment_log : [];
-    const entry = log.find(e => e.month === currentMonthKey);
-    const thisMonthStatus = entry ? entry.status : 'none';
-    const monthlyRate = parseFloat(c.total_with_tax) || 0;
+    const normPoolId = _finNormalizePoolId(c.pool_id);
+    const inRoutes = !!(normPoolId && inRouteIds.has(normPoolId));
+    const thisMonthStatus = _clientsMonthStatus(c, currentMonthKey);
+    const monthlyRate = parseFloat(c.discounted_service_subtotal) || parseFloat(c.total_with_tax) || 0;
     const name = c.client_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || '—';
     const dueThisWeek = !!(c.invoice_day && weekDaysInMonth.includes(Number(c.invoice_day)));
-    return { ...c, inRoutes, thisMonthStatus, monthlyRate, name, dueThisWeek };
+    const lastVisit = normPoolId ? lastVisitByPool[normPoolId] : null;
+    const lastVisitDays = _clientsDaysAgo(lastVisit?.timestamp || lastVisit?.date);
+    const visitsThisMonth = normPoolId ? (visitsThisMonthByPool[normPoolId] || 0) : 0;
+    const needsBilling = ['pending', 'none'].includes(thisMonthStatus);
+    const noRoute = !inRoutes;
+    const stale = lastVisitDays === null || lastVisitDays > 21;
+    const attentionScore = (needsBilling ? 4 : 0) + (dueThisWeek ? 3 : 0) + (noRoute ? 3 : 0) + (stale ? 2 : 0);
+    return { ...c, inRoutes, thisMonthStatus, monthlyRate, name, dueThisWeek, lastVisit, lastVisitDays, visitsThisMonth, needsBilling, noRoute, stale, attentionScore };
   });
 
   const totalMRR = enriched.reduce((s, c) => s + c.monthlyRate, 0);
   const inRoutesCount = enriched.filter(c => c.inRoutes).length;
-  const billingIssues = enriched.filter(c => ['pending', 'none'].includes(c.thisMonthStatus)).length;
+  const billingIssues = enriched.filter(c => c.needsBilling).length;
+  const routeMissing = enriched.filter(c => c.noRoute).length;
+  const dueThisWeek = enriched.filter(c => c.dueThisWeek && c.thisMonthStatus !== 'paid').length;
+  const staleVisits = enriched.filter(c => c.stale).length;
 
   const statsEl = document.getElementById('clients-stats');
   if (statsEl) {
     statsEl.innerHTML = `
-      <div style="display:flex;gap:.75rem;flex-wrap:wrap;padding:0 1rem .5rem">
-        ${_finStatCard('Active Clients', enriched.length)}
-        ${_finStatCard('Total MRR', _finFmtCurrency(totalMRR))}
-        ${_finStatCard('In Routes', inRoutesCount)}
-        ${_finStatCard('Billing Issues', `<span style="color:var(--error)">${billingIssues}</span>`)}
+      <div class="clients-ops-grid">
+        <button class="clients-op-card" onclick="_clientsSetQuickFilter('billing')">
+          <span>Needs Billing</span><strong>${billingIssues}</strong><small>${dueThisWeek} due this week</small>
+        </button>
+        <button class="clients-op-card" onclick="_clientsSetQuickFilter('routes')">
+          <span>Missing From Routes</span><strong>${routeMissing}</strong><small>${inRoutesCount} active in route logs</small>
+        </button>
+        <button class="clients-op-card" onclick="_clientsSetQuickFilter('stale')">
+          <span>Stale / No Visits</span><strong>${staleVisits}</strong><small>Over 21 days or no log</small>
+        </button>
+        <div class="clients-op-card clients-op-card--money">
+          <span>Monthly Revenue</span><strong>${_finFmtCurrency(totalMRR)}</strong><small>${enriched.length} active accounts</small>
+        </div>
       </div>`;
   }
 
@@ -1180,8 +1295,18 @@ function _renderClientsTab() {
   const filtersEl = document.getElementById('clients-filters');
   if (filtersEl) {
     filtersEl.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;padding-bottom:.25rem">
-        <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:.3rem">
+      <div class="clients-toolbar">
+        <div class="clients-quick-filters">
+          ${[
+            ['billing', 'Needs Billing'],
+            ['routes', 'Not In Routes'],
+            ['stale', 'Stale Visits'],
+            ['due', 'Due This Week'],
+            ['paid', 'Paid']
+          ].map(([key, label]) => `<button class="clients-chip ${_clientsQuickFilter===key?'active':''}" onclick="_clientsSetQuickFilter('${key}')">${label}</button>`).join('')}
+        </div>
+        <div class="clients-filter-grid">
+        <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:.3rem">
           <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Search</label>
           <input type="text" class="si" placeholder="Name, email, or pool ID…"
             value="${_clientsSearch}" oninput="_clientsSearch=this.value;_renderClientsTable()">
@@ -1203,6 +1328,17 @@ function _renderClientsTab() {
             <option value="pending" ${_clientsBillingFilter==='pending'?'selected':''}>Pending</option>
             <option value="none" ${_clientsBillingFilter==='none'?'selected':''}>No Record</option>
           </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.3rem">
+          <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Sort</label>
+          <select class="si" style="width:auto" onchange="_clientsSort=this.value;_renderClientsTable()">
+            <option value="attention" ${_clientsSort==='attention'?'selected':''}>Needs attention</option>
+            <option value="invoice_day" ${_clientsSort==='invoice_day'?'selected':''}>Invoice day</option>
+            <option value="rate" ${_clientsSort==='rate'?'selected':''}>Monthly rate</option>
+            <option value="last_visit" ${_clientsSort==='last_visit'?'selected':''}>Last visit</option>
+            <option value="name" ${_clientsSort==='name'?'selected':''}>Client name</option>
+          </select>
+        </div>
         </div>
       </div>`;
   }
@@ -1231,8 +1367,19 @@ function _renderClientsTable(enriched) {
       rows = rows.filter(c => c.thisMonthStatus === _clientsBillingFilter);
     }
   }
+  if (_clientsQuickFilter === 'billing') rows = rows.filter(c => c.needsBilling);
+  if (_clientsQuickFilter === 'routes') rows = rows.filter(c => c.noRoute);
+  if (_clientsQuickFilter === 'stale') rows = rows.filter(c => c.stale);
+  if (_clientsQuickFilter === 'due') rows = rows.filter(c => c.dueThisWeek && c.thisMonthStatus !== 'paid');
+  if (_clientsQuickFilter === 'paid') rows = rows.filter(c => c.thisMonthStatus === 'paid');
 
-  rows.sort((a, b) => a.name.localeCompare(b.name));
+  rows.sort((a, b) => {
+    if (_clientsSort === 'attention') return (b.attentionScore - a.attentionScore) || a.name.localeCompare(b.name);
+    if (_clientsSort === 'invoice_day') return (Number(a.invoice_day) || 99) - (Number(b.invoice_day) || 99);
+    if (_clientsSort === 'rate') return b.monthlyRate - a.monthlyRate;
+    if (_clientsSort === 'last_visit') return (b.lastVisitDays ?? 9999) - (a.lastVisitDays ?? 9999);
+    return a.name.localeCompare(b.name);
+  });
 
   const thead = document.getElementById('clients-thead');
   const tbody = document.getElementById('clients-tbody');
@@ -1240,17 +1387,14 @@ function _renderClientsTable(enriched) {
 
   thead.innerHTML = `<tr>
     <th style="padding-left:1rem">Client</th>
-    <th>City / Area</th>
-    <th>Service</th>
-    <th style="text-align:right">Monthly Rate</th>
-    <th style="text-align:center">Invoice Day</th>
-    <th>This Month</th>
-    <th>In Routes</th>
-    <th></th>
+    <th>Billing</th>
+    <th>Service / Route</th>
+    <th>Last Visit</th>
+    <th style="text-align:right;padding-right:1rem">Actions</th>
   </tr>`;
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--muted)">No active clients match your filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">No active clients match your filters.</td></tr>`;
     return;
   }
 
@@ -1267,24 +1411,50 @@ function _renderClientsTable(enriched) {
     return `<span style="background:${bg};color:${color};padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">${label}</span>${duePill}`;
   };
 
-  const routeBadge = inR => inR
-    ? `<span style="background:#ccfbf1;color:#0f766e;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Yes</span>`
-    : `<span style="color:var(--muted);font-size:.85rem">No</span>`;
+  const routeBadge = c => c.inRoutes
+    ? `<span class="clients-pill ok">In routes</span>`
+    : `<span class="clients-pill warn">Not in routes</span>`;
+  const visitText = c => {
+    if (c.lastVisitDays === null) return '<span class="clients-pill warn">No visit log</span>';
+    const date = new Date(c.lastVisit.timestamp || c.lastVisit.date).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const tone = c.lastVisitDays > 21 ? 'warn' : 'ok';
+    return `<span class="clients-pill ${tone}">${date}</span><div class="clients-sub">${c.lastVisitDays === 0 ? 'Today' : `${c.lastVisitDays} days ago`} · ${c.visitsThisMonth} this month</div>`;
+  };
 
-  tbody.innerHTML = rows.map(c => `
-    <tr style="cursor:pointer" onclick="viewCRMDetail('${c.quote_id}')">
-      <td style="padding-left:1rem">
-        <div style="font-weight:600">${c.name}</div>
-        ${c.email ? `<div style="font-size:.8rem;color:var(--muted)">${c.email}</div>` : ''}
-      </td>
-      <td>${[c.city, c.area].filter(Boolean).join(' · ') || '—'}</td>
-      <td style="font-size:.88rem">${c.service || '—'}</td>
-      <td style="text-align:right;font-weight:600">${c.monthlyRate ? _finFmtCurrency(c.monthlyRate) : '—'}</td>
-      <td style="text-align:center;font-weight:${c.dueThisWeek?'700':'400'};color:${c.dueThisWeek?'#b45309':'inherit'}">${c.invoice_day ? `Day ${c.invoice_day}` : '—'}</td>
-      <td>${billingBadge(c.thisMonthStatus, c.dueThisWeek)}</td>
-      <td>${routeBadge(c.inRoutes)}</td>
-      <td style="text-align:right;color:var(--muted);font-size:.85rem">›</td>
-    </tr>`).join('');
+  tbody.innerHTML = rows.map(c => {
+    const quote = escHtml(c.quote_id);
+    const email = escHtml(c.email || '');
+    const phone = escHtml(c.phone || '');
+    const mapUrl = c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([c.address, c.city, c.zip_code].filter(Boolean).join(', '))}` : '';
+    return `
+      <tr class="clients-row" onclick="viewCRMDetail('${quote}')">
+        <td style="padding-left:1rem">
+          <div class="clients-name">${escHtml(c.name)}</div>
+          <div class="clients-sub">${escHtml([c.city, c.area].filter(Boolean).join(' · ') || c.pool_id || 'No pool ID')}</div>
+          <div class="clients-contact">
+            ${email ? `<a onclick="event.stopPropagation()" href="mailto:${email}" title="${email}">✉ Email</a>` : ''}
+            ${phone ? `<a onclick="event.stopPropagation()" href="tel:${phone}" title="${phone}">📞 ${escHtml(phone)}</a>` : ''}
+            ${mapUrl ? `<a class="clients-map" onclick="event.stopPropagation()" href="${escHtml(mapUrl)}" target="_blank" rel="noopener">📍 Map</a>` : ''}
+          </div>
+        </td>
+        <td>
+          <div style="font-weight:700">${c.monthlyRate ? _finFmtCurrency(c.monthlyRate) : '—'}</div>
+          ${c.invoice_day ? `<div class="clients-sub">Invoice day ${c.invoice_day}</div>` : ''}
+          <div style="margin-top:.35rem">${billingBadge(c.thisMonthStatus, c.dueThisWeek)}</div>
+        </td>
+        <td>
+          <div style="font-weight:600;font-size:.88rem">${escHtml(c.service || '—')}</div>
+          <div style="margin-top:.35rem">${routeBadge(c)}</div>
+        </td>
+        <td>${visitText(c)}</td>
+        <td style="text-align:right;padding-right:1rem">
+          <div class="clients-actions">
+            ${c.thisMonthStatus !== 'invoiced' && c.thisMonthStatus !== 'paid' ? `<button onclick="event.stopPropagation();_clientsMarkBilling('${quote}','invoiced')">Mark invoiced</button>` : ''}
+            ${c.thisMonthStatus !== 'paid' ? `<button onclick="event.stopPropagation();_clientsMarkBilling('${quote}','paid')">Mark paid</button>` : ''}
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
