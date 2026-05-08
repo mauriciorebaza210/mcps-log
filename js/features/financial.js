@@ -252,14 +252,29 @@ function _finFindCrm(poolId, poolName) {
   });
 }
 
+const _finTabTitles = {
+  payouts:   'Payouts',
+  profit:    'Profitability',
+  chemicals: 'Chemical Analysis',
+  visits:    'Visit History',
+  clients:   'Clients',
+  payroll:   'Payroll',
+  unmatched: 'Unmatched Submissions',
+  companies: 'Startup Companies'
+};
+
 function switchFinTab(tab) {
   _finActiveTab = tab;
-  
+
   // Sync the hash to drive routing and sidebar state
   const newHash = `financial_hub/${tab}`;
   if (location.hash !== `#` + newHash) {
     location.hash = newHash;
   }
+
+  // Update page title
+  const hdr = document.querySelector('#page-financial_hub .fin-page-hdr h2');
+  if (hdr) hdr.textContent = _finTabTitles[tab] || 'Financial Hub';
 
   // Toggle view visibility
   ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched', 'companies'].forEach(t => {
@@ -282,6 +297,9 @@ async function loadFinancialHub() {
   if (hash.startsWith('financial_hub/') && hash.split('/')[1] !== _finActiveTab) {
     _finActiveTab = hash.split('/')[1];
   }
+
+  const hdr = document.querySelector('#page-financial_hub .fin-page-hdr h2');
+  if (hdr) hdr.textContent = _finTabTitles[_finActiveTab] || 'Financial Hub';
 
   ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched', 'companies'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
