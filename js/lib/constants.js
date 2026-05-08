@@ -76,7 +76,8 @@ const SIDEBAR_GROUPS = [
       { page:'financial_hub', label:'Visit History',       icon:SVG_CLIP,  hubTab:'visits',    id:'ni-financial_hub-visits' },
       { page:'financial_hub', label:'Clients',             icon:SVG_CLIP,  hubTab:'clients',   id:'ni-financial_hub-clients' },
       { page:'financial_hub', label:'Payroll',             icon:SVG_CLIP,  hubTab:'payroll',   id:'ni-financial_hub-payroll' },
-      { page:'financial_hub', label:'Unmatched',           icon:SVG_CLIP,  hubTab:'unmatched', id:'ni-financial_hub-unmatched' }
+      { page:'financial_hub', label:'Unmatched',           icon:SVG_CLIP,  hubTab:'unmatched', id:'ni-financial_hub-unmatched' },
+      { page:'financial_hub', label:'Companies',           icon:SVG_CLIP,  hubTab:'companies', id:'ni-financial_hub-companies' }
     ]
   }
 ];

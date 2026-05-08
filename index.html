@@ -1183,7 +1183,52 @@
         <div id="unmatched-content" style="padding:0 1rem 2rem"></div>
       </div>
 
+      <!-- Tab: Startup Companies -->
+      <div id="fin-view-companies" style="display:none">
+        <div id="companies-content" style="padding:0 1rem 2rem"></div>
+      </div>
+
     </div><!-- /page-financial_hub -->
+
+    <!-- Startup Company Modal -->
+    <div id="co-modal-backdrop" class="conf-modal-backdrop" onclick="closeCompanyModal(event)">
+      <div class="conf-modal" style="max-width:480px" onclick="event.stopPropagation()">
+        <div class="conf-modal-hdr">
+          <span class="conf-modal-title" id="co-modal-title">Add Company</span>
+          <button class="gtc-modal-close" onclick="closeCompanyModal()">&times;</button>
+        </div>
+        <div class="conf-modal-body" style="display:flex;flex-direction:column;gap:1rem">
+          <input type="hidden" id="co-id">
+          <div>
+            <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.35rem">Company Name <span style="color:#dc2626">*</span></label>
+            <input id="co-name" class="si" placeholder="e.g. Lennar Homes">
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.35rem">Contact Name</label>
+            <input id="co-contact" class="si" placeholder="e.g. Jane Smith">
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.35rem">Report BCC Email</label>
+            <input id="co-email" class="si" type="email" placeholder="reports@builder.com">
+            <div style="font-size:.75rem;color:var(--muted);margin-top:.3rem">BCC'd on every service report for pools associated with this company.</div>
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.35rem">Phone</label>
+            <input id="co-phone" class="si" placeholder="(210) 555-0100">
+          </div>
+          <div>
+            <label style="display:block;font-weight:600;font-size:.85rem;margin-bottom:.35rem">Notes</label>
+            <textarea id="co-notes" class="si" rows="2" placeholder="Internal notes…"></textarea>
+          </div>
+          <div id="co-error" style="color:#dc2626;font-size:.82rem;display:none"></div>
+        </div>
+        <div class="conf-modal-foot">
+          <button id="co-deactivate-btn" class="adm-new-btn" style="background:#fee2e2;color:#991b1b;border:none;margin-right:auto;display:none" onclick="deactivateCompany()">Deactivate</button>
+          <button class="adm-new-btn" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border)" onclick="closeCompanyModal()">Cancel</button>
+          <button id="co-save-btn" class="adm-new-btn" style="background:var(--teal)" onclick="saveCompany()">Save</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ── Alerts & Issues page ── -->
     <div class="pf" id="page-alerts">

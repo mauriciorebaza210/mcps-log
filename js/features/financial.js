@@ -16,7 +16,7 @@ let _finCustomTo   = '';           // 'YYYY-MM-DD'
 let _finTechFilter = '';           // '' = all techs (admin only)
 let _finLoaded     = false;
 
-let _finActiveTab  = 'payouts'; // 'payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll'
+let _finActiveTab  = 'payouts'; // 'payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched', 'companies'
 let _finCrmCache   = [];        // cache for CRM/Quote data
 
 const FIN_PAGE_SIZE = 15;
@@ -262,7 +262,7 @@ function switchFinTab(tab) {
   }
 
   // Toggle view visibility
-  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched', 'companies'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === tab ? 'block' : 'none';
   });
@@ -283,7 +283,7 @@ async function loadFinancialHub() {
     _finActiveTab = hash.split('/')[1];
   }
 
-  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched'].forEach(t => {
+  ['payouts', 'profit', 'chemicals', 'visits', 'clients', 'payroll', 'unmatched', 'companies'].forEach(t => {
     const view = document.getElementById(`fin-view-${t}`);
     if (view) view.style.display = t === _finActiveTab ? 'block' : 'none';
   });
@@ -305,9 +305,11 @@ async function loadFinancialHub() {
     else if (_finActiveTab === 'clients') _renderClientsTab();
     else if (_finActiveTab === 'payroll') _loadAndRenderPayroll();
     else if (_finActiveTab === 'unmatched') _loadAndRenderUnmatched();
+    else if (_finActiveTab === 'companies') _loadAndRenderCompaniesTab();
   } else {
     if (loading) loading.style.display = 'block';
     if (_finActiveTab === 'unmatched') _loadAndRenderUnmatched();
+    else if (_finActiveTab === 'companies') _loadAndRenderCompaniesTab();
   }
 
   try {
@@ -345,7 +347,7 @@ async function loadFinancialHub() {
       else if (_finActiveTab === 'visits') loadVisitHistoryTab();
       else if (_finActiveTab === 'clients') _renderClientsTab();
       else if (_finActiveTab === 'payroll') _loadAndRenderPayroll();
-      // unmatched is loaded independently — skip here to avoid double-fetch
+      // unmatched and companies are loaded independently — skip here to avoid double-fetch
     }
   } catch(e) {
     console.error('Financial Hub load error:', e);
@@ -2118,5 +2120,203 @@ async function _resolveUnmatched(rowIndex, btn) {
     if (err) err.textContent = 'Error: ' + String(e.message || e);
     btn.disabled = false;
     btn.textContent = 'Resolve';
+  }
+}
+
+// ── Startup Companies Tab ────────────────────────────────────────────────────
+
+let _companiesCache = null;
+let _companiesSearch = '';
+
+async function _loadAndRenderCompaniesTab() {
+  const el = document.getElementById('companies-content');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)"><div class="spinner"></div></div>';
+
+  try {
+    const res = await api({ action: 'get_startup_companies', token: _s.token });
+    if (!res.ok) throw new Error(res.error || 'Failed to load companies');
+    _companiesCache = res.companies || [];
+  } catch(e) {
+    el.innerHTML = `<div style="padding:2rem;text-align:center;color:#dc2626">Error: ${escHtml(String(e.message || e))}</div>`;
+    return;
+  }
+  _renderCompaniesTab();
+}
+
+function _renderCompaniesTab() {
+  const el = document.getElementById('companies-content');
+  if (!el) return;
+
+  const sharedFilters = document.getElementById('fin-shared-filters');
+  if (sharedFilters) sharedFilters.innerHTML = '';
+
+  const all = _companiesCache || [];
+  const q = _companiesSearch.toLowerCase();
+  let rows = q
+    ? all.filter(c =>
+        (c.company_name || '').toLowerCase().includes(q) ||
+        (c.contact_name || '').toLowerCase().includes(q) ||
+        (c.report_bcc_email || '').toLowerCase().includes(q)
+      )
+    : all;
+
+  const activeCount = all.filter(c => String(c.active || 'TRUE').toUpperCase() !== 'FALSE').length;
+  const withEmail   = all.filter(c => c.report_bcc_email && String(c.active || 'TRUE').toUpperCase() !== 'FALSE').length;
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem">
+      <div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <div class="clients-op-card clients-op-card--money" style="cursor:default;min-width:140px">
+          <span>Active Companies</span><strong>${activeCount}</strong>
+        </div>
+        <div class="clients-op-card clients-op-card--money" style="cursor:default;min-width:140px">
+          <span>With BCC Email</span><strong>${withEmail}</strong>
+        </div>
+      </div>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="openCompanyModal()">+ Add Company</button>
+    </div>
+    <div style="margin-bottom:.75rem">
+      <input class="si" style="max-width:320px" placeholder="Search companies…"
+        value="${escHtml(_companiesSearch)}"
+        oninput="_companiesSearch=this.value;_renderCompaniesTab()">
+    </div>
+    <div style="overflow-x:auto">
+      <table class="adm-table" style="width:100%">
+        <thead>
+          <tr>
+            <th style="padding-left:1rem">Company</th>
+            <th>Contact</th>
+            <th>BCC Email</th>
+            <th>Phone</th>
+            <th>Status</th>
+            <th style="text-align:right;padding-right:1rem">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length === 0
+            ? `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No companies found.</td></tr>`
+            : rows.map(c => {
+                const isActive = String(c.active || 'TRUE').toUpperCase() !== 'FALSE';
+                const statusBadge = isActive
+                  ? `<span style="background:#d1fae5;color:#065f46;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Active</span>`
+                  : `<span style="background:#f3f4f6;color:#6b7280;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Inactive</span>`;
+                return `<tr>
+                  <td style="padding-left:1rem;font-weight:600">${escHtml(c.company_name || '—')}<br>
+                    <span style="font-size:.75rem;color:var(--muted);font-weight:400">${escHtml(c.pool_company_id || '')}</span>
+                  </td>
+                  <td>${escHtml(c.contact_name || '—')}</td>
+                  <td style="font-size:.85rem">${c.report_bcc_email ? `<a href="mailto:${escHtml(c.report_bcc_email)}" style="color:var(--teal)">${escHtml(c.report_bcc_email)}</a>` : '<span style="color:var(--muted)">—</span>'}</td>
+                  <td>${escHtml(c.phone || '—')}</td>
+                  <td>${statusBadge}</td>
+                  <td style="text-align:right;padding-right:1rem">
+                    <button class="adm-new-btn" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);font-size:.8rem;padding:.35rem .9rem"
+                      onclick='openCompanyModal(${JSON.stringify(c)})'>Edit</button>
+                  </td>
+                </tr>`;
+              }).join('')
+          }
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function openCompanyModal(company) {
+  document.getElementById('co-id').value      = company ? (company.pool_company_id || '') : '';
+  document.getElementById('co-name').value    = company ? (company.company_name || '') : '';
+  document.getElementById('co-contact').value = company ? (company.contact_name || '') : '';
+  document.getElementById('co-email').value   = company ? (company.report_bcc_email || '') : '';
+  document.getElementById('co-phone').value   = company ? (company.phone || '') : '';
+  document.getElementById('co-notes').value   = company ? (company.notes || '') : '';
+  document.getElementById('co-modal-title').textContent = company ? 'Edit Company' : 'Add Company';
+  document.getElementById('co-error').style.display = 'none';
+  document.getElementById('co-error').textContent = '';
+
+  const deactivateBtn = document.getElementById('co-deactivate-btn');
+  if (company && company.pool_company_id) {
+    const isActive = String(company.active || 'TRUE').toUpperCase() !== 'FALSE';
+    deactivateBtn.style.display = 'inline-flex';
+    deactivateBtn.textContent = isActive ? 'Deactivate' : 'Reactivate';
+    deactivateBtn.dataset.active = isActive ? 'TRUE' : 'FALSE';
+    deactivateBtn.dataset.id = company.pool_company_id;
+  } else {
+    deactivateBtn.style.display = 'none';
+  }
+
+  document.getElementById('co-modal-backdrop').classList.add('open');
+  document.getElementById('co-name').focus();
+}
+
+function closeCompanyModal(event) {
+  if (event && event.target !== document.getElementById('co-modal-backdrop')) return;
+  document.getElementById('co-modal-backdrop').classList.remove('open');
+}
+
+async function saveCompany() {
+  const errEl  = document.getElementById('co-error');
+  const saveBtn = document.getElementById('co-save-btn');
+  const name   = document.getElementById('co-name').value.trim();
+  if (!name) {
+    errEl.textContent = 'Company name is required.';
+    errEl.style.display = 'block';
+    document.getElementById('co-name').focus();
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving…';
+  errEl.style.display = 'none';
+
+  const company = {
+    pool_company_id:  document.getElementById('co-id').value.trim() || undefined,
+    company_name:     name,
+    contact_name:     document.getElementById('co-contact').value.trim(),
+    report_bcc_email: document.getElementById('co-email').value.trim(),
+    phone:            document.getElementById('co-phone').value.trim(),
+    notes:            document.getElementById('co-notes').value.trim(),
+    active:           'TRUE'
+  };
+
+  try {
+    const res = await api({ action: 'upsert_startup_company', token: _s.token, company });
+    if (!res.ok) throw new Error(res.error || 'Save failed');
+    document.getElementById('co-modal-backdrop').classList.remove('open');
+    _companiesCache = null;
+    await _loadAndRenderCompaniesTab();
+  } catch(e) {
+    errEl.textContent = String(e.message || e);
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+  }
+}
+
+async function deactivateCompany() {
+  const btn = document.getElementById('co-deactivate-btn');
+  const id  = btn.dataset.id;
+  const currentlyActive = btn.dataset.active === 'TRUE';
+  const newActive = currentlyActive ? 'FALSE' : 'TRUE';
+  const label = currentlyActive ? 'Deactivating…' : 'Reactivating…';
+  const confirm_msg = currentlyActive
+    ? 'Deactivate this company? They will no longer receive BCC emails for new service reports.'
+    : 'Reactivate this company?';
+
+  if (!confirm(confirm_msg)) return;
+
+  btn.disabled = true;
+  btn.textContent = label;
+
+  const existing = (_companiesCache || []).find(c => c.pool_company_id === id) || {};
+  try {
+    const res = await api({ action: 'upsert_startup_company', token: _s.token, company: { ...existing, active: newActive } });
+    if (!res.ok) throw new Error(res.error || 'Failed');
+    document.getElementById('co-modal-backdrop').classList.remove('open');
+    _companiesCache = null;
+    await _loadAndRenderCompaniesTab();
+  } catch(e) {
+    alert('Error: ' + String(e.message || e));
+    btn.disabled = false;
+    btn.textContent = currentlyActive ? 'Deactivate' : 'Reactivate';
   }
 }
