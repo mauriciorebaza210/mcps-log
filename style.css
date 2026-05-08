@@ -2181,6 +2181,23 @@ select.q-inp{cursor:pointer}
 .scl-pdf-btn{display:inline-block;padding:.25rem .6rem;background:var(--teal);color:#fff;border-radius:var(--r-sm);font-size:var(--text-sm);font-weight:600;text-decoration:none;white-space:nowrap}
 .scl-pdf-btn:hover{background:var(--teal-mid)}
 
+/* Companies table */
+.co-table{width:100%;border-collapse:collapse}
+.co-table thead tr{background:var(--surface);border-bottom:2px solid var(--border)}
+.co-table th{padding:.6rem .9rem;text-align:left;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);white-space:nowrap}
+.co-table td{padding:.85rem .9rem;border-bottom:1px solid var(--border);font-size:.9rem;vertical-align:middle}
+.co-table tbody tr:last-child td{border-bottom:none}
+.co-table tbody tr:hover{background:var(--surface)}
+@media(max-width:767px){
+  .co-table thead{display:none}
+  .co-table,.co-table tbody,.co-table tr,.co-table td{display:block;width:100%}
+  .co-table tbody tr{border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:.75rem;overflow:hidden}
+  .co-table td{display:flex;justify-content:space-between;align-items:center;padding:.55rem .9rem;border-bottom:1px solid var(--border);font-size:.85rem}
+  .co-table td:last-child{border-bottom:none}
+  .co-table td::before{content:attr(data-label);font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);flex-shrink:0;margin-right:.75rem}
+  .co-table td[data-label="Company"]{background:var(--surface);font-weight:700;font-size:.95rem}
+}
+
 /* Drawer overrides */
 .scl-drawer{width:min(600px,100vw)}
 

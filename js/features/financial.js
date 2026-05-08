@@ -2199,44 +2199,46 @@ function _renderCompaniesTab() {
         value="${escHtml(_companiesSearch)}"
         oninput="_companiesSearch=this.value;_renderCompaniesTab()">
     </div>
-    <div style="overflow-x:auto">
-      <table class="adm-table" style="width:100%">
-        <thead>
-          <tr>
-            <th style="padding-left:1rem">Company</th>
-            <th>Contact</th>
-            <th>BCC Email</th>
-            <th>Phone</th>
-            <th>Status</th>
-            <th style="text-align:right;padding-right:1rem">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.length === 0
-            ? `<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--muted)">No companies found.</td></tr>`
-            : rows.map(c => {
-                const isActive = String(c.active || 'TRUE').toUpperCase() !== 'FALSE';
-                const statusBadge = isActive
-                  ? `<span style="background:#d1fae5;color:#065f46;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Active</span>`
-                  : `<span style="background:#f3f4f6;color:#6b7280;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Inactive</span>`;
-                return `<tr>
-                  <td style="padding-left:1rem;font-weight:600">${escHtml(c.company_name || '—')}<br>
-                    <span style="font-size:.75rem;color:var(--muted);font-weight:400">${escHtml(c.pool_company_id || '')}</span>
-                  </td>
-                  <td>${escHtml(c.contact_name || '—')}</td>
-                  <td style="font-size:.85rem">${c.report_bcc_email ? `<a href="mailto:${escHtml(c.report_bcc_email)}" style="color:var(--teal)">${escHtml(c.report_bcc_email)}</a>` : '<span style="color:var(--muted)">—</span>'}</td>
-                  <td>${escHtml(c.phone || '—')}</td>
-                  <td>${statusBadge}</td>
-                  <td style="text-align:right;padding-right:1rem">
-                    <button class="adm-new-btn" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);font-size:.8rem;padding:.35rem .9rem"
-                      onclick='openCompanyModal(${JSON.stringify(c)})'>Edit</button>
-                  </td>
-                </tr>`;
-              }).join('')
-          }
-        </tbody>
-      </table>
-    </div>`;
+    <table class="co-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Contact</th>
+          <th>BCC Email</th>
+          <th>Phone</th>
+          <th>Status</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.length === 0
+          ? `<tr><td colspan="6" data-label="" style="text-align:center;padding:2rem;color:var(--muted)">No companies found.</td></tr>`
+          : rows.map(c => {
+              const isActive = String(c.active || 'TRUE').toUpperCase() !== 'FALSE';
+              const statusBadge = isActive
+                ? `<span style="background:#d1fae5;color:#065f46;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Active</span>`
+                : `<span style="background:#f3f4f6;color:#6b7280;padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">Inactive</span>`;
+              const emailCell = c.report_bcc_email
+                ? `<a href="mailto:${escHtml(c.report_bcc_email)}" style="color:var(--teal);word-break:break-all">${escHtml(c.report_bcc_email)}</a>`
+                : `<span style="color:var(--muted)">—</span>`;
+              return `<tr>
+                <td data-label="Company" style="font-weight:600">
+                  ${escHtml(c.company_name || '—')}
+                  <span style="display:block;font-size:.72rem;color:var(--muted);font-weight:400">${escHtml(c.pool_company_id || '')}</span>
+                </td>
+                <td data-label="Contact">${escHtml(c.contact_name || '—')}</td>
+                <td data-label="BCC Email">${emailCell}</td>
+                <td data-label="Phone">${escHtml(c.phone || '—')}</td>
+                <td data-label="Status">${statusBadge}</td>
+                <td data-label="Actions" style="text-align:right">
+                  <button class="adm-new-btn" style="background:var(--surface);color:var(--text);border:1.5px solid var(--border);font-size:.8rem;padding:.35rem .9rem"
+                    onclick='openCompanyModal(${JSON.stringify(c)})'>Edit</button>
+                </td>
+              </tr>`;
+            }).join('')
+        }
+      </tbody>
+    </table>`;
 }
 
 function openCompanyModal(company) {
