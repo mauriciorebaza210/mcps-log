@@ -82,7 +82,7 @@ const SCL_POOL_SCHOOL = [
       { key: 'PH',                range: '7.2–7.6',   id: 'scl-chem-ph' },
       { key: 'Total Alkalinity',  range: '80–120',    id: 'scl-chem-alkalinity' },
       { key: 'Calcium Hardness',  range: '200–400',   id: 'scl-chem-calcium' },
-      { key: 'Tablet Levels',     range: '',          id: 'scl-chem-tablets' }
+      { key: 'Tablet Levels',     range: '',          id: 'scl-chem-tablets', options: ['Low','Medium','High'] }
     ]
   },
   {
@@ -390,12 +390,15 @@ function _buildPoolSchoolForm() {
   });
 
   const chemDef = SCL_POOL_SCHOOL.find(s => s.type === 'chemical');
-  const chemRows = chemDef ? chemDef.chemicals.map(c =>
-    `<div class="scl-chem-row">
-      <span class="scl-chem-label">${escHtml(c.key)} <span class="scl-chem-range">${escHtml(c.range)}</span></span>
-      <input class="scl-chem-inp scl-inp" id="${c.id}" type="text" placeholder="—">
-    </div>`
-  ).join('') + `
+  const chemRows = chemDef ? chemDef.chemicals.map(c => {
+    const input = c.options
+      ? `<div class="scl-yn-btns">${c.options.map(o => `<button class="scl-yn-btn" data-chem-id="${escHtml(c.id)}" data-val="${escHtml(o)}" onclick="sclToggleYN(this)">${escHtml(o)}</button>`).join('')}</div>`
+      : `<input class="scl-chem-inp scl-inp" id="${escHtml(c.id)}" type="text" placeholder="—">`;
+    return `<div class="scl-chem-row">
+      <span class="scl-chem-label">${escHtml(c.key)}${c.range ? ` <span class="scl-chem-range">${escHtml(c.range)}</span>` : ''}</span>
+      ${input}
+    </div>`;
+  }).join('') + `
     <div class="scl-chem-row" style="border-top:2px solid var(--border);margin-top:.25rem;padding-top:.5rem">
       <span class="scl-chem-label" style="font-weight:700">Levels Are Normal</span>
       <div class="scl-yn-btns">
@@ -464,8 +467,13 @@ function _buildPoolSchoolForm() {
 
 // ── YES / NO toggle ───────────────────────────────────────────────────────────
 function sclToggleYN(btn) {
-  const row = btn.closest('.scl-yn-row, .scl-chem-row');
-  if (row) row.querySelectorAll('.scl-yn-btn').forEach(b => b.classList.remove('active'));
+  const chemId = btn.dataset.chemId;
+  if (chemId) {
+    document.querySelectorAll(`.scl-yn-btn[data-chem-id="${chemId}"]`).forEach(b => b.classList.remove('active'));
+  } else {
+    const row = btn.closest('.scl-yn-row, .scl-chem-row');
+    if (row) row.querySelectorAll('.scl-yn-btn').forEach(b => b.classList.remove('active'));
+  }
   btn.classList.add('active');
 }
 
@@ -580,7 +588,14 @@ function _serializeSclForm() {
         });
       } else if (s.type === 'chemical') {
         const chemVals = {};
-        s.chemicals.forEach(c => { chemVals[c.key] = g(c.id); });
+        s.chemicals.forEach(c => {
+          if (c.options) {
+            const active = document.querySelector(`.scl-yn-btn.active[data-chem-id="${c.id}"]`);
+            chemVals[c.key] = active ? active.dataset.val : null;
+          } else {
+            chemVals[c.key] = g(c.id);
+          }
+        });
         chemVals['Levels Are Normal'] = (() => { const a = document.querySelector('.scl-yn-btn.active[data-section="Chemical Levels"][data-item="Levels Are Normal"]'); return a ? a.dataset.val : null; })();
         itemsData['Chemical Levels'] = chemVals;
       }
@@ -639,9 +654,17 @@ function _applyDraftToForm(draft) {
       if (typeof val === 'boolean') {
         const chk = document.querySelector(`input[data-section="${section}"][data-item="${item}"]`);
         if (chk) chk.checked = val;
-      } else if (val === 'yes' || val === 'no') {
-        const btn = document.querySelector(`.scl-yn-btn[data-section="${section}"][data-item="${item}"][data-val="${val}"]`);
-        if (btn) btn.classList.add('active');
+      } else if (val && typeof val === 'string') {
+        // YES/NO buttons (data-section/data-item) or option buttons (data-chem-id)
+        const chemDef = SCL_POOL_SCHOOL.find(s => s.type === 'chemical');
+        const chem = chemDef && chemDef.chemicals.find(c => c.key === item);
+        if (chem && chem.options) {
+          const btn = document.querySelector(`.scl-yn-btn[data-chem-id="${chem.id}"][data-val="${val}"]`);
+          if (btn) btn.classList.add('active');
+        } else {
+          const btn = document.querySelector(`.scl-yn-btn[data-section="${section}"][data-item="${item}"][data-val="${val}"]`);
+          if (btn) btn.classList.add('active');
+        }
       }
     });
   });
