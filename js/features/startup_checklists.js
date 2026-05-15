@@ -78,10 +78,11 @@ const SCL_POOL_SCHOOL = [
   {
     section: 'Chemical Levels', type: 'chemical',
     chemicals: [
-      { key: 'PH',          range: '7.2–7.6',   id: 'scl-chem-ph' },
-      { key: 'Chlorine',    range: '2.0–4.0',   id: 'scl-chem-chlorine' },
-      { key: 'Acid',        range: '110–150',    id: 'scl-chem-acid' },
-      { key: 'Salt System', range: '250–325',    id: 'scl-chem-salt' }
+      { key: 'Chlorine',          range: '2.0–4.0',   id: 'scl-chem-chlorine' },
+      { key: 'PH',                range: '7.2–7.6',   id: 'scl-chem-ph' },
+      { key: 'Total Alkalinity',  range: '80–120',    id: 'scl-chem-alkalinity' },
+      { key: 'Calcium Hardness',  range: '200–400',   id: 'scl-chem-calcium' },
+      { key: 'Tablet Levels',     range: '',          id: 'scl-chem-tablets' }
     ]
   },
   {
@@ -578,11 +579,10 @@ function _serializeSclForm() {
           itemsData[s.section][item] = active ? active.dataset.val : null;
         });
       } else if (s.type === 'chemical') {
-        itemsData['Chemical Levels'] = {
-          PH: g('scl-chem-ph'), Chlorine: g('scl-chem-chlorine'),
-          Acid: g('scl-chem-acid'), 'Salt System': g('scl-chem-salt'),
-          'Levels Are Normal': (() => { const a = document.querySelector('.scl-yn-btn.active[data-section="Chemical Levels"][data-item="Levels Are Normal"]'); return a ? a.dataset.val : null; })()
-        };
+        const chemVals = {};
+        s.chemicals.forEach(c => { chemVals[c.key] = g(c.id); });
+        chemVals['Levels Are Normal'] = (() => { const a = document.querySelector('.scl-yn-btn.active[data-section="Chemical Levels"][data-item="Levels Are Normal"]'); return a ? a.dataset.val : null; })();
+        itemsData['Chemical Levels'] = chemVals;
       }
     });
   } else {
