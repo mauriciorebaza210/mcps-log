@@ -2256,6 +2256,7 @@ textarea.scl-inp{resize:vertical;min-height:60px}
 .scl-yn-yes.active{background:var(--success);color:#fff;border-color:var(--success)}
 .scl-yn-no{color:#dc2626;border-color:#fecaca}
 .scl-yn-no.active{background:#dc2626;color:#fff;border-color:#dc2626}
+.scl-yn-btn.active:not(.scl-yn-yes):not(.scl-yn-no){background:var(--teal);color:#fff;border-color:var(--teal)}
 
 /* ── SCL CHEMICAL LEVELS ─────────────────────────────────────────────────── */
 .scl-chem-grid{display:flex;flex-direction:column}
