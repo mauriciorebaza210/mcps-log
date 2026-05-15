@@ -111,6 +111,7 @@ let _sclCustSigCtx    = null;
 let _sclCustDrawing   = false;
 let _sclCustLastX     = 0, _sclCustLastY = 0;
 let _sclHasCustSig    = false;
+let _sclTestMode      = false;
 
 const _sclDraftKey = () => `mcps_scl_draft_${_sclType}`;
 
@@ -212,8 +213,39 @@ function closeSclDrawer() {
   document.getElementById('scl-backdrop').style.display = 'none';
   document.getElementById('scl-drawer').classList.remove('open');
   document.body.style.overflow = '';
-  _sclPreFill = null;
+  _sclPreFill  = null;
+  _sclTestMode = false;
   _sclSigCanvas = _sclSigCtx = _sclCustSigCanvas = _sclCustSigCtx = null;
+  const tb = document.getElementById('scl-test-banner');
+  if (tb) tb.style.display = 'none';
+}
+
+// ── Test mode ─────────────────────────────────────────────────────────────────
+function sclEnableTestMode() {
+  _sclTestMode = true;
+
+  const tb = document.getElementById('scl-test-banner');
+  if (tb) tb.style.display = 'flex';
+
+  const btn = document.getElementById('scl-submit-btn');
+  if (btn) { btn.textContent = 'Submit Test'; btn.style.background = '#d97706'; }
+
+  // Inject a synthetic test client into the dropdown
+  const sel = document.getElementById('scl-client-select');
+  if (sel && !sel.querySelector('option[value="__test__"]')) {
+    const opt = document.createElement('option');
+    opt.value           = '__test__';
+    opt.textContent     = 'TEST CUSTOMER';
+    opt.dataset.pool    = 'TEST-001';
+    opt.dataset.name    = 'Test Customer';
+    opt.dataset.addr    = '123 Test St, San Antonio TX 78245';
+    opt.dataset.phone   = '2105550000';
+    sel.appendChild(opt);
+  }
+  if (sel) { sel.value = '__test__'; sclClientSelected(); }
+
+  const techEl = document.getElementById('scl-tech-name');
+  if (techEl && !techEl.value) techEl.value = (_s && _s.name) ? _s.name : 'Test Tech';
 }
 
 // ── Client loader ─────────────────────────────────────────────────────────────
@@ -654,7 +686,7 @@ function submitStartupChecklist() {
   const data = _serializeSclForm();
   if (!data) return;
 
-  if (!data.quote_id) {
+  if (!data.quote_id && !_sclTestMode) {
     msg.textContent='Please select a client.'; msg.className='im im-err'; msg.style.display='block'; return;
   }
   if (!data.technician_name) {
@@ -667,28 +699,35 @@ function submitStartupChecklist() {
     msg.textContent='Please capture the customer signature before submitting.'; msg.className='im im-err'; msg.style.display='block'; return;
   }
 
-  msg.textContent='Saving… generating PDF (this may take a moment)…';
+  msg.textContent = _sclTestMode
+    ? 'Running test — generating PDF (no data will be saved)…'
+    : 'Saving… generating PDF (this may take a moment)…';
   msg.className='im'; msg.style.display='block';
   if (btn) { btn.disabled=true; btn.textContent='Saving…'; }
+
+  // Ensure test submissions have a placeholder quote_id
+  if (_sclTestMode && !data.quote_id) data.quote_id = '__test__';
 
   api({
     action: 'save_startup_checklist',
     token: _s.token,
     ...data,
+    is_test:                 _sclTestMode,
     signature_data:          _sclSigCanvas     ? _sclSigCanvas.toDataURL('image/png')     : '',
     customer_signature_data: _sclCustSigCanvas ? _sclCustSigCanvas.toDataURL('image/png') : ''
   }).then(r => {
     if (!r.ok) {
       msg.textContent=r.error||'Save failed.'; msg.className='im im-err'; msg.style.display='block';
-      if (btn) { btn.disabled=false; btn.textContent='Submit Checklist'; }
+      if (btn) { btn.disabled=false; btn.textContent = _sclTestMode ? 'Submit Test' : 'Submit Checklist'; }
       return;
     }
-    localStorage.removeItem(_sclDraftKey());
-    msg.textContent='Checklist saved!'; msg.className='im im-ok'; msg.style.display='block';
-    if (_activeHubTab === 'startup_checklists') loadStartupChecklistsTab();
+    if (!_sclTestMode) localStorage.removeItem(_sclDraftKey());
+    msg.textContent = _sclTestMode ? 'Test complete! Check the PDF.' : 'Checklist saved!';
+    msg.className='im im-ok'; msg.style.display='block';
+    if (!_sclTestMode && _activeHubTab === 'startup_checklists') loadStartupChecklistsTab();
     setTimeout(() => { closeSclDrawer(); if (r.pdf_url) window.open(r.pdf_url,'_blank'); }, 1200);
   }).catch(() => {
     msg.textContent='Network error. Please try again.'; msg.className='im im-err'; msg.style.display='block';
-    if (btn) { btn.disabled=false; btn.textContent='Submit Checklist'; }
+    if (btn) { btn.disabled=false; btn.textContent = _sclTestMode ? 'Submit Test' : 'Submit Checklist'; }
   });
 }

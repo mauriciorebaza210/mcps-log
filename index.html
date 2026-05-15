@@ -1738,9 +1738,13 @@
       </div>
       <button class="drawer-close" onclick="closeSclDrawer()">✕</button>
     </div>
+    <div id="scl-test-banner" style="display:none;padding:.5rem 1rem;background:#fef3c7;border-bottom:2px solid #f59e0b;font-size:.82rem;font-weight:600;color:#92400e;align-items:center;gap:.5rem">
+      🧪 TEST MODE — PDF will generate but nothing saves to Sheets and no email is sent
+    </div>
     <div class="drawer-body" id="scl-drawer-body" style="overflow-y:auto;flex:1;padding:0"></div>
     <div class="drawer-footer" style="padding:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem;align-items:center">
       <button class="scl-draft-btn" onclick="sclSaveDraft()">Save Draft</button>
+      <button class="scl-draft-btn" onclick="sclEnableTestMode()" id="scl-test-btn" title="Fill with test data and submit without saving" style="background:rgba(217,119,6,.12);color:#92400e;border-color:#f59e0b">🧪 Test</button>
       <div style="flex:1"></div>
       <button class="conf-cancel-btn" onclick="closeSclDrawer()">Cancel</button>
       <button class="conf-submit-btn" id="scl-submit-btn" onclick="submitStartupChecklist()">Submit Checklist</button>
