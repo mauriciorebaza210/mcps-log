@@ -1372,27 +1372,38 @@ function toggleQuizPreview() {
 function headsUp(e, btn) {
   e.stopPropagation();
   if (btn.classList.contains('sending') || btn.classList.contains('sent')) return;
-  const poolId = btn.dataset.poolId;
+  const poolId   = btn.dataset.poolId;
   const custName = btn.dataset.custName;
   btn.classList.add('sending');
-  api({ action: 'send_heads_up', token: _s.token, pool_id: poolId, customer_name: custName })
+  api({ action: 'get_pool_phone', token: _s.token, pool_id: poolId, customer_name: custName })
     .then(function(res) {
       btn.classList.remove('sending');
-      if (res.ok) {
-        btn.classList.add('sent');
-        btn.title = 'Heads up sent!';
-        huToast('\u2705 Heads up sent to ' + res.customer + '!');
-        setTimeout(function() {
-          btn.classList.remove('sent');
-          btn.title = 'Send heads up SMS';
-        }, 5000);
-      } else {
-        huToast('\u26a0\ufe0f ' + (res.error || 'Could not send heads up'), true);
+      if (!res.ok) {
+        huToast('\u26a0\ufe0f ' + (res.error || 'Could not find phone number'), true);
+        return;
       }
+      const hour     = new Date().getHours();
+      const greeting = hour < 12 ? 'Good morning' : 'Good afternoon';
+      const techName = (_s && _s.name) ? _s.name : 'your technician';
+      const msg = greeting + '. This is ' + techName + ' with Mission Custom Pool Solutions. '
+        + 'We just wanted to let you know we are on the way to your property and will be servicing your pool shortly.';
+
+      navigator.clipboard.writeText(msg).catch(function() {});
+
+      const digits = res.phone.replace(/[^0-9]/g, '');
+      window.open('sms:' + digits + '&body=' + encodeURIComponent(msg), '_self');
+
+      btn.classList.add('sent');
+      btn.title = 'Message ready!';
+      huToast('\u2705 Opening Messages to ' + res.firstName + '...');
+      setTimeout(function() {
+        btn.classList.remove('sent');
+        btn.title = 'Send heads up SMS';
+      }, 5000);
     })
     .catch(function() {
       btn.classList.remove('sending');
-      huToast('\u26a0\ufe0f Network error — could not send heads up', true);
+      huToast('\u26a0\ufe0f Network error — could not load phone number', true);
     });
 }
 

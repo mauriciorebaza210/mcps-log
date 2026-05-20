@@ -894,7 +894,11 @@ function renderDayCard(dayData) {
     const svcClass = getSvcClass_(pool.service);
     const svcLabel = getSvcLabel_(pool.service);
     const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
-    const indivMaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(pool.address + ', ' + pool.city + ', TX');
+    const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const _encAddr = encodeURIComponent(pool.address + ', ' + (pool.city || '') + ', TX');
+    const indivMaps = _isIOS
+      ? 'https://maps.apple.com/?daddr=' + _encAddr + '&dirflg=d'
+      : 'https://www.google.com/maps/dir/?api=1&destination=' + _encAddr;
     const isStartupGhost = pool._startupDay > 1;
     // Admin tap: ghost startups open the action sheet on their origin day
     const actionDay = isStartupGhost ? pool._startupOriginDay : dayData.day;
