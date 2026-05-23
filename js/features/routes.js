@@ -962,6 +962,7 @@ function renderDayCard(dayData) {
           ${pool.operator && isAdmin() ? `<span class="ps-label svc-other">${pool.op_name || pool.operator}</span>` : ''}
           ${pool.priority ? `<span class="ps-label" style="background:#fee2e2;color:#ef4444">High Priority</span>` : ''}
         </div>
+        ${pool.gate_code ? `<div class="stop-gate-code" style="font-size:.75rem;color:var(--teal);margin-top:.25rem;font-weight:600;letter-spacing:.01em">🔑 ${escHtml(pool.gate_code)}</div>` : ''}
         ${pool.notes ? `<div class="stop-notes" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;font-style:italic">📋 ${pool.notes}</div>` : ''}
 
         <div class="ps-btns" onclick="event.stopPropagation()">
@@ -1474,10 +1475,15 @@ function openPoolAction(poolId, day, operator, pinned) {
   if (!isAdmin()) return;
   const pool = findPool_(poolId);
   const isStartup = !!(pool && (pool.service || '').toLowerCase().includes('startup'));
-  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, scope: 'permanent' };
+  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, scope: 'permanent', startup_start_date: pool ? pool.startup_start_date : null };
   // Fill title
   document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
   document.getElementById('pas-sub').textContent = pool ? `${pool.address}, ${pool.city} · ${pool.service}` : '';
+  // Gate code
+  const gcInput = document.getElementById('pas-gate-code-input');
+  if (gcInput) gcInput.value = (pool && pool.gate_code) ? pool.gate_code : '';
+  const gcBtn = document.getElementById('pas-gate-code-save-btn');
+  if (gcBtn) { gcBtn.textContent = 'Save'; gcBtn.disabled = false; }
   // Day grid
   const dayGrid = document.getElementById('pas-day-grid');
   dayGrid.innerHTML = ALL_DAYS.map(d =>
@@ -1508,12 +1514,22 @@ function closePoolAction() {
   _updateStartupSpanPreview_();
   const startupActionsEl = document.getElementById('pas-startup-actions');
   if (startupActionsEl) startupActionsEl.style.display = 'none';
-  // Reset convert day picker to initial state
+  // Reset recurring picker
   const convertBtn = document.getElementById('pas-convert-btn');
   const picker = document.getElementById('pas-convert-day-picker');
-  if (convertBtn) convertBtn.style.display = '';
+  if (convertBtn) { convertBtn.style.display = ''; convertBtn.textContent = '♻️ Add to recurring route'; convertBtn.disabled = false; }
   if (picker) picker.style.display = 'none';
-  pasSetScope('permanent'); // reset scope toggle for next open
+  // Reset reschedule picker
+  const rescheduleBtn    = document.getElementById('pas-reschedule-btn');
+  const reschedulePicker = document.getElementById('pas-reschedule-picker');
+  if (rescheduleBtn) rescheduleBtn.style.display = '';
+  if (reschedulePicker) reschedulePicker.style.display = 'none';
+  // Reset first-month picker
+  const fmBtn = document.getElementById('pas-fm-btn');
+  const fmPicker = document.getElementById('pas-fm-picker');
+  if (fmBtn) { fmBtn.style.display = ''; fmBtn.textContent = '📅 Sponsor first month — schedule 4 visits'; fmBtn.style.background = '#eff6ff'; fmBtn.style.color = '#1d4ed8'; fmBtn.disabled = false; }
+  if (fmPicker) fmPicker.style.display = 'none';
+  pasSetScope('permanent');
 }
 
 function pasSelectDay(btn, day) {
@@ -1683,6 +1699,32 @@ function _dateForDay_(dayName) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// ── Save gate code for a pool ───────────────────────────────────────────────
+function pasSaveGateCode() {
+  if (!_pasState) return;
+  const btn = document.getElementById('pas-gate-code-save-btn');
+  const input = document.getElementById('pas-gate-code-input');
+  const gateCode = input ? input.value.trim() : '';
+  btn.disabled = true; btn.textContent = 'Saving...';
+  api({ action: 'save_gate_code', token: _s.token, pool_id: _pasState.pool_id, gate_code: gateCode })
+    .then(res => {
+      btn.disabled = false;
+      if (res.ok) {
+        const pool = findPool_(_pasState.pool_id);
+        if (pool) pool.gate_code = gateCode;
+        btn.textContent = 'Saved ✓';
+        setTimeout(() => { btn.textContent = 'Save'; }, 2000);
+        renderRoutePage();
+      } else {
+        btn.textContent = 'Save';
+        alert('Error: ' + (res.error || 'Unknown'));
+      }
+    }).catch(e => {
+      btn.disabled = false; btn.textContent = 'Save';
+      alert('Network error: ' + e.message);
+    });
+}
+
 // ── Pool action sheet scope toggle ──────────────────────────────────────────
 function pasSetScope(scope) {
   if (!_pasState) return;
@@ -1709,63 +1751,257 @@ function pasSetScope(scope) {
 }
 
 // ── Startup: convert to Weekly Full Service — step 1: show day picker ────────
+// ── Reschedule startup days ───────────────────────────────────────────────────
+
+function openRescheduleStartupPanel() {
+  if (!_pasState) return;
+  const btn    = document.getElementById('pas-reschedule-btn');
+  const picker = document.getElementById('pas-reschedule-picker');
+  if (!picker) return;
+  const dateInput = document.getElementById('pas-reschedule-date');
+  if (dateInput && _pasState.startup_start_date) {
+    dateInput.value = String(_pasState.startup_start_date).split('T')[0];
+  }
+  _updateReschedulePreview_();
+  if (btn) btn.style.display = 'none';
+  picker.style.display = 'flex';
+}
+
+function _updateReschedulePreview_() {
+  const preview   = document.getElementById('pas-reschedule-preview');
+  const dateInput = document.getElementById('pas-reschedule-date');
+  if (!preview) return;
+  if (!dateInput || !dateInput.value) { preview.innerHTML = ''; return; }
+  try {
+    const d1 = new Date(dateInput.value + 'T12:00:00');
+    const d2 = new Date(d1); d2.setDate(d2.getDate() + 1);
+    const d3 = new Date(d1); d3.setDate(d3.getDate() + 2);
+    const fmt = dt => dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    preview.innerHTML = `<span>Day 1: <strong>${fmt(d1)}</strong></span> &nbsp;·&nbsp; <span>Day 2: <strong>${fmt(d2)}</strong></span> &nbsp;·&nbsp; <span>Day 3: <strong>${fmt(d3)}</strong></span>`;
+  } catch(e) { preview.innerHTML = ''; }
+}
+
+function cancelRescheduleStartup() {
+  const btn    = document.getElementById('pas-reschedule-btn');
+  const picker = document.getElementById('pas-reschedule-picker');
+  if (picker) picker.style.display = 'none';
+  if (btn) btn.style.display = '';
+}
+
+function confirmRescheduleStartup() {
+  if (!_pasState) return;
+  const dateInput = document.getElementById('pas-reschedule-date');
+  if (!dateInput || !dateInput.value) { alert('Please pick a date for Day 1.'); return; }
+  const btn = document.getElementById('pas-reschedule-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  api({ secret: SEC, action: 'reschedule_startup', token: _s.token,
+        pool_id: _pasState.pool_id, day_1_date: dateInput.value })
+    .then(res => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
+      if (res.ok) { closePoolAction(); _routeData = null; loadRoutes(); }
+      else alert('Error: ' + (res.error || 'Unknown'));
+    })
+    .catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
+      alert('Network error: ' + e.message);
+    });
+}
+
+// ── First month: date helpers ─────────────────────────────────────────────────
+
+// Returns Monday (yyyy-MM-dd) of the first service week after the 3-day startup.
+function _calcFirstMonthWeek1_(startupStartDate) {
+  if (!startupStartDate) return '';
+  try {
+    const d = new Date(String(startupStartDate).split('T')[0] + 'T12:00:00');
+    d.setDate(d.getDate() + 3); // day after startup_day_3
+    const dow = d.getDay(); // 0=Sun, 1=Mon
+    const daysToMon = dow === 0 ? 1 : dow === 1 ? 0 : 8 - dow;
+    d.setDate(d.getDate() + daysToMon);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  } catch(e) { return ''; }
+}
+
+// Returns Monday (yyyy-MM-dd) of week 5 — first recurring week after first month.
+function _firstMonthWeek5Monday_(startupStartDate) {
+  const w1 = _calcFirstMonthWeek1_(startupStartDate);
+  if (!w1) return '';
+  const [y, m, d] = w1.split('-').map(Number);
+  const w5 = new Date(y, m - 1, d + 28);
+  const pad = n => String(n).padStart(2, '0');
+  return `${w5.getFullYear()}-${pad(w5.getMonth() + 1)}-${pad(w5.getDate())}`;
+}
+
+// Returns array of 4 display strings like "Thu May 28".
+function _previewFmDates_(week1Monday, dayOfWeek) {
+  const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const dayIdx = DAYS.indexOf(dayOfWeek);
+  if (dayIdx === -1 || !week1Monday) return [];
+  try {
+    const [y, m, d] = week1Monday.split('-').map(Number);
+    const base = new Date(y, m - 1, d + dayIdx);
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const dt = new Date(base);
+      dt.setDate(dt.getDate() + i * 7);
+      out.push(dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+    }
+    return out;
+  } catch(e) { return []; }
+}
+
+function _updateFmPreview_() {
+  const preview = document.getElementById('pas-fm-preview');
+  if (!preview || !_pasState) return;
+  const week1 = _calcFirstMonthWeek1_(_pasState.startup_start_date);
+  const day = _pasState._fmDay;
+  const dates = week1 && day ? _previewFmDates_(week1, day) : [];
+  if (!dates.length) { preview.innerHTML = ''; return; }
+  preview.innerHTML = dates.map((dt, i) =>
+    `<span style="white-space:nowrap">Wk ${i + 1}: <strong>${dt}</strong></span>`
+  ).join(' &nbsp;·&nbsp; ');
+}
+
+// ── First month panel ─────────────────────────────────────────────────────────
+
+function openFirstMonthPanel() {
+  if (!_pasState) return;
+  const picker = document.getElementById('pas-fm-picker');
+  const btn    = document.getElementById('pas-fm-btn');
+  if (!picker) return;
+
+  const currentDay = _pasState.day || 'Monday';
+  if (!_pasState._fmDay) _pasState._fmDay = currentDay;
+
+  document.getElementById('pas-fm-day-grid').innerHTML =
+    ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d =>
+      `<button onclick="pasFmSelectDay(this,'${d}')"
+        style="padding:.3rem .55rem;border-radius:5px;border:1.5px solid var(--border);
+               background:${d === _pasState._fmDay ? '#1d4ed8' : 'transparent'};
+               color:${d === _pasState._fmDay ? '#fff' : 'var(--text)'};
+               font-size:.78rem;font-weight:600;cursor:pointer">${d.slice(0, 3)}</button>`
+    ).join('');
+
+  const techSel = document.getElementById('pas-fm-tech-select');
+  const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
+  techSel.innerHTML = '<option value="">Unassigned</option>' +
+    ops.map(op => { const un = op.username || op, nm = op.name || op; return `<option value="${escHtml(un)}">${escHtml(nm)}</option>`; }).join('');
+
+  _updateFmPreview_();
+  if (btn) btn.style.display = 'none';
+  picker.style.display = 'flex';
+}
+
+function pasFmSelectDay(btn, day) {
+  document.querySelectorAll('#pas-fm-day-grid button').forEach(b => {
+    b.style.background = 'transparent'; b.style.color = 'var(--text)';
+  });
+  btn.style.background = '#1d4ed8'; btn.style.color = '#fff';
+  if (_pasState) _pasState._fmDay = day;
+  _updateFmPreview_();
+}
+
+function cancelFirstMonth() {
+  const picker = document.getElementById('pas-fm-picker');
+  const btn    = document.getElementById('pas-fm-btn');
+  if (picker) picker.style.display = 'none';
+  if (btn) btn.style.display = '';
+  if (_pasState) _pasState._fmDay = null;
+}
+
+function confirmFirstMonth() {
+  if (!_pasState) return;
+  const day = _pasState._fmDay;
+  if (!day) { alert('Please select a service day first.'); return; }
+  const startupDate = _pasState.startup_start_date;
+  if (!startupDate) { alert('No startup date found for this pool. Check the Routes sheet.'); return; }
+  const week1Monday = _calcFirstMonthWeek1_(startupDate);
+  if (!week1Monday) { alert('Could not calculate first visit date.'); return; }
+  const tech = (document.getElementById('pas-fm-tech-select') || {}).value || '';
+  const btn  = document.getElementById('pas-fm-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scheduling…'; }
+
+  api({ secret: SEC, action: 'schedule_first_month_visits', token: _s.token,
+        pool_id: _pasState.pool_id, week_1_monday: week1Monday,
+        day_of_week: day, assigned_technician: tech })
+    .then(res => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Schedule 4 visits'; }
+      if (res.ok) {
+        const fmPicker = document.getElementById('pas-fm-picker');
+        const fmBtn    = document.getElementById('pas-fm-btn');
+        if (fmPicker) fmPicker.style.display = 'none';
+        if (fmBtn) {
+          fmBtn.textContent = '✓ First month visits scheduled';
+          fmBtn.style.background = '#dbeafe'; fmBtn.style.color = '#1e40af';
+          fmBtn.disabled = true;
+        }
+      } else { alert('Error: ' + (res.error || 'Unknown')); }
+    })
+    .catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Schedule 4 visits'; }
+      alert('Network error: ' + e.message);
+    });
+}
+
+// ── Recurring route panel ─────────────────────────────────────────────────────
+
 function convertStartupToWeeklyService(evt) {
   if (evt) evt.stopPropagation();
   if (!_pasState) return;
-
-  // Show the day picker, hide the convert button
   const convertBtn = document.getElementById('pas-convert-btn');
-  const picker = document.getElementById('pas-convert-day-picker');
-  const grid = document.getElementById('pas-convert-day-grid');
+  const picker     = document.getElementById('pas-convert-day-picker');
+  const grid       = document.getElementById('pas-convert-day-grid');
   if (!picker || !grid) return;
 
-  // Pre-select the pool's current day if available
   const currentDay = _pasState.day || null;
-  grid.innerHTML = ALL_DAYS.slice(0, 6).map(d =>
+  grid.innerHTML = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d =>
     `<button onclick="pasSelectConvertDay(this,'${d}')"
-      style="padding:.3rem .55rem;border-radius:5px;border:1.5px solid var(--border);background:${d === currentDay ? 'var(--teal)' : 'transparent'};color:${d === currentDay ? '#fff' : 'var(--text)'};font-size:.78rem;font-weight:600;cursor:pointer"
-      data-day="${d}"${d === currentDay ? ' class="active"' : ''}>${d.slice(0, 3)}</button>`
+      style="padding:.3rem .55rem;border-radius:5px;border:1.5px solid var(--border);
+             background:${d === currentDay ? 'var(--teal)' : 'transparent'};
+             color:${d === currentDay ? '#fff' : 'var(--text)'};
+             font-size:.78rem;font-weight:600;cursor:pointer">${d.slice(0, 3)}</button>`
   ).join('');
   _pasState._convertDay = currentDay || null;
+  _pasState._recurringStart = 'now';
 
   if (convertBtn) convertBtn.style.display = 'none';
   picker.style.display = 'flex';
 }
 
-// First month toggle inside the convert picker
-function pasToggleFirstMonth() {
-  if (!_pasState) return;
-  _pasState._firstMonth = !_pasState._firstMonth;
-  const track = document.getElementById('pas-fm-toggle');
-  const knob = document.getElementById('pas-fm-knob');
-  if (track) track.style.background = _pasState._firstMonth ? 'var(--teal)' : '#ccc';
-  if (knob) knob.style.left = _pasState._firstMonth ? '16px' : '2px';
-}
-
-// Day selection inside the convert picker
 function pasSelectConvertDay(btn, day) {
   document.querySelectorAll('#pas-convert-day-grid button').forEach(b => {
-    b.style.background = 'transparent';
-    b.style.color = 'var(--text)';
+    b.style.background = 'transparent'; b.style.color = 'var(--text)';
   });
-  btn.style.background = 'var(--teal)';
-  btn.style.color = '#fff';
+  btn.style.background = 'var(--teal)'; btn.style.color = '#fff';
   if (_pasState) _pasState._convertDay = day;
 }
 
-/// ── Startup: convert — step 2: send confirmed request ────────────────────────
+function pasSetRecurringStart(mode, btn) {
+  if (!_pasState) return;
+  _pasState._recurringStart = mode;
+  document.querySelectorAll('.pas-start-btn').forEach(b => {
+    b.style.background = 'transparent'; b.style.color = 'var(--text)'; b.style.borderColor = 'var(--border)';
+  });
+  btn.style.background = '#15803d'; btn.style.color = '#fff'; btn.style.borderColor = '#15803d';
+}
+
 function confirmConvertToWeekly() {
   if (!_pasState) return;
   const newDay = _pasState._convertDay;
   if (!newDay) { alert('Please select the weekly service day first.'); return; }
 
+  // If "after first month" chosen, push service_start_date 4 weeks out
+  let serviceStartDate = '';
+  if (_pasState._recurringStart === 'after_fm' && _pasState.startup_start_date) {
+    serviceStartDate = _firstMonthWeek5Monday_(_pasState.startup_start_date) || '';
+  }
+
   const confirmBtn = document.getElementById('pas-convert-confirm-btn');
   if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Converting…'; }
 
-  api({
-    secret: SEC, action: 'convert_startup_to_weekly', token: _s.token,
-    pool_id: _pasState.pool_id, new_day: newDay, first_month: !!_pasState._firstMonth
-  })
+  api({ secret: SEC, action: 'convert_startup_to_weekly', token: _s.token,
+        pool_id: _pasState.pool_id, new_day: newDay, service_start_date: serviceStartDate })
     .then(res => {
       if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm'; }
       if (res.ok) { closePoolAction(); _routeData = null; loadRoutes(); }
@@ -1777,18 +2013,16 @@ function confirmConvertToWeekly() {
     });
 }
 
-/// ── Startup: cancel convert picker ───────────────────────────────────────────
 function cancelConvertToWeekly() {
   const convertBtn = document.getElementById('pas-convert-btn');
-  const picker = document.getElementById('pas-convert-day-picker');
+  const picker     = document.getElementById('pas-convert-day-picker');
   if (convertBtn) convertBtn.style.display = '';
   if (picker) picker.style.display = 'none';
-  if (_pasState) { _pasState._convertDay = null; _pasState._firstMonth = false; }
-  // Reset toggle visual
-  const track = document.getElementById('pas-fm-toggle');
-  const knob = document.getElementById('pas-fm-knob');
-  if (track) track.style.background = '#ccc';
-  if (knob) knob.style.left = '2px';
+  if (_pasState) { _pasState._convertDay = null; _pasState._recurringStart = 'now'; }
+  const nowBtn   = document.getElementById('pas-start-now');
+  const afterBtn = document.getElementById('pas-start-after-fm');
+  if (nowBtn)   { nowBtn.style.background = '#15803d'; nowBtn.style.color = '#fff'; nowBtn.style.borderColor = '#15803d'; }
+  if (afterBtn) { afterBtn.style.background = 'transparent'; afterBtn.style.color = 'var(--text)'; afterBtn.style.borderColor = 'var(--border)'; }
 }
 
 // ── Startup: mark complete (stop showing in schedule) ───────────────────────

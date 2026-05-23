@@ -1471,29 +1471,70 @@
       <span class="pas-pin-text" id="pas-pin-text">Pinned — won't be moved by auto-placement</span>
     </div>
   </div>
+  <div class="pas-section" id="pas-gate-code-section">
+    <div class="pas-section-label">🔑 Gate / access code</div>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <input type="text" id="pas-gate-code-input" placeholder="e.g. #1234, keypad on right gate" autocomplete="off"
+        style="flex:1;padding:.4rem .6rem;border-radius:6px;border:1.5px solid var(--border);font-size:.85rem;background:var(--card);color:var(--text);font-family:inherit">
+      <button id="pas-gate-code-save-btn" onclick="pasSaveGateCode()"
+        style="padding:.4rem .75rem;border-radius:6px;border:none;background:var(--teal);color:#fff;font-weight:600;font-size:.82rem;cursor:pointer;white-space:nowrap">Save</button>
+    </div>
+  </div>
   <!-- Startup-specific actions (shown only for startup pools) -->
   <div class="pas-section" id="pas-startup-actions" style="display:none">
     <div class="pas-section-label">🚀 Startup actions</div>
-    <div style="display:flex;flex-direction:column;gap:.4rem">
-      <button id="pas-convert-btn" onclick="convertStartupToWeeklyService(event)" style="padding:.5rem .75rem;border-radius:7px;border:none;background:#dcfce7;color:#15803d;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">✅ Convert to Weekly Full Service</button>
-      <!-- Day picker shown after clicking Convert (hidden initially) -->
-      <div id="pas-convert-day-picker" style="display:none;flex-direction:column;gap:.4rem;padding:.5rem .6rem;border-radius:7px;background:rgba(200,168,75,.1);border:1px solid rgba(200,168,75,.3)">
-        <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Which day will this pool be serviced weekly?</div>
-        <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-convert-day-grid"></div>
-        <!-- First month toggle -->
-        <div style="display:flex;align-items:center;gap:.5rem;margin-top:.5rem;padding:.35rem .5rem;border-radius:6px;background:rgba(13,77,68,.07);cursor:pointer" onclick="pasToggleFirstMonth()">
-          <div id="pas-fm-toggle" style="width:32px;height:18px;border-radius:9px;background:#ccc;position:relative;transition:background .2s;flex-shrink:0">
-            <div id="pas-fm-knob" style="width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+
+      <!-- Reschedule startup days -->
+      <div id="pas-reschedule-section">
+        <button id="pas-reschedule-btn" onclick="openRescheduleStartupPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#f1f5f9;color:#475569;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">🗓️ Reschedule startup days</button>
+        <div id="pas-reschedule-picker" style="display:none;flex-direction:column;gap:.45rem;margin-top:.4rem;padding:.55rem .65rem;border-radius:7px;background:rgba(71,85,105,.07);border:1px solid rgba(71,85,105,.22)">
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">New start date for Day 1</div>
+          <input type="date" id="pas-reschedule-date" oninput="_updateReschedulePreview_()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.85rem;color:var(--text);background:var(--card);font-family:inherit;width:100%;box-sizing:border-box" />
+          <div id="pas-reschedule-preview" style="font-size:.74rem;color:var(--text-muted);line-height:1.7"></div>
+          <div style="display:flex;gap:.4rem;margin-top:.1rem">
+            <button onclick="confirmRescheduleStartup()" id="pas-reschedule-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:#475569;color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Confirm</button>
+            <button onclick="cancelRescheduleStartup()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
           </div>
-          <span style="font-size:.78rem;font-weight:600;color:var(--text)">First month service (4 visits)</span>
-        </div>
-        <div style="display:flex;gap:.4rem;margin-top:.4rem">
-          <button onclick="confirmConvertToWeekly()" id="pas-convert-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:var(--teal);color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Confirm</button>
-          <button onclick="cancelConvertToWeekly()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
         </div>
       </div>
+
+      <!-- Path A: Sponsor first month — schedule 4 one-time Scheduled_Visits -->
+      <div id="pas-fm-section">
+        <button id="pas-fm-btn" onclick="openFirstMonthPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#eff6ff;color:#1d4ed8;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📅 Sponsor first month — schedule 4 visits</button>
+        <div id="pas-fm-picker" style="display:none;flex-direction:column;gap:.45rem;margin-top:.4rem;padding:.55rem .65rem;border-radius:7px;background:rgba(29,78,216,.06);border:1px solid rgba(29,78,216,.22)">
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Service day for the 4 weekly visits</div>
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-fm-day-grid"></div>
+          <div id="pas-fm-preview" style="font-size:.74rem;color:var(--text-muted);line-height:1.7;margin-top:.1rem"></div>
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Assign technician (optional)</div>
+          <select id="pas-fm-tech-select" style="padding:.32rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.8rem;background:var(--card);color:var(--text)"><option value="">Unassigned</option></select>
+          <div style="display:flex;gap:.4rem;margin-top:.1rem">
+            <button onclick="confirmFirstMonth()" id="pas-fm-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:#1d4ed8;color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Schedule 4 visits</button>
+            <button onclick="cancelFirstMonth()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Path B: Add to recurring route (Routes sheet) -->
+      <div id="pas-recurring-section">
+        <button id="pas-convert-btn" onclick="convertStartupToWeeklyService(event)" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#dcfce7;color:#15803d;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">♻️ Add to recurring route</button>
+        <div id="pas-convert-day-picker" style="display:none;flex-direction:column;gap:.4rem;padding:.55rem .65rem;border-radius:7px;background:rgba(21,128,61,.07);border:1px solid rgba(21,128,61,.25)">
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Which day will this pool be serviced weekly?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-convert-day-grid"></div>
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-top:.2rem">When does recurring service start?</div>
+          <div style="display:flex;gap:.4rem" id="pas-start-toggle">
+            <button class="pas-start-btn" id="pas-start-now" onclick="pasSetRecurringStart('now',this)" style="flex:1;padding:.35rem .4rem;border-radius:6px;border:1.5px solid #15803d;background:#15803d;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">Start now</button>
+            <button class="pas-start-btn" id="pas-start-after-fm" onclick="pasSetRecurringStart('after_fm',this)" style="flex:1;padding:.35rem .4rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.75rem;font-weight:600;cursor:pointer">After first month</button>
+          </div>
+          <div style="display:flex;gap:.4rem;margin-top:.1rem">
+            <button onclick="confirmConvertToWeekly()" id="pas-convert-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:var(--teal);color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Confirm</button>
+            <button onclick="cancelConvertToWeekly()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <button id="pas-checklist-btn" onclick="openSclTypePickerFromPool()" style="padding:.5rem .75rem;border-radius:7px;border:none;background:rgba(200,168,75,.15);color:#92600a;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📋 Startup checklists</button>
       <button onclick="markStartupDone(event)" style="padding:.5rem .75rem;border-radius:7px;border:none;background:#fee2e2;color:#b91c1c;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">✗ Startup complete — remove from schedule</button>
-      <button id="pas-checklist-btn" onclick="openSclTypePickerFromPool()" style="padding:.5rem .75rem;border-radius:7px;border:none;background:rgba(200,168,75,.15);color:#92600a;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📋 Startup Checklists</button>
     </div>
   </div>
   <button class="pas-apply-btn" id="pas-apply-btn" onclick="applyPoolAction()">Apply Changes</button>
