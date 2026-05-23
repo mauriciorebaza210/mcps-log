@@ -625,20 +625,42 @@ function renderNewPoolsBanner() {
     if (banner) banner.remove();
     return;
   }
+
+  const pendingStartups = _unassignedPools.filter(p => (p.service || '').toLowerCase().includes('startup'));
+  const regularPools    = _unassignedPools.filter(p => !(p.service || '').toLowerCase().includes('startup'));
+
+  const pendingSection = pendingStartups.length ? `
+    <div style="font-size:.72rem;font-weight:700;color:#7c3aed;letter-spacing:.04em;padding:.3rem .1rem .1rem;text-transform:uppercase">📌 Pending Startups</div>
+    ${pendingStartups.map(p => `<div class="npb-pool">
+      <div class="npb-pool-info">
+        <div class="npb-pool-name">${escHtml(p.customer_name || p.pool_id)} <span style="font-size:0.7rem;color:var(--muted);font-weight:700;background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px;margin-left:4px">${escHtml(p._status)}</span></div>
+        <div class="npb-pool-addr">${escHtml(p.address || '')}${p.city ? ', ' + escHtml(p.city) : ''}</div>
+      </div>
+      <button class="npb-place-btn" style="background:#7c3aed;border-color:#7c3aed;color:#fff" onclick="openPlacePool('${escHtml(p.pool_id)}')">Schedule ▸</button>
+    </div>`).join('')}` : '';
+
+  const regularSection = regularPools.length ? `
+    ${pendingStartups.length ? `<div style="font-size:.72rem;font-weight:700;color:var(--text-muted);letter-spacing:.04em;padding:.4rem .1rem .1rem;text-transform:uppercase">New Pools</div>` : ''}
+    ${regularPools.map(p => `<div class="npb-pool">
+      <div class="npb-pool-info">
+        <div class="npb-pool-name">${escHtml(p.customer_name || p.pool_id)} <span style="font-size:0.7rem;color:var(--muted);font-weight:700;background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px;margin-left:4px">${escHtml(p._status)}</span></div>
+        <div class="npb-pool-addr">${escHtml(p.address || '')}${p.city ? ', ' + escHtml(p.city) : ''}</div>
+      </div>
+      <button class="npb-place-btn" onclick="openPlacePool('${escHtml(p.pool_id)}')">Place ▸</button>
+    </div>`).join('')}
+    <button class="npb-auto-btn" onclick="autoPlaceAll()">⚡ Auto-place all new pools</button>` : '';
+
+  const title = pendingStartups.length && !regularPools.length
+    ? `📌 ${pendingStartups.length} pending startup${pendingStartups.length > 1 ? 's' : ''} — schedule now`
+    : `⚠️ ${_unassignedPools.length} pool${_unassignedPools.length > 1 ? 's' : ''} need${_unassignedPools.length === 1 ? 's' : ''} routing`;
+
   const html = `<div class="new-pools-banner" id="new-pools-banner">
     <div class="npb-header" onclick="document.getElementById('npb-body').classList.toggle('open')">
-      <span class="npb-title">⚠️ ${_unassignedPools.length} new pool${_unassignedPools.length > 1 ? 's' : ''} need${_unassignedPools.length === 1 ? 's' : ''} routing</span>
+      <span class="npb-title">${title}</span>
       <span class="npb-count">▼</span>
     </div>
     <div class="npb-body" id="npb-body">
-      ${_unassignedPools.map(p => `<div class="npb-pool">
-        <div class="npb-pool-info">
-          <div class="npb-pool-name">${p.customer_name || p.pool_id} <span style="font-size:0.7rem; color:var(--muted); font-weight:700; background:rgba(0,0,0,0.05); padding:1px 4px; border-radius:3px; margin-left:4px">${p._status}</span></div>
-          <div class="npb-pool-addr">${p.address || ''}, ${p.city || ''}</div>
-        </div>
-        <button class="npb-place-btn" onclick="openPlacePool('${p.pool_id}')">Place ▸</button>
-      </div>`).join('')}
-      <button class="npb-auto-btn" onclick="autoPlaceAll()">⚡ Auto-place all new pools</button>
+      ${pendingSection}${regularSection}
     </div>
   </div>`;
   if (!banner) {
@@ -1696,7 +1718,7 @@ function openPlacePool(poolId) {
   pasSetScope('permanent');
   _updateStartupSpanPreview_();
   const startupActionsEl = document.getElementById('pas-startup-actions');
-  if (startupActionsEl) startupActionsEl.style.display = 'none'; // Unassigned startups shouldn't show actions
+  if (startupActionsEl) startupActionsEl.style.display = isStartup ? 'block' : 'none';
   document.getElementById('pas-backdrop').classList.add('open');
   document.getElementById('pas-sheet').classList.add('open');
 }
@@ -2071,6 +2093,29 @@ function cancelConvertToWeekly() {
 }
 
 // ── Startup: mark complete (stop showing in schedule) ───────────────────────
+function markStartupPending(evt) {
+  if (evt) evt.stopPropagation();
+  if (!_pasState) return;
+  if (!confirm('Mark this startup as Pending?\n\nExisting startup days will be cancelled and the pool will appear in the "Pending Startups" section at the top of the schedule, ready to be rescheduled.')) return;
+  const btn = evt && evt.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  api({ secret: SEC, action: 'mark_startup_pending', token: _s.token, pool_id: _pasState.pool_id })
+    .then(res => {
+      if (btn) { btn.disabled = false; btn.textContent = '📌 Mark as Pending — hold for scheduling'; }
+      if (res.ok) {
+        closePoolAction();
+        _routeData = null;
+        loadRoutes();
+        if (typeof _appCacheRemove === 'function') _appCacheRemove('unassigned');
+        loadUnassigned(true);
+      } else alert('Error: ' + (res.error || 'Unknown'));
+    })
+    .catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = '📌 Mark as Pending — hold for scheduling'; }
+      alert('Network error: ' + e.message);
+    });
+}
+
 function markStartupDone(evt) {
   if (evt) evt.stopPropagation();
   if (!_pasState) return;

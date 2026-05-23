@@ -481,6 +481,76 @@ function rescheduleStartupVisits(token, poolId, day1Date) {
   }
 }
 
+// ─── Mark Startup as Pending (unscheduled, waiting to be placed) ─────────────
+//
+// Sets day_of_week=UNSCHEDULED and clears startup_start_date in Routes.
+// Cancels any status=scheduled startup_day_* visits in Scheduled_Visits
+// so the pool surfaces in the unassigned banner.
+function markStartupPending(token, poolId) {
+  const auth = validateToken(token);
+  if (!auth.ok) return { ok: false, error: auth.error };
+  if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return { ok: false, error: 'Not authorized' };
+  if (!poolId) return { ok: false, error: 'pool_id required' };
+  try {
+    const ss = SpreadsheetApp.openById(RD_ROUTES_SS_ID);
+
+    // Cancel scheduled startup_day_* visits
+    const svSheet = ss.getSheetByName('Scheduled_Visits');
+    if (svSheet && svSheet.getLastRow() >= 2) {
+      const data = svSheet.getDataRange().getValues();
+      const h = data[0].map(c => String(c || '').trim().toLowerCase().replace(/ /g, '_'));
+      const pidCol  = h.indexOf('pool_id');
+      const vtCol   = h.indexOf('visit_type');
+      const statCol = h.indexOf('status');
+      if (pidCol !== -1 && vtCol !== -1 && statCol !== -1) {
+        for (let i = 1; i < data.length; i++) {
+          const pid  = String(data[i][pidCol]  || '').trim();
+          const vt   = String(data[i][vtCol]   || '').trim();
+          const stat = String(data[i][statCol] || '').trim().toLowerCase();
+          if (pid === String(poolId).trim() && vt.startsWith('startup_day_') && stat === 'scheduled') {
+            svSheet.getRange(i + 1, statCol + 1).setValue('cancelled');
+          }
+        }
+      }
+    }
+
+    // Set day_of_week=UNSCHEDULED and clear startup_start_date in Routes
+    const routeSheet = ss.getSheetByName('Routes');
+    if (routeSheet && routeSheet.getLastRow() > 1) {
+      const rData = routeSheet.getDataRange().getValues();
+      const rH = rData[0].map(c => String(c || '').trim().toLowerCase().replace(/ /g, '_'));
+      const rPid = rH.indexOf('pool_id');
+      const rDay = rH.indexOf('day_of_week');
+      const rSd  = rH.indexOf('startup_start_date');
+      for (let i = 1; i < rData.length; i++) {
+        if (rPid !== -1 && String(rData[i][rPid] || '').trim() === String(poolId).trim()) {
+          if (rDay !== -1) routeSheet.getRange(i + 1, rDay + 1).setValue('UNSCHEDULED');
+          if (rSd  !== -1) routeSheet.getRange(i + 1, rSd  + 1).setValue('');
+          break;
+        }
+      }
+    }
+
+    // Bust caches
+    const cache = CacheService.getScriptCache();
+    cache.remove('unassigned_pools');
+    // Bust this week and surrounding weeks' route caches
+    const today = new Date();
+    for (let w = -1; w <= 1; w++) {
+      try {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + w * 7);
+        cache.remove('rd:' + Utilities.formatDate(d, RD_TZ, 'yyyy-MM-dd'));
+      } catch(e) {}
+    }
+
+    Logger.log('markStartupPending: ' + poolId + ' → UNSCHEDULED, visits cancelled');
+    return { ok: true };
+  } catch(e) {
+    Logger.log('markStartupPending error: ' + e);
+    return { ok: false, error: String(e) };
+  }
+}
+
 // ─── Schedule First Month Visits (4 weekly one-time Scheduled_Visits) ────────
 //
 // Creates first_month_week_1 through _4 rows in Scheduled_Visits starting on
