@@ -1486,7 +1486,21 @@ function openPoolAction(poolId, day, operator, pinned) {
   if (!isAdmin()) return;
   const pool = findPool_(poolId);
   const isStartup = !!(pool && (pool.service || '').toLowerCase().includes('startup'));
-  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, scope: 'permanent', startup_start_date: pool ? pool.startup_start_date : null };
+
+  // Derive startup_start_date: prefer Routes sheet value, then scan merged visit data
+  let startupStartDate = (pool && pool.startup_start_date) ? pool.startup_start_date : null;
+  if (!startupStartDate && isStartup && _routeData && _routeData.days) {
+    outer: for (const d of _routeData.days) {
+      for (const p of (d.pools || [])) {
+        if (p.pool_id === poolId && p._visit_type && p._visit_type.startsWith('startup_day_') && p.startup_start_date) {
+          startupStartDate = p.startup_start_date;
+          break outer;
+        }
+      }
+    }
+  }
+
+  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, scope: 'permanent', startup_start_date: startupStartDate };
   // Fill title
   document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
   document.getElementById('pas-sub').textContent = pool ? `${pool.address}, ${pool.city} · ${pool.service}` : '';
@@ -1865,7 +1879,8 @@ function _previewFmDates_(week1Monday, dayOfWeek) {
 function _updateFmPreview_() {
   const preview = document.getElementById('pas-fm-preview');
   if (!preview || !_pasState) return;
-  const week1 = _calcFirstMonthWeek1_(_pasState.startup_start_date);
+  const week1Input = document.getElementById('pas-fm-week1-input');
+  const week1 = (week1Input && week1Input.value) ? week1Input.value : _calcFirstMonthWeek1_(_pasState.startup_start_date);
   const day = _pasState._fmDay;
   const dates = week1 && day ? _previewFmDates_(week1, day) : [];
   if (!dates.length) { preview.innerHTML = ''; return; }
@@ -1884,6 +1899,13 @@ function openFirstMonthPanel() {
 
   const currentDay = _pasState.day || 'Monday';
   if (!_pasState._fmDay) _pasState._fmDay = currentDay;
+
+  // Pre-fill week 1 start date if we can compute it
+  const week1Input = document.getElementById('pas-fm-week1-input');
+  if (week1Input) {
+    const computed = _calcFirstMonthWeek1_(_pasState.startup_start_date);
+    week1Input.value = computed || '';
+  }
 
   document.getElementById('pas-fm-day-grid').innerHTML =
     ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d =>
@@ -1925,10 +1947,13 @@ function confirmFirstMonth() {
   if (!_pasState) return;
   const day = _pasState._fmDay;
   if (!day) { alert('Please select a service day first.'); return; }
-  const startupDate = _pasState.startup_start_date;
-  if (!startupDate) { alert('No startup date found for this pool. Check the Routes sheet.'); return; }
-  const week1Monday = _calcFirstMonthWeek1_(startupDate);
-  if (!week1Monday) { alert('Could not calculate first visit date.'); return; }
+
+  // Use the date input value (admin may have typed it manually if auto-fill was empty)
+  const week1Input = document.getElementById('pas-fm-week1-input');
+  const week1Monday = (week1Input && week1Input.value) ? week1Input.value
+    : _calcFirstMonthWeek1_(_pasState.startup_start_date);
+  if (!week1Monday) { alert('Please enter the first visit week start date (Monday).'); return; }
+
   const tech = (document.getElementById('pas-fm-tech-select') || {}).value || '';
   const btn  = document.getElementById('pas-fm-confirm-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Scheduling…'; }
@@ -2004,8 +2029,17 @@ function confirmConvertToWeekly() {
 
   // If "after first month" chosen, push service_start_date 4 weeks out
   let serviceStartDate = '';
-  if (_pasState._recurringStart === 'after_fm' && _pasState.startup_start_date) {
-    serviceStartDate = _firstMonthWeek5Monday_(_pasState.startup_start_date) || '';
+  if (_pasState._recurringStart === 'after_fm') {
+    // Use the week-1 date input if available (set when FM panel was opened)
+    const week1Input = document.getElementById('pas-fm-week1-input');
+    const week1 = (week1Input && week1Input.value) ? week1Input.value
+      : _calcFirstMonthWeek1_(_pasState.startup_start_date);
+    if (week1) {
+      const [y, m, d] = week1.split('-').map(Number);
+      const w5 = new Date(y, m - 1, d + 28);
+      const pad = n => String(n).padStart(2, '0');
+      serviceStartDate = `${w5.getFullYear()}-${pad(w5.getMonth() + 1)}-${pad(w5.getDate())}`;
+    }
   }
 
   const confirmBtn = document.getElementById('pas-convert-confirm-btn');

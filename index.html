@@ -1503,6 +1503,8 @@
       <div id="pas-fm-section">
         <button id="pas-fm-btn" onclick="openFirstMonthPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#eff6ff;color:#1d4ed8;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📅 Sponsor first month — schedule 4 visits</button>
         <div id="pas-fm-picker" style="display:none;flex-direction:column;gap:.45rem;margin-top:.4rem;padding:.55rem .65rem;border-radius:7px;background:rgba(29,78,216,.06);border:1px solid rgba(29,78,216,.22)">
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Week 1 start date (Monday)</div>
+          <input type="date" id="pas-fm-week1-input" oninput="_updateFmPreview_()" style="padding:.32rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.8rem;background:var(--card);color:var(--text);width:100%;box-sizing:border-box" />
           <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Service day for the 4 weekly visits</div>
           <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-fm-day-grid"></div>
           <div id="pas-fm-preview" style="font-size:.74rem;color:var(--text-muted);line-height:1.7;margin-top:.1rem"></div>
