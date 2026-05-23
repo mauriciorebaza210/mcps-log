@@ -84,38 +84,49 @@ function _mergeScheduledVisits_(days, visits) {
     const dayObj = dayMap[v.scheduled_date];
     if (dayObj) {
       if (!dayObj.pools) dayObj.pools = [];
-      // Deduplication: Avoid adding if there's already a regular route stop for this pool,
-      // UNLESS we want both to show. For startups, we typically want the scheduled visit to 
-      // replace or augment. For now, we will add it directly but mark it as a scheduled_visit.
       const existingIdx = dayObj.pools.findIndex(p => p.pool_id === v.pool_id);
       if (existingIdx !== -1) {
-        // If a recurring route already exists, we can tag it or skip
-        // We'll tag it with the visit info to update the badge later
         dayObj.pools[existingIdx]._is_scheduled_visit = true;
         dayObj.pools[existingIdx]._visit_type = v.visit_type;
         dayObj.pools[existingIdx]._scheduled_visit_id = v.scheduled_visit_id;
+        // Fill startup_start_date if Routes row didn't have it
+        if (!dayObj.pools[existingIdx].startup_start_date) {
+          dayObj.pools[existingIdx].startup_start_date = _startupDateFromVisit_(v.scheduled_date, v.visit_type);
+        }
       } else {
-        // Build a pool-like object for the scheduled visit
         dayObj.pools.push({
-          pool_id: v.pool_id,
-          customer_name: v.customer_name,
-          address: v.address,
-          city: v.city,
-          service: v.service_type || v.visit_type,
-          maps_url: '', // We can lazily recompute maps urls later if needed
-          lat: '',
-          lng: '',
-          operator: v.assigned_technician,
-          pinned: false,
-
-          // Flags for renderer
-          _is_scheduled_visit: true,
-          _visit_type: v.visit_type,
-          _scheduled_visit_id: v.scheduled_visit_id
+          pool_id:            v.pool_id,
+          customer_name:      v.customer_name,
+          address:            v.address,
+          city:               v.city,
+          service:            v.service_type || v.visit_type,
+          maps_url:           '',
+          lat:                '',
+          lng:                '',
+          operator:           v.assigned_technician,
+          pinned:             false,
+          startup_start_date: _startupDateFromVisit_(v.scheduled_date, v.visit_type),
+          _is_scheduled_visit:  true,
+          _visit_type:          v.visit_type,
+          _scheduled_visit_id:  v.scheduled_visit_id
         });
       }
     }
   });
+}
+
+// Given a Scheduled_Visits scheduled_date and visit_type, compute startup_start_date
+// (the date of Day 1). Day 2 is Day1+1, Day 3 is Day1+2.
+function _startupDateFromVisit_(scheduledDate, visitType) {
+  if (!scheduledDate || !visitType) return '';
+  const offset = visitType === 'startup_day_2' ? -1 : visitType === 'startup_day_3' ? -2 : 0;
+  if (offset === 0 && visitType !== 'startup_day_1') return '';
+  try {
+    const d = new Date(String(scheduledDate).split('T')[0] + 'T12:00:00');
+    d.setDate(d.getDate() + offset);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  } catch(e) { return ''; }
 }
 
 // ── Map Calendar Logic ──
