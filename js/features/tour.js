@@ -10,6 +10,7 @@ var TOUR_STEP_COUNT = 13;
 
 window._tourActive               = false;
 window._tourAttemptedThisSession = false;
+window._tourForceMode            = false; // true when launched via ?tour=force — suppresses server writes
 
 // ─── State helpers ─────────────────────────────────────────────────────────────
 
@@ -28,6 +29,9 @@ function _setTourState(status, extra, opts) {
   var onError    = opts.onError   || null;
 
   if (!_s) return;
+  // Suppress all state writes when admin is previewing via ?tour=force
+  if (window._tourForceMode) return;
+
   _s.tutorial_status  = status;
   _s.tutorial_version = TOUR_VERSION;
   if (extra && extra.started_at)   _s.tutorial_started_at    = extra.started_at;
@@ -81,9 +85,11 @@ function checkAndLaunchTour() {
   }
 }
 
-// Force-launch — caller must have already validated admin role
+// Force-launch — caller must have already validated admin role.
+// Sets _tourForceMode so no state is written to localStorage or the server.
 function forceLaunchTour() {
   window._tourAttemptedThisSession = true;
+  window._tourForceMode            = true;
   _showWelcomeModal();
 }
 
@@ -185,8 +191,7 @@ function _showResumePrompt() {
     '<span class="tour-resume-icon" aria-hidden="true">🗺️</span>' +
     '<span class="tour-resume-text">Continue the portal tour?</span>' +
     '<div class="tour-resume-actions">' +
-      '<button class="tour-resume-btn tour-resume-yes"  id="tour-resume-resume">Resume</button>' +
-      '<button class="tour-resume-btn tour-resume-over" id="tour-resume-over">Start over</button>' +
+      '<button class="tour-resume-btn tour-resume-yes"  id="tour-resume-resume">Restart Tour</button>' +
       '<button class="tour-resume-btn tour-resume-dim"  id="tour-resume-dismiss">Dismiss for now</button>' +
     '</div>';
   document.body.appendChild(el);
@@ -202,12 +207,7 @@ function _showResumePrompt() {
     setTimeout(function() { if (el.parentNode) el.remove(); if (cb) cb(); }, 250);
   }
 
-  // "Resume" and "Start over" both restart from step 0 (step persistence not practical
-  // across page navigations; label is honest — both begin at the tour start).
   document.getElementById('tour-resume-resume').addEventListener('click', function() {
-    _hide(function() { _startDriver(0); });
-  });
-  document.getElementById('tour-resume-over').addEventListener('click', function() {
     _hide(function() { _startDriver(0); });
   });
   document.getElementById('tour-resume-dismiss').addEventListener('click', function() {
@@ -236,7 +236,7 @@ function _startDriver(startIndex) {
     stagePadding:   8,
     stageRadius:    8,
     popoverClass:   'tour-popover',
-    onDestroyStart: function() { window._tourActive = false; },
+    onDestroyStart: function() { window._tourActive = false; window._tourForceMode = false; },
     steps:          _buildSteps()
   });
 
@@ -284,12 +284,12 @@ function _buildSteps() {
       }
     },
 
-    // ── 2: Home dashboard → onNextClick navigates to live_map ───────────────
+    // ── 2: Technician home dashboard → onNextClick navigates to live_map ───────
     {
-      element: '#home-grid',
+      element: '#tech-home-dashboard',
       popover: {
         title:       'Your Dashboard ' + _prog(2),
-        description: 'Quick links to every tool you have access to. Alerts and weather updates appear here each time you log in.',
+        description: 'Your daily KPIs and today\'s stops appear here. Check this every morning to see how many pools are on your route and which one\'s up next.',
         side:  'bottom',
         align: 'start'
       },
@@ -312,7 +312,7 @@ function _buildSteps() {
       },
       onPrevClick: function() {
         navigateTo('home');
-        _waitForEl('#home-grid').then(function() {
+        _waitForEl('#tech-home-dashboard').then(function() {
           setTimeout(function() { if (_driverInstance) _driverInstance.movePrevious(); }, 300);
         });
       }
@@ -463,7 +463,8 @@ function _buildSteps() {
 
 function _finishTour() {
   if (_driverInstance) { try { _driverInstance.destroy(); } catch(e) {} _driverInstance = null; }
-  window._tourActive = false;
+  window._tourActive    = false;
+  window._tourForceMode = false;
 
   var overlay = document.createElement('div');
   overlay.id        = 'tour-finish-overlay';
@@ -472,7 +473,7 @@ function _finishTour() {
   document.body.appendChild(overlay);
 
   function _doSave(retriesLeft) {
-    _setTourState('completed', { completed_at: _s.tutorial_completed_at || new Date().toISOString() }, {
+    _setTourState('completed', { completed_at: new Date().toISOString() }, {
       retries: retriesLeft,
       onSuccess: function() {
         overlay.remove();
