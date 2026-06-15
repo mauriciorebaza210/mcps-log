@@ -383,6 +383,7 @@ function runRecs(){
 }
 
 function saveDraft(poolId) {
+  if (window._tourActive) return;
   if(!poolId) return;
   const draft = {};
   _formItems.forEach(item => {

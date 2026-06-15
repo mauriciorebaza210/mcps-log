@@ -15,7 +15,19 @@ function doLogin() {
     if(res.ok){
       const roles = res.roles || [res.role || 'technician'];
       const pages = unionPages_(roles);
-      _s = {token:res.token,name:res.name,roles,pages,username:u,avatar_url:res.avatar_url||'',email:res.email||''};
+      _s = {
+        token:res.token,
+        name:res.name,
+        roles,
+        pages,
+        username:u,
+        avatar_url:res.avatar_url||'',
+        email:res.email||'',
+        tutorial_status:res.tutorial_status||'',
+        tutorial_version:res.tutorial_version||'',
+        tutorial_started_at:res.tutorial_started_at||'',
+        tutorial_completed_at:res.tutorial_completed_at||''
+      };
       // Sync Drive URL to localStorage key so sidebar picks it up on all devices
       if (res.avatar_url) localStorage.setItem('mcps_avatar_' + u, res.avatar_url);
       localStorage.setItem('mcps_s',JSON.stringify(_s));

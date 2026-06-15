@@ -7,6 +7,13 @@
 
 var TOUR_VERSION    = 'technician-tour-v1';
 var TOUR_STEP_COUNT = 13;
+var TOUR_DEMO_POOL  = 'Bullock - Weekly Full Service - 24102 Shelton Spring - MCPS-0017';
+var TOUR_DEMO_READINGS = [
+  { fc:'1.2', ph:'7.9', ta:'70',  ch:'220', tablet:'low',    size:'medium', mat:'plaster' },
+  { fc:'2.4', ph:'8.1', ta:'90',  ch:'260', tablet:'medium', size:'medium', mat:'plaster' },
+  { fc:'4.6', ph:'7.4', ta:'75',  ch:'480', tablet:'low',    size:'large',  mat:'plaster' },
+  { fc:'1.8', ph:'7.7', ta:'110', ch:'310', tablet:'full',   size:'medium', mat:'fiberglass' }
+];
 
 window._tourActive               = false;
 window._tourAttemptedThisSession = false;
@@ -87,10 +94,25 @@ function checkAndLaunchTour() {
 
 // Force-launch — caller must have already validated admin role.
 // Sets _tourForceMode so no state is written to localStorage or the server.
+// If the admin is currently in admin dashboard view, switches to technician
+// view first so all tour targets are visible.
 function forceLaunchTour() {
   window._tourAttemptedThisSession = true;
   window._tourForceMode            = true;
-  _showWelcomeModal();
+
+  var tds = document.getElementById('tech-home-dashboard');
+  var needsSwitch = !tds || tds.style.display === 'none' || tds.style.display === '';
+
+  if (needsSwitch && typeof loadHomeStats === 'function') {
+    window._homeViewOverride = 'technician';
+    loadHomeStats().then(function() {
+      setTimeout(_showWelcomeModal, 400);
+    }).catch(function() {
+      setTimeout(_showWelcomeModal, 400);
+    });
+  } else {
+    _showWelcomeModal();
+  }
 }
 
 // Self-service restart (profile tab "Restart Tutorial" button)
@@ -230,21 +252,23 @@ function _startDriver(startIndex) {
   var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   _driverInstance = window.driver.js.driver({
-    animate:        !reducedMotion,
-    overlayOpacity: 0.55,
-    allowClose:     true,
-    stagePadding:   8,
-    stageRadius:    8,
-    popoverClass:   'tour-popover',
-    onDestroyStart: function() { window._tourActive = false; window._tourForceMode = false; },
-    steps:          _buildSteps()
+    animate:              !reducedMotion,
+    overlayOpacity:       0.55,
+    allowClose:           true,
+    overlayClickBehavior: function() {},
+    stagePadding:         8,
+    stageRadius:          8,
+    popoverClass:         'tour-popover',
+    onDestroyStart:       function() { window._tourActive = false; window._tourForceMode = false; _hideTourTransition(); },
+    steps:                _buildSteps()
   });
 
   _driverInstance.drive(startIndex || 0);
 }
 
-// ─── DOM wait helper ──────────────────────────────────────────────────────────
+// ─── DOM wait helpers ─────────────────────────────────────────────────────────
 
+// Waits until an element exists in the DOM (for dynamically-created elements).
 function _waitForEl(selector, timeoutMs) {
   timeoutMs = timeoutMs || 4500;
   return new Promise(function(resolve) {
@@ -256,6 +280,173 @@ function _waitForEl(selector, timeoutMs) {
     });
     obs.observe(document.body, { childList: true, subtree: true });
     setTimeout(function() { obs.disconnect(); resolve(null); }, timeoutMs);
+  });
+}
+
+// Waits until an element is in the DOM AND visible (offsetParent !== null).
+// Use this for elements that exist in static HTML but inside display:none containers
+// (e.g. #htab-schedule inside #route-content which starts hidden while routes load).
+function _waitForVisible(selector, timeoutMs) {
+  timeoutMs = timeoutMs || 6000;
+  return new Promise(function(resolve) {
+    var start = Date.now();
+    function check() {
+      var el = document.querySelector(selector);
+      if (el && el.offsetParent !== null) { resolve(el); return; }
+      if (Date.now() - start >= timeoutMs) { resolve(el || null); return; }
+      setTimeout(check, 150);
+    }
+    check();
+  });
+}
+
+function _waitForEitherVisible(selectors, timeoutMs) {
+  timeoutMs = timeoutMs || 2500;
+  return new Promise(function(resolve) {
+    var start = Date.now();
+    function check() {
+      for (var i = 0; i < selectors.length; i++) {
+        var el = document.querySelector(selectors[i]);
+        if (el && el.offsetParent !== null) { resolve(el); return; }
+      }
+      if (Date.now() - start >= timeoutMs) { resolve(null); return; }
+      setTimeout(check, 120);
+    }
+    check();
+  });
+}
+
+function _setTourPopoverHidden(hidden) {
+  var popover = document.getElementById('driver-popover-content');
+  if (popover) popover.style.visibility = hidden ? 'hidden' : '';
+}
+
+function _showTourTransition(message) {
+  var el = document.getElementById('tour-transition');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tour-transition';
+    el.className = 'tour-transition';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML = '<div class="tour-transition-spinner"></div><div class="tour-transition-text"></div>';
+    document.body.appendChild(el);
+  }
+  var text = el.querySelector('.tour-transition-text');
+  if (text) text.textContent = message || 'Loading the next tour step...';
+  requestAnimationFrame(function() { el.classList.add('visible'); });
+}
+
+function _hideTourTransition() {
+  var el = document.getElementById('tour-transition');
+  if (!el) return;
+  el.classList.remove('visible');
+  setTimeout(function() { if (el.parentNode && !el.classList.contains('visible')) el.remove(); }, 180);
+}
+
+function _moveTourToWhenReady(index, attempts) {
+  attempts = attempts === undefined ? 12 : attempts;
+  if (!_driverInstance) return;
+
+  try { _driverInstance.moveTo(index); } catch(e) {}
+
+  if (_driverInstance && _driverInstance.getActiveIndex && _driverInstance.getActiveIndex() !== index && attempts > 0) {
+    setTimeout(function() { _moveTourToWhenReady(index, attempts - 1); }, 100);
+    return;
+  }
+
+  if (_driverInstance && _driverInstance.getActiveIndex && _driverInstance.getActiveIndex() !== index) {
+    try { _driverInstance.destroy(); } catch(e) {}
+    _driverInstance = null;
+    setTimeout(function() { _startDriver(index); _hideTourTransition(); }, 50);
+    return;
+  }
+
+  _hideTourTransition();
+  _setTourPopoverHidden(false);
+}
+
+function _navigateTourTo(page, visibleSelector, stepIndex, opts) {
+  opts = opts || {};
+  _setTourPopoverHidden(true);
+  _showTourTransition(opts.message);
+  if (opts.beforeNavigate) opts.beforeNavigate();
+  navigateTo(page);
+  _waitForVisible(visibleSelector, opts.timeoutMs || 6500).then(function() {
+    Promise.resolve(opts.afterVisible ? opts.afterVisible() : null).then(function() {
+      setTimeout(function() { _moveTourToWhenReady(stepIndex); }, opts.delayMs || 450);
+    });
+  });
+}
+
+function _selectTourPool() {
+  var sel = document.querySelector('[name="pool_id"]');
+  if (!sel) return false;
+
+  var targetIdx = -1;
+  for (var i = 0; i < sel.options.length; i++) {
+    var opt = sel.options[i].value || sel.options[i].text || '';
+    if (opt === TOUR_DEMO_POOL || /Bullock/i.test(opt) || /MCPS-0017/i.test(opt)) {
+      targetIdx = i;
+      break;
+    }
+  }
+
+  if (targetIdx < 0) return false;
+  if (sel.selectedIndex !== targetIdx) {
+    sel.selectedIndex = targetIdx;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  return true;
+}
+
+function _getTourReadings() {
+  if (!window._tourDemoReadings) {
+    window._tourDemoReadings = TOUR_DEMO_READINGS[Math.floor(Math.random() * TOUR_DEMO_READINGS.length)];
+  }
+  return window._tourDemoReadings;
+}
+
+function _setTourField(name, value) {
+  var el = document.querySelector('[name="' + name.replace(/"/g, '\\"') + '"]');
+  if (!el) return;
+  el.value = value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function _seedTourReadings() {
+  if (!window._tourActive) return;
+  _selectTourPool();
+
+  var sample = _getTourReadings();
+  var sizeSel = document.getElementById('svc-size');
+  if (sizeSel) sizeSel.value = sample.size;
+  var matSel = document.getElementById('svc-mat');
+  if (matSel) matSel.value = sample.mat;
+
+  _setTourField('Free Chlorine (FC)', sample.fc);
+  _setTourField('pH', sample.ph);
+  _setTourField('Total Alkalinity (TA)', sample.ta);
+  _setTourField('Calcium Hardness (CH)', sample.ch);
+
+  var tablet = document.querySelector('.tbpill[data-val="' + sample.tablet + '"]');
+  if (tablet && !tablet.classList.contains('tactive') && typeof tTablet === 'function') {
+    tTablet(tablet, sample.tablet);
+  } else if (typeof runRecs === 'function') {
+    runRecs();
+  }
+}
+
+function _prepTourServiceLog() {
+  window._pendingSvcPoolId = TOUR_DEMO_POOL;
+  window._prefillCustomer = 'Charles Bullock';
+}
+
+function _showTourPoolContext() {
+  _selectTourPool();
+  return _waitForEitherVisible(['#pool-trend-banner', '#pool-last-notes-banner'], 3500).then(function() {
+    var mc = document.querySelector('.main-content');
+    if (mc) mc.scrollTop = 0;
   });
 }
 
@@ -291,13 +482,12 @@ function _buildSteps() {
         title:       'Your Dashboard ' + _prog(2),
         description: 'Your daily KPIs and today\'s stops appear here. Check this every morning to see how many pools are on your route and which one\'s up next.',
         side:  'bottom',
-        align: 'start'
-      },
-      onNextClick: function() {
-        navigateTo('live_map');
-        _waitForEl('#day-tabs').then(function() {
-          setTimeout(function() { if (_driverInstance) _driverInstance.moveNext(); }, 300);
-        });
+        align: 'start',
+        onNextClick: function() {
+          _navigateTourTo('live_map', '#htab-schedule', 2, {
+            message: 'Loading your schedule...'
+          });
+        }
       }
     },
 
@@ -307,14 +497,13 @@ function _buildSteps() {
       popover: {
         title:       'Schedule Tab ' + _prog(3),
         description: 'Your weekly route lives here. Tap a day to load that day\'s assigned pools.',
-        side:  'bottom',
-        align: 'start'
-      },
-      onPrevClick: function() {
-        navigateTo('home');
-        _waitForEl('#tech-home-dashboard').then(function() {
-          setTimeout(function() { if (_driverInstance) _driverInstance.movePrevious(); }, 300);
-        });
+        side:  'over',
+        align: 'center',
+        onPrevClick: function() {
+          _navigateTourTo('home', '#tech-home-dashboard', 1, {
+            message: 'Returning to your dashboard...'
+          });
+        }
       }
     },
 
@@ -336,13 +525,15 @@ function _buildSteps() {
         title:       'Service Stops ' + _prog(5),
         description: 'Once your route loads, each stop card shows the customer name, address, and service type. Tap a card then tap <strong>Log Visit</strong> to open the service form for that pool.',
         side:  'top',
-        align: 'start'
-      },
-      onNextClick: function() {
-        navigateTo('service_log');
-        _waitForEl('[data-tour="svc-pool-select"]').then(function() {
-          setTimeout(function() { if (_driverInstance) _driverInstance.moveNext(); }, 300);
-        });
+        align: 'start',
+        onNextClick: function() {
+          _navigateTourTo('service_log', '[data-tour="svc-pool-select"]', 5, {
+            beforeNavigate: _prepTourServiceLog,
+            afterVisible: _showTourPoolContext,
+            message: 'Opening Bullock\'s service log...',
+            delayMs: 700
+          });
+        }
       }
     },
 
@@ -351,24 +542,26 @@ function _buildSteps() {
       element: '[data-tour="svc-pool-select"]',
       popover: {
         title:       'Select the Pool ' + _prog(6),
-        description: 'Choose which pool you\'re servicing. When you tap Log Visit from a stop card, this fills in automatically.',
+        description: 'The tutorial preselects Charles Bullock so you can see how recent notes and water trends appear at the top of the service log.',
         side:  'bottom',
-        align: 'start'
-      },
-      onPrevClick: function() {
-        navigateTo('live_map');
-        _waitForEl('#hub-tab-schedule').then(function() {
-          setTimeout(function() { if (_driverInstance) _driverInstance.movePrevious(); }, 300);
-        });
+        align: 'start',
+        onPrevClick: function() {
+          _navigateTourTo('live_map', '#hub-tab-schedule', 4, {
+            message: 'Returning to the schedule...'
+          });
+        }
       }
     },
 
     // ── 7: Test results section ───────────────────────────────────────────────
     {
       element: '[data-tour="svc-test-results"]',
+      onHighlighted: function() {
+        _seedTourReadings();
+      },
       popover: {
         title:       'Water Test Readings ' + _prog(7),
-        description: 'Enter your test kit results here. Free Chlorine, pH, and Total Alkalinity are required. Calcium Hardness is optional but improves recommendation accuracy.',
+        description: 'For the tutorial, we filled in a sample set of readings so you can see the recommendation engine without leaving the walkthrough.',
         side:  'bottom',
         align: 'start'
       }
@@ -377,9 +570,12 @@ function _buildSteps() {
     // ── 8: Recommendation box ─────────────────────────────────────────────────
     {
       element: '[data-tour="svc-recommendations"]',
+      onHighlighted: function() {
+        _seedTourReadings();
+      },
       popover: {
         title:       'Mr. Chuy Recommends ' + _prog(8),
-        description: 'As you type your readings, this box calculates exactly what to add — adjusted for pool size, material, and condition. It updates live every time you change a value.',
+        description: 'These suggestions are generated from the sample readings, Bullock\'s pool size and material, and the selected tablet level.',
         side:  'left',
         align: 'start'
       }
@@ -425,14 +621,16 @@ function _buildSteps() {
         title:       'Submit Your Log ' + _prog(12),
         description: 'Tap Submit when everything is complete. If you\'re offline, your log saves locally and sends automatically once you reconnect.',
         side:  'top',
-        align: 'start'
-      },
-      onNextClick: function() {
-        navigateTo('live_map');
-        _waitForEl('#htab-profile').then(function() {
-          if (typeof switchHubTab === 'function') switchHubTab('profile');
-          setTimeout(function() { if (_driverInstance) _driverInstance.moveNext(); }, 350);
-        });
+        align: 'start',
+        onNextClick: function() {
+          _navigateTourTo('live_map', '#htab-profile', 12, {
+            afterVisible: function() {
+              if (typeof switchHubTab === 'function') switchHubTab('profile');
+            },
+            message: 'Opening your operator profile...',
+            delayMs: 500
+          });
+        }
       }
     },
 
@@ -441,19 +639,19 @@ function _buildSteps() {
       element: '#htab-profile',
       popover: {
         title:       'Your Profile ' + _prog(13),
-        description: 'See your certifications and training progress here. Tap <strong>Restart Tutorial</strong> any time to run this tour again.',
-        side:  'bottom',
-        align: 'start',
-        nextBtnText: 'Finish Tour'
-      },
-      onPrevClick: function() {
-        navigateTo('service_log');
-        _waitForEl('#btn-svc').then(function() {
-          setTimeout(function() { if (_driverInstance) _driverInstance.movePrevious(); }, 300);
-        });
-      },
-      onNextClick: function() {
-        _finishTour();
+        description: 'This is your operator profile. You can review your own profile details here and tap <strong>Restart Tutorial</strong> any time to run this tour again.',
+        side:  'over',
+        align: 'center',
+        nextBtnText: 'Finish Tour',
+        onPrevClick: function() {
+          _navigateTourTo('service_log', '#btn-svc', 11, {
+            message: 'Returning to the service log...',
+            delayMs: 500
+          });
+        },
+        onNextClick: function() {
+          _finishTour();
+        }
       }
     }
   ];

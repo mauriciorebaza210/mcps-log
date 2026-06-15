@@ -774,8 +774,21 @@ function approveNewHire(username) {
     if (!res.ok) { alert(res.error || 'Failed to approve.'); return; }
     api({ action: 'update_user', secret: SEC, token: _s.token, username, fields: { roles: role, active: true } })
       .then(() => {
-        const card = document.getElementById('hire-card-' + username);
-        if (card) card.innerHTML = `<div style="padding:.5rem 0;color:var(--success);font-weight:600">✓ ${username} approved as ${label}</div>`;
+        const resetTour = (role === 'technician' || role === 'lead')
+          ? api({
+              action: 'set_tutorial_state',
+              token: _s.token,
+              target_username: username,
+              tutorial_status: 'not_started',
+              tutorial_version: typeof TOUR_VERSION !== 'undefined' ? TOUR_VERSION : 'technician-tour-v1',
+              tutorial_started_at: '',
+              tutorial_completed_at: ''
+            }).catch(() => null)
+          : Promise.resolve();
+        resetTour.then(() => {
+          const card = document.getElementById('hire-card-' + username);
+          if (card) card.innerHTML = `<div style="padding:.5rem 0;color:var(--success);font-weight:600">✓ ${username} approved as ${label}</div>`;
+        });
       });
   }).catch(() => alert('Network error.'));
 }
@@ -920,7 +933,12 @@ function triggerGraduation() {
       if (!res.ok) return;
       _s.roles = ['technician'];
       _s.pages = unionPages_(['technician']);
+      _s.tutorial_status = 'not_started';
+      _s.tutorial_version = typeof TOUR_VERSION !== 'undefined' ? TOUR_VERSION : 'technician-tour-v1';
+      _s.tutorial_started_at = '';
+      _s.tutorial_completed_at = '';
       localStorage.setItem('mcps_s', JSON.stringify(_s));
+      if (typeof _setTourState === 'function') _setTourState('not_started', {}, { fireAndForget: true });
       showGraduationModal();
       setTimeout(() => {
         buildNav();

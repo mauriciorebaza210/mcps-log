@@ -2354,13 +2354,16 @@ input:disabled,textarea:disabled,select:disabled{
 .driver-overlay{z-index:100000!important}
 .driver-popover{
   background:var(--card)!important;
-  border:1px solid var(--border)!important;
-  border-radius:var(--r-md)!important;
-  box-shadow:0 8px 32px rgba(0,0,0,.18)!important;
+  border:1px solid rgba(13,77,68,.18)!important;
+  border-top:4px solid var(--teal)!important;
+  border-radius:12px!important;
+  box-shadow:0 18px 46px rgba(15,23,42,.22)!important;
   color:var(--text)!important;
   font-family:'Barlow',sans-serif!important;
   font-size:.88rem!important;
-  max-width:320px!important;
+  min-width:min(360px,calc(100vw - 2rem))!important;
+  max-width:min(420px,calc(100vw - 2rem))!important;
+  padding:1.35rem 1.45rem 1.15rem!important;
   z-index:100001!important;
 }
 .driver-popover-title{
@@ -2377,12 +2380,13 @@ input:disabled,textarea:disabled,select:disabled{
 .driver-popover-description{
   color:var(--text)!important;
   line-height:1.55!important;
-  margin-top:.45rem!important;
+  margin-top:.55rem!important;
+  font-size:.95rem!important;
 }
 .driver-popover-footer{
-  margin-top:.85rem!important;
+  margin-top:1rem!important;
   border-top:1px solid var(--border)!important;
-  padding-top:.65rem!important;
+  padding-top:.85rem!important;
   display:flex!important;
   align-items:center!important;
   gap:.45rem!important;
@@ -2401,6 +2405,11 @@ input:disabled,textarea:disabled,select:disabled{
   padding:.42rem .9rem!important;
   cursor:pointer!important;
   transition:background .15s!important;
+  min-width:96px!important;
+  text-align:center!important;
+  text-shadow:none!important;
+  -webkit-font-smoothing:antialiased!important;
+  text-rendering:geometricPrecision!important;
 }
 .driver-popover-prev-btn{background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--border)!important}
 .driver-popover-prev-btn:hover:not(:disabled){background:var(--border)!important}
@@ -2414,12 +2423,59 @@ input:disabled,textarea:disabled,select:disabled{
   padding:.15rem .3rem!important;
   border-radius:var(--r-sm)!important;
   transition:color .15s!important;
+  top:.65rem!important;
+  right:.7rem!important;
 }
-.driver-popover-close-btn:hover{color:var(--text)!important}
+.driver-popover-close-btn:hover,
+.driver-popover-close-btn:focus{color:var(--text)!important;outline:2px solid rgba(13,77,68,.22)!important}
 .driver-popover-progress-text{
   font-size:.75rem!important;
   color:var(--muted)!important;
   margin-left:auto!important;
+}
+
+.tour-transition{
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%) scale(.98);
+  z-index:100002;
+  min-width:min(320px,calc(100vw - 2rem));
+  max-width:min(380px,calc(100vw - 2rem));
+  background:var(--card);
+  border:1px solid rgba(13,77,68,.18);
+  border-top:4px solid var(--teal);
+  border-radius:12px;
+  box-shadow:0 18px 46px rgba(15,23,42,.22);
+  padding:1.15rem 1.25rem;
+  display:flex;
+  align-items:center;
+  gap:.85rem;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .16s ease,transform .16s ease;
+}
+.tour-transition.visible{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.tour-transition-spinner{
+  width:28px;
+  height:28px;
+  border:3px solid rgba(13,77,68,.16);
+  border-top-color:var(--teal);
+  border-radius:50%;
+  animation:tour-spin .75s linear infinite;
+  flex:0 0 auto;
+}
+.tour-transition-text{
+  font-family:'Oswald',sans-serif;
+  font-size:.95rem;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--teal);
+}
+@media(prefers-reduced-motion:reduce){
+  .tour-transition{transition:none}
+  .tour-transition-spinner{animation:none;border-color:var(--teal)}
 }
 
 /* Step progress label inside title */
@@ -2434,6 +2490,7 @@ input:disabled,textarea:disabled,select:disabled{
   padding:.1rem .5rem;
   letter-spacing:.04em;
   white-space:nowrap;
+  margin-right:1.65rem;
 }
 
 /* ── Welcome modal ── */

@@ -133,7 +133,11 @@ function completeEmployeeRegistration() {
         pages: unionPages_(roles),
         username: res.username,
         avatar_url: res.avatar_url || '',
-        email: (_employeeInviteState && _employeeInviteState.invite && _employeeInviteState.invite.email) || ''
+        email: (_employeeInviteState && _employeeInviteState.invite && _employeeInviteState.invite.email) || '',
+        tutorial_status: res.tutorial_status || '',
+        tutorial_version: res.tutorial_version || '',
+        tutorial_started_at: res.tutorial_started_at || '',
+        tutorial_completed_at: res.tutorial_completed_at || ''
       };
       localStorage.setItem('mcps_s', JSON.stringify(_s));
       showApp('onboarding');
