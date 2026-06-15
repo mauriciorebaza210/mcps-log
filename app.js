@@ -214,6 +214,7 @@ function _prefetchCommon() {
 function buildNav() {
   const pages = _s.pages || [];
   const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
+  const techOnly    = hasRole('technician') && !hasRole('lead') && !isAdmin() && !hasRole('manager');
   let html = '';
 
   // Home — direct link
@@ -230,6 +231,7 @@ function buildNav() {
     techChildren = SIDEBAR_GROUPS[2].children.filter(c => {
       if (!pages.includes(c.page)) return false;
       if (c.adminOnly && !isAdmin() && !hasRole('manager')) return false;
+      if (techOnly && (c.hubTab === 'myjobs' || c.hubTab === 'training')) return false;
       if (traineeOnly && c.page === 'live_map' && !c.hubTab) return false;
       if (traineeOnly && c.hubTab === 'profile') return false;
       if (traineeOnly && c.page === 'inventory') return false;
