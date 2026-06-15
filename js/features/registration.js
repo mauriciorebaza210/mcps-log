@@ -197,12 +197,15 @@ function createEmployeeInvite() {
     }
     showMsg(msgEl, 'Invite generated.', true);
     resultEl.style.display = 'block';
+    const emailNote = res.email_sent
+      ? 'Zapier email triggered.'
+      : 'Zapier email was not triggered: ' + (res.email_error || 'not configured') + '.';
     resultEl.innerHTML = `
       <div><span>Magic link</span><button onclick="copyEmployeeInviteText('invite-link')">Copy</button></div>
       <code id="invite-link">${escHtml(res.magic_link)}</code>
       <div><span>Employee code</span><button onclick="copyEmployeeInviteText('invite-code')">Copy</button></div>
       <code id="invite-code">${escHtml(res.employee_code)}</code>
-      <p>Use these fields in Zapier's email. The account will be created as <strong>new_hire</strong>.</p>`;
+      <p>${escHtml(emailNote)} The account will be created as <strong>new_hire</strong>.</p>`;
     loadEmployeeInvites();
   }).catch(() => showMsg(msgEl, 'Network error.', false));
 }
@@ -251,12 +254,37 @@ function renderEmployeeInviteList(invites) {
           <span class="employee-invite-badge ${escHtml(status)}">${escHtml(status.replace('_', ' '))}</span>
           <span>${escHtml(inv.worker_type === 'w2_employee' ? 'W2' : '1099')}</span>
           <span>Expires ${escHtml(inv.expires_at_display || '—')}</span>
+          ${inv.email_sent_at ? `<span class="employee-invite-email-ok">Email sent ${escHtml(inv.email_sent_at_display || '')}</span>` : ''}
+          ${inv.email_error ? `<span class="employee-invite-email-err">Email not sent</span>` : ''}
         </div>
         <div class="employee-invite-actions">
+          ${canCancel ? `<button type="button" onclick="resendEmployeeInvite('${escHtml(inv.invite_id)}')">Resend</button>` : ''}
           ${canCancel ? `<button type="button" onclick="cancelEmployeeInvite('${escHtml(inv.invite_id)}')">Cancel</button>` : ''}
         </div>
       </div>`;
   }).join('');
+}
+
+function resendEmployeeInvite(inviteId) {
+  if (!inviteId) return;
+  const msgEl = document.getElementById('employee-invite-msg');
+  if (msgEl) {
+    msgEl.style.display = 'block';
+    msgEl.className = 'im';
+    msgEl.textContent = 'Resending invite...';
+  }
+  api({ action: 'admin_resend_employee_invite', token: _s.token, invite_id: inviteId })
+    .then(res => {
+      if (!res.ok) {
+        if (msgEl) showMsg(msgEl, res.error || 'Failed to resend invite.', false);
+        return;
+      }
+      if (msgEl) showMsg(msgEl, res.email_sent ? 'Invite resent.' : (res.email_error || 'Invite regenerated, but email was not sent.'), !!res.email_sent);
+      loadEmployeeInvites();
+    })
+    .catch(() => {
+      if (msgEl) showMsg(msgEl, 'Network error.', false);
+    });
 }
 
 function cancelEmployeeInvite(inviteId) {

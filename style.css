@@ -1232,10 +1232,13 @@ select.q-inp{cursor:pointer}
 .employee-invite-person strong{font-size:.95rem;color:var(--text);overflow-wrap:anywhere}
 .employee-invite-person span{font-size:.82rem;color:var(--muted);overflow-wrap:anywhere}
 .employee-invite-meta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;color:var(--muted);font-size:.8rem;font-weight:600}
+.employee-invite-actions{display:flex;justify-content:flex-end;gap:.4rem;flex-wrap:wrap}
 .employee-invite-badge{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:99px;padding:.18rem .55rem;background:#e8f5f3;color:var(--teal)}
 .employee-invite-badge.used{background:#eef2ff;color:#4f46e5}
 .employee-invite-badge.expired{background:#fff7ed;color:#c2410c}
 .employee-invite-badge.cancelled{background:#f1f5f9;color:#64748b}
+.employee-invite-email-ok{color:#15803d}
+.employee-invite-email-err{color:var(--error)}
 @media (max-width:760px){.employee-invite-row{grid-template-columns:1fr}.employee-invite-actions{text-align:left}}
 @media (max-width:900px){.employee-invite-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.employee-invite-grid{grid-template-columns:1fr}}

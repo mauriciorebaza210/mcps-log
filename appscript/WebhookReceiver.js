@@ -451,6 +451,10 @@ function doPost(e) {
       return jsonResponse_(handleCancelEmployeeInvite(payload));
     }
 
+    if (payload.action === 'admin_resend_employee_invite') {
+      return jsonResponse_(handleResendEmployeeInvite(payload));
+    }
+
     if (payload.action === 'employee_invite_lookup') {
       return jsonResponse_(handleEmployeeInviteLookup(payload));
     }
