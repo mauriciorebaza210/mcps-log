@@ -259,22 +259,24 @@ function clearPoolContextBanners_() {
 function applyPoolContext_(ctx, poolId) {
   clearPoolContextBanners_();
 
-  // Prefill pool size
+  // Prefill pool size (case-insensitive, first-word match covers "Large (20k+)" → "large")
   if (ctx.last_size) {
+    const sizeKey = ctx.last_size.toString().toLowerCase().split(/[^a-z]/)[0];
     const sizeSel = document.getElementById('svc-size');
     if (sizeSel) {
       for (let i = 0; i < sizeSel.options.length; i++) {
-        if (sizeSel.options[i].value === ctx.last_size) { sizeSel.selectedIndex = i; break; }
+        if (sizeSel.options[i].value === sizeKey) { sizeSel.selectedIndex = i; break; }
       }
     }
   }
 
-  // Prefill pool material
+  // Prefill pool material (case-insensitive)
   if (ctx.last_material) {
+    const matKey = ctx.last_material.toString().toLowerCase().split(/[^a-z]/)[0];
     const matSel = document.getElementById('svc-mat');
     if (matSel) {
       for (let i = 0; i < matSel.options.length; i++) {
-        if (matSel.options[i].value === ctx.last_material) { matSel.selectedIndex = i; break; }
+        if (matSel.options[i].value === matKey) { matSel.selectedIndex = i; break; }
       }
     }
   }
