@@ -203,6 +203,7 @@ function createEmployeeInvite() {
       <div><span>Employee code</span><button onclick="copyEmployeeInviteText('invite-code')">Copy</button></div>
       <code id="invite-code">${escHtml(res.employee_code)}</code>
       <p>Use these fields in Zapier's email. The account will be created as <strong>new_hire</strong>.</p>`;
+    loadEmployeeInvites();
   }).catch(() => showMsg(msgEl, 'Network error.', false));
 }
 
@@ -211,7 +212,75 @@ function copyEmployeeInviteText(id) {
   if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
 }
 
+function loadEmployeeInvites() {
+  const list = document.getElementById('employee-invite-list');
+  if (!list || !_s || !_s.token) return;
+  list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">Loading invites...</div>';
+  api({ action: 'admin_list_employee_invites', token: _s.token })
+    .then(res => {
+      if (!res.ok) {
+        list.innerHTML = `<div style="color:var(--error);text-align:center;padding:1rem;font-size:.85rem">${escHtml(res.error || 'Failed to load invites.')}</div>`;
+        return;
+      }
+      renderEmployeeInviteList(res.invites || []);
+    })
+    .catch(() => {
+      list.innerHTML = '<div style="color:var(--error);text-align:center;padding:1rem;font-size:.85rem">Network error.</div>';
+    });
+}
+
+function renderEmployeeInviteList(invites) {
+  const list = document.getElementById('employee-invite-list');
+  if (!list) return;
+  if (!invites.length) {
+    list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">No employee invites yet.</div>';
+    return;
+  }
+  list.innerHTML = invites.map(inv => {
+    const fullName = [inv.first_name, inv.last_name].filter(Boolean).join(' ') || 'Unnamed';
+    const status = inv.status_label || inv.status || 'active';
+    const canCancel = status === 'active' || status === 'expired';
+    return `
+      <div class="employee-invite-row">
+        <div class="employee-invite-person">
+          <strong>${escHtml(fullName)}</strong>
+          <span>${escHtml(inv.email || '')}</span>
+          <span>@${escHtml(inv.username || '')}${inv.phone ? ' · ' + escHtml(inv.phone) : ''}</span>
+        </div>
+        <div class="employee-invite-meta">
+          <span class="employee-invite-badge ${escHtml(status)}">${escHtml(status.replace('_', ' '))}</span>
+          <span>${escHtml(inv.worker_type === 'w2_employee' ? 'W2' : '1099')}</span>
+          <span>Expires ${escHtml(inv.expires_at_display || '—')}</span>
+        </div>
+        <div class="employee-invite-actions">
+          ${canCancel ? `<button type="button" onclick="cancelEmployeeInvite('${escHtml(inv.invite_id)}')">Cancel</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function cancelEmployeeInvite(inviteId) {
+  if (!inviteId) return;
+  api({ action: 'admin_cancel_employee_invite', token: _s.token, invite_id: inviteId })
+    .then(res => {
+      if (!res.ok) {
+        const msgEl = document.getElementById('employee-invite-msg');
+        if (msgEl) showMsg(msgEl, res.error || 'Failed to cancel invite.', false);
+        return;
+      }
+      loadEmployeeInvites();
+    })
+    .catch(() => {
+      const msgEl = document.getElementById('employee-invite-msg');
+      if (msgEl) showMsg(msgEl, 'Network error.', false);
+    });
+}
+
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'inv-username') e.target.dataset.touched = '1';
   if (e.target && (e.target.id === 'inv-first' || e.target.id === 'inv-last')) _suggestInviteUsername_();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(loadEmployeeInvites, 800);
 });

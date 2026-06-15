@@ -64,7 +64,7 @@ function navigateTo(pageWithSub){
   if(page==='crm') loadCRM();
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
-  if(page==='admin') { loadPendingHires(); loadInternalNotes(); }
+  if(page==='admin') { loadPendingHires(); loadInternalNotes(); if (typeof loadEmployeeInvites === 'function') loadEmployeeInvites(); }
   if(page==='financial_hub') {
     // If we have a sub-path, notify the hub logic
     if (typeof switchFinTab === 'function' && sub) {

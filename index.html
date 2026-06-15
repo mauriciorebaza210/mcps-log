@@ -438,6 +438,15 @@
       </div>
       <div class="im" id="employee-invite-msg"></div>
       <div id="employee-invite-result" class="employee-invite-result" style="display:none"></div>
+      <div class="employee-invite-tracker">
+        <div class="employee-invite-tracker-head">
+          <span>Invite Tracker</span>
+          <button type="button" onclick="loadEmployeeInvites()">Refresh</button>
+        </div>
+        <div id="employee-invite-list">
+          <div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">Loading invites...</div>
+        </div>
+      </div>
     </div>
   </div>
 
