@@ -127,6 +127,19 @@ function openUserDrawer(username) {
   document.querySelector('input[name="d-active"][value="true"]').checked = true;
  
   document.getElementById('usr-pay-rate').value = '';
+  const nhWarn = document.getElementById('new-hire-role-warning');
+  const updateNewHireWarn = () => {
+    if (!nhWarn || _editingUsername !== null) return;
+    const nhChecked = document.querySelector('#role-checkboxes input[value="new_hire"]').checked;
+    nhWarn.style.display = nhChecked ? 'none' : 'block';
+  };
+  if (nhWarn) nhWarn.style.display = 'none';
+  if (!window._newHireRoleWarnBound) {
+    document.querySelectorAll('#role-checkboxes input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', updateNewHireWarn);
+    });
+    window._newHireRoleWarnBound = true;
+  }
 
   if (isNew) {
     document.getElementById('drawer-title').textContent = 'Add New User';
@@ -134,10 +147,11 @@ function openUserDrawer(username) {
     document.getElementById('d-uname').disabled         = false;
     document.getElementById('uname-hint').style.display = 'none';
     document.getElementById('d-pass-optional').style.display = 'none';
-    // Default: new_hire
+    // Default: new_hire — required for onboarding paperwork
     document.querySelector('#role-checkboxes input[value="new_hire"]').checked = true;
     document.getElementById('d-worker-type-wrap').style.display = 'block';
     document.getElementById('wt-1099').checked = true;
+    updateNewHireWarn();
     ALL_DAYS.forEach(day => {
       const cb = document.querySelector(`#day-checkboxes input[value="${day}"]`);
       if (cb) cb.checked = true;
@@ -305,4 +319,3 @@ function showMsg(el, text, ok) {
   el.style.display = 'block';
   setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
-

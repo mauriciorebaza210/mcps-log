@@ -4,6 +4,7 @@
 
 let _activeClientsView = 'signed'; // 'signed' | 'mcp'
 let _crmDataCache = null;
+let _homeProgressTimer = null;
 
 function _parseClientDate_(str) {
   if (!str) return null;
@@ -174,6 +175,56 @@ function _onActiveClientsViewChange_(view) {
   `;
 }
 
+function _startHomeProgressPolling_() {
+  if (!isAdmin()) return;
+  if (_homeProgressTimer) clearInterval(_homeProgressTimer);
+  _homeProgressTimer = setInterval(() => {
+    if (_curPage === 'home') loadHomeStats();
+  }, 60000);
+}
+
+function _routePoolsForToday_(routeRes, todayStr) {
+  if (!routeRes || !routeRes.ok || !routeRes.days) return [];
+  const dayName = new Date(todayStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+  const todayRouteDay = routeRes.days.find(d => d.date === todayStr || d.day === dayName);
+  return (todayRouteDay && todayRouteDay.pools) ? todayRouteDay.pools : [];
+}
+
+function renderHomeRouteProgressWidget(completions, totalScheduled, routePools, todayStr) {
+  const poolById = {};
+  (routePools || []).forEach(p => { if (p.pool_id) poolById[String(p.pool_id)] = p; });
+  const rows = (completions || []).slice().sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0));
+  const done = rows.length;
+  const pct = totalScheduled > 0 ? Math.min(100, Math.round(done / totalScheduled * 100)) : 0;
+  const listHtml = rows.length
+    ? rows.slice(0, 6).map(c => {
+        const pool = poolById[String(c.pool_id || '')] || {};
+        const name = pool.customer_name || c.pool_id || 'Pool';
+        const time = c.completed_at ? new Date(c.completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+        return `<div class="snapshot-item">
+          <span class="snapshot-label">${escHtml(name)}${c.technician ? ` <span style="color:var(--muted);font-weight:500">· ${escHtml(c.technician)}</span>` : ''}</span>
+          <span class="snapshot-val">${escHtml(time)}</span>
+        </div>`;
+      }).join('')
+    : `<div style="padding:.8rem 0;color:var(--muted);font-size:.9rem;font-weight:600;">No service logs submitted yet today.</div>`;
+
+  return `
+    <div class="dash-card" style="animation-delay:0.32s;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;gap:.75rem;">
+        <h3 class="kpi-title" style="color:var(--teal);margin:0;">Today's Route Progress</h3>
+        <button class="adm-new-btn" style="padding:.35rem .65rem;font-size:.72rem" onclick="loadHomeStats()">Refresh</button>
+      </div>
+      <div style="display:flex;align-items:end;gap:.6rem;margin-bottom:.7rem;">
+        <div class="kpi-val" style="font-size:2rem;line-height:1;">${done}<span style="font-size:1rem;color:var(--muted)"> / ${totalScheduled}</span></div>
+        <div style="font-size:.75rem;color:var(--muted);font-weight:700;margin-bottom:.25rem;">${todayStr}</div>
+      </div>
+      <div style="height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-bottom:.75rem;">
+        <div style="height:100%;width:${pct}%;background:var(--teal);border-radius:99px;"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;min-height:90px;">${listHtml}</div>
+    </div>`;
+}
+
 async function loadHomeStats() {
   const ds  = document.getElementById('home-dashboard');
   const tds = document.getElementById('tech-home-dashboard');
@@ -321,7 +372,7 @@ async function loadHomeStats() {
     const _histC = _appCacheGet('visit_history', 5*60*1000);
     const _rdC   = _getRouteCache('all', 0);
     const _glC   = _appCacheGet('weekly_goal',   5*60*1000);
-    const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes, goalRes] = await Promise.all([
+    const [crmRes, unRes, alertsRes, visitsRes, histRes, routeRes, goalRes, completionsRes] = await Promise.all([
       _or(_crmC  !== null ? { ok: true, data: _crmC } : null,
         apiGet({ action: 'get_crm_data', token: _s.token }).then(r => { if (r.ok && r.data) _appCacheSet('crm_data', r.data); return r; })),
       _or(_unC,
@@ -336,6 +387,7 @@ async function loadHomeStats() {
         apiGet({ action: 'route_data', token: _s.token, operator: 'all', week_start: _homeWeekStart }).then(r => { if (r.ok) _setRouteCache('all', 0, r); return r; })),
       _or(_glC,
         apiGet({ action: 'get_weekly_goal', token: _s.token }).then(r => { if (r.ok) _appCacheSet('weekly_goal', r); return r; })),
+      apiGet({ action: 'get_job_completions', token: _s.token, date: todayStr }).catch(() => ({ ok: false, completions: [] })),
     ]);
 
     let openOpportunities = 0;
@@ -433,20 +485,15 @@ async function loadHomeStats() {
     }
 
     // Accurate calculation for today's volume
-    let routeCount = 0;
-    if (routeRes.ok && routeRes.days) {
-      const dObj = new Date();
-      const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dObj.getDay()];
-      const todayRouteDay = routeRes.days.find(d => d.day === dayName || d.day === todayStr);
-      if (todayRouteDay && todayRouteDay.pools) routeCount = todayRouteDay.pools.length;
-    }
+    const todayRoutePools = _routePoolsForToday_(routeRes, todayStr);
+    let routeCount = todayRoutePools.length;
     const schedCount = (visitsRes.ok && visitsRes.visits)
-      ? visitsRes.visits.filter(v => (v.date || '').startsWith(todayStr)).length
+      ? visitsRes.visits.filter(v => String(v.date || v.scheduled_date || '').startsWith(todayStr)).length
       : 0;
     const todayScheduled = routeCount + schedCount;
 
-    let poolsCompletedToday = 0;
-    if (histRes.ok && histRes.rows) {
+    let poolsCompletedToday = (completionsRes.ok && completionsRes.completions) ? completionsRes.completions.length : 0;
+    if (!poolsCompletedToday && histRes.ok && histRes.rows) {
       const doneToday = new Set();
       const normalize = (val) => {
         if (!val) return '';
@@ -465,6 +512,7 @@ async function loadHomeStats() {
       });
       poolsCompletedToday = doneToday.size;
     }
+    const completionsToday = (completionsRes.ok && completionsRes.completions) ? completionsRes.completions : [];
 
     const crmData = (crmRes.ok && crmRes.data) ? crmRes.data : [];
     const unassignedCount = (unRes.ok && unRes.pools)
@@ -555,6 +603,7 @@ async function loadHomeStats() {
     const snapsRow = document.getElementById('dash-row-snapshots');
     if (snapsRow) {
       snapsRow.innerHTML = `
+        ${renderHomeRouteProgressWidget(completionsToday, todayScheduled, todayRoutePools, todayStr)}
         ${renderSnapshotDOM('Sales & Marketing', [
         { label: 'New Leads (This Week)', value: newLeadsThisWeek },
         { label: 'Quotes Sent', value: quotesSent },
@@ -639,6 +688,7 @@ async function loadHomeStats() {
         </div>
       `;
     }
+    _startHomeProgressPolling_();
   } catch (e) {
     console.error("Dashboard error:", e);
   }
@@ -1071,13 +1121,34 @@ window.toggleDriveCheck = function(idx) {
 };
 
 window.techCheckOut = function() {
-  if (typeof Swal === 'undefined') { alert('Check-out recorded! Have a great day.'); return; }
-  Swal.fire({
-    title: 'Check Out for the Day?',
-    text: 'This will be logged. Make sure all pools are completed.',
-    icon: 'question', showCancelButton: true,
-    confirmButtonText: 'Yes, Check Out', confirmButtonColor: '#0d4d44',
-  }).then(r => { if (r.isConfirmed) Swal.fire('Checked Out!', 'Great work today.', 'success'); });
+  const confirmFn = typeof Swal !== 'undefined'
+    ? () => Swal.fire({ title:'Check Out for the Day?', text:'This will be logged. Make sure all pools are completed.', icon:'question', showCancelButton:true, confirmButtonText:'Yes, Check Out', confirmButtonColor:'#0d4d44' }).then(r => r.isConfirmed)
+    : () => Promise.resolve(confirm('Check out for the day? This will be logged.'));
+
+  confirmFn().then(confirmed => {
+    if (!confirmed) return;
+
+    // Count completed pools from localStorage for today
+    const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const weekStart = _routeData && _routeData.week_start;
+    const doneKey = weekStart ? `mcps_done_${weekStart}_${todayName}` : null;
+    const poolsCompleted = doneKey ? JSON.parse(localStorage.getItem(doneKey) || '[]').length : 0;
+
+    api({ action: 'technician_check_out', token: _s.token, week_start: weekStart || '', pools_completed: poolsCompleted })
+      .then(res => {
+        if (res.ok) {
+          if (typeof Swal !== 'undefined') Swal.fire('Checked Out!', 'Great work today. See you next time!', 'success');
+          else alert('Checked out! Great work today.');
+        } else {
+          if (typeof Swal !== 'undefined') Swal.fire('Error', res.error || 'Could not record check-out. Try again.', 'error');
+          else alert('Check-out failed: ' + (res.error || 'Unknown error'));
+        }
+      })
+      .catch(() => {
+        if (typeof Swal !== 'undefined') Swal.fire('No Connection', 'Check-out could not be saved. Check your signal and try again.', 'warning');
+        else alert('Network error — check-out not saved. Try again.');
+      });
+  });
 };
 
 window.toggleHomeView = function() {

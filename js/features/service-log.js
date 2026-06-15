@@ -132,7 +132,8 @@ function renderSvcForm(meta, prefillPoolId){
     const grp=document.createElement('div');grp.className='sfg';
     const te=item.title.replace(/"/g,'&quot;');
     const isHardMandatory = (te.toLowerCase() === 'pool_id' || te === 'pH' || te === 'Chlorine (Cl)' || te === 'Total Alkalinity (TA)');
-    const lbl=item.title+((item.isRequired || isHardMandatory)?" <span style='color:red'>*</span>":'');
+    const isSoftOptional = (te === 'Calcium Hardness (CH)');
+    const lbl=item.title+((isHardMandatory || (item.isRequired && !isSoftOptional))?" <span style='color:red'>*</span>":'');
     grp.innerHTML='<label>'+lbl+'</label>'+(item.helpText?'<span class="sh">'+item.helpText+'</span>':'');
     let inp='';
     if(item.type==='LIST'||item.type==='MULTIPLE_CHOICE'){
@@ -150,7 +151,7 @@ function renderSvcForm(meta, prefillPoolId){
     if(item.title === 'Calcium Hardness (CH)') {
       // ── Tablet Level pill selector (portal-only) ────────────────────────────
       const tg=document.createElement('div');tg.className='sfg';
-      tg.innerHTML='<label>Tablet Level <span style="color:red">*</span></label><span class="sh">Current chlorine tablet level in the chlorinator.</span><div class="cp" id="tablet-pills" style="flex-wrap:wrap"><div class="cpill tbpill" onclick="tTablet(this,\'low\')" data-val="low">Low (0–2 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'medium\')" data-val="medium">Medium (3–4 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'full\')" data-val="full">Full (5–6 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'none\')" data-val="none">No Chlorinator</div></div>';
+      tg.innerHTML='<label>Tablet Level</label><span class="sh">Current chlorine tablet level in the chlorinator.</span><div class="cp" id="tablet-pills" style="flex-wrap:wrap"><div class="cpill tbpill" onclick="tTablet(this,\'low\')" data-val="low">Low (0–2 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'medium\')" data-val="medium">Medium (3–4 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'full\')" data-val="full">Full (5–6 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'none\')" data-val="none">No Chlorinator</div></div>';
       card.appendChild(tg);
     }
     if(item.title&&item.title.trim().toLowerCase()==='pool_id'){
@@ -570,7 +571,8 @@ function submitSvc(){
     if(!item.title)return;let val;
     if(item.type==='CHECKBOX'){const bs=document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');val=Array.from(bs).map(b=>b.value);if(!val.length)val=null;}
     else{const el=document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');if(el)val=el.value.trim();}
-    if(item.isRequired&&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
+    const _softOpt = (item.title === 'Calcium Hardness (CH)');
+    if(item.isRequired && !_softOpt &&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
     if(val)payload[item.title]=val;
   });
 
@@ -617,7 +619,29 @@ function submitSvc(){
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
   // Inject technician name from portal session
   if(_s && _s.name) payload['Technician'] = _s.name;
-  
+
+  // ── Chemical range validation ─────────────────────────────────────────────
+  const CHEM_RANGES = {
+    'pH':                    { min: 6.8,  max: 8.5,   label: 'pH'                    },
+    'Chlorine (Cl)':         { min: 0,    max: 15,    label: 'Chlorine (Cl)'         },
+    'Total Alkalinity (TA)': { min: 50,   max: 350,   label: 'Total Alkalinity (TA)' },
+    'Calcium Hardness (CH)': { min: 0,    max: 2000,  label: 'Calcium Hardness (CH)' },
+  };
+  const outOfRange = [];
+  Object.entries(CHEM_RANGES).forEach(([field, r]) => {
+    const raw = payload[field];
+    if (raw === undefined || raw === '') return;
+    const val = parseFloat(raw);
+    if (isNaN(val)) return;
+    if (val < r.min || val > r.max) {
+      outOfRange.push(`${r.label}: ${val} (valid range ${r.min}–${r.max})`);
+    }
+  });
+  if (outOfRange.length) {
+    const msg = 'These readings look unusual — double-check before submitting:\n\n' + outOfRange.join('\n') + '\n\nTap OK to submit anyway, or Cancel to go back and correct.';
+    if (!confirm(msg)) return;
+  }
+
   showSvcConfirm(payload);
 }
 function showSvcConfirm(payload){

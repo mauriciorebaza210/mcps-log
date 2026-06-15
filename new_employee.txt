@@ -1,0 +1,256 @@
+I'll start by exploring the actual codebase to understand what's really built before auditing it. Let me investigate the repository structure.
+
+This is a real, substantial codebase — a pool service technician platform (web app). Let me map its size and structure before auditing.
+
+This is a real single-page web app: ~14k lines of feature JS, an 1,800-line HTML shell, and a ~3,500-line Google Apps Script backend. To audit it faithfully I need to read the actual code, not assume. I'll fan out parallel deep-dive agents across the functional areas, then synthesize the audit myself.
+
+The routes/visit-workflow audit came back rich. Three agents (CRM, training/permissions, backend) are running in background. The auth/dashboard agent hit an "Overloaded" error mid-run — it already did 18 tool calls, so I'll resume it with its context intact.
+
+I have four of five deep-dive audits back with strong factual detail (routes/visit workflow, CRM/pool profiles, training/permissions/security, and backend/offline). The final agent covering login, onboarding, and the home dashboard is still running — that piece is essential for the first-day simulation, so I'll wait for it before assembling the full report.
+
+While that finishes, let me confirm a couple of specifics myself that the report will hinge on — the login screen markup and the home dashboard's top section.
+
+Login is confirmed: username + password + Sign In only — no email field, no forgot-password link, no self-service account creation. I now have comprehensive findings on routes, visit workflow, CRM/pool profiles, training, permissions, security, and backend/offline. The last agent (login internals, onboarding flow, home dashboard widgets) is still running — I'll incorporate it as soon as it lands, then deliver the full audit.
+
+The home dashboard is clearly **sales/owner-oriented** (Active Clients KPI, Pipeline Overview, Revenue, Weekly Signed Goal, funnel, "Today Needs Attention"). That's a critical signal. Let me confirm whether technicians see a different home view before I finalize.
+
+There's a dedicated technician home branch (`home.js:191-225`): for a tech, the dashboard renders today's scheduled stops with "Log Service" and "On My Way" buttons and a map link — meaningfully better than the sales view. Let me read that branch and the onboarding flow precisely to anchor the first-day simulation, then I'll assemble the full audit.
+
+I now have everything I need: the technician home renders a real "today's plan" view (schedule, stop detail with maps link, Log Service / On My Way, live last-water-reading) — but with telling placeholders like `Phone: "Not in route data"` and `Next Job ETA: -- (No schedule times yet)`. Combined with the four deep-dive audits, I can deliver the full readiness report grounded in actual code. (The fifth agent is still finishing onboarding internals, but I've independently confirmed login and the tech dashboard, so I won't block on it.)
+
+---
+
+# 🏊 MCPS Technician Platform — Operational Readiness Audit
+**Prepared for:** Owner, Mission Custom Pool Solutions
+**Date:** 2026-06-14 · **Trigger:** New technician starts tomorrow
+**Method:** Full source audit of the live codebase (SPA frontend + Google Apps Script/Sheets backend + Vercel API). Every finding below is tied to actual code.
+
+---
+
+## 1. Executive Summary
+
+**Overall Readiness: 58 / 100 — "YES, WITH RISKS (and one P0 security fix that should happen tonight)."**
+
+The platform has a **surprisingly solid technician "happy path."** A new tech who logs in, opens "Today's Schedule," drives to a stop, tests the water, and submits a log will be guided reasonably well — the dosing-recommendation engine, photo capture, draft auto-save, and per-stop map links all work. The home screen even has a dedicated technician view ("Here's your plan for today") rather than dumping sales dashboards on them.
+
+But the platform is built **as an owner/sales CRM that grew a technician module bolted on top.** The field-operations backbone that an operations manager needs is missing or fragile:
+
+- **There is no check-in / arrival / departure / time-on-site tracking at all.** Job "completion" is stored only in the technician's browser (`localStorage`) and is **never sent to the server** — so you, as dispatch, have **zero real-time visibility** into where your tech is or what's done.
+- **There is no offline support of any kind** — no service worker, no queue, no retry. Pools are in backyards with bad signal. A dropped connection on submit means manual retry and risk of duplicate logs.
+- **No customer phone number is shown anywhere** ("Phone: *Not in route data*"). A locked gate or a no-show has no supported path.
+- **A hardcoded privileged secret is committed in the client source code** (`SEC = 220ed543…`). Anyone who views the page source gets the keys to create users, set pay rates, and run payroll. This is a **P0** that should be addressed before you onboard more people.
+- **The knowledge base is empty.** The training module is a working engine with zero pool content loaded — no dosing guides, SOPs, equipment manuals, or emergency procedures.
+
+**Bottom line:** One supervised technician doing core water-test-and-log work tomorrow? Workable. The same platform as your system of record for scaling from 1 → 100 technicians? Not yet — and the security exposure should be closed regardless of headcount.
+
+---
+
+## 2. Readiness Scorecard
+
+| # | Area | Score | Status | Critical Issues |
+|---|------|------|--------|-----------------|
+| 1 | **Login / Auth** | 65% | 🟡 Works | No forgot-password; no self-serve account; session is editable localStorage |
+| 2 | **Onboarding / First Impression** | 40% | 🟠 Weak | "Onboarding" = HR/tax paperwork, not a product tutorial; no in-app walkthrough |
+| 3 | **Technician Dashboard (Home)** | 70% | 🟢 Good | Solid tech view; but "Next Job ETA / Next Stop" are placeholders ("Coming soon") |
+| 4 | **Route Management** | 55% | 🟡 Partial | No check-in/arrival/departure; done-state device-only; no customer phone |
+| 5 | **Pool Profile System** | 30% | 🔴 Missing | No pool profile entity; no dimensions/volume/equipment record; access info not surfaced |
+| 6 | **Service Visit Workflow** | 65% | 🟡 Works | Good water→dosing→photo→submit; no chem range validation; auto-emails with no preview |
+| 7 | **Forms & Data Entry** | 60% | 🟡 Partial | Auto-save drafts (fields only — photos lost); presence-only validation; HEIC risk |
+| 8 | **Knowledge Base / Training** | 25% | 🔴 Empty | Engine exists, zero content loaded; quiz answers client-side (cheatable) |
+| 9 | **Notifications** | 10% | 🔴 Missing | No push at all; alerts are pull-only; no route/weather/equipment alerts |
+| 10 | **Search** | 30% | 🔴 Weak | Fragmented; CRM searches name/email/city only; no address/phone/pool-id search |
+| 11 | **Offline Mode** | 5% | 🔴 None | No SW/PWA/queue/retry; writes fail manually; reads just error out |
+| 12 | **Photos** | 55% | 🟡 Partial | Capture works (4 max, 10MB); not saved in draft; no HEIC guard on visit photos |
+| 13 | **Reports / Visit History** | 45% | 🟠 Weak | Metadata-only; buried in Financial hub; 30-day default; role-gated |
+| 14 | **Permissions / Roles** | 35% | 🔴 Risk | All gating client-side only; session editable; `isAdmin()` = admin OR manager |
+| 15 | **Backend / Data Integrity** | 40% | 🟠 Weak | Sheets as DB; no locks/transactions; race conditions; silent `catch{}` hides failures |
+| 16 | **Security** | 20% | 🔴 P0 | Hardcoded privileged secret in client; unauth endpoints leak PII + tax docs |
+| 17 | **Edge-Case Handling** | 25% | 🔴 Weak | Locked gate, offline, wrong-chem entry, mid-day route change all unhandled |
+
+---
+
+## 3. 🚨 Tomorrow-Morning Critical List (P0 — must address before the tech goes live)
+
+These are the items that cause **real money loss, data loss, customer harm, or security exposure** on day one.
+
+| P0 | Issue | Evidence | Fix before tomorrow |
+|----|-------|----------|---------------------|
+| **P0-1** | **Privileged secret hardcoded in client source.** `SEC = '220ed543794285b632c27dec0b1b6529'` ships in browser JS; gates user creation, password/pay-rate edits, payroll, route mutations. | `js/lib/constants.js:7`; `appscript/WebhookReceiver.js:7` (`WEBHOOK_SECRET`) | At minimum, confirm the **GAS backend re-validates the session token + role on every privileged action** (not just the secret). Rotate the secret + redeploy this week. Until verified, **don't create the new tech's account via the in-app admin panel from an untrusted network.** |
+| **P0-2** | **Unauthenticated endpoints leak PII + signed tax docs.** `onboarding_list_pending`, `onboarding_list_all`, `onboarding_get_documents` return names, phone, DOB, address, emergency contacts, and **W-9/W-4 document URLs** with no token check. | `WebhookReceiver.js:1145, 1170, 1195, 1209-1214` | Add `validateToken` + admin role check to these `doGet` branches before any new employee's tax docs go in. This is a compliance/identity-theft exposure. |
+| **P0-3** | **Job completion is never synced — you'll be blind.** "Done" is written only to `localStorage` (`mcps_done_<week>_<day>`). Dispatch/admin cannot see route progress; switching phones or clearing cache wipes it. | `routes.js:857, 1432-1454`; `home.js` done-set | Brief the tech that "Done" is local-only, and **confirm visit completion via the submitted Service Log** (which *is* saved server-side), not the checkmark. Plan server-side completion this week. |
+| **P0-4** | **No customer phone anywhere → locked-gate dead end.** Stop detail literally renders `Phone: "Not in route data."` | `home.js:_renderStopDetail_` ("Not in route data"); `routes.js:988-999` (no phone field) | Give the tech a **printed/texted call sheet** (customer names + phone + gate notes) as a manual fallback for tomorrow. |
+| **P0-5** | **No offline resilience.** No service worker, no write queue, no retry. A submit on weak signal fails with an `alert()` and must be retried manually; a drop *after* the server writes can create a **duplicate log + duplicate customer email** after the 5-min dedup window. | `service-log.js:644, 675`; dedup `WebhookReceiver.js:1022` | Tell the tech: **submit only with signal; if "Network error," wait and retry once — do not spam Submit.** Draft is preserved (`svc_draft_<poolId>`), so data isn't lost. |
+| **P0-6** | **No chemical-value sanity check.** Validation is presence-only; pH 14, negative chlorine, a fat-fingered "770" TA all pass and feed the dosing recommendations + customer email. | `service-log.js:567-602` (no min/max; `step="any"`) | Brief the tech to double-check readings before submit. Add range validation this week — this directly causes **wrong dosing in a customer's pool.** |
+| **P0-7** | **Required-field mismatch.** Calcium Hardness and Tablet Level show a red "required" asterisk but are **not enforced** on submit. | Asterisk `service-log.js:135, 153`; enforced set `:585` (pool_id, pH, Cl, TA only) | Either enforce them or drop the asterisk — otherwise the tech learns to ignore "required" markers. |
+
+> **Recommended pre-flight (15 min):** Owner shadows the tech through one real submit, hands them a paper call sheet (P0-4), and confirms the GAS backend rejects a forged-role request (P0-1).
+
+---
+
+## 4. 📅 One-Week Roadmap (highest-impact)
+
+1. **Add a real Check-In / Arrive / Depart flow** with timestamps (and optional geolocation) per stop, written **server-side**. This unlocks dispatch visibility, time-on-site, and proof-of-service. *(Currently zero check-in exists — `routes.js` has no arrival button or `navigator.geolocation`.)*
+2. **Sync route completion to the server** — replace the `localStorage`-only done-state so admin sees live progress. *(`routes.js:857`)*
+3. **Add chemical range validation** (min/max per reading) before submit and before the customer email fires. *(P0-6)*
+4. **Lock down the backend P0s** — token+role on the onboarding `doGet` endpoints, rotate `SEC`, and confirm every privileged `action` re-validates server-side (not just the shared secret). *(WebhookReceiver.js)*
+5. **Surface customer contact + access info on the stop card** — phone, gate code (already captured at `routes.js:998`), pets, access notes. Pull from the startup checklist data that's already collected but never shown back. *(`startup_checklists.js:317-343`)*
+6. **Add a customer-report preview/confirm step** before the email auto-sends, with recipient shown. *(`service-log.js:670` — currently fires silently on submit.)*
+7. **Persist photos in the draft** (IndexedDB) and **add a HEIC guard on visit photos** to match the one that already exists on profile photos. *(`service-log.js:692-708` vs the existing guard at `routes.js:2149-2153`.)*
+8. **Seed the knowledge base** with your existing PDFs (you already have `MCPS_Cleaning_Checklist.pdf` and `MCPS_StartUp_Checklist.pdf` in the repo) plus a one-page dosing/emergency cheat sheet, so "Training" isn't "No modules yet." *(`training.js:180-183`)*
+
+---
+
+## 5. 🗓️ One-Month Roadmap (strategic — for scaling to 100 techs)
+
+1. **Build a true Pool Profile entity** — type, dimensions, volume (gallons), surface, features, and an equipment record (pump/filter/heater/automation/sanitizer with model + serial). Today there is **no profile** and equipment is a single 2-option dropdown (Chlorine/Salt). *(`startup_checklists.js:328-332`)*
+2. **Offline-first PWA**: service worker + write queue + sync + optimistic UI. This is non-negotiable for field reliability at scale. *(None exists today.)*
+3. **Push notifications**: route changes, new customer messages, equipment alerts, severe-weather alerts. Today there is **no push system whatsoever** — alerts are pull-only. *(`alerts.js`)*
+4. **Move auth/roles to server-enforced sessions** (the Supabase migration in `scripts/migrate_users.js` is the right direction) and off Google Sheets, which has **no locking/transactions** and will corrupt under concurrent technician writes. *(`RouteData.js` read-modify-write patterns; no `LockService`.)*
+5. **Unified search** across customers, addresses, phones, pool IDs, equipment, and history (today: 3 separate shallow search boxes). *(`crm.js:231-232`, `visit-history.js:105`)*
+6. **Guided multi-step visit workflow** (Inspect → Test → Dose → Clean → Photo → Notes → Complete) with an equipment-inspection checklist and a "couldn't service / reason" path. Today it's a single dynamic form with no cleaning or inspection steps.
+7. **Granular permissions** beyond binary `isAdmin()` (which currently means admin **or** manager), and replace client-side-only gating with server enforcement. *(`auth.js:43-44`; `constants.js:86-96`)*
+8. **Replace silent `catch{}` server-side** with real error surfacing so a "success" to the tech can't hide a failed inventory deduction, email, or schedule write. *(`WebhookReceiver.js:211-212, 1032, 1049`)*
+
+---
+
+## 6. 🎬 Technician First-Day Simulation (minute-by-minute)
+
+**8:02 AM — Getting in.** The tech opens the URL on their phone. Clean login card: "MCPS Employee Portal," **Username** + **Password**, "Sign In." *They don't have credentials yet* — there's no sign-up and **no "Forgot Password" link** (`index.html:20-29`). They text you; you create their account in the admin panel and read them a password. ⏱️ *Friction: account must be hand-created by an admin; any password trouble = a call to you, every time.*
+
+**8:06 AM — First screen.** Login succeeds. Greeting: *"Good morning, [Name] — Here's your plan for today."* Good first impression. They see **Today's Schedule (N stops)** with numbered cards (name, address, service type) and a stop-detail panel. *(`home.js:182-225, 860-960`)* 👍 This is genuinely the right screen to land on.
+
+**8:07 AM — The placeholders.** Two KPI cards read **"Next Job ETA: -- (No schedule times yet)"** and **"Next Stop."** The tech wonders, *"What time am I supposed to be there?"* — there are no appointment windows. *(`home.js:_thKpiCard_`, "Coming soon")* 🤔
+
+**8:08 AM — Tapping a stop.** Detail shows Address (a working Google Maps link 👍), Service, and **"Phone: Not in route data"**, plus Notes if present. *They think: "How do I call this customer if I'm locked out?"* No answer. *(`home.js:_renderStopDetail_`)* 😟
+
+**8:10 AM — "On My Way."** They tap **📲 On My Way** — it opens the phone's SMS app with a prefilled message. Works, but it's manual, one customer at a time. *(`training.js:headsUp`)*
+
+**8:30 AM — Navigation.** They tap the map link and drive. *(If they'd used the day-level "Apple Maps" multi-stop button, it would only route to the **last** stop — a known limitation noted right in the code: `routes.js:1480`.)*
+
+**8:45 AM — Arrival.** They park. *They look for a "Check In" or "I've Arrived" button.* **There is none.** *(No arrival logic anywhere in `routes.js`.)* They shrug and start work. *You have no record they arrived.* 😟
+
+**8:50 AM — Logging service.** They tap **📝 Log Service**. The form auto-fills pool size/material, shows **"Notes from last visit"** and a trend banner 👍, and their tech name is pre-filled. They enter FC/pH/TA. Dosing recommendations compute instantly — including smart logic like *"Green/algae — shock dose; do NOT adjust pH/TA/CH until chlorine works 24–48 hrs"* 👍. *(`service-log.js:258-338, 461-558`)* This is the strongest part of the app.
+
+**8:55 AM — Fat finger.** They accidentally type TA as **"880."** No warning. The recommendation engine happily computes a huge acid dose. *(No range validation, `service-log.js:567-602`.)* 😟 *If they don't catch it, the wrong dose goes in the pool and into the customer's emailed report.*
+
+**9:00 AM — Photos.** They take 2 before/after photos (camera opens fine via `accept="image/*"`, 4 max). *(`service-log.js:179-191`)* 👍 *But if the phone reloads now, the photos vanish — drafts save form fields only.*
+
+**9:03 AM — Submit.** They tap **Submit Log to MCPS** → a confirmation modal → success: *"Log written, inventory deducted, email sent."* 👍 *They didn't know an email would go to the customer, never saw it, and couldn't check the address.* *(`service-log.js:670`)* 🤔
+
+**9:04 AM — Weak signal.** At the next backyard, signal drops. Submit fails: **`alert("Network error")`**. *They tap Submit again… and again.* The draft is safe, but repeated taps risk a duplicate log + duplicate customer email once past the 5-min dedup window. *(`service-log.js:675`; dedup `WebhookReceiver.js:1022`)* 😟
+
+**11:00 AM — Locked gate.** Stop #5 gate is locked. No phone number, no "couldn't access — reason" button. *They text you a photo of the gate and move on.* 😟
+
+**4:30 PM — Done?** They've checked off stops locally. The checkmarks look satisfying — but **none of that reached you.** Your only real proof of work is the Service Logs that submitted successfully. *(`routes.js:1432-1454`)*
+
+**Net:** The core *do-the-water-chemistry-and-log-it* loop is good. Everything *around* it — arrival, contact, exceptions, connectivity, visibility — is where a new tech gets stuck and where you lose money and sleep.
+
+---
+
+## 7. 📋 Missing Features List
+
+**Missing buttons**
+- Check-In / Arrived / Depart / time-on-site
+- "Couldn't service" / skip-with-reason (locked gate, aggressive dog, no access)
+- Call customer (no phone surfaced at all)
+- Customer-report preview / send-confirm / opt-out
+- "Report broken equipment" with photo from the stop
+- Manual resync / "submit pending logs" for offline recovery
+
+**Missing screens**
+- Pool Profile (type, dimensions, volume, surface, features)
+- Equipment record (pump/filter/heater/automation/sanitizer — model/serial)
+- A tech-facing access/notes view (gate code, pets, Wi-Fi exist at startup but aren't shown back)
+- A tech-readable per-visit service report (history is metadata-only, buried in Financial hub)
+- Forgot-password / password-reset self-service
+
+**Missing workflows**
+- Guided multi-step visit (Inspect → Test → Dose → Clean → Photo → Notes → Complete)
+- Equipment inspection checklist
+- Mid-day route change notification to the tech (admin can move pools; tech only sees it on reload, and a moved pool **loses its local done-mark** because the key is week+day based)
+- Offline capture → queue → sync
+
+**Missing automations**
+- Push notifications (route changes, messages, equipment, weather)
+- ETAs / appointment windows ("Next Job ETA" is a placeholder)
+- Chemical range validation / anomaly flagging
+- Auto-retry on failed submit
+
+**Missing reports**
+- Per-tech daily completion / time-on-site
+- Equipment log / service-history report a tech can actually read in-app
+- Chemical trend per pool over time (data exists; no tech-facing view)
+
+**Missing data fields**
+- Customer phone/email on route + stop cards
+- Pool dimensions, volume (gallons), surface area
+- Structured equipment, sanitizer type, pets/hazard flags surfaced to weekly tech
+- "Amount of chemical actually added" (only *recommendations* are captured, not actuals)
+
+---
+
+## 8. ✅ Product Readiness Verdict
+
+# 🟡 YES — WITH RISKS
+
+**Would I put a brand-new technician in the field tomorrow on this platform?** Yes — **but only one tech, supervised, on the happy path, with a paper call-sheet fallback, and only after a 15-minute pre-flight.**
+
+**Why YES:** The technician home view, the water-test → dosing-recommendation engine, photo capture, draft auto-save, map links, and the submit-with-confirmation flow are real and reasonably polished. A tech *can* do the core job — test water, get correct dosing guidance, document with photos, and submit a log that reaches you and the customer.
+
+**Why WITH RISKS (not an unqualified yes):**
+- **Security (P0):** A privileged secret is sitting in your client source, and onboarding endpoints leak employee PII and tax documents with no auth. This is the one category I'd act on *tonight*, independent of the new hire.
+- **Operational blindness:** No check-in and no synced completion means you can't see your tech's progress in real time — fine at 1 tech standing next to you, untenable at 5+.
+- **Field fragility:** No offline support + no chemical validation means dropped signals and fat-fingered readings turn into duplicate emails and wrong doses in customers' pools.
+- **No safety net for exceptions:** locked gates, no-access, broken equipment — none have a supported path.
+
+**The honest scaling answer:** As your **system of record for growing 1 → 100 technicians**, the answer today is **NO** — the Google-Sheets backend (no locks/transactions), client-side-only permissions, absent offline mode, and missing pool-profile/dispatch layers won't survive concurrency or headcount. The good news: the frontend foundation and the technician UX instincts are genuinely solid, and the Supabase migration already started (`scripts/migrate_users.js`) is the right path. Close the P0 security items now, add check-in + server-side completion + chemical validation this week, and you'll have something you can confidently scale.
+
+---
+
+Would you like me to **turn the P0 list into a tracked checklist (GitHub issues)**, or **start implementing the highest-impact fixes** on your branch — I'd recommend leading with **(1) chemical range validation**, **(2) server-synced check-in/completion**, and **(3) surfacing customer phone + gate code on the stop card**, since those three are small, high-value, and directly de-risk tomorrow?
+
+The final audit (login internals, onboarding flow, full home dashboard) is back, and it **refines several findings in my report** — including one correction worth flagging. Here's the addendum that updates the audit:
+
+---
+
+## 📌 Addendum — Corrections & New Findings
+
+### ⚠️ Correction to P0-3 (Check-out)
+I reported "no check-in/arrival/departure." That's accurate for check-in/arrival, but I missed that there **is** a prominent full-width **"✓ Check Out for the Day"** button on the tech home — and it's **worse than absent: it's fake.** `techCheckOut()` (`home.js:1073-1081`) only pops a "Check-out recorded! / Great work today" dialog and **writes nothing to the backend.** A new tech will believe their hours/completion are being tracked when nothing is recorded. **Either wire it to the server or remove it before tomorrow** — a confidently-worded fake confirmation is an operational lie that will cost you in payroll/scheduling disputes.
+
+### 🆕 New P0 — Onboarding can be silently skipped (compliance risk)
+The onboarding flow is more sophisticated than I credited: a real `new_hire → trainee → technician` pipeline with **W-4/W-9 IRS PDFs e-signed client-side (pdf-lib)** and a contract step, gated by admin approval and a graduation module *(`onboarding.js:22-36, 425-443, 496-506, 635-663`)*. **But it only runs if the admin creates the account as `new_hire`.** Per `ROLE_PAGES` (`constants.js:86-94`):
+- Created as **`technician`** → skips onboarding entirely → **never signs W-9/W-4 or the contract.**
+- Created as **`trainee`** → force-routed to the Training tab (`app.js:172-176`), **also never sees onboarding.**
+
+**For tomorrow:** create the new hire as **`new_hire`** (not `technician`) so the tax/contract paperwork actually happens. Getting this wrong means an unsigned 1099/W-9 — a real IRS/compliance exposure, not just a UX gap.
+
+### 🆕 More placeholder "ghost" widgets than reported
+The tech dashboard shows **3 of 6 KPIs as dead placeholders** that look like live cards: **On-Time %** and **Drive Time** ("GPS tracking required"), and **Next Job ETA** ("No schedule times yet") *(`home.js:833-862`)*. Two body widgets are also stubs: **Equipment Status** ("No equipment endpoint yet", SOON badge) and **Messages & Alerts** ("Messaging system not yet available", SOON) *(`home.js:1014-1052`)*. A new tech can't distinguish "broken" from "not built yet." **Recommend hiding stubbed cards** rather than shipping "SOON" tiles to a first-day user. *(There's also a genuinely useful bit here I under-credited: a localStorage-persisted 5-item Drive Checklist and a live "Last Water Reading" panel.)*
+
+### 🆕 Mobile/accessibility issues for a field worker
+- **Zoom is disabled:** `user-scalable=0` in the viewport *(`index.html:9`)*. A tech squinting at pH/Cl values in direct sunlight can't pinch-zoom. Remove `maximum-scale=1.0, user-scalable=0`.
+- **Sub-spec touch targets:** drive-checklist checkboxes are **15×15px** *(`style.css` `.th-ck-item`)*, well under the ~44px minimum — easy to mis-tap with wet/gloved hands.
+
+### 🆕 Login & dashboard reliability gaps
+- **No lockout / rate-limit feedback** on login; a single generic "Network error." line *(`auth.js:29`)*. Good news: inputs use correct `type="tel"/"date"`, `autocomplete`, `autocapitalize="none"` *(`index.html:27-28`)*.
+- **Slow-connection = silent empty schedule:** the tech route fetch polls up to 16×500ms then **resolves empty with no error** *(`home.js:822-831`)* — on weak signal the tech sees "No jobs today" and assumes a day off. This compounds P0-5 (offline) and is high-impact for field use.
+- **Dead feature:** `loadHomeIssues()` targets `#home-issues-banner` DOM that doesn't exist *(`app.js:482-530`)* — wired in JS, silently no-ops. Cosmetic, but indicates drift between JS and markup.
+
+### 🆕 Confirmed: auth is NOT purely client-side (nuance on P0-1)
+Worth stating precisely: login hits a real backend and uses a **server-issued, server-validated token** — so it's not trivially bypassable by editing localStorage *for normal navigation*. The danger is specifically the **hardcoded `SEC` secret** *(`constants.js:7`, with an open "rotate me" TODO at `:5`)*: any logged-in user can read it from the bundle and call **privileged admin actions directly**, bypassing the UI gating. So P0-1 stands, but the precise risk is *secret-enabled privilege escalation*, not "anyone can log in as admin."
+
+---
+
+### 📊 Score adjustments
+| Area | Was | Now | Why |
+|------|-----|-----|-----|
+| Onboarding / First Impression | 40% | **55%** | Real W-4/W-9/contract pipeline exists — but docked for the silent-skip compliance trap |
+| Route Mgmt / Check-out | 55% | **50%** | Fake "Check Out" button is worse than none |
+| Technician Dashboard | 70% | **62%** | More ghost placeholders + silent-empty-schedule failure mode |
+
+**Revised overall readiness: ~56/100.** Verdict is unchanged: **🟡 YES, WITH RISKS** — but two items move into the tomorrow-morning list: **(a) create the hire as `new_hire` so tax/contract paperwork runs, and (b) remove or fix the fake Check-Out button.**
+
+---
+
+That completes the full audit across all functional areas. Want me to **open GitHub issues for the P0/P1 list**, or **start implementing the quick wins** on your `claude/technician-platform-readiness-rjj7m4` branch? The highest-value, lowest-risk fixes I'd tackle first: **chemical-range validation**, **remove the fake Check-Out (or make it real)**, **surface customer phone + gate code on the stop card**, and **hide the "SOON" placeholder widgets**.

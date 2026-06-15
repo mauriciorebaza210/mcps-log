@@ -242,8 +242,37 @@ function processPendingSvcJobs_() {
               }
             }
           }
-          svSheet.appendRow([Utilities.getUuid(), svPoolId, portalUser, new Date().toISOString(), svServiceType, 'completed', rowNum]);
-        } catch (svErr) { Logger.log('processPendingSvcJobs_ ScheduledVisits: ' + svErr); }
+          const completedAtRaw = lastRowData[0];
+          const completedAt = completedAtRaw ? new Date(completedAtRaw) : new Date();
+          const safeCompletedAt = isNaN(completedAt.getTime()) ? new Date() : completedAt;
+          svSheet.appendRow([Utilities.getUuid(), svPoolId, portalUser, safeCompletedAt.toISOString(), svServiceType, 'completed', rowNum]);
+
+          // Write to Job_Completions table in Routes SS
+          const completedDateStr = Utilities.formatDate(safeCompletedAt, 'America/Chicago', 'yyyy-MM-dd');
+          const visitId = svPoolId + '_' + completedDateStr;
+          const dayNum = safeCompletedAt.getDay();
+          const weekStartDate = new Date(safeCompletedAt);
+          weekStartDate.setDate(weekStartDate.getDate() + (dayNum === 0 ? -6 : 1 - dayNum));
+          const weekStart = Utilities.formatDate(weekStartDate, 'America/Chicago', 'yyyy-MM-dd');
+          const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+          let jcSheet = routesSs.getSheetByName('Job_Completions');
+          if (!jcSheet) {
+            jcSheet = routesSs.insertSheet('Job_Completions');
+            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date']);
+          }
+          let alreadyRecorded = false;
+          if (jcSheet.getLastRow() >= 2) {
+            const jcValues = jcSheet.getRange(1, 1, jcSheet.getLastRow(), jcSheet.getLastColumn()).getValues();
+            const jcHeaders = jcValues[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+            const visitIdCol = jcHeaders.indexOf('visit_id');
+            if (visitIdCol >= 0) {
+              alreadyRecorded = jcValues.slice(1).some(function(r) { return String(r[visitIdCol] || '') === visitId; });
+            }
+          }
+          if (!alreadyRecorded) {
+            jcSheet.appendRow([visitId, svPoolId, portalUser, safeCompletedAt.toISOString(), weekStart, dayNames[dayNum], rowNum, completedDateStr]);
+          }
+        } catch (svErr) { Logger.log('processPendingSvcJobs_ Routes writes: ' + svErr); }
       }
     } catch (jobErr) {
       Logger.log('processPendingSvcJobs_ job ' + jobId + ' error: ' + jobErr);
@@ -408,6 +437,18 @@ function doPost(e) {
     if (payload.action === 'validate_token') {
       const auth = validateToken(payload.token || '');
       return jsonResponse_(auth);
+    }
+
+    if (payload.action === 'admin_create_employee_invite') {
+      return jsonResponse_(handleCreateEmployeeInvite(payload));
+    }
+
+    if (payload.action === 'employee_invite_lookup') {
+      return jsonResponse_(handleEmployeeInviteLookup(payload));
+    }
+
+    if (payload.action === 'employee_register') {
+      return jsonResponse_(handleEmployeeRegister(payload));
     }
 
     // Zapier/SignRequest callback. Zapier may not have a portal session token,
@@ -1104,6 +1145,92 @@ function doPost(e) {
 
 
 
+    // ── Inventory management actions ────────────────────────────────────────────
+
+    if (payload.action === 'manual_check_poolcorp') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(manualCheckPoolCorpEmails());
+    }
+
+    if (payload.action === 'manual_apply_purchases') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      try {
+        const result = manualApplyPurchases();
+        return jsonResponse_({ ok: true, result });
+      } catch(e) {
+        return jsonResponse_({ ok: false, error: e.message });
+      }
+    }
+
+    if (payload.action === 'approve_pending_sku') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      try {
+        const result = approvePendingSku(payload.rowIndex, payload.overrides || {});
+        return jsonResponse_(result);
+      } catch(e) {
+        return jsonResponse_({ ok: false, error: e.message });
+      }
+    }
+
+    if (payload.action === 'reject_pending_sku') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      try {
+        const result = rejectPendingSku(payload.rowIndex);
+        return jsonResponse_(result);
+      } catch(e) {
+        return jsonResponse_({ ok: false, error: e.message });
+      }
+    }
+
+    if (payload.action === 'set_inventory_qty') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      try {
+        const result = setInventoryQty_(payload.chemical, payload.qty, auth.user || {});
+        return jsonResponse_(result);
+      } catch(e) {
+        return jsonResponse_({ ok: false, error: e.message });
+      }
+    }
+
+    // ── End inventory actions ───────────────────────────────────────────────────
+
+    if (payload.action === 'technician_check_out') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      try {
+        const userObj = auth.user || {};
+        const username = String(userObj.username || '').trim();
+        const techName = String(userObj.name || userObj.display_name || username || '').trim();
+        const checkoutTime = new Date();
+        const checkoutId = Utilities.getUuid();
+        const dayNum = checkoutTime.getDay();
+        const weekStartDate = new Date(checkoutTime);
+        weekStartDate.setDate(weekStartDate.getDate() + (dayNum === 0 ? -6 : 1 - dayNum));
+        const weekStart = payload.week_start || Utilities.formatDate(weekStartDate, 'America/Chicago', 'yyyy-MM-dd');
+        const poolsCompleted = parseInt(payload.pools_completed || 0, 10);
+        const routesSs = SpreadsheetApp.openById('1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM');
+        let coSheet = routesSs.getSheetByName('Checkout_Log');
+        if (!coSheet) {
+          coSheet = routesSs.insertSheet('Checkout_Log');
+          coSheet.appendRow(['checkout_id','username','technician_name','checkout_time','week_start','pools_completed']);
+        }
+        coSheet.appendRow([checkoutId, username, techName, checkoutTime.toISOString(), weekStart, poolsCompleted]);
+        return jsonResponse_({ ok: true, checkout_id: checkoutId });
+      } catch(e) {
+        return jsonResponse_({ ok: false, error: e.message });
+      }
+    }
+
     const result = processQBOBillPayload_(payload);
     return jsonResponse_({ ok: true, result });
 
@@ -1143,6 +1270,9 @@ function doGet(e) {
     }
     
     if (e && e.parameter && e.parameter.action === 'onboarding_list_pending') {
+      var _auth = validateToken(e.parameter.token || "");
+      if (!_auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
+      if (!hasRole(_auth, 'admin') && !hasRole(_auth, 'manager')) return jsonResponse_({ ok: false, error: "Admin access required." });
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
       if (!sheet) return jsonResponse_({ ok: true, applications: [] });
       var data = sheet.getDataRange().getValues();
@@ -1168,6 +1298,9 @@ function doGet(e) {
     }
     
     if (e && e.parameter && e.parameter.action === 'onboarding_list_all') {
+      var _auth = validateToken(e.parameter.token || "");
+      if (!_auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
+      if (!hasRole(_auth, 'admin') && !hasRole(_auth, 'manager')) return jsonResponse_({ ok: false, error: "Admin access required." });
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
       if (!sheet) return jsonResponse_({ ok: true, applications: [] });
       var data = sheet.getDataRange().getValues();
@@ -1193,6 +1326,9 @@ function doGet(e) {
     }
     
     if (e && e.parameter && e.parameter.action === 'onboarding_get_documents') {
+      var _auth = validateToken(e.parameter.token || "");
+      if (!_auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
+      if (!hasRole(_auth, 'admin') && !hasRole(_auth, 'manager')) return jsonResponse_({ ok: false, error: "Admin access required." });
       var username = e.parameter.username;
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
       if (!sheet) return jsonResponse_({ ok: false, error: "Not found" });
@@ -1318,6 +1454,45 @@ function doGet(e) {
       const rolesArr = Array.isArray(userObj.roles) ? userObj.roles : Array.isArray(auth.roles) ? auth.roles : String(userObj.roles || auth.roles || '').split(',').map(s => s.trim()).filter(Boolean);
       const session = { username: userObj.username || auth.username || '', roles: rolesArr.join(',') };
       return jsonResponse_(trGetTrainingProgress(e.parameter, session));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_job_completions') {
+      const auth = validateToken(e.parameter.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: "Admin access required." });
+      try {
+        const dateFilter = e.parameter.date || Utilities.formatDate(new Date(), 'America/Chicago', 'yyyy-MM-dd');
+        const routesSs = SpreadsheetApp.openById('1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM');
+        const jcSheet = routesSs.getSheetByName('Job_Completions');
+        if (!jcSheet || jcSheet.getLastRow() < 2) return jsonResponse_({ ok: true, completions: [], date: dateFilter });
+        const data = jcSheet.getDataRange().getValues();
+        const hdrs = data[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+        const iVisitId = hdrs.indexOf('visit_id');
+        const iPoolId  = hdrs.indexOf('pool_id');
+        const iTech    = hdrs.indexOf('technician');
+        const iCompAt  = hdrs.indexOf('completed_at');
+        const iDate    = hdrs.indexOf('date');
+        const iDow     = hdrs.indexOf('day_of_week');
+        const tz = 'America/Chicago';
+        const completions = [];
+        for (var i = 1; i < data.length; i++) {
+          var rowDate = iDate >= 0 ? String(data[i][iDate] || '').trim() : '';
+          if (!rowDate && iCompAt >= 0 && data[i][iCompAt]) {
+            try { rowDate = Utilities.formatDate(new Date(data[i][iCompAt]), tz, 'yyyy-MM-dd'); } catch(e2) {}
+          }
+          if (rowDate !== dateFilter) continue;
+          completions.push({
+            visit_id    : iVisitId >= 0 ? String(data[i][iVisitId] || '') : '',
+            pool_id     : iPoolId  >= 0 ? String(data[i][iPoolId]  || '') : '',
+            technician  : iTech    >= 0 ? String(data[i][iTech]    || '') : '',
+            completed_at: iCompAt  >= 0 ? String(data[i][iCompAt]  || '') : '',
+            day_of_week : iDow     >= 0 ? String(data[i][iDow]     || '') : '',
+          });
+        }
+        return jsonResponse_({ ok: true, completions, date: dateFilter });
+      } catch(err) {
+        return jsonResponse_({ ok: false, error: err.message });
+      }
     }
 
     if (e && e.parameter && e.parameter.action === 'route_data') {

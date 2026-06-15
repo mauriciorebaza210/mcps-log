@@ -41,6 +41,13 @@ function loadOnboarding() {
 
     updateOnbProgress(status || {});
 
+    if (status) {
+      const legalNameEl = document.getElementById('onb-legal-name');
+      const phoneEl = document.getElementById('onb-phone');
+      if (legalNameEl && status.full_name && !legalNameEl.value) legalNameEl.value = status.full_name;
+      if (phoneEl && status.phone && !phoneEl.value) phoneEl.value = status.phone;
+    }
+
     // Update task icons based on completion
     if (status && status.info_done) {
       document.getElementById('onb-icon-info').textContent = '✅';
@@ -664,6 +671,5 @@ function showGraduationModal() {
 
 
 // ── Active Clients Helpers ────────────────────────────────────────────────────
-
 
 

@@ -114,6 +114,7 @@ window.onload = () => {
     try { _s = JSON.parse(stored); if (!_s.username) { _s = null; localStorage.removeItem('mcps_s'); } else { showApp(location.hash.replace('#','') || _defaultLandingPage_()); return; } } catch(e) { localStorage.removeItem('mcps_s'); }
   }
   const deep = location.hash.replace('#','');
+  if (typeof initEmployeeRegistration === 'function' && initEmployeeRegistration(deep)) return;
   if (deep) sessionStorage.setItem('mcps_deep', deep);
 };
 

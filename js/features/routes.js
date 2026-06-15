@@ -5,6 +5,68 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // ROUTES / MAP PAGE
 // ══════════════════════════════════════════════════════════════════════════════
+let _jobCompletionsByDate = {};
+let _routeCompletionTimer = null;
+
+function _dateISOFromLocal_(dateObj = new Date()) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+}
+
+function _completionDateForDay_(dayData) {
+  const parsed = parseDateStr_(dayData && dayData.date);
+  if (parsed) return parsed.iso;
+  const d = dayData ? dayDateFromWeekStart_(dayData.day) : null;
+  return d ? _dateISOFromLocal_(d) : _dateISOFromLocal_();
+}
+
+function _completionsForDate_(dateStr) {
+  return _jobCompletionsByDate[dateStr] || [];
+}
+
+function _completionSetForDate_(dateStr) {
+  return new Set(_completionsForDate_(dateStr).map(c => String(c.pool_id || '').trim()).filter(Boolean));
+}
+
+function _loadJobCompletionsForDate_(dateStr) {
+  if (!isAdmin() || !_s || !_s.token) return Promise.resolve({ ok: true, completions: [], date: dateStr });
+  return apiGet({ action: 'get_job_completions', token: _s.token, date: dateStr })
+    .then(res => {
+      if (res && res.ok) _jobCompletionsByDate[dateStr] = res.completions || [];
+      return res;
+    });
+}
+
+function _loadRouteCompletionsForWeek_(silent) {
+  if (!isAdmin() || !_routeData || !_routeData.days) return Promise.resolve();
+  const dates = Array.from(new Set((_routeData.days || []).map(_completionDateForDay_).filter(Boolean)));
+  return Promise.all(dates.map(d => _loadJobCompletionsForDate_(d).catch(() => null)))
+    .then(() => {
+      if (_routeData) renderRoutePage();
+      if (!silent) _flashRouteRefresh_('Completion data refreshed.');
+    });
+}
+
+function refreshRouteCompletions() {
+  return _loadRouteCompletionsForWeek_(false);
+}
+
+function _startRouteCompletionPolling_() {
+  if (!isAdmin()) return;
+  if (_routeCompletionTimer) clearInterval(_routeCompletionTimer);
+  _routeCompletionTimer = setInterval(() => {
+    if (_curPage === 'live_map' && _activeHubTab === 'schedule') _loadRouteCompletionsForWeek_(true);
+  }, 60000);
+}
+
+function _flashRouteRefresh_(msg) {
+  const el = document.getElementById('route-completion-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.opacity = msg ? '1' : '0';
+  if (msg) setTimeout(() => { if (el) el.style.opacity = '0'; }, 1800);
+}
+
 function loadRoutes(opOverride) {
   const op = opOverride || _activeOp;
 
@@ -15,6 +77,8 @@ function loadRoutes(opOverride) {
     document.getElementById('route-loading').style.display = 'none';
     document.getElementById('route-content').style.display = 'block';
     renderRoutePage();
+    _loadRouteCompletionsForWeek_(true);
+    _startRouteCompletionPolling_();
     if (isAdmin()) loadUnassigned(true);
     // Scheduled visits are not stored in cache — always fetch fresh
     apiGet({ action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) })
@@ -61,6 +125,8 @@ function loadRoutes(opOverride) {
       _routeData = res;
       _setRouteCache(op, _weekOffset, res);
       renderRoutePage();
+      _loadRouteCompletionsForWeek_(true);
+      _startRouteCompletionPolling_();
       if (isAdmin()) loadUnassigned(true);
     })
     .catch(e => {
@@ -774,7 +840,13 @@ function renderRoutePage() {
   const tabsEl = document.getElementById('day-tabs');
   tabsEl.innerHTML = days.map(d => {
     const isToday = d.day === today;
-    const count = (d.pools || []).filter(p => !p._startupDay || p._startupDay === 1).length;
+    const realPools = (d.pools || []).filter(p => !p._startupDay || p._startupDay === 1);
+    const count = realPools.length;
+    const completionDate = _completionDateForDay_(d);
+    const serverDone = _completionSetForDate_(completionDate);
+    const doneCount = isAdmin()
+      ? realPools.filter((p, i) => serverDone.has(String(p.pool_id || String(i)))).length
+      : 0;
     const locked = d.locked;
     const _dp = parseDateStr_(d.date);
     const _dObj = _dp ? new Date(_dp.y, _dp.m - 1, _dp.d) : dayDateFromWeekStart_(d.day);
@@ -785,7 +857,7 @@ function renderRoutePage() {
       <span class="dt-day">${d.day.slice(0, 3)}</span>
       <span class="dt-date">${dateStr}</span>
       <span class="dt-weather" id="dtw-${d.day}">--</span>
-      <span class="dt-count">${count} pool${count !== 1 ? 's' : ''}</span>
+      <span class="dt-count">${isAdmin() ? `${doneCount}/${count} done` : `${count} pool${count !== 1 ? 's' : ''}`}</span>
     </div>`;
   }).join('');
 
@@ -796,7 +868,8 @@ function renderRoutePage() {
   // If viewing a different week, just select the first available day
   if (_weekOffset !== 0) autoDay = (days[0] || {}).day || 'Monday';
 
-  _doSelectDay(autoDay); // bypass debounce for initial auto-select
+  const selectedDay = (_activeDay && days.some(d => d.day === _activeDay)) ? _activeDay : autoDay;
+  _doSelectDay(selectedDay); // bypass debounce for initial auto-select
 
   // Fetch weather after tabs are rendered
   fetchWeekWeather();
@@ -852,10 +925,13 @@ function renderDayCard(dayData) {
   const dateStr = _ddObj
     ? _ddObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
     : dayData.day;
+  const completionDate = _completionDateForDay_(dayData);
+  const serverDoneSet = _completionSetForDate_(completionDate);
 
   // Load done state from localStorage
   const doneKey = `mcps_done_${_routeData.week_start}_${dayData.day}`;
-  const doneSet = new Set(JSON.parse(localStorage.getItem(doneKey) || '[]'));
+  const localDoneSet = new Set(JSON.parse(localStorage.getItem(doneKey) || '[]'));
+  const doneSet = isAdmin() ? serverDoneSet : localDoneSet;
 
   let html = '';
 
@@ -883,6 +959,7 @@ function renderDayCard(dayData) {
       ${isToday ? '<span class="rdc-badge today-badge">Today</span>' : ''}
       ${locked ? '<span class="rdc-badge locked">Locked 🔒</span>' : ''}
       ${totalCount > 0 ? `<span class="rdc-progress-badge${allDone ? ' all-done' : ''}" id="rdc-progress-badge">${doneCount}/${totalCount} Done</span>` : ''}
+      ${isAdmin() ? '<button class="pin-all-btn" onclick="refreshRouteCompletions()" title="Refresh completed jobs">Refresh</button><span id="route-completion-status" style="font-size:.75rem;opacity:0;transition:opacity .2s"></span>' : ''}
       ${isAdmin() ? '<button class="pin-all-btn" onclick="pinAllDay(\'' + dayData.day + '\')" title="Pin all pools on this day">📌 Pin All</button>' : ''}
     </div>
     <div class="rdc-progress-bar-wrap">
@@ -923,7 +1000,7 @@ function renderDayCard(dayData) {
   html += '<div class="pool-stops">';
   pools.forEach((pool, idx) => {
     const pId = pool.pool_id || String(idx);
-    const done = doneSet.has(pId);
+    const done = doneSet.has(String(pId));
     const svcClass = getSvcClass_(pool.service);
     const svcLabel = getSvcLabel_(pool.service);
     const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
@@ -994,6 +1071,7 @@ function renderDayCard(dayData) {
           ${scheduledBadgeHtml ? scheduledBadgeHtml : `<span class="ps-label ${svcClass}">${svcLabel}</span>` + startupDayBadge}
           ${pool.operator && isAdmin() ? `<span class="ps-label svc-other">${pool.op_name || pool.operator}</span>` : ''}
           ${pool.priority ? `<span class="ps-label" style="background:#fee2e2;color:#ef4444">High Priority</span>` : ''}
+          ${done && isAdmin() ? `<span class="ps-label svc-done">Done</span>` : ''}
         </div>
         ${pool.gate_code ? `<div class="stop-gate-code" style="font-size:.75rem;color:var(--teal);margin-top:.25rem;font-weight:600;letter-spacing:.01em">🔑 ${escHtml(pool.gate_code)}</div>` : ''}
         ${pool.notes ? `<div class="stop-notes" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;font-style:italic">📋 ${pool.notes}</div>` : ''}
@@ -1009,7 +1087,7 @@ function renderDayCard(dayData) {
           ${isGtcVisit ? `<button class="ps-btn ps-gtc-next" onclick="openGtcModal('${escHtml(pId)}','${escHtml(pool.customer_name || '')}','${escHtml(pool.operator || '')}')">+ Next Visit</button>` : ''}
         </div>
       </div>
-      <div class="ps-action-col" onclick="event.stopPropagation();toggleDoneInHub(this,${idx},'${escHtml(pId)}','${doneKey}')">
+      <div class="ps-action-col${isAdmin() ? ' ps-server-check' : ''}" ${isAdmin() ? 'title="Server-confirmed from submitted service log"' : `onclick="event.stopPropagation();toggleDoneInHub(this,${idx},'${escHtml(pId)}','${doneKey}')"`}>
         <div class="ps-check">${done ? '✓' : ''}</div>
       </div>
     </div>`;
