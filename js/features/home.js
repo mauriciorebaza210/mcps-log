@@ -1015,7 +1015,7 @@ function _loadStopChemistry_(pool) {
         container.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">No readings on file.</div>`; return;
       }
       const row = res.rows
-        .filter(r => r.detail && (r.detail['pH'] != null || r.detail['Chlorine (Cl)'] != null))
+        .filter(r => r.detail && (r.detail['pH'] != null || r.detail['Free Chlorine (FC)'] != null))
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
       if (!row) { container.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">No chemistry data found.</div>`; return; }
       _chemCache_[pId] = row;
@@ -1036,7 +1036,7 @@ function _injectChem_(elId, row) {
     <div class="th-chem-ts">Last visit: ${ts}</div>
     <div class="th-chem-row">
       ${_chemBub_('pH', d['pH'], 6.8, 7.6)}
-      ${_chemBub_('Cl', d['Chlorine (Cl)'], 1.0, 3.0)}
+      ${_chemBub_('Cl', d['Free Chlorine (FC)'], 1.0, 3.0)}
       ${_chemBub_('TA', d['Total Alkalinity (TA)'], 80, 120)}
       ${_chemBub_('CH', d['Calcium Hardness (CH)'], 200, 400)}
     </div>`;

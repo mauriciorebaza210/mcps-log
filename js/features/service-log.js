@@ -5,7 +5,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SERVICE LOG
 // ══════════════════════════════════════════════════════════════════════════════
-const TF={FC:"Chlorine (Cl)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium Hardness (CH)"};
+const TF={FC:"Free Chlorine (FC)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium Hardness (CH)"};
 const SG={small:12000,medium:17500,large:25000};
 const SM=[6,7,8,9];
 
@@ -131,7 +131,7 @@ function renderSvcForm(meta, prefillPoolId){
     }
     const grp=document.createElement('div');grp.className='sfg';
     const te=item.title.replace(/"/g,'&quot;');
-    const isHardMandatory = (te.toLowerCase() === 'pool_id' || te === 'pH' || te === 'Chlorine (Cl)' || te === 'Total Alkalinity (TA)');
+    const isHardMandatory = (te.toLowerCase() === 'pool_id' || te === 'pH' || te === 'Free Chlorine (FC)' || te === 'Total Alkalinity (TA)');
     const isSoftOptional = (te === 'Calcium Hardness (CH)');
     const lbl=item.title+((isHardMandatory || (item.isRequired && !isSoftOptional))?" <span style='color:red'>*</span>":'');
     grp.innerHTML='<label>'+lbl+'</label>'+(item.helpText?'<span class="sh">'+item.helpText+'</span>':'');
@@ -584,7 +584,7 @@ function submitSvc(){
     const tLower = t.toLowerCase();
     
     // Only these 4 are strictly mandatory by code request
-    const isMainMandatory = (t === 'pH' || t === 'Chlorine (Cl)' || t === 'Total Alkalinity (TA)' || tLower === 'pool_id');
+    const isMainMandatory = (t === 'pH' || t === 'Free Chlorine (FC)' || t === 'Total Alkalinity (TA)' || tLower === 'pool_id');
     
     if (isMainMandatory || i.isRequired) {
       if (!payload[i.title] || (Array.isArray(payload[i.title]) && !payload[i.title].length) || payload[i.title].toString().trim() === '') {
@@ -623,7 +623,7 @@ function submitSvc(){
   // ── Chemical range validation ─────────────────────────────────────────────
   const CHEM_RANGES = {
     'pH':                    { min: 6.8,  max: 8.5,   label: 'pH'                    },
-    'Chlorine (Cl)':         { min: 0,    max: 15,    label: 'Chlorine (Cl)'         },
+    'Free Chlorine (FC)':    { min: 0,    max: 15,    label: 'Free Chlorine (FC)'    },
     'Total Alkalinity (TA)': { min: 50,   max: 350,   label: 'Total Alkalinity (TA)' },
     'Calcium Hardness (CH)': { min: 0,    max: 2000,  label: 'Calcium Hardness (CH)' },
   };

@@ -2482,7 +2482,7 @@ function getPoolContext_(poolId) {
     const sizeColIdx = headers.indexOf('Pool Size');
     const matColIdx = headers.indexOf('Pool Material');
     const tabletColIdx = headers.indexOf('Tablet Level');
-    const clColIdx = headers.indexOf('Chlorine (Cl)');
+    const clColIdx = headers.indexOf('Free Chlorine (FC)');
     const phColIdx = headers.indexOf('pH');
     const taColIdx = headers.indexOf('Total Alkalinity (TA)');
     const notesColIdx = headers.indexOf('Internal Notes'); // Fetches the tech-only notes
@@ -2516,7 +2516,36 @@ function getPoolContext_(poolId) {
       }
     }
 
-    if (!visitCount) return { found: false };
+    if (!visitCount) {
+      // No Chemical_Usage_Log history — fall back to Quotes sheet for size & material
+      try {
+        const crmSs = SpreadsheetApp.openById('1fw2qMdWnNbYlb3F6wM3A69CMDIymYVd2uhOF_iPoB6E');
+        const qSheet = crmSs.getSheetByName('Quotes');
+        if (qSheet && qSheet.getLastRow() >= 2) {
+          const qData = qSheet.getDataRange().getValues();
+          const qH = qData[0].map(h => String(h || '').trim().toLowerCase());
+          const qPid  = qH.indexOf('pool_id');
+          const qSize = qH.indexOf('size');
+          const qMat  = qH.indexOf('material');
+          if (qPid !== -1) {
+            for (let i = 1; i < qData.length; i++) {
+              const pid = String(qData[i][qPid] || '').trim();
+              if (pid && extractPoolId_(pid) === requestedId) {
+                const sz  = qSize !== -1 ? String(qData[i][qSize] || '').trim().toLowerCase() : '';
+                const mat = qMat  !== -1 ? String(qData[i][qMat]  || '').trim().toLowerCase() : '';
+                if (sz || mat) {
+                  return { found: true, last_size: sz, last_material: mat, last_tablet: '', internal_notes: '', visit_count: 0, trends: [] };
+                }
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        Logger.log('getPoolContext_ CRM fallback error: ' + e);
+      }
+      return { found: false };
+    }
 
     function avg(colIdx) {
       if (colIdx === -1) return null;
