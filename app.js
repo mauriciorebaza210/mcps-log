@@ -24,7 +24,7 @@ let _routeFetchInFlight = null; // { key, promise } — deduplicates concurrent 
 let _daySelectTimer = null;     // debounce timer for selectDay()
 
 // ── Route data cache (localStorage, 15-min TTL) ──────────────────────────────
-const ROUTE_CACHE_TTL = 15 * 60 * 1000;
+const ROUTE_CACHE_TTL = 3 * 60 * 1000;
 function _routeCacheKey(op, weekOffset){ return `mcps_route_${op||'all'}_${weekOffset||0}`; }
 function _getRouteCache(op, weekOffset){
   try{
@@ -305,15 +305,16 @@ function _closeSidebar() {
 // Trainees see only the Training tab; field roles (tech/lead) also see My Jobs.
 function _configureHubTabs(){
   const traineeOnly = hasRole('trainee') && !hasRole('technician') && !hasRole('lead') && !hasRole('admin') && !hasRole('manager');
-  const isField = hasRole('technician') || hasRole('lead');
-  const schedBtn  = document.getElementById('htab-schedule');
-  const profBtn   = document.getElementById('htab-profile');
-  const myJobsBtn = document.getElementById('htab-myjobs');
-  const sclBtn    = document.getElementById('htab-startup_checklists');
-  if(schedBtn)  schedBtn.style.display  = traineeOnly ? 'none' : '';
-  if(profBtn)   profBtn.style.display   = traineeOnly ? 'none' : '';
-  if(myJobsBtn) myJobsBtn.style.display = isField ? '' : 'none';
-  if(sclBtn)    sclBtn.style.display    = (isAdmin() || hasRole('manager')) ? '' : 'none';
+  const schedBtn    = document.getElementById('htab-schedule');
+  const profBtn     = document.getElementById('htab-profile');
+  const myJobsBtn   = document.getElementById('htab-myjobs');
+  const trainingBtn = document.getElementById('htab-training');
+  const sclBtn      = document.getElementById('htab-startup_checklists');
+  if(schedBtn)    schedBtn.style.display    = traineeOnly ? 'none' : '';
+  if(profBtn)     profBtn.style.display     = traineeOnly ? 'none' : '';
+  if(myJobsBtn)   myJobsBtn.style.display   = 'none';
+  if(trainingBtn) trainingBtn.style.display = 'none';
+  if(sclBtn)      sclBtn.style.display      = (isAdmin() || hasRole('manager')) ? '' : 'none';
   // Also hide the schedule/profile/myjobs tab content for trainees
   if(traineeOnly){
     document.getElementById('hub-tab-schedule').style.display = 'none';

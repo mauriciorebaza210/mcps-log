@@ -70,7 +70,7 @@ function _flashRouteRefresh_(msg) {
 function loadRoutes(opOverride) {
   const op = opOverride || _activeOp;
 
-  // ── Cache hit: render immediately, then patch in scheduled visits ──
+  // ── Cache hit: render immediately, revalidate in background ──
   const cached = _getRouteCache(op, _weekOffset);
   if (cached) {
     _routeData = cached;
@@ -80,14 +80,25 @@ function loadRoutes(opOverride) {
     _loadRouteCompletionsForWeek_(true);
     _startRouteCompletionPolling_();
     if (isAdmin()) loadUnassigned(true);
-    // Scheduled visits are not stored in cache — always fetch fresh
-    apiGet({ action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) })
-      .then(svRes => {
-        if (svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
-          _mergeScheduledVisits_(_routeData.days, svRes.visits);
-          renderRoutePage();
-        }
-      }).catch(() => {});
+    // Revalidate route_data + scheduled_visits in background; re-render only if data changed
+    const rdParams = { action: 'route_data', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
+    if (_weekOffset !== 0) rdParams.week_offset = _weekOffset;
+    Promise.all([
+      apiGet(rdParams),
+      apiGet({ action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) })
+    ]).then(([freshRes, svRes]) => {
+      if (!freshRes || !freshRes.ok) return;
+      if (svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
+        _mergeScheduledVisits_(freshRes.days, svRes.visits);
+      }
+      const freshJson = JSON.stringify(freshRes.days);
+      const cachedJson = JSON.stringify(cached.days);
+      if (freshJson !== cachedJson) {
+        _routeData = freshRes;
+        _setRouteCache(op, _weekOffset, freshRes);
+        renderRoutePage();
+      }
+    }).catch(() => {});
     return;
   }
 
