@@ -39,7 +39,7 @@ function loadOnboarding() {
       const contractSigEl = document.getElementById('onb-signed-name');
       if (legalNameEl && status.full_name && !legalNameEl.value) legalNameEl.value = status.full_name;
       if (phoneEl && status.phone && !phoneEl.value) phoneEl.value = status.phone;
-      if (emailEl && status.email && !emailEl.value) emailEl.value = status.email;
+      if (emailEl && !emailEl.value) emailEl.value = status.email || (_s && _s.email) || '';
       if (preferredEl && status.preferred_name && !preferredEl.value) preferredEl.value = status.preferred_name;
       if (i9SigEl && status.full_name && !i9SigEl.value) i9SigEl.value = status.full_name;
       if (contractSigEl && status.full_name && !contractSigEl.value) contractSigEl.value = status.full_name;

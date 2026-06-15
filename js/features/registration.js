@@ -132,7 +132,8 @@ function completeEmployeeRegistration() {
         roles,
         pages: unionPages_(roles),
         username: res.username,
-        avatar_url: res.avatar_url || ''
+        avatar_url: res.avatar_url || '',
+        email: (_employeeInviteState && _employeeInviteState.invite && _employeeInviteState.invite.email) || ''
       };
       localStorage.setItem('mcps_s', JSON.stringify(_s));
       showApp('onboarding');
