@@ -986,7 +986,7 @@
         <div class="onb-welcome" id="onb-welcome-name">Welcome!</div>
         <div class="onb-sub">Complete the steps below to activate your account.</div>
         <div class="onb-progress-bar"><div class="onb-progress-fill" id="onb-fill" style="width:0%"></div></div>
-        <div class="onb-progress-label" id="onb-progress-label">0 of 3 steps complete</div>
+        <div class="onb-progress-label" id="onb-progress-label">0 of 4 steps complete</div>
       </div>
 
       <!-- Task 1 — Personal Information -->
@@ -1007,7 +1007,6 @@
           </div>
           <div class="onb-row2">
             <div class="onb-fg"><label for="onb-dob">Date of Birth</label><input class="onb-inp" id="onb-dob" type="date"></div>
-            <div class="onb-fg"><label for="onb-dl-exp">Driver's License Expiration</label><input class="onb-inp" id="onb-dl-exp" type="date"></div>
           </div>
           <div class="onb-row2">
             <div class="onb-fg"><label for="onb-phone">Phone Number</label><input class="onb-inp" id="onb-phone" type="tel" placeholder="(555) 555-5555"></div>
@@ -1027,6 +1026,10 @@
           <div class="onb-fg">
             <label for="onb-dl-photo">Driver's License Photo</label>
             <input class="onb-inp" id="onb-dl-photo" type="file" accept="image/*" capture="environment">
+          </div>
+          <div class="onb-row2">
+            <div class="onb-fg"><label for="onb-dl-number">Driver's License Number</label><input class="onb-inp" id="onb-dl-number" autocomplete="off" placeholder="DL number"></div>
+            <div class="onb-fg"><label for="onb-dl-exp">Driver's License Expiration</label><input class="onb-inp" id="onb-dl-exp" type="date"></div>
           </div>
 
           <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Emergency Contact</div>
@@ -1059,7 +1062,79 @@
         </div>
       </div>
 
-      <!-- Task 2 — W-4 -->
+      <!-- Task 2 — I-9 -->
+      <div class="onb-task-card" id="onb-task-i9">
+        <div class="onb-task-hdr" onclick="toggleOnbTask('i9')">
+          <span class="onb-task-icon" id="onb-icon-i9">🪪</span>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:.95rem">I-9 Employment Eligibility</div>
+            <div style="font-size:.78rem;color:var(--muted)" id="onb-i9-subtitle">Complete Section 1 and review the form</div>
+          </div>
+          <span class="onb-lock" id="onb-lock-i9">Locked</span>
+          <span class="onb-chevron" id="onb-chev-i9">›</span>
+        </div>
+        <div class="onb-task-body" id="onb-body-i9" style="display:none">
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.1rem 0 .4rem">Employee Attestation</div>
+          <div class="onb-row2">
+            <div class="onb-fg"><label for="onb-i9-other-last">Other Last Names Used <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input class="onb-inp" id="onb-i9-other-last" placeholder="Type N/A if none"></div>
+            <div class="onb-fg"><label for="onb-i9-ssn">SSN</label><input class="onb-inp" id="onb-i9-ssn" placeholder="___-__-____" maxlength="11" autocomplete="off" oninput="onbFormatW4Ssn(this)"></div>
+          </div>
+
+          <div class="onb-fg">
+            <label>Citizenship / Immigration Status</label>
+            <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.3rem">
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-i9-status" value="citizen" onchange="onbI9StatusChanged()"> U.S. citizen</label>
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-i9-status" value="noncitizen_national" onchange="onbI9StatusChanged()"> Noncitizen national of the United States</label>
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-i9-status" value="lawful_permanent_resident" onchange="onbI9StatusChanged()"> Lawful permanent resident</label>
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-i9-status" value="alien_authorized" onchange="onbI9StatusChanged()"> Alien authorized to work</label>
+            </div>
+          </div>
+
+          <div id="onb-i9-lpr-fields" style="display:none">
+            <div class="onb-fg"><label for="onb-i9-uscis">USCIS or A-Number</label><input class="onb-inp" id="onb-i9-uscis" placeholder="A-Number / USCIS number"></div>
+          </div>
+
+          <div id="onb-i9-alien-fields" style="display:none">
+            <div class="onb-fg"><label for="onb-i9-work-exp">Work Authorization Expiration <span style="font-weight:400;color:var(--muted)">(if any)</span></label><input class="onb-inp" id="onb-i9-work-exp" type="date"></div>
+            <div class="onb-row2">
+              <div class="onb-fg"><label for="onb-i9-i94">I-94 Admission Number</label><input class="onb-inp" id="onb-i9-i94" placeholder="I-94 number"></div>
+              <div class="onb-fg"><label for="onb-i9-passport">Foreign Passport Number</label><input class="onb-inp" id="onb-i9-passport" placeholder="Passport number"></div>
+            </div>
+            <div class="onb-fg"><label for="onb-i9-passport-country">Foreign Passport Country of Issuance</label><input class="onb-inp" id="onb-i9-passport-country" placeholder="Country"></div>
+          </div>
+
+          <div class="onb-fg">
+            <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer">
+              <input type="checkbox" id="onb-i9-preparer" style="margin-top:.2rem">
+              <span>Someone helped prepare or translate this form</span>
+            </label>
+          </div>
+
+          <div class="onb-fg">
+            <label class="onb-agree-label">
+              <input type="checkbox" id="onb-i9-agree">
+              <span>I attest, under penalty of perjury, that my citizenship or immigration status is correct.</span>
+            </label>
+          </div>
+          <div class="onb-fg">
+            <label for="onb-i9-signature">Type your full legal name to sign</label>
+            <input class="onb-inp" id="onb-i9-signature" placeholder="Full Legal Name">
+          </div>
+
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">I-9 Form Generation</div>
+          <div class="onb-fg">
+            <div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">Your I-9 will be generated from the fields above. Review the PDF before submitting.</div>
+            <input type="hidden" id="onb-i9-base64">
+            <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-i9" onclick="generateAndReviewI9()">Review &amp; Sign I-9 Form</button>
+            <div id="i9-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ I-9 generated and ready.</div>
+          </div>
+
+          <div class="im" id="onb-i9-msg" style="margin:.5rem 0 0"></div>
+          <button class="onb-submit-btn" onclick="submitI9Info()">Submit I-9 →</button>
+        </div>
+      </div>
+
+      <!-- Task 3 — W-4 -->
       <div class="onb-task-card" id="onb-task-w4">
         <div class="onb-task-hdr" onclick="toggleOnbTask('w4')">
           <span class="onb-task-icon" id="onb-icon-w4">🧾</span>
@@ -1067,6 +1142,7 @@
             <div style="font-weight:700;font-size:.95rem">W-4</div>
             <div style="font-size:.78rem;color:var(--muted)">Federal withholding form</div>
           </div>
+          <span class="onb-lock" id="onb-lock-w4">Locked</span>
           <span class="onb-chevron" id="onb-chev-w4">›</span>
         </div>
         <div class="onb-task-body" id="onb-body-w4" style="display:none">
@@ -1126,7 +1202,7 @@
         </div>
       </div>
 
-      <!-- Task 3 — Employee Agreement -->
+      <!-- Task 4 — Employee Agreement -->
       <div class="onb-task-card" id="onb-task-contract">
         <div class="onb-task-hdr" onclick="toggleOnbTask('contract')">
           <span class="onb-task-icon" id="onb-icon-contract">📄</span>
@@ -1134,6 +1210,7 @@
             <div style="font-weight:700;font-size:.95rem">Contractor Agreement</div>
             <div style="font-size:.78rem;color:var(--muted)">Read and sign your independent contractor agreement</div>
           </div>
+          <span class="onb-lock" id="onb-lock-contract">Locked</span>
           <span class="onb-chevron" id="onb-chev-contract">›</span>
         </div>
         <div class="onb-task-body" id="onb-body-contract" style="display:none">
@@ -1346,6 +1423,26 @@
       <div style="display:flex;gap:.5rem">
         <button class="conf-cancel-btn" onclick="closeW9Modal()">Cancel</button>
         <button class="conf-submit-btn" onclick="confirmW9()">Looks Good &amp; Sign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── I-9 Review Modal ── -->
+<div class="conf-modal-backdrop" id="i9-modal-backdrop" onclick="closeI9Modal(event)" style="display:none;z-index:9999">
+  <div class="conf-modal" onclick="event.stopPropagation()" style="max-width:800px;width:95%;height:90vh;display:flex;flex-direction:column">
+    <div class="conf-modal-hdr">
+      <div class="conf-modal-title">Review &amp; Sign I-9</div>
+      <button class="drawer-close" onclick="closeI9Modal()">✕</button>
+    </div>
+    <div class="conf-modal-body" style="flex:1;padding:0;overflow:hidden">
+      <iframe id="i9-preview-frame" style="width:100%;height:100%;border:none;background:#f1f5f9"></iframe>
+    </div>
+    <div class="conf-modal-foot" style="justify-content:space-between">
+      <div style="font-size:.85rem;color:var(--muted)">By confirming, you electronically sign Section 1 of this I-9 using the name provided.</div>
+      <div style="display:flex;gap:.5rem">
+        <button class="conf-cancel-btn" onclick="closeI9Modal()">Cancel</button>
+        <button class="conf-submit-btn" onclick="confirmI9()">Looks Good &amp; Sign</button>
       </div>
     </div>
   </div>

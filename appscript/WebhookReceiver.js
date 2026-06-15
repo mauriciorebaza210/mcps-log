@@ -187,7 +187,7 @@ function getEmployeeSensitiveSheet_() {
   const headers = [
     'submitted_at','updated_at','username','full_legal_name','preferred_name','date_of_birth',
     'phone','email','home_address_line1','home_address_line2','home_city','home_state','home_zip',
-    'drivers_license_photo_url','drivers_license_expiration','emergency_contact_name',
+    'drivers_license_photo_url','drivers_license_number','drivers_license_expiration','emergency_contact_name',
     'emergency_contact_relationship','emergency_contact_phone','allergies',
     'emergency_medical_notes','shirt_size'
   ];
@@ -262,6 +262,7 @@ function saveEmployeeSensitiveInfo_(payload, auth) {
     home_state: payload.address_state || '',
     home_zip: payload.address_zip || '',
     drivers_license_photo_url: dlUrl,
+    drivers_license_number: payload.drivers_license_number || '',
     drivers_license_expiration: payload.drivers_license_expiration || '',
     emergency_contact_name: payload.emergency_name || '',
     emergency_contact_relationship: payload.emergency_relationship || '',
@@ -283,7 +284,8 @@ function saveEmployeeSensitiveInfo_(payload, auth) {
     });
   }
   const onboardingStatus = getOnboardingStatusForUsername_(username);
-  return { ok: true, sensitive_info_done: true, info_done: onboardingStatus.info_done, contract_done: onboardingStatus.contract_done };
+  const i9Status = getEmployeeI9StatusForUsername_(username);
+  return { ok: true, sensitive_info_done: true, i9_done: i9Status.done, info_done: onboardingStatus.info_done, contract_done: onboardingStatus.contract_done };
 }
 
 function getSensitiveInfoStatusForUsername_(username) {
@@ -325,6 +327,122 @@ function getOnboardingStatusForUsername_(username) {
     }
   }
   return { info_done: false, contract_done: false };
+}
+
+function getEmployeeI9Sheet_() {
+  const ss = getEmployeeSensitiveSpreadsheet_();
+  let sheet = ss.getSheetByName('Employee_I9_Submissions');
+  const headers = [
+    'submitted_at','updated_at','username','full_name','ssn_last4','citizenship_status',
+    'work_authorization_expiration','uscis_number','i94_number','foreign_passport',
+    'foreign_passport_country','preparer_used','signature_name','signature_date',
+    'i9_pdf_url','admin_section2_status','admin_section2_signed_at'
+  ];
+  if (!sheet) {
+    sheet = ss.insertSheet('Employee_I9_Submissions');
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+  } else {
+    const existing = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]
+      .map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+    headers.forEach(function(h) {
+      if (existing.indexOf(h) === -1) {
+        sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h);
+        existing.push(h);
+      }
+    });
+  }
+  return sheet;
+}
+
+function getEmployeeI9StatusForUsername_(username) {
+  try {
+    const sheet = getEmployeeI9Sheet_();
+    if (!sheet || sheet.getLastRow() < 2) return { done: false };
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+    const usernameCol = headers.indexOf('username');
+    const pdfCol = headers.indexOf('i9_pdf_url');
+    const submittedCol = headers.indexOf('submitted_at');
+    if (usernameCol < 0) return { done: false };
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][usernameCol] || '').trim().toLowerCase() === String(username || '').trim().toLowerCase()) {
+        return {
+          done: !!(data[i][submittedCol] && data[i][pdfCol]),
+          i9_pdf_url: pdfCol >= 0 ? data[i][pdfCol] : ''
+        };
+      }
+    }
+  } catch(e) {
+    Logger.log('getEmployeeI9StatusForUsername_: ' + e);
+  }
+  return { done: false };
+}
+
+function saveEmployeeI9Info_(payload, auth) {
+  const username = String(auth.username || '').trim().toLowerCase();
+  if (!username) return { ok: false, error: 'Unauthorized' };
+  const sensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+  if (!sensitiveStatus.done) return { ok: false, error: 'Complete Personal Information first.' };
+  if (!payload.i9_base64) return { ok: false, error: 'Review and sign the I-9 before submitting.' };
+
+  const folder = getEmployeeSensitiveFolder_();
+  const blob = Utilities.newBlob(Utilities.base64Decode(payload.i9_base64), 'application/pdf', username + '_i9.pdf');
+  const file = folder.createFile(blob);
+  const i9Url = file.getUrl();
+
+  const sheet = getEmployeeI9Sheet_();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+    .map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+  const data = sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues() : [];
+  const usernameCol = headers.indexOf('username');
+  let rowIdx = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (String(data[i][usernameCol] || '').trim().toLowerCase() === username) {
+      rowIdx = i + 2;
+      break;
+    }
+  }
+  const now = new Date().toISOString();
+  const ssnLast4 = payload.ssn_full ? String(payload.ssn_full).replace(/\D/g, '').slice(-4) : '';
+  const values = {
+    submitted_at: rowIdx === -1 ? now : now,
+    updated_at: now,
+    username: username,
+    full_name: payload.full_name || '',
+    ssn_last4: ssnLast4,
+    citizenship_status: payload.citizenship_status || '',
+    work_authorization_expiration: payload.work_authorization_expiration || '',
+    uscis_number: payload.uscis_number || '',
+    i94_number: payload.i94_number || '',
+    foreign_passport: payload.foreign_passport || '',
+    foreign_passport_country: payload.foreign_passport_country || '',
+    preparer_used: payload.preparer_used ? 'yes' : 'no',
+    signature_name: payload.signature_name || '',
+    signature_date: payload.signature_date || '',
+    i9_pdf_url: i9Url,
+    admin_section2_status: 'pending_review'
+  };
+
+  if (rowIdx === -1) {
+    const row = new Array(headers.length).fill('');
+    headers.forEach(function(h, i) { if (values[h] !== undefined) row[i] = values[h]; });
+    sheet.appendRow(row);
+  } else {
+    headers.forEach(function(h, i) {
+      if (values[h] !== undefined) sheet.getRange(rowIdx, i + 1).setValue(values[h]);
+    });
+  }
+
+  const onboardingStatus = getOnboardingStatusForUsername_(username);
+  return {
+    ok: true,
+    sensitive_info_done: true,
+    i9_done: true,
+    info_done: onboardingStatus.info_done,
+    contract_done: onboardingStatus.contract_done,
+    i9_pdf_url: i9Url
+  };
 }
 
 // ── processPendingSvcJobs_ ────────────────────────────────────────────────────
@@ -647,6 +765,17 @@ function doPost(e) {
         return jsonResponse_({ ok: false, error: err.toString() });
       }
     }
+
+    if (payload.action === 'save_i9_info') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || "Unauthorized" });
+      try {
+        const result = saveEmployeeI9Info_(payload, auth);
+        return jsonResponse_(result);
+      } catch (err) {
+        return jsonResponse_({ ok: false, error: err.toString() });
+      }
+    }
     
     // ── ONBOARDING: Save Personal Info + Generate W-9/W-4 in Google Drive ──────────
     if (payload.action === 'save_info') {
@@ -654,6 +783,8 @@ function doPost(e) {
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || "Unauthorized" });
       try {
         var username = auth.user ? auth.user.username : (auth.username || '');
+        var i9GateStatus = getEmployeeI9StatusForUsername_(username);
+        if (!i9GateStatus.done) return jsonResponse_({ ok: false, error: "Complete I-9 first." });
         var workerType = auth.user && auth.user.worker_type ? auth.user.worker_type : (auth.worker_type || "1099_contractor");
         var w9Url = null;
         var w4Url = null;
@@ -728,9 +859,11 @@ function doPost(e) {
         
         var savedStatus = getOnboardingStatusForUsername_(username);
         var savedSensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+        var savedI9Status = getEmployeeI9StatusForUsername_(username);
         return jsonResponse_({
           ok: true,
           sensitive_info_done: savedSensitiveStatus.done,
+          i9_done: savedI9Status.done,
           info_done: true,
           contract_done: savedStatus.contract_done
         });
@@ -761,9 +894,11 @@ function doPost(e) {
           if (headers[j] === 'status') sheet.getRange(rowIdx, j+1).setValue("pending_review");
         }
         var contractSensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+        var contractI9Status = getEmployeeI9StatusForUsername_(username);
         return jsonResponse_({
           ok: true,
           sensitive_info_done: contractSensitiveStatus.done,
+          i9_done: contractI9Status.done,
           info_done: true,
           contract_done: true
         });
@@ -1441,6 +1576,7 @@ function doGet(e) {
       var username = auth.user ? auth.user.username : (auth.username || '');
       var workerType = auth.user && auth.user.worker_type ? auth.user.worker_type : (auth.worker_type || "1099_contractor");
       var sensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+      var i9Status = getEmployeeI9StatusForUsername_(username);
       var userEmail = auth.user && auth.user.email ? auth.user.email : (auth.email || '');
       var userPhone = auth.user && auth.user.phone ? auth.user.phone : (auth.phone || '');
       
@@ -1448,6 +1584,7 @@ function doGet(e) {
       if (!sheet) return jsonResponse_({
         ok: true,
         sensitive_info_done: sensitiveStatus.done,
+        i9_done: i9Status.done,
         info_done: false,
         contract_done: false,
         status: 'in_progress',
@@ -1463,6 +1600,7 @@ function doGet(e) {
           return jsonResponse_({
             ok: true,
             sensitive_info_done: sensitiveStatus.done,
+            i9_done: i9Status.done,
             info_done: !!data[i][0],
             contract_done: !!data[i][7],
             status: data[i][11] || 'in_progress',
@@ -1477,6 +1615,7 @@ function doGet(e) {
       return jsonResponse_({
         ok: true,
         sensitive_info_done: sensitiveStatus.done,
+        i9_done: i9Status.done,
         info_done: false,
         contract_done: false,
         status: 'in_progress',
@@ -1501,12 +1640,14 @@ function doGet(e) {
       var apps = [];
       for (var i = 1; i < data.length; i++) {
         if (data[i][11] === 'pending_review') {
+          var pendingI9Status = getEmployeeI9StatusForUsername_(data[i][1]);
           apps.push({
             username: data[i][1],
             full_name: data[i][2],
             phone: data[i][3],
             info_submitted_at: data[i][0],
             info_done: !!data[i][0],
+            i9_done: pendingI9Status.done,
             contract_done: !!data[i][7],
             status: 'pending_review',
             worker_type: wTypeIdx > -1 ? data[i][wTypeIdx] : '1099_contractor'
@@ -1529,6 +1670,7 @@ function doGet(e) {
       var apps = [];
       for (var i = 1; i < data.length; i++) {
         if (!data[i][1]) continue;
+        var allI9Status = getEmployeeI9StatusForUsername_(data[i][1]);
         apps.push({
           username: data[i][1],
           full_name: data[i][2],
@@ -1536,6 +1678,7 @@ function doGet(e) {
           info_submitted_at: data[i][0],
           approved_at: data[i][10],
           info_done: !!data[i][0],
+          i9_done: allI9Status.done,
           contract_done: !!data[i][7],
           status: data[i][11],
           worker_type: wTypeIdx > -1 ? data[i][wTypeIdx] : '1099_contractor'
@@ -1555,6 +1698,7 @@ function doGet(e) {
       var headers = data[0];
       var wTypeIdx = headers.indexOf('worker_type');
       var w4Idx = headers.indexOf('w4_url');
+      var i9Status = getEmployeeI9StatusForUsername_(username);
 
       for (var i = 1; i < data.length; i++) {
         if (data[i][1] === username) {
@@ -1562,6 +1706,7 @@ function doGet(e) {
             ok: true,
             full_name: data[i][2], phone: data[i][3], tax_type: data[i][4], tax_id_last4: data[i][5], 
             w9_signed_url: data[i][6],
+            i9_signed_url: i9Status.i9_pdf_url || null,
             w4_signed_url: w4Idx > -1 ? data[i][w4Idx] : null,
             worker_type: wTypeIdx > -1 ? data[i][wTypeIdx] : '1099_contractor',
             contract_signed_at: data[i][7], contract_signed_name: data[i][8],

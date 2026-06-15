@@ -1502,6 +1502,10 @@ select.q-inp{cursor:pointer}
 .onb-task-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;margin-bottom:.85rem}
 .onb-task-hdr{display:flex;align-items:center;gap:.85rem;padding:1rem 1.1rem;cursor:pointer;user-select:none;transition:background .12s}
 .onb-task-hdr:hover{background:var(--surface)}
+.onb-task-card.is-locked{opacity:.68}
+.onb-task-card.is-locked .onb-task-hdr{cursor:not-allowed}
+.onb-lock{display:none;font-family:'Barlow Condensed',sans-serif;font-size:var(--text-xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:99px;padding:.18rem .55rem}
+.onb-task-card.is-locked .onb-lock{display:inline-flex}
 .onb-task-body{padding:.1rem 1.1rem 1.1rem;border-top:1px solid var(--border)}
 .onb-task-icon{font-size:var(--text-xl);flex-shrink:0}
 .onb-chevron{font-size:var(--text-lg);color:var(--muted);transition:transform .2s;flex-shrink:0}

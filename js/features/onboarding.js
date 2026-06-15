@@ -5,7 +5,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // ONBOARDING
 // ══════════════════════════════════════════════════════════════════════════════
-let _onbStatus = { sensitive_info_done: false, info_done: false, contract_done: false };
+let _onbStatus = { sensitive_info_done: false, i9_done: false, info_done: false, contract_done: false };
 
 function loadOnboarding() {
   const nameEl = document.getElementById('onb-welcome-name');
@@ -35,15 +35,22 @@ function loadOnboarding() {
       const phoneEl = document.getElementById('onb-phone');
       const emailEl = document.getElementById('onb-email');
       const preferredEl = document.getElementById('onb-preferred-name');
+      const i9SigEl = document.getElementById('onb-i9-signature');
+      const contractSigEl = document.getElementById('onb-signed-name');
       if (legalNameEl && status.full_name && !legalNameEl.value) legalNameEl.value = status.full_name;
       if (phoneEl && status.phone && !phoneEl.value) phoneEl.value = status.phone;
       if (emailEl && status.email && !emailEl.value) emailEl.value = status.email;
       if (preferredEl && status.preferred_name && !preferredEl.value) preferredEl.value = status.preferred_name;
+      if (i9SigEl && status.full_name && !i9SigEl.value) i9SigEl.value = status.full_name;
+      if (contractSigEl && status.full_name && !contractSigEl.value) contractSigEl.value = status.full_name;
     }
 
     // Update task icons based on completion
     if (status && status.sensitive_info_done) {
       document.getElementById('onb-icon-info').textContent = '✅';
+    }
+    if (status && status.i9_done) {
+      document.getElementById('onb-icon-i9').textContent = '✅';
     }
     if (status && status.info_done) {
       document.getElementById('onb-icon-w4').textContent = '✅';
@@ -58,12 +65,36 @@ function loadOnboarding() {
 }
 
 function toggleOnbTask(task) {
+  if (!canOpenOnbTask_(task)) return;
   const body = document.getElementById('onb-body-' + task);
   const chev = document.getElementById('onb-chev-' + task);
   if (!body) return;
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : 'block';
   if (chev) chev.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+function canOpenOnbTask_(task) {
+  if (task === 'info') return true;
+  if (task === 'i9') return !!_onbStatus.sensitive_info_done;
+  if (task === 'w4') return !!_onbStatus.i9_done;
+  if (task === 'contract') return !!_onbStatus.info_done;
+  return true;
+}
+
+function openOnbTask_(task) {
+  if (!canOpenOnbTask_(task)) return;
+  const body = document.getElementById('onb-body-' + task);
+  const chev = document.getElementById('onb-chev-' + task);
+  if (body) body.style.display = 'block';
+  if (chev) chev.style.transform = 'rotate(90deg)';
+}
+
+function closeOnbTask_(task) {
+  const body = document.getElementById('onb-body-' + task);
+  const chev = document.getElementById('onb-chev-' + task);
+  if (body) body.style.display = 'none';
+  if (chev) chev.style.transform = '';
 }
 
 function submitPersonalInfo() {
@@ -79,6 +110,7 @@ function submitPersonalInfo() {
     address_city: document.getElementById('onb-city').value.trim(),
     address_state: document.getElementById('onb-state').value.trim(),
     address_zip: document.getElementById('onb-zip').value.trim(),
+    drivers_license_number: document.getElementById('onb-dl-number').value.trim(),
     drivers_license_expiration: document.getElementById('onb-dl-exp').value,
     emergency_name: document.getElementById('onb-ec-name').value.trim(),
     emergency_relationship: document.getElementById('onb-ec-relationship').value.trim(),
@@ -96,6 +128,7 @@ function submitPersonalInfo() {
   if (!fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) {
     showMsg(msgEl, 'Complete address is required.', false); return;
   }
+  if (!fields.drivers_license_number) { showMsg(msgEl, 'Driver license number is required.', false); return; }
   if (!fields.drivers_license_expiration) { showMsg(msgEl, 'Driver license expiration is required.', false); return; }
   if (!fields.emergency_name || !fields.emergency_relationship || !fields.emergency_phone) { showMsg(msgEl, 'Complete emergency contact is required.', false); return; }
   if (!fields.allergies) { showMsg(msgEl, 'Allergies are required. Type None if none.', false); return; }
@@ -111,9 +144,9 @@ function submitPersonalInfo() {
         if (res.ok) {
           showMsg(msgEl, 'Saved!', true);
           document.getElementById('onb-icon-info').textContent = '✅';
-          updateOnbProgress({ sensitive_info_done: true, info_done: !!res.info_done, contract_done: !!res.contract_done });
-          toggleOnbTask('info');
-          toggleOnbTask('w4');
+          updateOnbProgress({ sensitive_info_done: true, i9_done: !!res.i9_done, info_done: !!res.info_done, contract_done: !!res.contract_done });
+          closeOnbTask_('info');
+          openOnbTask_('i9');
         } else {
           showMsg(msgEl, res.error || 'Failed to save.', false);
         }
@@ -129,6 +162,207 @@ function fileToDataUrl_(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function onbI9StatusChanged() {
+  const status = (document.querySelector('input[name="onb-i9-status"]:checked') || {}).value;
+  const lpr = document.getElementById('onb-i9-lpr-fields');
+  const alien = document.getElementById('onb-i9-alien-fields');
+  if (lpr) lpr.style.display = (status === 'lawful_permanent_resident' || status === 'alien_authorized') ? 'block' : 'none';
+  if (alien) alien.style.display = status === 'alien_authorized' ? 'block' : 'none';
+}
+
+function collectI9Fields_() {
+  const fullName = document.getElementById('onb-legal-name').value.trim();
+  const parts = splitLegalName_(fullName);
+  return {
+    full_name: fullName,
+    first_name: parts.first,
+    middle_initial: parts.middleInitial,
+    last_name: parts.last,
+    other_last_names: document.getElementById('onb-i9-other-last').value.trim(),
+    dob: document.getElementById('onb-dob').value,
+    ssn_full: document.getElementById('onb-i9-ssn').value.replace(/\D/g, ''),
+    email: document.getElementById('onb-email').value.trim(),
+    phone: document.getElementById('onb-phone').value.trim(),
+    address_line1: document.getElementById('onb-addr1').value.trim(),
+    address_line2: document.getElementById('onb-addr2').value.trim(),
+    address_city: document.getElementById('onb-city').value.trim(),
+    address_state: document.getElementById('onb-state').value.trim().toUpperCase(),
+    address_zip: document.getElementById('onb-zip').value.trim(),
+    citizenship_status: (document.querySelector('input[name="onb-i9-status"]:checked') || {}).value || '',
+    uscis_number: document.getElementById('onb-i9-uscis').value.trim(),
+    work_authorization_expiration: document.getElementById('onb-i9-work-exp').value,
+    i94_number: document.getElementById('onb-i9-i94').value.trim(),
+    foreign_passport: document.getElementById('onb-i9-passport').value.trim(),
+    foreign_passport_country: document.getElementById('onb-i9-passport-country').value.trim(),
+    preparer_used: document.getElementById('onb-i9-preparer').checked,
+    signature_name: document.getElementById('onb-i9-signature').value.trim(),
+    signature_date: onbTodayMmddyyyy_()
+  };
+}
+
+function validateI9Fields_(fields, msgEl) {
+  if (!_onbStatus.sensitive_info_done) { showMsg(msgEl, 'Complete Personal Information first.', false); return false; }
+  if (!fields.full_name || !fields.last_name || !fields.first_name) { showMsg(msgEl, 'Legal name is required from Personal Information.', false); return false; }
+  if (!fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) { showMsg(msgEl, 'Complete address is required from Personal Information.', false); return false; }
+  if (!fields.dob) { showMsg(msgEl, 'Date of birth is required from Personal Information.', false); return false; }
+  if (fields.ssn_full.length < 9) { showMsg(msgEl, 'Enter full SSN for this I-9.', false); return false; }
+  if (!fields.citizenship_status) { showMsg(msgEl, 'Select citizenship or immigration status.', false); return false; }
+  if (fields.citizenship_status === 'lawful_permanent_resident' && !fields.uscis_number) { showMsg(msgEl, 'Enter USCIS or A-Number.', false); return false; }
+  if (fields.citizenship_status === 'alien_authorized' && !fields.uscis_number && !fields.i94_number && !(fields.foreign_passport && fields.foreign_passport_country)) {
+    showMsg(msgEl, 'Enter USCIS/A-Number, I-94 number, or foreign passport details.', false); return false;
+  }
+  if (fields.preparer_used) { showMsg(msgEl, 'Preparer/translator support will be added next. For now, complete this yourself or contact admin.', false); return false; }
+  if (!document.getElementById('onb-i9-agree').checked) { showMsg(msgEl, 'Check the I-9 attestation box.', false); return false; }
+  if (!fields.signature_name || fields.signature_name.toLowerCase() !== fields.full_name.toLowerCase()) { showMsg(msgEl, 'Type your full legal name exactly to sign.', false); return false; }
+  return true;
+}
+
+function splitLegalName_(fullName) {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  const last = parts.length > 1 ? parts.pop() : '';
+  const first = parts.shift() || '';
+  const middleInitial = parts.length ? parts.join(' ').charAt(0).toUpperCase() : '';
+  return { first, middleInitial, last: last || first };
+}
+
+function onbDateInputToMmddyyyy_(value) {
+  if (!value) return '';
+  const parts = String(value).split('-');
+  if (parts.length === 3) return parts[1] + '/' + parts[2] + '/' + parts[0];
+  return value;
+}
+
+function onbTodayMmddyyyy_() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return mm + '/' + dd + '/' + d.getFullYear();
+}
+
+function setPdfText_(form, name, value) {
+  if (value === undefined || value === null) return;
+  try {
+    const field = form.getField(name);
+    if (field.setText) field.setText(String(value));
+    else if (field.select) field.select(String(value));
+  } catch(e) {}
+}
+
+function checkPdfBox_(form, name) {
+  try { form.getCheckBox(name).check(); } catch(e) {
+    try { form.getField(name).check(); } catch(_e) {}
+  }
+}
+
+let _pendingI9PdfBytes = null;
+
+async function generateAndReviewI9() {
+  const btn = document.getElementById('btn-gen-i9');
+  const msgEl = document.getElementById('onb-i9-msg');
+  const fields = collectI9Fields_();
+  if (!validateI9Fields_(fields, msgEl)) return;
+
+  btn.textContent = 'Generating...';
+  btn.disabled = true;
+  try {
+    const rawForm = await fetch('/i-9.pdf').then(res => res.arrayBuffer());
+    const pdfDoc = await PDFLib.PDFDocument.load(rawForm);
+    const form = pdfDoc.getForm();
+
+    setPdfText_(form, 'Last Name (Family Name)', fields.last_name);
+    setPdfText_(form, 'First Name Given Name', fields.first_name);
+    setPdfText_(form, 'Employee Middle Initial (if any)', fields.middle_initial);
+    setPdfText_(form, 'Employee Other Last Names Used (if any)', fields.other_last_names || 'N/A');
+    setPdfText_(form, 'Address Street Number and Name', fields.address_line1);
+    setPdfText_(form, 'Apt Number (if any)', fields.address_line2);
+    setPdfText_(form, 'City or Town', fields.address_city);
+    setPdfText_(form, 'State', fields.address_state);
+    setPdfText_(form, 'ZIP Code', fields.address_zip);
+    setPdfText_(form, 'Date of Birth mmddyyyy', onbDateInputToMmddyyyy_(fields.dob));
+    setPdfText_(form, 'US Social Security Number', fields.ssn_full.substring(0,3) + '-' + fields.ssn_full.substring(3,5) + '-' + fields.ssn_full.substring(5,9));
+    setPdfText_(form, 'Employees E-mail Address', fields.email);
+    setPdfText_(form, 'Telephone Number', fields.phone);
+
+    if (fields.citizenship_status === 'citizen') checkPdfBox_(form, 'CB_1');
+    if (fields.citizenship_status === 'noncitizen_national') checkPdfBox_(form, 'CB_2');
+    if (fields.citizenship_status === 'lawful_permanent_resident') {
+      checkPdfBox_(form, 'CB_3');
+      setPdfText_(form, '3 A lawful permanent resident Enter USCIS or ANumber', fields.uscis_number);
+    }
+    if (fields.citizenship_status === 'alien_authorized') {
+      checkPdfBox_(form, 'CB_4');
+      setPdfText_(form, 'Exp Date mmddyyyy', onbDateInputToMmddyyyy_(fields.work_authorization_expiration));
+      setPdfText_(form, 'USCIS ANumber', fields.uscis_number);
+      setPdfText_(form, 'Form I94 Admission Number', fields.i94_number);
+      setPdfText_(form, 'Foreign Passport Number and Country of IssuanceRow1', [fields.foreign_passport, fields.foreign_passport_country].filter(Boolean).join(' / '));
+    }
+
+    const pages = pdfDoc.getPages();
+    const page = pages[0];
+    const signatureText = fields.signature_name + ' (e-signed)';
+    const dateText = fields.signature_date;
+    page.drawText(signatureText, { x: 42, y: 430, size: 10 });
+    page.drawText(dateText, { x: 372, y: 430, size: 10 });
+
+    setPdfText_(form, 'Signature of Employee', signatureText);
+    setPdfText_(form, "Today's Date mmddyyy", dateText);
+
+    const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    form.updateFieldAppearances(helveticaFont);
+    const pdfBytes = await pdfDoc.save();
+    _pendingI9PdfBytes = pdfBytes;
+
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    document.getElementById('i9-preview-frame').src = url;
+    document.getElementById('i9-modal-backdrop').style.display = 'flex';
+  } catch (err) {
+    console.error(err);
+    showMsg(msgEl, 'Failed to generate I-9: ' + err.message, false);
+  } finally {
+    btn.textContent = 'Review & Sign I-9 Form';
+    btn.disabled = false;
+  }
+}
+
+function closeI9Modal() {
+  document.getElementById('i9-modal-backdrop').style.display = 'none';
+  document.getElementById('i9-preview-frame').src = '';
+  _pendingI9PdfBytes = null;
+}
+
+function confirmI9() {
+  if (!_pendingI9PdfBytes) return;
+  let binary = '';
+  for (let i = 0; i < _pendingI9PdfBytes.byteLength; i++) {
+    binary += String.fromCharCode(_pendingI9PdfBytes[i]);
+  }
+  document.getElementById('onb-i9-base64').value = btoa(binary);
+  document.getElementById('i9-status-msg').style.display = 'block';
+  closeI9Modal();
+}
+
+function submitI9Info() {
+  const msgEl = document.getElementById('onb-i9-msg');
+  const fields = collectI9Fields_();
+  if (!validateI9Fields_(fields, msgEl)) return;
+  const i9b64 = document.getElementById('onb-i9-base64').value;
+  if (!i9b64) { showMsg(msgEl, 'Please review and sign your I-9 Form before submitting.', false); return; }
+
+  showMsg(msgEl, 'Saving...', true);
+  api(Object.assign({ action: 'save_i9_info', token: _s.token, secret: SEC, i9_base64: i9b64 }, fields)).then(res => {
+    if (res.ok) {
+      showMsg(msgEl, 'Saved!', true);
+      document.getElementById('onb-icon-i9').textContent = '✅';
+      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: true, info_done: !!res.info_done, contract_done: !!res.contract_done });
+      closeOnbTask_('i9');
+      openOnbTask_('w4');
+    } else {
+      showMsg(msgEl, res.error || 'Failed to save.', false);
+    }
+  }).catch(() => showMsg(msgEl, 'Network error.', false));
 }
 
 function submitW4Info() {
@@ -153,6 +387,7 @@ function submitW4Info() {
   if (!fields.legal_name || !fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) {
     showMsg(msgEl, 'Complete Personal Information first.', false); return;
   }
+  if (!_onbStatus.i9_done) { showMsg(msgEl, 'Complete I-9 first.', false); return; }
   if (fields.tax_id_full.length < 9) { showMsg(msgEl, 'Enter full SSN.', false); return; }
 
   const w4b64 = document.getElementById('onb-w4-base64').value;
@@ -162,9 +397,9 @@ function submitW4Info() {
       if (res.ok) {
         showMsg(msgEl, 'Saved!', true);
         document.getElementById('onb-icon-w4').textContent = '✅';
-        updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, info_done: true, contract_done: !!res.contract_done });
-        toggleOnbTask('w4');
-        toggleOnbTask('contract');
+        updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: !!res.i9_done, info_done: true, contract_done: !!res.contract_done });
+        closeOnbTask_('w4');
+        openOnbTask_('contract');
       } else {
         showMsg(msgEl, res.error || 'Failed to save.', false);
       }
@@ -463,13 +698,14 @@ function submitContract() {
 
   if (!agreed) { showMsg(msgEl, 'You must check the agreement box.', false); return; }
   if (!signedName) { showMsg(msgEl, 'Type your full name to sign.', false); return; }
+  if (!_onbStatus.info_done) { showMsg(msgEl, 'Complete W-4 first.', false); return; }
 
   api({ action: 'onboarding_save_contract', signed_name: signedName, signed_at: new Date().toISOString(), token: _s.token, secret: SEC })
   .then(res => {
     if (res.ok) {
       showMsg(msgEl, 'Signature saved!', true);
       document.getElementById('onb-icon-contract').textContent = '✅';
-      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, info_done: !!res.info_done, contract_done: true });
+      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: !!res.i9_done, info_done: !!res.info_done, contract_done: true });
     } else {
       showMsg(msgEl, res.error || 'Failed to save signature.', false);
     }
@@ -478,21 +714,34 @@ function submitContract() {
 
 function updateOnbProgress(status) {
   _onbStatus = Object.assign({}, _onbStatus, status || {});
-  const done = (_onbStatus.sensitive_info_done ? 1 : 0) + (_onbStatus.info_done ? 1 : 0) + (_onbStatus.contract_done ? 1 : 0);
-  const pct  = (done / 3) * 100;
+  const done = (_onbStatus.sensitive_info_done ? 1 : 0) + (_onbStatus.i9_done ? 1 : 0) + (_onbStatus.info_done ? 1 : 0) + (_onbStatus.contract_done ? 1 : 0);
+  const pct  = (done / 4) * 100;
   const fill = document.getElementById('onb-fill');
   const label = document.getElementById('onb-progress-label');
   if (fill) fill.style.width = pct + '%';
-  if (label) label.textContent = done + ' of 3 steps complete';
+  if (label) label.textContent = done + ' of 4 steps complete';
 
   if (_onbStatus.sensitive_info_done) document.getElementById('onb-icon-info').textContent = '✅';
+  if (_onbStatus.i9_done) document.getElementById('onb-icon-i9').textContent = '✅';
   if (_onbStatus.info_done) document.getElementById('onb-icon-w4').textContent = '✅';
   if (_onbStatus.contract_done) document.getElementById('onb-icon-contract').textContent = '✅';
 
-  if (_onbStatus.sensitive_info_done && _onbStatus.info_done && _onbStatus.contract_done) {
+  refreshOnbLocks_();
+
+  if (_onbStatus.sensitive_info_done && _onbStatus.i9_done && _onbStatus.info_done && _onbStatus.contract_done) {
     const pending = document.getElementById('onb-pending-state');
     if (pending) pending.style.display = 'block';
   }
+}
+
+function refreshOnbLocks_() {
+  ['i9', 'w4', 'contract'].forEach(task => {
+    const card = document.getElementById('onb-task-' + task);
+    if (!card) return;
+    const locked = !canOpenOnbTask_(task);
+    card.classList.toggle('is-locked', locked);
+    if (locked) closeOnbTask_(task);
+  });
 }
 
 // ── Admin: New Hire Applications ──────────────────────────────────────────────
@@ -519,6 +768,7 @@ function loadPendingHires() {
         </div>
         <div class="pend-ai" style="margin-bottom:.65rem">
           <span class="pend-ai-pill ${a.info_done ? 'conf-high' : 'conf-low'}">${a.info_done ? '✓ Info' : '✗ Info'}</span>
+          <span class="pend-ai-pill ${a.i9_done ? 'conf-high' : 'conf-low'}">${a.i9_done ? '✓ I-9' : '✗ I-9'}</span>
           <span class="pend-ai-pill ${a.contract_done ? 'conf-high' : 'conf-low'}">${a.contract_done ? '✓ Contract' : '✗ Contract'}</span>
         </div>
         <div class="pend-btns" style="flex-wrap:wrap;gap:.4rem">
@@ -590,6 +840,7 @@ function renderRecords(list) {
       </div>
       <div class="pend-ai" style="margin-bottom:.5rem">
         <span class="pend-ai-pill ${a.info_done?'conf-high':'conf-low'}">${a.info_done?'✓ Info':'✗ Info'}</span>
+        <span class="pend-ai-pill ${a.i9_done?'conf-high':'conf-low'}">${a.i9_done?'✓ I-9':'✗ I-9'}</span>
         <span class="pend-ai-pill ${a.contract_done?'conf-high':'conf-low'}">${a.contract_done?'✓ Contract':'✗ Contract'}</span>
       </div>
       <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid);width:100%" onclick="viewHireDocs('${a.username}')">📄 View Docs & Tax Form</button>
@@ -623,6 +874,12 @@ function viewHireDocs(username) {
         <div class="docs-row"><span>Signed At</span><span>${d.contract_signed_at ? new Date(d.contract_signed_at).toLocaleString() : '—'}</span></div>
       </div>
       <div>
+        <div class="docs-section-title">I-9</div>
+        ${d.i9_signed_url
+          ? `<a href="${d.i9_signed_url}" target="_blank" class="docs-w9-btn">⬇ Open I-9 PDF</a><div style="font-size:.72rem;color:var(--muted);margin-top:.3rem">Stored in sensitive employee docs</div>`
+          : '<span style="color:var(--muted);font-size:.85rem">No I-9 uploaded</span>'}
+      </div>
+      <div style="margin-top:1.25rem">
         <div class="docs-section-title">Tax Document</div>
         ${d.worker_type === 'w2_employee' ?
           (d.w4_signed_url
