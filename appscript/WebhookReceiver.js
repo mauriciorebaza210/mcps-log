@@ -1242,16 +1242,19 @@ function doPost(e) {
       return jsonResponse_(handleGetGtcPools_());
     }
 
-    if (payload.action === 'send_heads_up') {
-      const auth = validateToken(payload.token || '');
-      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
-      return jsonResponse_(sendHeadsUp(payload.pool_id || '', payload.customer_name || ''));
-    }
-
     if (payload.action === 'get_pool_phone') {
       const auth = validateToken(payload.token || '');
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
       return jsonResponse_(getPoolPhone_(payload.pool_id || '', payload.customer_name || ''));
+    }
+
+    if (payload.action === 'send_heads_up') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      const techName = (auth.user && auth.user.name) ? auth.user.name : (auth.name || '');
+      const result = sendHeadsUp(payload.pool_id || '', payload.customer_name || '', techName);
+      if (!result.ok) return jsonResponse_(result);
+      return jsonResponse_({ ok: true, firstName: result.customer });
     }
 
     if (payload.action === 'save_payroll_config') {
