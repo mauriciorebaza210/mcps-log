@@ -922,7 +922,13 @@ function triggerGraduation() {
       _s.pages = unionPages_(['technician']);
       localStorage.setItem('mcps_s', JSON.stringify(_s));
       showGraduationModal();
-      setTimeout(() => { buildNav(); navigateTo('home'); }, 3000);
+      setTimeout(() => {
+        buildNav();
+        navigateTo('home');
+        // Launch tutorial after confetti clears (3.2s) + home render delay
+        window._tourAttemptedThisSession = false;
+        setTimeout(() => { if (typeof checkAndLaunchTour === 'function') checkAndLaunchTour(); }, 3600);
+      }, 3000);
     }).catch(() => {});
 }
 

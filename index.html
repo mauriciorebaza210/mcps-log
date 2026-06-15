@@ -13,6 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/js/lib/vendor/driver.min.css">
 </head>
 <body>
 
@@ -166,7 +167,7 @@
       </div>
 
       <!-- Keep home-grid for module navigation links for now, but hidden initially -->
-      <div class="home-grid" id="home-grid" style="margin-top: 1.5rem; display:none"></div>
+      <div class="home-grid" id="home-grid" data-tour="home-grid" style="margin-top: 1.5rem; display:none"></div>
     </div>
 
     <!-- Routes / Map -->
@@ -289,6 +290,13 @@
             <div class="im" id="avail-msg" style="display:none;margin-top:.75rem"></div>
           </div>
 
+          <!-- Tutorial restart — visible to technicians and leads -->
+          <div class="tour-restart-wrap" id="tour-restart-wrap">
+            <button class="tour-restart-btn" onclick="restartTour()" aria-label="Restart the portal tutorial">
+              🗺️ Restart Tutorial
+            </button>
+          </div>
+
         </div><!-- /hub-tab-profile -->
 
         <!-- ══ TRAINING TAB ══ -->
@@ -389,6 +397,9 @@
   </div>
 
   <!-- Internal Notes -->
+  <!-- Tutorial Controls — admin only, rendered by admin.js -->
+  <div id="adm-tutorial-controls" style="display:none"></div>
+
   <div class="adm-card" id="adm-internal-notes-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
       <span>Internal Notes from Submissions</span>
@@ -1870,6 +1881,8 @@
 <script src="/js/features/visit-history.js"></script>
 <script src="/js/features/alerts.js"></script>
 <script src="/js/features/startup_checklists.js"></script>
+<script src="/js/lib/vendor/driver.iife.min.js"></script>
+<script src="/js/features/tour.js"></script>
 <script src="/app.js"></script>
 
 <!-- ── Startup Checklist Type Picker ── -->

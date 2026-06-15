@@ -728,6 +728,10 @@ function doPost(e) {
       return jsonResponse_(auth);
     }
 
+    if (payload.action === 'set_tutorial_state') {
+      return jsonResponse_(handleSetTutorialState(payload));
+    }
+
     if (payload.action === 'admin_create_employee_invite') {
       return jsonResponse_(handleCreateEmployeeInvite(payload));
     }
@@ -2486,7 +2490,7 @@ function getPoolContext_(poolId) {
     const sheet = ss.getSheetByName('Chemical_Usage_Log');
     if (!sheet) return { found: false };
 
-    const data = sheet.getDisplayValues();
+    const data = sheet.getDataRange().getDisplayValues();
     if (data.length < 2) return { found: false };
 
     const headers = data[0].map(h => String(h || '').trim());
@@ -2494,20 +2498,21 @@ function getPoolContext_(poolId) {
     const sizeColIdx = headers.indexOf('Pool Size');
     const matColIdx = headers.indexOf('Pool Material');
     const tabletColIdx = headers.indexOf('Tablet Level');
-    const clColIdx = headers.indexOf('Free Chlorine (FC)') !== -1
-      ? headers.indexOf('Free Chlorine (FC)')
-      : headers.indexOf('Chlorine (Cl)');
+    const clColIdxNew = headers.indexOf('Free Chlorine (FC)'); // portal era column name
+    const clColIdxOld = headers.indexOf('Chlorine (Cl)');      // Google Form era column name
     const phColIdx = headers.indexOf('pH');
     const taColIdx = headers.indexOf('Total Alkalinity (TA)');
-    const notesColIdx = headers.indexOf('Internal Notes'); // Fetches the tech-only notes
+    const notesColIdx = headers.indexOf('Internal Notes');
+    const publicNotesColIdx = headers.indexOf('Notes'); // regular visit notes
     if (poolColIdx === -1) return { found: false };
-    
+
     const requestedPool = String(poolId || '').trim();
     const requestedId = extractPoolId_(requestedPool);
     let lastSize = "";
     let lastMat = "";
     let lastTablet = "";
     let lastInternalNote = "";
+    let lastPublicNote = "";
     let visitCount = 0;
     const recentRows = [];
 
@@ -2517,12 +2522,14 @@ function getPoolContext_(poolId) {
       if (rowPool === requestedPool || extractPoolId_(rowPool) === requestedId) {
         visitCount++;
         if (recentRows.length < 5) recentRows.push(data[i]);
-        
-        // Grab the latest internal note if we haven't found one yet
+
         if (!lastInternalNote && notesColIdx !== -1 && data[i][notesColIdx]) {
           lastInternalNote = data[i][notesColIdx];
         }
-        
+        if (!lastPublicNote && publicNotesColIdx !== -1 && data[i][publicNotesColIdx]) {
+          lastPublicNote = data[i][publicNotesColIdx];
+        }
+
         // Grab the latest size/material settings
         if (!lastSize && sizeColIdx !== -1) lastSize = data[i][sizeColIdx];
         if (!lastMat && matColIdx !== -1) lastMat = data[i][matColIdx];
@@ -2568,6 +2575,17 @@ function getPoolContext_(poolId) {
       return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
     }
 
+    // Chlorine: check both old ("Chlorine (Cl)") and new ("Free Chlorine (FC)") per row
+    function avgCl() {
+      const nums = recentRows.map(r => {
+        const vNew = clColIdxNew !== -1 ? parseFloat(r[clColIdxNew]) : NaN;
+        const vOld = clColIdxOld !== -1 ? parseFloat(r[clColIdxOld]) : NaN;
+        const v = (!isNaN(vNew) && vNew >= 0) ? vNew : ((!isNaN(vOld) && vOld >= 0) ? vOld : NaN);
+        return v;
+      }).filter(n => !isNaN(n));
+      return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+    }
+
     const trends = [];
     const phAvg = avg(phColIdx);
     if (phAvg !== null) {
@@ -2575,7 +2593,7 @@ function getPoolContext_(poolId) {
       else if (phAvg < 7.15) trends.push('pH runs low (avg ' + phAvg.toFixed(1) + ')');
       else trends.push('pH usually in range (avg ' + phAvg.toFixed(1) + ')');
     }
-    const clAvg = avg(clColIdx);
+    const clAvg = avgCl();
     if (clAvg !== null) {
       if (clAvg > 4) trends.push('chlorine tends to run high (avg ' + clAvg.toFixed(1) + ' ppm)');
       else if (clAvg < 1) trends.push('chlorine tends to run low (avg ' + clAvg.toFixed(1) + ' ppm)');
@@ -2591,7 +2609,8 @@ function getPoolContext_(poolId) {
       last_size: lastSize,
       last_material: lastMat,
       last_tablet: lastTablet,
-      internal_notes: lastInternalNote, // This triggers the yellow banner
+      internal_notes: lastInternalNote,
+      last_notes: lastPublicNote,       // regular visit notes (triggers yellow banner too)
       visit_count: visitCount,
       trends: trends
     };

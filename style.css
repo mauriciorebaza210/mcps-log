@@ -380,6 +380,9 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .pool-trend-banner{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--r-sm);padding:.65rem .9rem;margin-bottom:1rem;font-size:var(--text-sm);color:#166534}
 .pool-trend-banner strong{display:block;font-size:var(--text-sm);font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#15803d;margin-bottom:.25rem}
 .pool-trend-pill{display:inline-block;background:#dcfce7;border:1px solid #bbf7d0;color:#166534;border-radius:99px;padding:.1rem .55rem;font-size:var(--text-sm);font-weight:600;margin:.1rem .15rem}
+.svc-retry-banner{display:flex;align-items:center;justify-content:space-between;gap:.75rem;background:#fef3c7;border:1px solid #fde68a;border-left:4px solid var(--warn);border-radius:var(--r-sm);padding:.65rem .9rem;margin-bottom:1rem}
+.svc-retry-msg{font-size:var(--text-sm);color:#92400e;flex:1}
+.svc-retry-btn{flex-shrink:0;background:var(--warn);color:#fff;border:none;border-radius:var(--r-sm);padding:.4rem .85rem;font-family:'Oswald',sans-serif;font-size:var(--text-sm);font-weight:600;letter-spacing:.06em;cursor:pointer;white-space:nowrap}
 
 /* Admin filter */
 .op-filter-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.75rem}
@@ -2342,3 +2345,274 @@ input:disabled,textarea:disabled,select:disabled{
   border:none;border-radius:var(--r-sm);font-family:'Oswald',sans-serif;font-size:var(--text-sm);
   font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .15s}
 .empty-state-action:hover{background:var(--teal-mid)}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   TOUR — Onboarding walkthrough (Driver.js theme + custom UI)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Driver.js overlay / popover overrides ── */
+.driver-overlay{z-index:100000!important}
+.driver-popover{
+  background:var(--card)!important;
+  border:1px solid var(--border)!important;
+  border-radius:var(--r-md)!important;
+  box-shadow:0 8px 32px rgba(0,0,0,.18)!important;
+  color:var(--text)!important;
+  font-family:'Barlow',sans-serif!important;
+  font-size:.88rem!important;
+  max-width:320px!important;
+  z-index:100001!important;
+}
+.driver-popover-title{
+  font-family:'Oswald',sans-serif!important;
+  font-size:1rem!important;
+  font-weight:700!important;
+  color:var(--teal)!important;
+  letter-spacing:.02em!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:.5rem!important;
+}
+.driver-popover-description{
+  color:var(--text)!important;
+  line-height:1.55!important;
+  margin-top:.45rem!important;
+}
+.driver-popover-footer{
+  margin-top:.85rem!important;
+  border-top:1px solid var(--border)!important;
+  padding-top:.65rem!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:.45rem!important;
+}
+.driver-popover-prev-btn,
+.driver-popover-next-btn{
+  background:var(--teal)!important;
+  color:#fff!important;
+  border:none!important;
+  border-radius:var(--r-sm)!important;
+  font-family:'Oswald',sans-serif!important;
+  font-size:.78rem!important;
+  font-weight:600!important;
+  letter-spacing:.06em!important;
+  text-transform:uppercase!important;
+  padding:.42rem .9rem!important;
+  cursor:pointer!important;
+  transition:background .15s!important;
+}
+.driver-popover-prev-btn{background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--border)!important}
+.driver-popover-prev-btn:hover:not(:disabled){background:var(--border)!important}
+.driver-popover-next-btn:hover:not(:disabled){background:var(--teal-mid)!important}
+.driver-popover-close-btn{
+  color:var(--muted)!important;
+  font-size:1.1rem!important;
+  background:none!important;
+  border:none!important;
+  cursor:pointer!important;
+  padding:.15rem .3rem!important;
+  border-radius:var(--r-sm)!important;
+  transition:color .15s!important;
+}
+.driver-popover-close-btn:hover{color:var(--text)!important}
+.driver-popover-progress-text{
+  font-size:.75rem!important;
+  color:var(--muted)!important;
+  margin-left:auto!important;
+}
+
+/* Step progress label inside title */
+.tour-step-prog{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:.75rem;
+  font-weight:600;
+  color:var(--gold);
+  background:rgba(200,168,75,.12);
+  border:1px solid rgba(200,168,75,.25);
+  border-radius:99px;
+  padding:.1rem .5rem;
+  letter-spacing:.04em;
+  white-space:nowrap;
+}
+
+/* ── Welcome modal ── */
+.tour-welcome-backdrop{
+  position:fixed;inset:0;z-index:100010;
+  background:rgba(13,77,68,.88);
+  display:flex;align-items:center;justify-content:center;
+  padding:1.25rem;
+  animation:tour-fade-in .25s ease;
+}
+@keyframes tour-fade-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.tour-welcome-backdrop{animation:none}}
+
+.tour-welcome-card{
+  background:var(--card);
+  border-radius:var(--r-lg);
+  box-shadow:0 20px 60px rgba(0,0,0,.3);
+  padding:2rem 1.75rem 1.5rem;
+  max-width:420px;width:100%;
+  animation:tour-slide-up .28s ease;
+}
+@keyframes tour-slide-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.tour-welcome-card{animation:none}}
+
+.tour-welcome-logo-wrap{text-align:center;margin-bottom:1.25rem}
+.tour-welcome-logo-img{height:38px;object-fit:contain}
+
+.tour-welcome-title{
+  font-family:'Oswald',sans-serif;
+  font-size:1.35rem;font-weight:700;
+  color:var(--teal);letter-spacing:.01em;
+  margin:0 0 .5rem;
+}
+.tour-welcome-sub{font-size:.9rem;color:var(--muted);margin:0 0 1rem;line-height:1.5}
+.tour-welcome-list{
+  list-style:none;padding:0;margin:0 0 1rem;
+  display:flex;flex-direction:column;gap:.45rem;
+}
+.tour-welcome-list li{font-size:.88rem;color:var(--text);display:flex;align-items:center;gap:.5rem}
+.tour-welcome-list li span{flex-shrink:0}
+.tour-welcome-time{font-size:.78rem;color:var(--muted);margin:0;font-style:italic}
+
+.tour-welcome-actions{
+  display:flex;flex-direction:column;gap:.6rem;margin-top:1.25rem;
+}
+.tour-welcome-start{
+  width:100%;padding:.8rem 1rem;
+  font-family:'Oswald',sans-serif;font-size:.95rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;
+}
+.tour-welcome-skip{
+  background:none;border:none;color:var(--muted);
+  font-size:.82rem;cursor:pointer;padding:.3rem;
+  text-decoration:underline;text-underline-offset:3px;
+  font-family:'Barlow',sans-serif;
+  transition:color .15s;
+}
+.tour-welcome-skip:hover{color:var(--text)}
+
+/* ── Resume prompt ── */
+.tour-resume-prompt{
+  position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%);
+  z-index:100010;
+  background:var(--teal);color:#fff;
+  border-radius:var(--r-md);
+  box-shadow:0 8px 24px rgba(0,0,0,.22);
+  padding:.75rem 1rem;
+  display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;
+  max-width:92vw;min-width:280px;
+  opacity:0;transition:opacity .25s ease,transform .25s ease;
+  transform:translateX(-50%) translateY(12px);
+}
+.tour-resume-prompt.visible{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(prefers-reduced-motion:reduce){.tour-resume-prompt{transition:none}}
+
+.tour-resume-icon{font-size:1.1rem;flex-shrink:0}
+.tour-resume-text{font-size:.88rem;font-weight:600;font-family:'Barlow',sans-serif;flex:1;min-width:120px}
+.tour-resume-actions{display:flex;gap:.45rem;flex-wrap:wrap}
+.tour-resume-btn{
+  background:rgba(255,255,255,.15);
+  border:1px solid rgba(255,255,255,.3);
+  color:#fff;
+  border-radius:var(--r-sm);
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:.8rem;font-weight:600;letter-spacing:.04em;
+  padding:.3rem .7rem;cursor:pointer;
+  transition:background .15s;
+  white-space:nowrap;
+}
+.tour-resume-btn:hover{background:rgba(255,255,255,.28)}
+.tour-resume-dim{opacity:.75}
+
+/* ── Profile tab restart button ── */
+.tour-restart-wrap{
+  padding:1rem 1rem 0;
+  border-top:1px solid var(--border);
+  margin-top:1rem;
+}
+.tour-restart-btn{
+  background:transparent;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  color:var(--muted);
+  font-family:'Barlow',sans-serif;
+  font-size:.82rem;font-weight:600;
+  padding:.5rem 1rem;cursor:pointer;
+  transition:all .15s;
+  width:100%;text-align:center;
+}
+.tour-restart-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-glow)}
+.tour-restart-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+/* ── Finish overlay ── */
+.tour-finish-overlay{
+  position:fixed;inset:0;z-index:100020;
+  background:rgba(0,0,0,.55);
+  display:flex;align-items:center;justify-content:center;
+}
+.tour-finish-inner{
+  background:var(--card);
+  border-radius:var(--r-md);
+  padding:1.75rem 1.5rem;
+  max-width:340px;width:90%;
+  text-align:center;
+  box-shadow:0 16px 48px rgba(0,0,0,.2);
+}
+.tour-finish-inner p{margin:.75rem 0 0;color:var(--muted);font-size:.88rem}
+.tour-finish-err{color:var(--error)!important;font-size:.85rem}
+.tour-finish-btns{display:flex;gap:.6rem;justify-content:center;margin-top:1rem}
+.tour-finish-spinner{
+  width:32px;height:32px;border:3px solid var(--border);
+  border-top-color:var(--teal);border-radius:50%;
+  animation:tour-spin .7s linear infinite;margin:0 auto;
+}
+@keyframes tour-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.tour-finish-spinner{animation:none;border-color:var(--teal)}}
+
+/* ── Finish toast ── */
+.tour-finish-toast{
+  position:fixed;bottom:1.5rem;right:1.25rem;
+  z-index:100020;
+  background:var(--teal);color:#fff;
+  border-radius:var(--r-md);
+  padding:.7rem 1.1rem;
+  font-size:.88rem;font-family:'Barlow',sans-serif;font-weight:600;
+  box-shadow:0 6px 20px rgba(0,0,0,.2);
+  opacity:0;transition:opacity .35s ease;
+  pointer-events:none;
+}
+.tour-finish-toast.visible{opacity:1}
+
+/* ── Sync error inline ── */
+.tour-sync-err{
+  font-size:.78rem;color:var(--error);
+  margin-top:.4rem;font-weight:500;
+}
+
+/* ── Admin Tutorial Controls ── */
+.tour-admin-user-list{display:flex;flex-direction:column;gap:.5rem}
+.tour-admin-user-row{
+  display:flex;align-items:center;gap:.75rem;
+  padding:.55rem .75rem;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  flex-wrap:wrap;
+}
+.tour-admin-user-info{display:flex;flex-direction:column;gap:.1rem;flex:1;min-width:120px}
+.tour-admin-name{font-size:.88rem;font-weight:600;color:var(--text)}
+.tour-admin-role{font-size:.75rem;color:var(--muted)}
+.tour-admin-status{font-size:.72rem;font-weight:700;letter-spacing:.04em;border-radius:99px;padding:.15rem .55rem;white-space:nowrap}
+.tour-admin-status-none{background:#f1f5f9;color:var(--muted)}
+.tour-admin-status-prog{background:#fef9c3;color:#92400e}
+.tour-admin-status-done{background:#dcfce7;color:#15803d}
+.tour-admin-status-skip{background:#f1f5f9;color:var(--muted)}
+.tour-admin-reset-btn{
+  background:none;border:1px solid var(--border);border-radius:var(--r-sm);
+  color:var(--text);font-family:'Barlow',sans-serif;font-size:.78rem;
+  font-weight:600;padding:.3rem .75rem;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.tour-admin-reset-btn:hover:not(:disabled){border-color:var(--teal);color:var(--teal);background:var(--teal-glow)}
+.tour-admin-reset-btn:disabled{opacity:.4;cursor:not-allowed}

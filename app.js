@@ -146,6 +146,21 @@ function showApp(startPage) {
   const pg = resolvedPage && (_s.pages||[]).includes(resolvedPage) ? startPage : _defaultLandingPage_();
   navigateTo(pg);
   updateSidebarAvatar();
+
+  // Tour auto-launch and dev overrides
+  const _tourParam = new URLSearchParams(location.search).get('tour');
+  if (_tourParam === 'force' && (_s.roles||[]).includes('admin')) {
+    setTimeout(function() { if (typeof forceLaunchTour === 'function') forceLaunchTour(); }, 700);
+  } else if (_tourParam === 'reset' && (_s.roles||[]).includes('admin')) {
+    if (typeof _setTourState === 'function') {
+      _setTourState('not_started', {}, {
+        onSuccess: function() { setTimeout(function() { if (typeof forceLaunchTour === 'function') forceLaunchTour(); }, 300); },
+        onError:   function() { console.warn('[tour] ?tour=reset server sync failed'); }
+      });
+    }
+  } else if (typeof checkAndLaunchTour === 'function') {
+    setTimeout(checkAndLaunchTour, 600);
+  }
 }
 
 function updateSidebarAvatar() {

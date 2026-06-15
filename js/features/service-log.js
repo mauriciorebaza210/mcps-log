@@ -9,74 +9,83 @@ const TF={FC:"Free Chlorine (FC)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium
 const SG={small:12000,medium:17500,large:25000};
 const SM=[6,7,8,9];
 
-const _SVC_META_TTL = 4 * 60 * 60 * 1000; // 4 hours — force fresh metadata after this
 let _svcContextReqId = 0;
+
+// ── Static form schema — edit this array to change the form ──────────────────
+// Cards are created per PAGE_BREAK. First card is always "Visit Details".
+// The PAGE_BREAK titled "Used" also gets the rec box (Mr. Chuy Recommends).
+// To add a chemical: append a TEXT entry after the "Used" PAGE_BREAK.
+// To reorder fields: move the object. IDs are just for reference.
+const FORM_SCHEMA = [
+  // ── Visit Details ─────────────────────────────────────────────────────────
+  { id:1,  title:'pool_id',                          type:'LIST',           isRequired:false, helpText:'',                                                                              choices:['Bullock - Weekly Full Service - 24102 Shelton Spring - MCPS-0017','Casarez - Weekly Full Service - 25 Inwood Ridge Drive - MCPS-0020','Chapa - Green-to-Clean Cleaning Service - 1090 North Trail - MCPS-0026','Libby - Weekly Full Service - 27121 Highland Crest - MCPS-0007','Lopez - Monthly Full Service - 307 Parkside Dr - MCPS-0021','Mendoza - Weekly Full Service - 22088 Mathis Rd - MCPS-0012','Menezes - Weekly Full Service - 4202 Coriander - MCPS-0026','Moczygemba - Weekly Full Service - 108 Elk Run - MCPS-0023','Murray - Weekly Full Service - 452 CR 257 - MCPS-0025','Pompa - Weekly Full Service - 18538 Shadow Canyon Dr - MCPS-0001','Robbins - Weekly Full Service - 2144 County Road 419 - MCPS-0018','Saldaña - Weekly Full Service - 306 Sligo St - MCPS-0024','Startz - Green-to-Clean Cleaning Service - 3431 County Rd 136 - MCPS-0019','Valdez - Weekly Full Service - 13355 Leeward Lane - MCPS-0009','Other / Pool not listed'] },
+  // renderSvcForm injects Pool Size, Pool Material, Condition on Arrival, Internal Notes after pool_id
+  { id:2,  title:'Pool description (if Other selected)', type:'TEXT',       isRequired:false, helpText:"Only fill this in if you selected 'Other / Pool not listed' above. Enter client name, address, or any info to identify the pool." },
+  { id:3,  title:'Technician',                       type:'LIST',           isRequired:false, helpText:'',                                                                              choices:['Mauricio Rebaza','Tony Siller','Chuy Silva','Ryan Willford'] },
+  { id:4,  title:'Notes',                            type:'PARAGRAPH_TEXT', isRequired:false, helpText:''                                                                              },
+  // ── Test Results ──────────────────────────────────────────────────────────
+  { id:5,  title:'Test Results',                     type:'PAGE_BREAK',     isSectionBreak:true                                                                                        },
+  { id:6,  title:'Free Chlorine (FC)',               type:'TEXT',           isRequired:false, helpText:''                                                                              },
+  { id:7,  title:'pH',                               type:'TEXT',           isRequired:false, helpText:''                                                                              },
+  { id:8,  title:'Total Alkalinity (TA)',            type:'TEXT',           isRequired:false, helpText:''                                                                              },
+  { id:9,  title:'Calcium Hardness (CH)',            type:'TEXT',           isRequired:false, helpText:''                                                                              },
+  // renderSvcForm injects Tablet Level pills after Calcium Hardness (CH)
+  // ── Used ──────────────────────────────────────────────────────────────────
+  { id:11, title:'Used',                             type:'PAGE_BREAK',     isSectionBreak:true                                                                                        },
+  { id:12, title:'Liquid Chlorine',                  type:'TEXT',           isRequired:false, helpText:'Enter gallons used (leave blank if none).'                                     },
+  { id:13, title:'Muriatic Acid',                    type:'TEXT',           isRequired:false, helpText:'Enter gallons used (leave blank if none).'                                     },
+  { id:14, title:'Alkalinity Increaser',             type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+  { id:15, title:'Calcium Hardness Increaser',       type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+  { id:16, title:'Chlorine Tablets (3")',            type:'TEXT',           isRequired:false, helpText:'Enter tablets used (leave blank if none).'                                    },
+  { id:17, title:'Startup-Tec',                      type:'TEXT',           isRequired:false, helpText:'Enter bottles used (leave blank if none).'                                    },
+  { id:18, title:'ScaleTec (Calcium Remover)',       type:'TEXT',           isRequired:false, helpText:'Enter bottles used (leave blank if none).'                                    },
+  { id:19, title:'Algaecide',                        type:'TEXT',           isRequired:false, helpText:'Enter bottles used (leave blank if none).'                                    },
+  { id:20, title:'Cyanuric Acid (Stabilizer)',       type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+];
 
 function loadServiceLog(prefillPoolId){
   window._lastLoadedPoolId = null;
   window._svcLoadCounter = (window._svcLoadCounter||0) + 1;
   const thisRequest = window._svcLoadCounter;
 
-  // 1. Try to render INSTANTLY from cache if fresh enough
-  const cached   = localStorage.getItem('svc_meta_cache');
-  const cachedTs = parseInt(localStorage.getItem('svc_meta_cache_ts') || '0', 10);
-  const cacheValid = cached && (Date.now() - cachedTs < _SVC_META_TTL);
-  if (cacheValid) {
+  // Render immediately from static schema — no network wait
+  renderSvcForm(FORM_SCHEMA, prefillPoolId);
+  document.getElementById('svc-loading').style.display = 'none';
+  document.getElementById('svc-root').style.display = 'block';
+
+  // Show recovery banner if there's an unsent log from a previous session
+  const _queued = localStorage.getItem('svc_queued_submit');
+  if (_queued) {
     try {
-      renderSvcForm(JSON.parse(cached), prefillPoolId);
-      document.getElementById('svc-loading').style.display = 'none';
-      document.getElementById('svc-root').style.display = 'block';
+      const _q = JSON.parse(_queued);
+      const _pk = _q.payload && Object.keys(_q.payload).find(k => k.trim().toLowerCase() === 'pool_id');
+      const _pl = _pk ? _q.payload[_pk] : 'Unknown pool';
+      const _age = _q.ts ? Math.round((Date.now() - _q.ts) / 60000) : 0;
+      setTimeout(() => {
+        const root = document.getElementById('svc-root');
+        if (!root) return;
+        const b = document.createElement('div');
+        b.id = 'svc-retry-banner';
+        b.className = 'svc-retry-banner';
+        b.innerHTML = '<div class="svc-retry-msg">⚠️ Unsent log for <strong>' + escHtml(_pl) + '</strong> (' + _age + 'm ago)</div><button class="svc-retry-btn" onclick="_retrySvcNow_()">Send Now</button>';
+        root.insertBefore(b, root.firstChild);
+      }, 100);
     } catch(e) {}
   }
 
-  // 2. Three parallel requests: form metadata, live pool list, pool context
-  const metaReq  = api({ secret:SEC, action:'get_metadata' });
-  const poolsReq = api({ secret:SEC, action:'get_pool_list', token:_s.token });
-  const ctxReq   = prefillPoolId
-    ? api({ secret:SEC, action:'get_pool_context', token:_s.token, pool_id:prefillPoolId })
-    : Promise.resolve(null);
-
-  // 3. Fresh form metadata — re-render if stale or changed
-  metaReq.then(res => {
+  // Live pool list — populates the pool_id dropdown when it arrives
+  api({ secret:SEC, action:'get_pool_list', token:_s.token }).then(res => {
     if (thisRequest !== window._svcLoadCounter) return;
-    if (res.ok) {
-      const fresh = JSON.stringify(res.data);
-      const changed = !cacheValid || localStorage.getItem('svc_meta_cache') !== fresh;
-      localStorage.setItem('svc_meta_cache', fresh);
-      localStorage.setItem('svc_meta_cache_ts', String(Date.now()));
-      if (changed) {
-        document.getElementById('svc-loading').style.display = 'none';
-        document.getElementById('svc-root').style.display = 'block';
-        renderSvcForm(res.data, prefillPoolId);
-      }
-    } else if (!cacheValid) {
-      document.getElementById('svc-root').innerHTML = '<div style="color:var(--error);padding:2rem;text-align:center">'+res.error+'</div>';
-      document.getElementById('svc-root').style.display = 'block';
-    }
-  }).catch(e => {
-    if (!cacheValid) {
-      document.getElementById('svc-loading').style.display = 'none';
-      document.getElementById('svc-root').innerHTML = '<div style="color:var(--error);padding:2rem;text-align:center">Failed: '+e.message+'</div>';
-      document.getElementById('svc-root').style.display = 'block';
-    }
-  });
+    if (res && res.ok && res.pools && res.pools.length) _applyLivePoolList_(res.pools, prefillPoolId);
+  }).catch(() => {});
 
-  // 4. Live pool list — replaces dropdown options as soon as it arrives
-  poolsReq.then(res => {
-    if (thisRequest !== window._svcLoadCounter) return;
-    if (res && res.ok && res.pools && res.pools.length) {
-      // Give the form a moment to render before swapping options
-      setTimeout(() => _applyLivePoolList_(res.pools, prefillPoolId), 60);
-    }
-  }).catch(() => {}); // Silent fail — form metadata choices are the fallback
-
-  // 5. Pool context (specs/notes/trends) as soon as it arrives
-  ctxReq.then(res => {
-    if (thisRequest !== window._svcLoadCounter) return;
-    if (res && res.ok && res.data && res.data.found) {
-      setTimeout(() => applyPoolContext_(res.data, prefillPoolId), 20);
-    }
-  });
+  // Pool context — prefills size/material/tablet + shows trend and notes banners
+  if (prefillPoolId) {
+    api({ secret:SEC, action:'get_pool_context', token:_s.token, pool_id:prefillPoolId }).then(res => {
+      if (thisRequest !== window._svcLoadCounter) return;
+      if (res && res.ok && res.data && res.data.found) applyPoolContext_(res.data, prefillPoolId);
+    });
+  }
 }
 
 // Replace the pool_id select with live data and re-apply any prefill match
@@ -122,14 +131,17 @@ function renderSvcForm(meta, prefillPoolId){
   meta.forEach(item=>{
     if(item.isSectionBreak){
       card=mkCard(item.title||'Chemical Log');root.appendChild(card);
-      if(item.title&&item.title.trim().toLowerCase()==='used'){
-        const rb=document.createElement('div');rb.id='rec-box';rb.className='rec-box';
+      if(item.title&&item.title.trim().toLowerCase()==='test results') card.setAttribute('data-tour','svc-test-results');
+      if(item.title&&item.title.trim().toLowerCase()==='used'){ card.setAttribute('data-tour','svc-chemicals-used');
+        const rb=document.createElement('div');rb.id='rec-box';rb.className='rec-box';rb.setAttribute('data-tour','svc-recommendations');
         rb.innerHTML='<div class="rb-hdr">Mr. Chuy Recommends:<span id="rb-vol" class="rb-vol">—</span></div><div id="rb-flags" class="rb-flags"></div><div id="rb-list" class="rb-list"></div>';
         card.appendChild(rb);
       }
       return;
     }
     const grp=document.createElement('div');grp.className='sfg';
+    if(item.title&&item.title.trim().toLowerCase()==='pool_id') grp.setAttribute('data-tour','svc-pool-select');
+    if(item.title==='Notes') grp.setAttribute('data-tour','svc-notes');
     const te=item.title.replace(/"/g,'&quot;');
     const isHardMandatory = (te.toLowerCase() === 'pool_id' || te === 'pH' || te === 'Free Chlorine (FC)' || te === 'Total Alkalinity (TA)');
     const isSoftOptional = (te === 'Calcium Hardness (CH)');
@@ -568,6 +580,7 @@ function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
 }
 
 function submitSvc(){
+  if(window._tourActive) return; // tour in progress — do not submit real service log
   const payload={};let hasErr=false;
   _formItems.forEach(item=>{
     if(!item.title)return;let val;
@@ -662,43 +675,109 @@ function closeSvcConfirm(event){
 }
 function confirmAndSubmit(){
   document.getElementById('conf-modal-backdrop').classList.remove('open');
-  const btn=document.getElementById('btn-svc');
-  btn.disabled=true;
-  btn.textContent=(window._svcPhotos&&window._svcPhotos.length)
-    ?'Uploading '+window._svcPhotos.length+' photo(s)...'
-    :'Submitting...';
-  api({secret:SEC,action:'submit_form',token:_s.token,data:window._svcPayload,photos:window._svcPhotos||[]}).then(res=>{
-    if(res.ok){
-      if (window._svcPayload) {
-        const poolIdKey = Object.keys(window._svcPayload).find(k => k.trim().toLowerCase() === 'pool_id');
-        const pId = poolIdKey ? window._svcPayload[poolIdKey] : null;
-        
-        if (pId) {
-          localStorage.removeItem('svc_draft_' + pId);
-          
-          // Auto-mark as done in Technician Hub
-          if(_activeDay && _routeData && _routeData.week_start){
-            const doneKey = `mcps_done_${_routeData.week_start}_${_activeDay}`;
-            const done = JSON.parse(localStorage.getItem(doneKey)||'[]');
-            if(!done.includes(pId)){
-              done.push(pId);
-              localStorage.setItem(doneKey, JSON.stringify(done));
-              console.log('[hub] Pool', pId, 'auto-marked as done for', _activeDay);
-            }
-          }
-        }
-        window._lastLoadedPoolId = null;
-      }
-      const pc=(window._svcPhotos||[]).length;
-      document.getElementById('svc-root').innerHTML='<div style="text-align:center;padding:3rem 1rem">'
-        +'<div style="font-size:3.5rem;margin-bottom:1rem">✅</div>'
-        +'<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'
-        +'<p style="color:#64748b;margin-bottom:.35rem">Log written, inventory deducted, email sent.</p>'
-        +(pc?'<p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">📸 '+pc+' photo'+(pc>1?'s':'')+' saved to Drive.</p>':'<br>')
-        +'<button onclick="resetSvc()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'
-        +'</div>';
-    }else{alert('Error: '+res.error);btn.disabled=false;btn.textContent='Submit Log to MCPS';}
-  }).catch(e=>{alert('Network error: '+e.message);btn.disabled=false;btn.textContent='Submit Log to MCPS';});
+  _doSvcSubmit_(window._svcPayload, window._svcPhotos || []);
+}
+
+function _doSvcSubmit_(payload, photos) {
+  const btn = document.getElementById('btn-svc');
+  if (btn) { btn.disabled = true; btn.textContent = photos.length ? 'Uploading ' + photos.length + ' photo(s)...' : 'Submitting...'; }
+
+  if (!navigator.onLine) {
+    _svcQueueAndBail_(payload, photos);
+    return;
+  }
+
+  api({ secret:SEC, action:'submit_form', token:_s.token, data:payload, photos:photos }).then(res => {
+    if (res.ok) {
+      _onSvcSuccess_(payload, photos.length);
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit Log to MCPS'; }
+      if (document.getElementById('svc-root')) alert('Error: ' + res.error);
+    }
+  }).catch(() => {
+    _svcQueueAndBail_(payload, photos);
+  });
+}
+
+function _svcQueueAndBail_(payload, photos) {
+  try {
+    localStorage.setItem('svc_queued_submit', JSON.stringify({ payload, photos, ts: Date.now() }));
+  } catch(e) {
+    try { localStorage.setItem('svc_queued_submit', JSON.stringify({ payload, photos: [], ts: Date.now() })); } catch(_) {}
+  }
+  window._svcPayload = payload;
+  window._svcPhotos = photos;
+  window.addEventListener('online', _onSvcOnline_, { once: true });
+
+  // Show saved screen so tech can move to next pool immediately
+  const root = document.getElementById('svc-root');
+  if (root) {
+    root.innerHTML = '<div style="text-align:center;padding:3rem 1rem">'
+      + '<div style="font-size:3.5rem;margin-bottom:1rem">💾</div>'
+      + '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">LOG SAVED</div>'
+      + '<p style="color:#64748b;margin-bottom:1.5rem">No signal — your log is saved and will send automatically when you\'re back online.</p>'
+      + '<button onclick="resetSvc()" style="display:block;width:100%;padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-bottom:.75rem">Log Another Pool</button>'
+      + '<button onclick="navigateTo(\'live_map\')" style="display:block;width:100%;padding:.85rem 1.75rem;background:transparent;color:#0d4d44;border:2px solid #0d4d44;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Back to Hub</button>'
+      + '</div>';
+  }
+}
+
+function _showSvcRetryBanner_(msg) {
+  const root = document.getElementById('svc-root');
+  if (!root) return;
+  let b = document.getElementById('svc-retry-banner');
+  if (!b) { b = document.createElement('div'); b.id = 'svc-retry-banner'; b.className = 'svc-retry-banner'; root.insertBefore(b, root.firstChild); }
+  b.innerHTML = '<div class="svc-retry-msg">⚠️ ' + msg + '</div><button class="svc-retry-btn" onclick="_retrySvcNow_()">Retry</button>';
+}
+
+function _retrySvcNow_() {
+  const raw = localStorage.getItem('svc_queued_submit');
+  if (!raw) return;
+  try {
+    const { payload, photos } = JSON.parse(raw);
+    window._svcPayload = payload;
+    window._svcPhotos = photos || [];
+    const b = document.getElementById('svc-retry-banner');
+    if (b) b.remove();
+    _doSvcSubmit_(payload, photos || []);
+  } catch(e) {}
+}
+
+function _onSvcOnline_() {
+  const raw = localStorage.getItem('svc_queued_submit');
+  if (!raw) return;
+  try {
+    const { payload, photos } = JSON.parse(raw);
+    window._svcPayload = payload;
+    window._svcPhotos = photos || [];
+    _showSvcRetryBanner_('Signal back — sending now...');
+    _doSvcSubmit_(payload, photos || []);
+  } catch(e) {}
+}
+
+function _onSvcSuccess_(payload, photoCount) {
+  localStorage.removeItem('svc_queued_submit');
+  window.removeEventListener('online', _onSvcOnline_);
+  const poolIdKey = Object.keys(payload).find(k => k.trim().toLowerCase() === 'pool_id');
+  const pId = poolIdKey ? payload[poolIdKey] : null;
+  if (pId) {
+    localStorage.removeItem('svc_draft_' + pId);
+    if (_activeDay && _routeData && _routeData.week_start) {
+      const doneKey = `mcps_done_${_routeData.week_start}_${_activeDay}`;
+      const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
+      if (!done.includes(pId)) { done.push(pId); localStorage.setItem(doneKey, JSON.stringify(done)); }
+    }
+  }
+  window._lastLoadedPoolId = null;
+  const _successRoot = document.getElementById('svc-root');
+  if (!_successRoot) return; // background send — DOM not visible, nothing to update
+  _successRoot.innerHTML = '<div style="text-align:center;padding:3rem 1rem">'
+    + '<div style="font-size:3.5rem;margin-bottom:1rem">✅</div>'
+    + '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'
+    + '<p style="color:#64748b;margin-bottom:.35rem">Log written, inventory deducted, email sent.</p>'
+    + (photoCount ? '<p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">📸 ' + photoCount + ' photo' + (photoCount > 1 ? 's' : '') + ' saved to Drive.</p>' : '<br>')
+    + '<button onclick="resetSvc()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'
+    + '</div>';
 }
 // ── Photo handlers ──────────────────────────────────────────────────────────
 const MAX_PHOTOS = 4;
@@ -715,22 +794,47 @@ function handlePhotoDrop(event) {
   addPhotos_(Array.from(event.dataTransfer.files || []).filter(f => f.type.startsWith('image/')));
 }
 
-function addPhotos_(files) {
+function compressPhoto_(file) {
+  return new Promise(resolve => {
+    const MAX_DIM = 1200;
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        if (w >= h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+        else { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      c.toBlob(blob => {
+        const r = new FileReader();
+        r.onload = e => resolve({ base64: e.target.result.split(',')[1], mimeType: 'image/jpeg', name: file.name.replace(/\.\w+$/, '.jpg') });
+        r.readAsDataURL(blob);
+      }, 'image/jpeg', 0.72);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+async function addPhotos_(files) {
   const remaining = MAX_PHOTOS - window._svcPhotos.length;
   const toAdd = files.slice(0, remaining);
   if (files.length > remaining) alert('Max 4 photos per visit. Only the first ' + remaining + ' were added.');
-  let pending = toAdd.length;
-  if (!pending) return;
-  toAdd.forEach(file => {
-    if (file.size > MAX_BYTES) { alert(file.name + ' is too large (max 10 MB).'); pending--; if (!pending) renderPhotoPreviews_(); return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      window._svcPhotos.push({ base64: e.target.result.split(',')[1], mimeType: file.type || 'image/jpeg', name: file.name });
-      pending--;
-      if (!pending) renderPhotoPreviews_();
-    };
-    reader.readAsDataURL(file);
-  });
+  if (!toAdd.length) return;
+  const zone = document.getElementById('photo-drop-zone');
+  const label = zone && zone.querySelector('.pu-label');
+  if (label) label.textContent = 'Compressing...';
+  for (const file of toAdd) {
+    if (file.size > MAX_BYTES) { alert(file.name + ' is too large (max 10 MB).'); continue; }
+    const compressed = await compressPhoto_(file);
+    if (compressed) window._svcPhotos.push(compressed);
+  }
+  if (label) label.textContent = 'Tap to take photo or choose from library';
+  renderPhotoPreviews_();
 }
 
 function removePhoto_(idx) {
@@ -760,9 +864,7 @@ function renderPhotoPreviews_() {
   ).join('');
 }
 function resetSvc(){
-  _formItems=[];
   document.getElementById('svc-root').style.display='none';
   document.getElementById('svc-root').innerHTML='';
-  document.getElementById('svc-loading').style.display='block';
   loadServiceLog();
 }

@@ -35,8 +35,92 @@ function loadUsers() {
     if (!res.ok) return;
     _usersCache = res.users || [];
     renderUserTable(_usersCache);
+    renderTutorialControls(_usersCache);
     // If profile tab is open, refresh the grid with fresh data
     if(_activeHubTab === 'profile') renderProfileTab();
+  });
+}
+
+// ── Tutorial Controls — admin only ────────────────────────────────────────────
+function renderTutorialControls(users) {
+  const wrap = document.getElementById('adm-tutorial-controls');
+  if (!wrap) return;
+
+  // Show only to admins; technicians/leads never see this panel
+  if (!isAdmin()) { wrap.style.display = 'none'; return; }
+
+  const eligibleRoles = ['technician', 'lead', 'trainee'];
+  const targets = (users || []).filter(u => {
+    const roles = Array.isArray(u.roles) ? u.roles : String(u.roles||'').split(',').map(r=>r.trim());
+    const active = u.active === true || String(u.active).toUpperCase() === 'TRUE';
+    return active && roles.some(r => eligibleRoles.includes(r));
+  }).sort((a, b) => String(a.name||'').localeCompare(String(b.name||'')));
+
+  wrap.style.display = 'block';
+  wrap.innerHTML =
+    '<div class="adm-card" style="border:1px dashed var(--gold);background:#fffbf0">' +
+      '<div class="adm-card-title" style="color:var(--gold)">🧪 Tutorial Controls <span style="font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.5rem">Admin only</span></div>' +
+      '<p style="font-size:.82rem;color:var(--muted);margin:.25rem 0 1rem">Reset a technician\'s tutorial state so it relaunches on their next login. Does not affect their onboarding data or account permissions.</p>' +
+      '<div class="tour-admin-user-list">' +
+        (targets.length
+          ? targets.map(u => {
+              const roles = Array.isArray(u.roles) ? u.roles : String(u.roles||'').split(',').map(r=>r.trim());
+              const status = u.tutorial_status || 'not_started';
+              const statusLabel = { not_started:'Not started', in_progress:'In progress', completed:'Completed', skipped:'Skipped' }[status] || status;
+              const statusClass = { completed:'tour-admin-status-done', skipped:'tour-admin-status-skip', in_progress:'tour-admin-status-prog' }[status] || 'tour-admin-status-none';
+              return '<div class="tour-admin-user-row">' +
+                '<div class="tour-admin-user-info">' +
+                  '<span class="tour-admin-name">' + escHtml(u.name || u.username) + '</span>' +
+                  '<span class="tour-admin-role">' + escHtml(roles.join(', ')) + '</span>' +
+                '</div>' +
+                '<span class="tour-admin-status ' + statusClass + '">' + escHtml(statusLabel) + '</span>' +
+                '<button class="tour-admin-reset-btn" data-uname="' + escHtml(u.username) + '" data-name="' + escHtml(u.name||u.username) + '"' +
+                  (status === 'not_started' ? ' disabled title="Already not_started"' : '') +
+                  '>Reset</button>' +
+              '</div>';
+            }).join('')
+          : '<p style="color:var(--muted);font-size:.85rem">No eligible technicians found.</p>'
+        ) +
+      '</div>' +
+    '</div>';
+
+  wrap.querySelectorAll('.tour-admin-reset-btn:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const uname = this.getAttribute('data-uname');
+      const name  = this.getAttribute('data-name');
+      if (!uname) return;
+      if (!confirm('Reset tutorial state for ' + name + '?\n\nThey will see the welcome tour on their next login. This does not change their onboarding status or role.')) return;
+
+      btn.textContent = 'Saving…';
+      btn.disabled    = true;
+
+      api({
+        action:           'set_tutorial_state',
+        token:            _s.token,
+        target_username:  uname,
+        tutorial_status:  'not_started',
+        tutorial_version: typeof TOUR_VERSION !== 'undefined' ? TOUR_VERSION : 'technician-tour-v1',
+        tutorial_started_at:   '',
+        tutorial_completed_at: ''
+      }).then(res => {
+        if (res && res.ok) {
+          btn.textContent = '✓ Reset';
+          btn.style.color = 'var(--success)';
+          // Update local cache and re-render
+          const cached = (_usersCache || []).find(u => u.username === uname);
+          if (cached) { cached.tutorial_status = 'not_started'; cached.tutorial_version = ''; }
+          setTimeout(() => renderTutorialControls(_usersCache), 800);
+        } else {
+          btn.textContent = 'Retry';
+          btn.disabled    = false;
+          alert('Could not reset tutorial state: ' + ((res && res.error) || 'Unknown error'));
+        }
+      }).catch(() => {
+        btn.textContent = 'Retry';
+        btn.disabled    = false;
+        alert('Network error — could not reach server.');
+      });
+    });
   });
 }
 
