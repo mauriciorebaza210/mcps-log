@@ -5,29 +5,13 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // ONBOARDING
 // ══════════════════════════════════════════════════════════════════════════════
-let _onbStatus = { sensitive_info_done: false, i9_done: false, info_done: false, contract_done: false };
+let _onbStatus = { sensitive_info_done: false, i9_done: false, info_done: false };
 
 function loadOnboarding() {
   const nameEl = document.getElementById('onb-welcome-name');
   if (nameEl) nameEl.textContent = 'Welcome, ' + (_s.name ? _s.name.split(' ')[0] : '') + '!';
 
-  // Fetch status and contract context in parallel
-  Promise.all([
-    apiGet({ action: 'onboarding_get_status', token: _s.token }).then(r => r),
-    apiGet({ action: 'onboarding_get_context', token: _s.token }).then(r => r)
-  ]).then(([status, ctx]) => {
-    // Render contract HTML
-    if (ctx && ctx.contract_html) {
-      document.getElementById('onb-contract-html').innerHTML = ctx.contract_html;
-    } 
-    
-    document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Employee Agreement';
-    document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your employment agreement';
-
-    // Pre-fill signed date
-    const dateEl = document.getElementById('onb-signed-date');
-    if (dateEl) dateEl.value = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-
+  apiGet({ action: 'onboarding_get_status', token: _s.token }).then(status => {
     updateOnbProgress(status || {});
 
     if (status) {
@@ -55,7 +39,6 @@ function loadOnboarding() {
       fill('onb-medical', status.medical_conditions);
       if (status.shirt_size) { const el = document.getElementById('onb-shirt-size'); if (el && !el.value) el.value = status.shirt_size; }
       fill('onb-i9-signature', status.full_name);
-      fill('onb-signed-name', status.full_name);
     }
 
     // Update task icons based on completion
@@ -68,13 +51,7 @@ function loadOnboarding() {
     if (status && status.info_done) {
       document.getElementById('onb-icon-w4').textContent = '✅';
     }
-    if (status && status.contract_done) {
-      document.getElementById('onb-icon-contract').textContent = '✅';
-    }
-  }).catch(() => {
-    const dateEl = document.getElementById('onb-signed-date');
-    if (dateEl) dateEl.value = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-  });
+  }).catch(() => {});
 }
 
 function toggleOnbTask(task) {
@@ -91,7 +68,6 @@ function canOpenOnbTask_(task) {
   if (task === 'info') return true;
   if (task === 'i9') return !!_onbStatus.sensitive_info_done;
   if (task === 'w4') return !!_onbStatus.i9_done;
-  if (task === 'contract') return !!_onbStatus.info_done;
   return true;
 }
 
@@ -164,7 +140,7 @@ function submitPersonalInfo() {
         if (res.ok) {
           showMsg(msgEl, 'Saved!', true);
           document.getElementById('onb-icon-info').textContent = '✅';
-          updateOnbProgress({ sensitive_info_done: true, i9_done: !!res.i9_done, info_done: !!res.info_done, contract_done: !!res.contract_done });
+          updateOnbProgress({ sensitive_info_done: true, i9_done: !!res.i9_done, info_done: !!res.info_done });
           closeOnbTask_('info');
           openOnbTask_('i9');
         } else {
@@ -382,7 +358,7 @@ function submitI9Info() {
     if (res.ok) {
       showMsg(msgEl, 'Saved!', true);
       document.getElementById('onb-icon-i9').textContent = '✅';
-      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: true, info_done: !!res.info_done, contract_done: !!res.contract_done });
+      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: true, info_done: !!res.info_done });
       closeOnbTask_('i9');
       openOnbTask_('w4');
     } else {
@@ -423,9 +399,8 @@ function submitW4Info() {
       if (res.ok) {
         showMsg(msgEl, 'Saved!', true);
         document.getElementById('onb-icon-w4').textContent = '✅';
-        updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: !!res.i9_done, info_done: true, contract_done: !!res.contract_done });
+        updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: !!res.i9_done, info_done: true });
         closeOnbTask_('w4');
-        openOnbTask_('contract');
       } else {
         showMsg(msgEl, res.error || 'Failed to save.', false);
       }
@@ -717,51 +692,29 @@ function confirmW4() {
 }
 
 
-function submitContract() {
-  const msgEl = document.getElementById('onb-contract-msg');
-  const agreed = document.getElementById('onb-agree-cb').checked;
-  const signedName = document.getElementById('onb-signed-name').value.trim();
-
-  if (!agreed) { showMsg(msgEl, 'You must check the agreement box.', false); return; }
-  if (!signedName) { showMsg(msgEl, 'Type your full name to sign.', false); return; }
-  if (!_onbStatus.info_done) { showMsg(msgEl, 'Complete W-4 first.', false); return; }
-
-  api({ action: 'onboarding_save_contract', signed_name: signedName, signed_at: new Date().toISOString(), token: _s.token, secret: SEC })
-  .then(res => {
-    if (res.ok) {
-      showMsg(msgEl, 'Signature saved!', true);
-      document.getElementById('onb-icon-contract').textContent = '✅';
-      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, i9_done: !!res.i9_done, info_done: !!res.info_done, contract_done: true });
-    } else {
-      showMsg(msgEl, res.error || 'Failed to save signature.', false);
-    }
-  }).catch(() => showMsg(msgEl, 'Network error.', false));
-}
-
 function updateOnbProgress(status) {
   _onbStatus = Object.assign({}, _onbStatus, status || {});
-  const done = (_onbStatus.sensitive_info_done ? 1 : 0) + (_onbStatus.i9_done ? 1 : 0) + (_onbStatus.info_done ? 1 : 0) + (_onbStatus.contract_done ? 1 : 0);
-  const pct  = (done / 4) * 100;
+  const done = (_onbStatus.sensitive_info_done ? 1 : 0) + (_onbStatus.i9_done ? 1 : 0) + (_onbStatus.info_done ? 1 : 0);
+  const pct  = (done / 3) * 100;
   const fill = document.getElementById('onb-fill');
   const label = document.getElementById('onb-progress-label');
   if (fill) fill.style.width = pct + '%';
-  if (label) label.textContent = done + ' of 4 steps complete';
+  if (label) label.textContent = done + ' of 3 steps complete';
 
   if (_onbStatus.sensitive_info_done) document.getElementById('onb-icon-info').textContent = '✅';
   if (_onbStatus.i9_done) document.getElementById('onb-icon-i9').textContent = '✅';
   if (_onbStatus.info_done) document.getElementById('onb-icon-w4').textContent = '✅';
-  if (_onbStatus.contract_done) document.getElementById('onb-icon-contract').textContent = '✅';
 
   refreshOnbLocks_();
 
-  if (_onbStatus.sensitive_info_done && _onbStatus.i9_done && _onbStatus.info_done && _onbStatus.contract_done) {
+  if (_onbStatus.sensitive_info_done && _onbStatus.i9_done && _onbStatus.info_done) {
     const pending = document.getElementById('onb-pending-state');
     if (pending) pending.style.display = 'block';
   }
 }
 
 function refreshOnbLocks_() {
-  ['i9', 'w4', 'contract'].forEach(task => {
+  ['i9', 'w4'].forEach(task => {
     const card = document.getElementById('onb-task-' + task);
     if (!card) return;
     const locked = !canOpenOnbTask_(task);
@@ -795,7 +748,6 @@ function loadPendingHires() {
         <div class="pend-ai" style="margin-bottom:.65rem">
           <span class="pend-ai-pill ${a.info_done ? 'conf-high' : 'conf-low'}">${a.info_done ? '✓ Info' : '✗ Info'}</span>
           <span class="pend-ai-pill ${a.i9_done ? 'conf-high' : 'conf-low'}">${a.i9_done ? '✓ I-9' : '✗ I-9'}</span>
-          <span class="pend-ai-pill ${a.contract_done ? 'conf-high' : 'conf-low'}">${a.contract_done ? '✓ Contract' : '✗ Contract'}</span>
         </div>
         <div class="pend-btns" style="flex-wrap:wrap;gap:.4rem;align-items:center">
           <select id="role-select-${a.username}" style="padding:.35rem .5rem;border:1px solid var(--border);border-radius:6px;font-size:.8rem;background:var(--surface);color:var(--text)">
@@ -875,7 +827,6 @@ function renderRecords(list) {
       <div class="pend-ai" style="margin-bottom:.5rem">
         <span class="pend-ai-pill ${a.info_done?'conf-high':'conf-low'}">${a.info_done?'✓ Info':'✗ Info'}</span>
         <span class="pend-ai-pill ${a.i9_done?'conf-high':'conf-low'}">${a.i9_done?'✓ I-9':'✗ I-9'}</span>
-        <span class="pend-ai-pill ${a.contract_done?'conf-high':'conf-low'}">${a.contract_done?'✓ Contract':'✗ Contract'}</span>
       </div>
       <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid);width:100%" onclick="viewHireDocs('${a.username}')">📄 View Docs & Tax Form</button>
     </div>`;

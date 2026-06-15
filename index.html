@@ -979,7 +979,7 @@
         <div class="onb-welcome" id="onb-welcome-name">Welcome!</div>
         <div class="onb-sub">Complete the steps below to activate your account.</div>
         <div class="onb-progress-bar"><div class="onb-progress-fill" id="onb-fill" style="width:0%"></div></div>
-        <div class="onb-progress-label" id="onb-progress-label">0 of 4 steps complete</div>
+        <div class="onb-progress-label" id="onb-progress-label">0 of 3 steps complete</div>
       </div>
 
       <!-- Task 1 — Personal Information -->
@@ -1194,40 +1194,6 @@
 
           <div class="im" id="onb-w4-msg" style="margin:.5rem 0 0"></div>
           <button class="onb-submit-btn" onclick="submitW4Info()">Save W-4 →</button>
-        </div>
-      </div>
-
-      <!-- Task 4 — Employee Agreement -->
-      <div class="onb-task-card" id="onb-task-contract">
-        <div class="onb-task-hdr" onclick="toggleOnbTask('contract')">
-          <span class="onb-task-icon" id="onb-icon-contract">📄</span>
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:.95rem">Contractor Agreement</div>
-            <div style="font-size:.78rem;color:var(--muted)">Read and sign your independent contractor agreement</div>
-          </div>
-          <span class="onb-lock" id="onb-lock-contract">Locked</span>
-          <span class="onb-chevron" id="onb-chev-contract">›</span>
-        </div>
-        <div class="onb-task-body" id="onb-body-contract" style="display:none">
-          <div class="onb-contract-scroll" id="onb-contract-html">
-            <div style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem">Loading agreement…</div>
-          </div>
-          <div class="onb-fg" style="margin-top:.85rem">
-            <label class="onb-agree-label">
-              <input type="checkbox" id="onb-agree-cb">
-              <span>I have read and agree to the terms of this agreement</span>
-            </label>
-          </div>
-          <div class="onb-fg">
-            <label>Type your full legal name to sign</label>
-            <input class="onb-inp" id="onb-signed-name" placeholder="Full Legal Name">
-          </div>
-          <div class="onb-fg">
-            <label>Date</label>
-            <input class="onb-inp" id="onb-signed-date" readonly>
-          </div>
-          <div class="im" id="onb-contract-msg" style="margin:.5rem 0 0"></div>
-          <button class="onb-submit-btn" onclick="submitContract()">Submit Signature →</button>
         </div>
       </div>
 
