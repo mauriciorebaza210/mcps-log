@@ -300,14 +300,30 @@ function getSensitiveInfoStatusForUsername_(username) {
       if (String(data[i][usernameCol] || '').trim().toLowerCase() === String(username || '').trim().toLowerCase()) {
         const get = function(col) {
           const idx = headers.indexOf(col);
-          return idx >= 0 ? data[i][idx] : '';
+          const val = idx >= 0 ? data[i][idx] : '';
+          if (val instanceof Date) return Utilities.formatDate(val, 'America/Chicago', 'yyyy-MM-dd');
+          return String(val || '');
         };
         return {
           done: true,
           full_name: get('full_legal_name'),
           preferred_name: get('preferred_name'),
           phone: get('phone'),
-          email: get('email')
+          email: get('email'),
+          dob: get('date_of_birth'),
+          address_line1: get('home_address_line1'),
+          address_line2: get('home_address_line2'),
+          address_city: get('home_city'),
+          address_state: get('home_state'),
+          address_zip: get('home_zip'),
+          dl_number: get('drivers_license_number'),
+          dl_expiration: get('drivers_license_expiration'),
+          emergency_name: get('emergency_contact_name'),
+          emergency_relationship: get('emergency_contact_relationship'),
+          emergency_phone: get('emergency_contact_phone'),
+          allergies: get('allergies'),
+          medical_conditions: get('emergency_medical_notes'),
+          shirt_size: get('shirt_size')
         };
       }
     }
@@ -1580,51 +1596,35 @@ function doGet(e) {
       var userEmail = auth.user && auth.user.email ? auth.user.email : (auth.email || '');
       var userPhone = auth.user && auth.user.phone ? auth.user.phone : (auth.phone || '');
       
-      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
-      if (!sheet) return jsonResponse_({
-        ok: true,
-        sensitive_info_done: sensitiveStatus.done,
-        i9_done: i9Status.done,
-        info_done: false,
-        contract_done: false,
-        status: 'in_progress',
-        worker_type: workerType,
+      var sensitiveFields = {
         full_name: sensitiveStatus.full_name || '',
         preferred_name: sensitiveStatus.preferred_name || '',
         phone: sensitiveStatus.phone || userPhone,
-        email: sensitiveStatus.email || userEmail
-      });
+        email: sensitiveStatus.email || userEmail,
+        dob: sensitiveStatus.dob || '',
+        address_line1: sensitiveStatus.address_line1 || '',
+        address_line2: sensitiveStatus.address_line2 || '',
+        address_city: sensitiveStatus.address_city || '',
+        address_state: sensitiveStatus.address_state || '',
+        address_zip: sensitiveStatus.address_zip || '',
+        dl_number: sensitiveStatus.dl_number || '',
+        dl_expiration: sensitiveStatus.dl_expiration || '',
+        emergency_name: sensitiveStatus.emergency_name || '',
+        emergency_relationship: sensitiveStatus.emergency_relationship || '',
+        emergency_phone: sensitiveStatus.emergency_phone || '',
+        allergies: sensitiveStatus.allergies || '',
+        medical_conditions: sensitiveStatus.medical_conditions || '',
+        shirt_size: sensitiveStatus.shirt_size || ''
+      };
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
+      if (!sheet) return jsonResponse_(Object.assign({ ok: true, sensitive_info_done: sensitiveStatus.done, i9_done: i9Status.done, info_done: false, contract_done: false, status: 'in_progress', worker_type: workerType }, sensitiveFields));
       var data = sheet.getDataRange().getValues();
       for (var i = 1; i < data.length; i++) {
         if (data[i][1] === username) {
-          return jsonResponse_({
-            ok: true,
-            sensitive_info_done: sensitiveStatus.done,
-            i9_done: i9Status.done,
-            info_done: !!data[i][0],
-            contract_done: !!data[i][7],
-            status: data[i][11] || 'in_progress',
-            full_name: sensitiveStatus.full_name || data[i][2],
-            preferred_name: sensitiveStatus.preferred_name || '',
-            phone: sensitiveStatus.phone || data[i][3] || userPhone,
-            email: sensitiveStatus.email || userEmail,
-            worker_type: workerType
-          });
+          return jsonResponse_(Object.assign({ ok: true, sensitive_info_done: sensitiveStatus.done, i9_done: i9Status.done, info_done: !!data[i][0], contract_done: !!data[i][7], status: data[i][11] || 'in_progress', worker_type: workerType }, sensitiveFields));
         }
       }
-      return jsonResponse_({
-        ok: true,
-        sensitive_info_done: sensitiveStatus.done,
-        i9_done: i9Status.done,
-        info_done: false,
-        contract_done: false,
-        status: 'in_progress',
-        worker_type: workerType,
-        full_name: sensitiveStatus.full_name || '',
-        preferred_name: sensitiveStatus.preferred_name || '',
-        phone: sensitiveStatus.phone || userPhone,
-        email: sensitiveStatus.email || userEmail
-      });
+      return jsonResponse_(Object.assign({ ok: true, sensitive_info_done: sensitiveStatus.done, i9_done: i9Status.done, info_done: false, contract_done: false, status: 'in_progress', worker_type: workerType }, sensitiveFields));
     }
     
     if (e && e.parameter && e.parameter.action === 'onboarding_list_pending') {

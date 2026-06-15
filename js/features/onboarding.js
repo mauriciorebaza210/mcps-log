@@ -31,23 +31,31 @@ function loadOnboarding() {
     updateOnbProgress(status || {});
 
     if (status) {
-      const phoneEl = document.getElementById('onb-phone');
-      const emailEl = document.getElementById('onb-email');
-      const preferredEl = document.getElementById('onb-preferred-name');
-      const i9SigEl = document.getElementById('onb-i9-signature');
-      const contractSigEl = document.getElementById('onb-signed-name');
+      const fill = (id, val) => { const el = document.getElementById(id); if (el && val && !el.value) el.value = val; };
       if (status.full_name) {
         const parts = splitLegalName_(status.full_name);
-        const firstEl = document.getElementById('onb-first-name');
-        const lastEl = document.getElementById('onb-last-name');
-        if (firstEl && !firstEl.value) firstEl.value = parts.first;
-        if (lastEl && !lastEl.value) lastEl.value = parts.last;
+        fill('onb-first-name', parts.first);
+        fill('onb-last-name', parts.last);
       }
-      if (phoneEl && status.phone && !phoneEl.value) phoneEl.value = status.phone;
-      if (emailEl && !emailEl.value) emailEl.value = status.email || (_s && _s.email) || '';
-      if (preferredEl && status.preferred_name && !preferredEl.value) preferredEl.value = status.preferred_name;
-      if (i9SigEl && status.full_name && !i9SigEl.value) i9SigEl.value = status.full_name;
-      if (contractSigEl && status.full_name && !contractSigEl.value) contractSigEl.value = status.full_name;
+      fill('onb-preferred-name', status.preferred_name);
+      fill('onb-dob', status.dob);
+      fill('onb-phone', status.phone);
+      fill('onb-email', status.email || (_s && _s.email) || '');
+      fill('onb-addr1', status.address_line1);
+      fill('onb-addr2', status.address_line2);
+      fill('onb-city', status.address_city);
+      fill('onb-state', status.address_state);
+      fill('onb-zip', status.address_zip);
+      fill('onb-dl-number', status.dl_number);
+      fill('onb-dl-exp', status.dl_expiration);
+      fill('onb-ec-name', status.emergency_name);
+      fill('onb-ec-relationship', status.emergency_relationship);
+      fill('onb-ec-phone', status.emergency_phone);
+      fill('onb-allergies', status.allergies);
+      fill('onb-medical', status.medical_conditions);
+      if (status.shirt_size) { const el = document.getElementById('onb-shirt-size'); if (el && !el.value) el.value = status.shirt_size; }
+      fill('onb-i9-signature', status.full_name);
+      fill('onb-signed-name', status.full_name);
     }
 
     // Update task icons based on completion
@@ -338,6 +346,14 @@ async function generateAndReviewI9() {
     btn.textContent = 'Review & Sign I-9 Form';
     btn.disabled = false;
   }
+}
+
+function toggleSsnVisibility(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.textContent = show ? '🙈' : '👁';
 }
 
 function closeI9Modal() {

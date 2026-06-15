@@ -1513,6 +1513,10 @@ select.q-inp{cursor:pointer}
 .onb-fg label{display:block;font-size:var(--text-base);font-weight:600;margin-bottom:.35rem}
 .onb-inp{width:100%;padding:.75rem 1rem;border:1.5px solid var(--border);border-radius:var(--r-md);font-size:var(--text-base);font-family:'Barlow',sans-serif;background:var(--surface);color:var(--text);transition:all .2s}
 .onb-inp:focus{outline:none;border-color:var(--teal-mid);background:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.12)}
+.ssn-wrap{position:relative;display:flex;align-items:center}
+.ssn-wrap .onb-inp{padding-right:2.5rem}
+.ssn-eye{position:absolute;right:.65rem;background:none;border:none;cursor:pointer;font-size:1rem;line-height:1;padding:.2rem;opacity:.45;transition:opacity .15s}
+.ssn-eye:hover{opacity:.85}
 .onb-row2{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
 .onb-row3{display:grid;grid-template-columns:1fr .55fr .65fr;gap:.65rem}
 @media(max-width:460px){.onb-row2,.onb-row3{grid-template-columns:1fr}}

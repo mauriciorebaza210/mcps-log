@@ -1079,7 +1079,7 @@
           <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.1rem 0 .4rem">Employee Attestation</div>
           <div class="onb-row2">
             <div class="onb-fg"><label for="onb-i9-other-last">Other Last Names Used <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input class="onb-inp" id="onb-i9-other-last" placeholder="Type N/A if none"></div>
-            <div class="onb-fg"><label for="onb-i9-ssn">SSN</label><input class="onb-inp" id="onb-i9-ssn" placeholder="___-__-____" maxlength="11" autocomplete="off" oninput="onbFormatW4Ssn(this)"></div>
+            <div class="onb-fg"><label for="onb-i9-ssn">SSN</label><div class="ssn-wrap"><input class="onb-inp" id="onb-i9-ssn" type="password" placeholder="___-__-____" maxlength="11" autocomplete="off" oninput="onbFormatW4Ssn(this)"><button type="button" class="ssn-eye" onclick="toggleSsnVisibility('onb-i9-ssn',this)" tabindex="-1" aria-label="Show SSN">👁</button></div></div>
           </div>
 
           <div class="onb-fg">
@@ -1152,7 +1152,7 @@
             
             <div class="onb-fg">
               <label>Full SSN Number</label>
-              <input class="onb-inp" id="onb-w4-ssn" placeholder="___-__-____" maxlength="11" oninput="onbFormatW4Ssn(this)">
+              <div class="ssn-wrap"><input class="onb-inp" id="onb-w4-ssn" type="password" placeholder="___-__-____" maxlength="11" autocomplete="off" oninput="onbFormatW4Ssn(this)"><button type="button" class="ssn-eye" onclick="toggleSsnVisibility('onb-w4-ssn',this)" tabindex="-1" aria-label="Show SSN">👁</button></div>
             </div>
 
             <div class="onb-fg">
