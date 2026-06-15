@@ -903,12 +903,9 @@ function _renderTechKPIs_(total, done, nextPool, weather) {
   const nextColor = nextPool ? 'var(--teal)' : 'var(--success)';
 
   kpiRow.innerHTML =
-    _thKpiCard_('Jobs Today',   String(total),  'var(--teal)',    false) +
-    _thKpiCard_('Completed',    `${done}<small style="font-size:.75em;color:var(--muted)"> / ${total}</small>`, 'var(--success)', false) +
-    _thKpiCard_('On-Time %',    '--', 'var(--muted)', true, 'GPS tracking required') +
-    _thKpiCard_('Drive Time',   '--', 'var(--muted)', true, 'GPS tracking required') +
-    _thKpiCard_('Next Job ETA', '--', 'var(--muted)', true, 'No schedule times yet') +
-    _thKpiCard_('Next Stop',    nextAddr, nextColor, false);
+    _thKpiCard_('Jobs Today', String(total),  'var(--teal)',    false) +
+    _thKpiCard_('Completed',  `${done}<small style="font-size:.75em;color:var(--muted)"> / ${total}</small>`, 'var(--success)', false) +
+    _thKpiCard_('Next Stop',  nextAddr, nextColor, false);
 }
 
 function _thKpiCard_(label, value, color, isPlaceholder, note) {

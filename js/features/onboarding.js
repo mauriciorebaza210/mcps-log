@@ -320,15 +320,12 @@ async function generateAndReviewI9() {
       setPdfText_(form, 'Foreign Passport Number and Country of IssuanceRow1', [fields.foreign_passport, fields.foreign_passport_country].filter(Boolean).join(' / '));
     }
 
-    const pages = pdfDoc.getPages();
-    const page = pages[0];
     const ssnFormatted = fields.ssn_full.substring(0,3) + '-' + fields.ssn_full.substring(3,5) + '-' + fields.ssn_full.substring(5,9);
     const signatureText = fields.signature_name + ' (e-signed)';
     const dateText = fields.signature_date;
-    // Draw SSN, signature, and date directly — form field names vary by PDF version
-    page.drawText(ssnFormatted, { x: 163, y: 545, size: 9 });
-    page.drawText(signatureText, { x: 42, y: 430, size: 10 });
-    page.drawText(dateText, { x: 372, y: 430, size: 10 });
+    setPdfText_(form, 'US Social Security Number', ssnFormatted);
+    setPdfText_(form, 'Signature of Employee', signatureText);
+    setPdfText_(form, "Today's Date mmddyyy", dateText);
 
     const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
     form.updateFieldAppearances(helveticaFont);
@@ -800,8 +797,14 @@ function loadPendingHires() {
           <span class="pend-ai-pill ${a.i9_done ? 'conf-high' : 'conf-low'}">${a.i9_done ? '✓ I-9' : '✗ I-9'}</span>
           <span class="pend-ai-pill ${a.contract_done ? 'conf-high' : 'conf-low'}">${a.contract_done ? '✓ Contract' : '✗ Contract'}</span>
         </div>
-        <div class="pend-btns" style="flex-wrap:wrap;gap:.4rem">
-          <button class="pend-approve" onclick="approveNewHire('${a.username}')">Approve → Trainee</button>
+        <div class="pend-btns" style="flex-wrap:wrap;gap:.4rem;align-items:center">
+          <select id="role-select-${a.username}" style="padding:.35rem .5rem;border:1px solid var(--border);border-radius:6px;font-size:.8rem;background:var(--surface);color:var(--text)">
+            <option value="trainee">Trainee</option>
+            <option value="technician">Technician</option>
+            <option value="manager">Manager</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="pend-approve" onclick="approveNewHire('${a.username}')">Approve</button>
           <button class="pend-reject" onclick="rejectNewHire('${a.username}')">Request Changes</button>
           <button class="pend-reject" style="border-color:var(--teal-light);color:var(--teal-mid)" onclick="viewHireDocs('${a.username}')">📄 View Docs</button>
         </div>
@@ -812,13 +815,15 @@ function loadPendingHires() {
 }
 
 function approveNewHire(username) {
+  const sel = document.getElementById('role-select-' + username);
+  const role = sel ? sel.value : 'trainee';
+  const label = sel ? sel.options[sel.selectedIndex].text : 'Trainee';
   api({ action: 'onboarding_approve', username, token: _s.token, secret: SEC }).then(res => {
     if (!res.ok) { alert(res.error || 'Failed to approve.'); return; }
-    // Promote role to trainee via GAS
-    api({ action: 'update_user', secret: SEC, token: _s.token, username, fields: { roles: 'trainee', active: true } })
+    api({ action: 'update_user', secret: SEC, token: _s.token, username, fields: { roles: role, active: true } })
       .then(() => {
         const card = document.getElementById('hire-card-' + username);
-        if (card) card.innerHTML = `<div style="padding:.5rem 0;color:var(--success);font-weight:600">✓ ${username} approved as Trainee</div>`;
+        if (card) card.innerHTML = `<div style="padding:.5rem 0;color:var(--success);font-weight:600">✓ ${username} approved as ${label}</div>`;
       });
   }).catch(() => alert('Network error.'));
 }

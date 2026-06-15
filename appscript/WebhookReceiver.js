@@ -1699,19 +1699,22 @@ function doGet(e) {
       var wTypeIdx = headers.indexOf('worker_type');
       var w4Idx = headers.indexOf('w4_url');
       var i9Status = getEmployeeI9StatusForUsername_(username);
+      var sensitiveInfo = getSensitiveInfoStatusForUsername_(username);
 
       for (var i = 1; i < data.length; i++) {
         if (data[i][1] === username) {
           return jsonResponse_({
             ok: true,
-            full_name: data[i][2], phone: data[i][3], tax_type: data[i][4], tax_id_last4: data[i][5], 
+            full_name: data[i][2], phone: data[i][3], tax_type: data[i][4], tax_id_last4: data[i][5],
             w9_signed_url: data[i][6],
             i9_signed_url: i9Status.i9_pdf_url || null,
             w4_signed_url: w4Idx > -1 ? data[i][w4Idx] : null,
             worker_type: wTypeIdx > -1 ? data[i][wTypeIdx] : '1099_contractor',
             contract_signed_at: data[i][7], contract_signed_name: data[i][8],
-            dob: data[i][13], address_line1: data[i][14], address_city: data[i][15], address_state: data[i][16], address_zip: data[i][17],
-            emergency_name: data[i][18], emergency_phone: data[i][19]
+            dob: sensitiveInfo.dob || data[i][13],
+            address_line1: data[i][14], address_city: data[i][15], address_state: data[i][16], address_zip: data[i][17],
+            emergency_name: sensitiveInfo.emergency_name || data[i][18],
+            emergency_phone: sensitiveInfo.emergency_phone || data[i][19]
           });
         }
       }
