@@ -986,7 +986,7 @@
         <div class="onb-welcome" id="onb-welcome-name">Welcome!</div>
         <div class="onb-sub">Complete the steps below to activate your account.</div>
         <div class="onb-progress-bar"><div class="onb-progress-fill" id="onb-fill" style="width:0%"></div></div>
-        <div class="onb-progress-label" id="onb-progress-label">0 of 2 steps complete</div>
+        <div class="onb-progress-label" id="onb-progress-label">0 of 3 steps complete</div>
       </div>
 
       <!-- Task 1 — Personal Information -->
@@ -995,71 +995,82 @@
           <span class="onb-task-icon" id="onb-icon-info">📋</span>
           <div style="flex:1">
             <div style="font-weight:700;font-size:.95rem">Personal Information</div>
-            <div style="font-size:.78rem;color:var(--muted)">Legal name, address, tax info &amp; W-9</div>
+            <div style="font-size:.78rem;color:var(--muted)">Legal profile, emergency contact, and safety info</div>
           </div>
           <span class="onb-chevron" id="onb-chev-info">›</span>
         </div>
         <div class="onb-task-body" id="onb-body-info" style="display:none">
 
           <div class="onb-row2">
-            <div class="onb-fg"><label for="onb-legal-name">Legal Full Name</label><input class="onb-inp" id="onb-legal-name" placeholder="First Middle Last"></div>
-            <div class="onb-fg"><label for="onb-dob">Date of Birth</label><input class="onb-inp" id="onb-dob" type="date"></div>
+            <div class="onb-fg"><label for="onb-legal-name">Full Legal Name</label><input class="onb-inp" id="onb-legal-name" placeholder="First Middle Last"></div>
+            <div class="onb-fg"><label for="onb-preferred-name">Preferred Name</label><input class="onb-inp" id="onb-preferred-name" placeholder="What should we call you?"></div>
           </div>
-          <div class="onb-fg"><label for="onb-phone">Phone Number</label><input class="onb-inp" id="onb-phone" type="tel" placeholder="(555) 555-5555"></div>
+          <div class="onb-row2">
+            <div class="onb-fg"><label for="onb-dob">Date of Birth</label><input class="onb-inp" id="onb-dob" type="date"></div>
+            <div class="onb-fg"><label for="onb-dl-exp">Driver's License Expiration</label><input class="onb-inp" id="onb-dl-exp" type="date"></div>
+          </div>
+          <div class="onb-row2">
+            <div class="onb-fg"><label for="onb-phone">Phone Number</label><input class="onb-inp" id="onb-phone" type="tel" placeholder="(555) 555-5555"></div>
+            <div class="onb-fg"><label for="onb-email">Email</label><input class="onb-inp" id="onb-email" type="email" placeholder="you@example.com"></div>
+          </div>
 
           <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Home Address</div>
           <div class="onb-fg"><label for="onb-addr1">Street Address</label><input class="onb-inp" id="onb-addr1" placeholder="123 Main St"></div>
+          <div class="onb-fg"><label for="onb-addr2">Apartment / Unit <span style="font-weight:400;color:var(--muted)">(optional)</span></label><input class="onb-inp" id="onb-addr2" placeholder="Apt 4B"></div>
           <div class="onb-row3">
             <div class="onb-fg"><label for="onb-city">City</label><input class="onb-inp" id="onb-city" placeholder="San Antonio"></div>
             <div class="onb-fg"><label for="onb-state">State</label><input class="onb-inp" id="onb-state" placeholder="TX" maxlength="2"></div>
             <div class="onb-fg"><label for="onb-zip">ZIP</label><input class="onb-inp" id="onb-zip" placeholder="78201" maxlength="10"></div>
           </div>
 
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Driver's License</div>
+          <div class="onb-fg">
+            <label for="onb-dl-photo">Driver's License Photo</label>
+            <input class="onb-inp" id="onb-dl-photo" type="file" accept="image/*" capture="environment">
+          </div>
+
           <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Emergency Contact</div>
           <div class="onb-row2">
             <div class="onb-fg"><label for="onb-ec-name">Name</label><input class="onb-inp" id="onb-ec-name" placeholder="Jane Doe"></div>
-            <div class="onb-fg"><label for="onb-ec-phone">Phone</label><input class="onb-inp" id="onb-ec-phone" type="tel" placeholder="(555) 555-5555"></div>
+            <div class="onb-fg"><label for="onb-ec-relationship">Relationship</label><input class="onb-inp" id="onb-ec-relationship" placeholder="Spouse, parent, friend"></div>
+          </div>
+          <div class="onb-fg"><label for="onb-ec-phone">Emergency Contact Phone</label><input class="onb-inp" id="onb-ec-phone" type="tel" placeholder="(555) 555-5555"></div>
+
+          <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Emergency Health Info</div>
+          <div class="onb-fg"><label for="onb-allergies">Allergies</label><textarea class="onb-inp" id="onb-allergies" rows="3" placeholder="List allergies, or type None"></textarea></div>
+          <div class="onb-fg"><label for="onb-medical">Medical conditions we should know in an emergency</label><textarea class="onb-inp" id="onb-medical" rows="3" placeholder="Optional emergency-only notes"></textarea></div>
+
+          <div class="onb-fg">
+            <label for="onb-shirt-size">Shirt Size</label>
+            <select class="onb-inp sl" id="onb-shirt-size">
+              <option value="">Select size</option>
+              <option value="XS">XS</option>
+              <option value="S">S</option>
+              <option value="M">M</option>
+              <option value="L">L</option>
+              <option value="XL">XL</option>
+              <option value="2XL">2XL</option>
+              <option value="3XL">3XL</option>
+            </select>
           </div>
 
-          <div id="onb-w9-module">
-            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Tax Information (W-9)</div>
-            <div class="onb-fg">
-              <label>Tax ID Type</label>
-              <div style="display:flex;gap:1rem;margin-top:.3rem">
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="SSN" onchange="onbTaxTypeChanged()"> SSN</label>
-                <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;font-weight:400"><input type="radio" name="onb-tax-type" value="EIN" onchange="onbTaxTypeChanged()"> EIN</label>
-              </div>
-            </div>
-            
-            <div class="onb-fg" id="onb-ein-type-fg" style="display:none">
-              <label for="onb-ein-type">Tax Classification</label>
-              <select class="onb-inp" id="onb-ein-type" style="padding:.6rem 1rem">
-                <option value="ccorp">C Corporation</option>
-                <option value="scorp">S Corporation</option>
-                <option value="partnership">Partnership</option>
-                <option value="llc_c">LLC - C Corporation</option>
-                <option value="llc_s">LLC - S Corporation</option>
-                <option value="llc_p">LLC - Partnership</option>
-                <option value="trust">Trust / Estate</option>
-              </select>
-            </div>
+          <div class="im" id="onb-info-msg" style="margin:.5rem 0 0"></div>
+          <button class="onb-submit-btn" onclick="submitPersonalInfo()">Save Personal Information →</button>
+        </div>
+      </div>
 
-            <div class="onb-fg">
-              <label for="onb-tax-full">Full Tax ID Number</label>
-              <input class="onb-inp" id="onb-tax-full" placeholder="Please select SSN or EIN first" maxlength="11" oninput="onbFormatTaxId(this)" disabled>
-            </div>
-
-            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">W-9 Form Generation</div>
-            <div class="onb-fg">
-              <div style="font-size:.85rem;color:var(--muted);margin-bottom:.5rem">Your W-9 will be automatically generated with the info above and seamlessly attached using your legal name as a signature.</div>
-              <input type="hidden" id="onb-w9-base64">
-              <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-w9" onclick="generateAndReviewW9()">Review &amp; Sign W-9 Form</button>
-              <div id="w9-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ W-9 generated and ready.</div>
-            </div>
+      <!-- Task 2 — W-4 -->
+      <div class="onb-task-card" id="onb-task-w4">
+        <div class="onb-task-hdr" onclick="toggleOnbTask('w4')">
+          <span class="onb-task-icon" id="onb-icon-w4">🧾</span>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:.95rem">W-4</div>
+            <div style="font-size:.78rem;color:var(--muted)">Federal withholding form</div>
           </div>
-
-          <div id="onb-w4-module" style="display:none;">
-            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.85rem 0 .4rem">Tax Information (W-4)</div>
+          <span class="onb-chevron" id="onb-chev-w4">›</span>
+        </div>
+        <div class="onb-task-body" id="onb-body-w4" style="display:none">
+            <div style="font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:.1rem 0 .4rem">Tax Information (W-4)</div>
             
             <div class="onb-fg">
               <label>Full SSN Number</label>
@@ -1109,14 +1120,13 @@
               <button class="adm-new-btn" style="width:100%;justify-content:center;padding:.8rem;font-size:.9rem" id="btn-gen-w4" onclick="generateAndReviewW4()">Review &amp; Sign W-4 Form</button>
               <div id="w4-status-msg" style="margin-top:.4rem;font-size:.8rem;font-weight:600;color:var(--success);display:none">✓ W-4 generated and ready.</div>
             </div>
-          </div>
 
-          <div class="im" id="onb-info-msg" style="margin:.5rem 0 0"></div>
-          <button class="onb-submit-btn" onclick="submitPersonalInfo()">Save &amp; Continue →</button>
+          <div class="im" id="onb-w4-msg" style="margin:.5rem 0 0"></div>
+          <button class="onb-submit-btn" onclick="submitW4Info()">Save W-4 →</button>
         </div>
       </div>
 
-      <!-- Task 2 — Contractor Agreement -->
+      <!-- Task 3 — Employee Agreement -->
       <div class="onb-task-card" id="onb-task-contract">
         <div class="onb-task-hdr" onclick="toggleOnbTask('contract')">
           <span class="onb-task-icon" id="onb-icon-contract">📄</span>
@@ -1149,7 +1159,7 @@
         </div>
       </div>
 
-      <!-- Pending state (shown when both tasks complete) -->
+      <!-- Pending state (shown when all onboarding steps complete) -->
       <div class="onb-pending-state" id="onb-pending-state" style="display:none">
         <div style="font-size:2rem;margin-bottom:.5rem">🎉</div>
         <div style="font-weight:700;font-size:1.05rem;margin-bottom:.3rem">Application Submitted!</div>

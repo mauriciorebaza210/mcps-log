@@ -5,6 +5,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // ONBOARDING
 // ══════════════════════════════════════════════════════════════════════════════
+let _onbStatus = { sensitive_info_done: false, info_done: false, contract_done: false };
+
 function loadOnboarding() {
   const nameEl = document.getElementById('onb-welcome-name');
   if (nameEl) nameEl.textContent = 'Welcome, ' + (_s.name ? _s.name.split(' ')[0] : '') + '!';
@@ -19,21 +21,8 @@ function loadOnboarding() {
       document.getElementById('onb-contract-html').innerHTML = ctx.contract_html;
     } 
     
-    // Branch on worker type
-    const isW2 = status && status.worker_type === 'w2_employee';
-    if (isW2) {
-      document.getElementById('onb-w9-module').style.display = 'none';
-      document.getElementById('onb-w4-module').style.display = 'block';
-      document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Employment Agreement';
-      document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your W2 employment agreement';
-      document.querySelector('#onb-task-info .onb-task-hdr div div:nth-child(2)').textContent = 'Legal name, address, tax info & W-4';
-    } else {
-      document.getElementById('onb-w9-module').style.display = 'block';
-      document.getElementById('onb-w4-module').style.display = 'none';
-      document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Contractor Agreement';
-      document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your independent contractor agreement';
-      document.querySelector('#onb-task-info .onb-task-hdr div div:nth-child(2)').textContent = 'Legal name, address, tax info & W-9';
-    }
+    document.querySelector('#onb-task-contract .onb-task-hdr div div').textContent = 'Employee Agreement';
+    document.querySelector('#onb-task-contract .onb-task-hdr div div:nth-child(2)').textContent = 'Read and sign your employment agreement';
 
     // Pre-fill signed date
     const dateEl = document.getElementById('onb-signed-date');
@@ -44,13 +33,20 @@ function loadOnboarding() {
     if (status) {
       const legalNameEl = document.getElementById('onb-legal-name');
       const phoneEl = document.getElementById('onb-phone');
+      const emailEl = document.getElementById('onb-email');
+      const preferredEl = document.getElementById('onb-preferred-name');
       if (legalNameEl && status.full_name && !legalNameEl.value) legalNameEl.value = status.full_name;
       if (phoneEl && status.phone && !phoneEl.value) phoneEl.value = status.phone;
+      if (emailEl && status.email && !emailEl.value) emailEl.value = status.email;
+      if (preferredEl && status.preferred_name && !preferredEl.value) preferredEl.value = status.preferred_name;
     }
 
     // Update task icons based on completion
-    if (status && status.info_done) {
+    if (status && status.sensitive_info_done) {
       document.getElementById('onb-icon-info').textContent = '✅';
+    }
+    if (status && status.info_done) {
+      document.getElementById('onb-icon-w4').textContent = '✅';
     }
     if (status && status.contract_done) {
       document.getElementById('onb-icon-contract').textContent = '✅';
@@ -73,77 +69,108 @@ function toggleOnbTask(task) {
 function submitPersonalInfo() {
   const msgEl = document.getElementById('onb-info-msg');
   const fields = {
-    legal_name     : document.getElementById('onb-legal-name').value.trim(),
-    dob            : document.getElementById('onb-dob').value,
-    phone          : document.getElementById('onb-phone').value.trim(),
-    address_line1  : document.getElementById('onb-addr1').value.trim(),
-    address_city   : document.getElementById('onb-city').value.trim(),
-    address_state  : document.getElementById('onb-state').value.trim(),
-    address_zip    : document.getElementById('onb-zip').value.trim(),
-    emergency_name : document.getElementById('onb-ec-name').value.trim(),
+    legal_name: document.getElementById('onb-legal-name').value.trim(),
+    preferred_name: document.getElementById('onb-preferred-name').value.trim(),
+    dob: document.getElementById('onb-dob').value,
+    phone: document.getElementById('onb-phone').value.trim(),
+    email: document.getElementById('onb-email').value.trim(),
+    address_line1: document.getElementById('onb-addr1').value.trim(),
+    address_line2: document.getElementById('onb-addr2').value.trim(),
+    address_city: document.getElementById('onb-city').value.trim(),
+    address_state: document.getElementById('onb-state').value.trim(),
+    address_zip: document.getElementById('onb-zip').value.trim(),
+    drivers_license_expiration: document.getElementById('onb-dl-exp').value,
+    emergency_name: document.getElementById('onb-ec-name').value.trim(),
+    emergency_relationship: document.getElementById('onb-ec-relationship').value.trim(),
     emergency_phone: document.getElementById('onb-ec-phone').value.trim(),
-    tax_type       : (document.querySelector('input[name="onb-tax-type"]:checked') || {}).value || '',
-    tax_ein_type   : document.getElementById('onb-ein-type').value,
-    tax_id_full    : document.getElementById('onb-tax-full').value.trim(),
+    allergies: document.getElementById('onb-allergies').value.trim(),
+    medical_conditions: document.getElementById('onb-medical').value.trim(),
+    shirt_size: document.getElementById('onb-shirt-size').value,
   };
 
   if (!fields.legal_name) { showMsg(msgEl, 'Legal name is required.', false); return; }
+  if (!fields.preferred_name) { showMsg(msgEl, 'Preferred name is required.', false); return; }
   if (!fields.dob) { showMsg(msgEl, 'Date of birth is required.', false); return; }
   if (!fields.phone) { showMsg(msgEl, 'Phone number is required.', false); return; }
+  if (!fields.email) { showMsg(msgEl, 'Email is required.', false); return; }
   if (!fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) {
     showMsg(msgEl, 'Complete address is required.', false); return;
   }
-  if (!fields.emergency_name || !fields.emergency_phone) { showMsg(msgEl, 'Emergency contact is required.', false); return; }
-  const isW2 = document.getElementById('onb-w4-module').style.display !== 'none';
-  if (!isW2) {
-    if (!fields.tax_type) { showMsg(msgEl, 'Select SSN or EIN.', false); return; }
-    if (!fields.tax_id_full || fields.tax_id_full.length < 10) { showMsg(msgEl, 'Enter full Tax ID.', false); return; }
-  } else {
-    fields.tax_type = 'SSN';
-    fields.tax_id_full = document.getElementById('onb-w4-ssn').value.replace(/\D/g, '');
-    if (fields.tax_id_full.length < 9) { showMsg(msgEl, 'Enter full SSN.', false); return; }
-    fields.w4_filing_status = (document.querySelector('input[name="onb-w4-status"]:checked') || {}).value;
-    fields.w4_multiple_jobs = document.getElementById('onb-w4-step2').checked;
-    fields.w4_dependents_1 = document.getElementById('onb-w4-dep1').value || '0';
-    fields.w4_dependents_2 = document.getElementById('onb-w4-dep2').value || '0';
-    fields.w4_other_income = document.getElementById('onb-w4-4a').value || '0';
-    fields.w4_deductions = document.getElementById('onb-w4-4b').value || '0';
-    fields.w4_extra_withholding = document.getElementById('onb-w4-4c').value || '0';
+  if (!fields.drivers_license_expiration) { showMsg(msgEl, 'Driver license expiration is required.', false); return; }
+  if (!fields.emergency_name || !fields.emergency_relationship || !fields.emergency_phone) { showMsg(msgEl, 'Complete emergency contact is required.', false); return; }
+  if (!fields.allergies) { showMsg(msgEl, 'Allergies are required. Type None if none.', false); return; }
+  if (!fields.shirt_size) { showMsg(msgEl, 'Shirt size is required.', false); return; }
+
+  const file = document.getElementById('onb-dl-photo').files[0];
+  if (!file) { showMsg(msgEl, 'Driver license photo is required.', false); return; }
+
+  showMsg(msgEl, 'Saving...', true);
+  fileToDataUrl_(file).then(dataUrl => {
+    api(Object.assign({ action: 'save_sensitive_info', token: _s.token, secret: SEC, drivers_license_photo: dataUrl, drivers_license_photo_name: file.name || 'drivers_license.jpg' }, fields))
+      .then(res => {
+        if (res.ok) {
+          showMsg(msgEl, 'Saved!', true);
+          document.getElementById('onb-icon-info').textContent = '✅';
+          updateOnbProgress({ sensitive_info_done: true, info_done: !!res.info_done, contract_done: !!res.contract_done });
+          toggleOnbTask('info');
+          toggleOnbTask('w4');
+        } else {
+          showMsg(msgEl, res.error || 'Failed to save.', false);
+        }
+      })
+      .catch(() => showMsg(msgEl, 'Network error.', false));
+  }).catch(() => showMsg(msgEl, 'Could not read driver license photo.', false));
+}
+
+function fileToDataUrl_(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function submitW4Info() {
+  const msgEl = document.getElementById('onb-w4-msg');
+  const fields = {
+    legal_name: document.getElementById('onb-legal-name').value.trim(),
+    phone: document.getElementById('onb-phone').value.trim(),
+    address_line1: document.getElementById('onb-addr1').value.trim(),
+    address_city: document.getElementById('onb-city').value.trim(),
+    address_state: document.getElementById('onb-state').value.trim(),
+    address_zip: document.getElementById('onb-zip').value.trim(),
+    tax_type: 'SSN',
+    tax_id_full: document.getElementById('onb-w4-ssn').value.replace(/\D/g, ''),
+    w4_filing_status: (document.querySelector('input[name="onb-w4-status"]:checked') || {}).value,
+    w4_multiple_jobs: document.getElementById('onb-w4-step2').checked,
+    w4_dependents_1: document.getElementById('onb-w4-dep1').value || '0',
+    w4_dependents_2: document.getElementById('onb-w4-dep2').value || '0',
+    w4_other_income: document.getElementById('onb-w4-4a').value || '0',
+    w4_deductions: document.getElementById('onb-w4-4b').value || '0',
+    w4_extra_withholding: document.getElementById('onb-w4-4c').value || '0',
+  };
+  if (!fields.legal_name || !fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) {
+    showMsg(msgEl, 'Complete Personal Information first.', false); return;
   }
+  if (fields.tax_id_full.length < 9) { showMsg(msgEl, 'Enter full SSN.', false); return; }
 
-  const w9b64 = document.getElementById('onb-w9-base64').value;
   const w4b64 = document.getElementById('onb-w4-base64').value;
-  
-  const doSave = (b64Key, b64Val) => {
-    const body = Object.assign({ action: 'save_info' }, fields);
-    if (b64Val) body[b64Key] = b64Val;
-
-    body.token = _s.token;
-    body.secret = SEC;
-    
+  if (w4b64) {
+    const body = Object.assign({ action: 'save_info', token: _s.token, secret: SEC, w4_base64: w4b64 }, fields);
     api(body).then(res => {
       if (res.ok) {
         showMsg(msgEl, 'Saved!', true);
-        document.getElementById('onb-icon-info').textContent = '✅';
-        updateOnbProgress({ info_done: true, contract_done: !!res.contract_done });
+        document.getElementById('onb-icon-w4').textContent = '✅';
+        updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, info_done: true, contract_done: !!res.contract_done });
+        toggleOnbTask('w4');
+        toggleOnbTask('contract');
       } else {
         showMsg(msgEl, res.error || 'Failed to save.', false);
       }
     }).catch(() => showMsg(msgEl, 'Network error.', false));
-  };
-
-  if (!isW2) {
-    if (w9b64) {
-      doSave('w9_base64', w9b64);
     } else {
-      showMsg(msgEl, 'Please generate and review your W-9 Form before saving.', false);
-    }
-  } else {
-    if (w4b64) {
-      doSave('w4_base64', w4b64);
-    } else {
-      showMsg(msgEl, 'Please generate and review your W-4 Form before saving.', false);
-    }
+    showMsg(msgEl, 'Please generate and review your W-4 Form before saving.', false);
   }
 }
 
@@ -442,7 +469,7 @@ function submitContract() {
     if (res.ok) {
       showMsg(msgEl, 'Signature saved!', true);
       document.getElementById('onb-icon-contract').textContent = '✅';
-      updateOnbProgress({ info_done: !!res.info_done, contract_done: true });
+      updateOnbProgress({ sensitive_info_done: !!res.sensitive_info_done, info_done: !!res.info_done, contract_done: true });
     } else {
       showMsg(msgEl, res.error || 'Failed to save signature.', false);
     }
@@ -450,14 +477,19 @@ function submitContract() {
 }
 
 function updateOnbProgress(status) {
-  const done = (status.info_done ? 1 : 0) + (status.contract_done ? 1 : 0);
-  const pct  = (done / 2) * 100;
+  _onbStatus = Object.assign({}, _onbStatus, status || {});
+  const done = (_onbStatus.sensitive_info_done ? 1 : 0) + (_onbStatus.info_done ? 1 : 0) + (_onbStatus.contract_done ? 1 : 0);
+  const pct  = (done / 3) * 100;
   const fill = document.getElementById('onb-fill');
   const label = document.getElementById('onb-progress-label');
   if (fill) fill.style.width = pct + '%';
-  if (label) label.textContent = done + ' of 2 steps complete';
+  if (label) label.textContent = done + ' of 3 steps complete';
 
-  if (status.info_done && status.contract_done) {
+  if (_onbStatus.sensitive_info_done) document.getElementById('onb-icon-info').textContent = '✅';
+  if (_onbStatus.info_done) document.getElementById('onb-icon-w4').textContent = '✅';
+  if (_onbStatus.contract_done) document.getElementById('onb-icon-contract').textContent = '✅';
+
+  if (_onbStatus.sensitive_info_done && _onbStatus.info_done && _onbStatus.contract_done) {
     const pending = document.getElementById('onb-pending-state');
     if (pending) pending.style.display = 'block';
   }
@@ -671,5 +703,3 @@ function showGraduationModal() {
 
 
 // ── Active Clients Helpers ────────────────────────────────────────────────────
-
-

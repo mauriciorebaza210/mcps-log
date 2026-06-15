@@ -172,6 +172,161 @@ function saveVisitPhotos_(photos, formData) {
   return urls;
 }
 
+function getEmployeeSensitiveSpreadsheet_() {
+  const props = PropertiesService.getScriptProperties();
+  let id = props.getProperty('EMPLOYEE_SENSITIVE_SPREADSHEET_ID');
+  if (id) return SpreadsheetApp.openById(id);
+  const ss = SpreadsheetApp.create('MCPS Employee Sensitive Info');
+  props.setProperty('EMPLOYEE_SENSITIVE_SPREADSHEET_ID', ss.getId());
+  return ss;
+}
+
+function getEmployeeSensitiveSheet_() {
+  const ss = getEmployeeSensitiveSpreadsheet_();
+  let sheet = ss.getSheetByName('Employee_Sensitive_Info');
+  const headers = [
+    'submitted_at','updated_at','username','full_legal_name','preferred_name','date_of_birth',
+    'phone','email','home_address_line1','home_address_line2','home_city','home_state','home_zip',
+    'drivers_license_photo_url','drivers_license_expiration','emergency_contact_name',
+    'emergency_contact_relationship','emergency_contact_phone','allergies',
+    'emergency_medical_notes','shirt_size'
+  ];
+  if (!sheet) {
+    sheet = ss.insertSheet('Employee_Sensitive_Info');
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+  } else {
+    const existing = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]
+      .map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+    headers.forEach(function(h) {
+      if (existing.indexOf(h) === -1) {
+        sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h);
+        existing.push(h);
+      }
+    });
+  }
+  return sheet;
+}
+
+function getEmployeeSensitiveFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  let id = props.getProperty('EMPLOYEE_SENSITIVE_DRIVE_FOLDER_ID');
+  if (id) return DriveApp.getFolderById(id);
+  const folder = DriveApp.createFolder('MCPS Employee Sensitive Docs');
+  props.setProperty('EMPLOYEE_SENSITIVE_DRIVE_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+function saveSensitiveDriverLicense_(payload, username) {
+  const dataUrl = String(payload.drivers_license_photo || '');
+  if (!dataUrl) return '';
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matches) throw new Error('Invalid driver license image.');
+  const mimeType = matches[1];
+  const ext = mimeType.indexOf('png') !== -1 ? 'png' : mimeType.indexOf('webp') !== -1 ? 'webp' : 'jpg';
+  const cleanName = String(payload.drivers_license_photo_name || 'drivers_license').replace(/[^\w.-]+/g, '_');
+  const blob = Utilities.newBlob(Utilities.base64Decode(matches[2]), mimeType, username + '_drivers_license_' + Date.now() + '_' + cleanName + '.' + ext);
+  const file = getEmployeeSensitiveFolder_().createFile(blob);
+  return file.getUrl();
+}
+
+function saveEmployeeSensitiveInfo_(payload, auth) {
+  const username = String(auth.username || '').trim().toLowerCase();
+  if (!username) return { ok: false, error: 'Unauthorized' };
+  const sheet = getEmployeeSensitiveSheet_();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+    .map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+  const data = sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues() : [];
+  const usernameCol = headers.indexOf('username');
+  let rowIdx = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (String(data[i][usernameCol] || '').trim().toLowerCase() === username) {
+      rowIdx = i + 2;
+      break;
+    }
+  }
+  const now = new Date().toISOString();
+  const dlUrl = payload.drivers_license_photo ? saveSensitiveDriverLicense_(payload, username) : '';
+  const values = {
+    submitted_at: rowIdx === -1 ? now : '',
+    updated_at: now,
+    username: username,
+    full_legal_name: payload.legal_name || '',
+    preferred_name: payload.preferred_name || '',
+    date_of_birth: payload.dob || '',
+    phone: payload.phone || '',
+    email: payload.email || '',
+    home_address_line1: payload.address_line1 || '',
+    home_address_line2: payload.address_line2 || '',
+    home_city: payload.address_city || '',
+    home_state: payload.address_state || '',
+    home_zip: payload.address_zip || '',
+    drivers_license_photo_url: dlUrl,
+    drivers_license_expiration: payload.drivers_license_expiration || '',
+    emergency_contact_name: payload.emergency_name || '',
+    emergency_contact_relationship: payload.emergency_relationship || '',
+    emergency_contact_phone: payload.emergency_phone || '',
+    allergies: payload.allergies || '',
+    emergency_medical_notes: payload.medical_conditions || '',
+    shirt_size: payload.shirt_size || ''
+  };
+  if (rowIdx === -1) {
+    const row = new Array(headers.length).fill('');
+    headers.forEach(function(h, i) { if (values[h] !== undefined) row[i] = values[h]; });
+    sheet.appendRow(row);
+  } else {
+    headers.forEach(function(h, i) {
+      if (values[h] === undefined) return;
+      if (h === 'submitted_at' && !values[h]) return;
+      if (h === 'drivers_license_photo_url' && !values[h]) return;
+      sheet.getRange(rowIdx, i + 1).setValue(values[h]);
+    });
+  }
+  const onboardingStatus = getOnboardingStatusForUsername_(username);
+  return { ok: true, sensitive_info_done: true, info_done: onboardingStatus.info_done, contract_done: onboardingStatus.contract_done };
+}
+
+function getSensitiveInfoStatusForUsername_(username) {
+  try {
+    const sheet = getEmployeeSensitiveSheet_();
+    if (!sheet || sheet.getLastRow() < 2) return { done: false };
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+    const usernameCol = headers.indexOf('username');
+    if (usernameCol < 0) return { done: false };
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][usernameCol] || '').trim().toLowerCase() === String(username || '').trim().toLowerCase()) {
+        const get = function(col) {
+          const idx = headers.indexOf(col);
+          return idx >= 0 ? data[i][idx] : '';
+        };
+        return {
+          done: true,
+          full_name: get('full_legal_name'),
+          preferred_name: get('preferred_name'),
+          phone: get('phone'),
+          email: get('email')
+        };
+      }
+    }
+  } catch(e) {
+    Logger.log('getSensitiveInfoStatusForUsername_: ' + e);
+  }
+  return { done: false };
+}
+
+function getOnboardingStatusForUsername_(username) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
+  if (!sheet || sheet.getLastRow() < 2) return { info_done: false, contract_done: false };
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][1] || '').trim().toLowerCase() === String(username || '').trim().toLowerCase()) {
+      return { info_done: !!data[i][0], contract_done: !!data[i][7] };
+    }
+  }
+  return { info_done: false, contract_done: false };
+}
+
 // ── processPendingSvcJobs_ ────────────────────────────────────────────────────
 // Time-based trigger fired ~5s after submit_form returns ok:true.
 // Handles the slow post-processing that would otherwise block the technician:
@@ -481,6 +636,17 @@ function doPost(e) {
       invalidateCrmCache_();
       return jsonResponse_(proposalResponse);
     }
+
+    if (payload.action === 'save_sensitive_info') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || "Unauthorized" });
+      try {
+        const result = saveEmployeeSensitiveInfo_(payload, auth);
+        return jsonResponse_(result);
+      } catch (err) {
+        return jsonResponse_({ ok: false, error: err.toString() });
+      }
+    }
     
     // ── ONBOARDING: Save Personal Info + Generate W-9/W-4 in Google Drive ──────────
     if (payload.action === 'save_info') {
@@ -560,7 +726,14 @@ function doPost(e) {
           sheet.appendRow(rowData);
         }
         
-        return jsonResponse_({ ok: true, contract_done: false });
+        var savedStatus = getOnboardingStatusForUsername_(username);
+        var savedSensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+        return jsonResponse_({
+          ok: true,
+          sensitive_info_done: savedSensitiveStatus.done,
+          info_done: true,
+          contract_done: savedStatus.contract_done
+        });
       } catch (err) {
         return jsonResponse_({ ok: false, error: err.toString() });
       }
@@ -587,7 +760,13 @@ function doPost(e) {
           if (headers[j] === 'contract_signed_name') sheet.getRange(rowIdx, j+1).setValue(payload.signed_name);
           if (headers[j] === 'status') sheet.getRange(rowIdx, j+1).setValue("pending_review");
         }
-        return jsonResponse_({ ok: true, info_done: true });
+        var contractSensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+        return jsonResponse_({
+          ok: true,
+          sensitive_info_done: contractSensitiveStatus.done,
+          info_done: true,
+          contract_done: true
+        });
       } catch (err) {
         return jsonResponse_({ ok: false, error: err.toString() });
       }
@@ -1261,24 +1440,52 @@ function doGet(e) {
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
       var username = auth.user ? auth.user.username : (auth.username || '');
       var workerType = auth.user && auth.user.worker_type ? auth.user.worker_type : (auth.worker_type || "1099_contractor");
+      var sensitiveStatus = getSensitiveInfoStatusForUsername_(username);
+      var userEmail = auth.user && auth.user.email ? auth.user.email : (auth.email || '');
+      var userPhone = auth.user && auth.user.phone ? auth.user.phone : (auth.phone || '');
       
       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Onboarding_Submissions");
-      if (!sheet) return jsonResponse_({ ok: true, info_done: false, contract_done: false, status: 'in_progress', worker_type: workerType });
+      if (!sheet) return jsonResponse_({
+        ok: true,
+        sensitive_info_done: sensitiveStatus.done,
+        info_done: false,
+        contract_done: false,
+        status: 'in_progress',
+        worker_type: workerType,
+        full_name: sensitiveStatus.full_name || '',
+        preferred_name: sensitiveStatus.preferred_name || '',
+        phone: sensitiveStatus.phone || userPhone,
+        email: sensitiveStatus.email || userEmail
+      });
       var data = sheet.getDataRange().getValues();
       for (var i = 1; i < data.length; i++) {
         if (data[i][1] === username) {
           return jsonResponse_({
             ok: true,
+            sensitive_info_done: sensitiveStatus.done,
             info_done: !!data[i][0],
             contract_done: !!data[i][7],
             status: data[i][11] || 'in_progress',
-            full_name: data[i][2],
-            phone: data[i][3],
+            full_name: sensitiveStatus.full_name || data[i][2],
+            preferred_name: sensitiveStatus.preferred_name || '',
+            phone: sensitiveStatus.phone || data[i][3] || userPhone,
+            email: sensitiveStatus.email || userEmail,
             worker_type: workerType
           });
         }
       }
-      return jsonResponse_({ ok: true, info_done: false, contract_done: false, status: 'in_progress', worker_type: workerType });
+      return jsonResponse_({
+        ok: true,
+        sensitive_info_done: sensitiveStatus.done,
+        info_done: false,
+        contract_done: false,
+        status: 'in_progress',
+        worker_type: workerType,
+        full_name: sensitiveStatus.full_name || '',
+        preferred_name: sensitiveStatus.preferred_name || '',
+        phone: sensitiveStatus.phone || userPhone,
+        email: sensitiveStatus.email || userEmail
+      });
     }
     
     if (e && e.parameter && e.parameter.action === 'onboarding_list_pending') {
