@@ -1015,7 +1015,7 @@ function _loadStopChemistry_(pool) {
         container.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">No readings on file.</div>`; return;
       }
       const row = res.rows
-        .filter(r => r.detail && (r.detail['pH'] != null || r.detail['Free Chlorine (FC)'] != null || r.detail['Chlorine (Cl)'] != null))
+        .filter(r => r.pool_id === pId && r.detail && (r.detail['pH'] != null || r.detail['Free Chlorine (FC)'] != null || r.detail['Chlorine (Cl)'] != null))
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
       if (!row) { container.innerHTML = `<div class="th-ph-note" style="padding:.4rem 0;">No chemistry data found.</div>`; return; }
       _chemCache_[pId] = row;

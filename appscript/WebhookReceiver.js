@@ -2147,9 +2147,14 @@ function doGet(e) {
 
       const payRate = (auth.user && auth.user.pay_rate) ? auth.user.pay_rate : (auth.pay_rate || "");
 
+      // When a pool_id param is provided, bypass tech filter and scope to that pool
+      const filterPoolId = (e.parameter.pool_id || '').trim().toUpperCase();
+
       // Cache rows+pay_rates by operator filter; payRate comes from token (no extra sheet read)
       const vhCache    = CacheService.getScriptCache();
-      const vhCacheKey = 'visit_hist:' + (filterTech ? filterTech.toLowerCase() : 'all');
+      const vhCacheKey = filterPoolId
+        ? 'visit_hist:pool:' + filterPoolId.toLowerCase()
+        : 'visit_hist:' + (filterTech ? filterTech.toLowerCase() : 'all');
       const vhCached   = vhCache.get(vhCacheKey);
       if (vhCached) {
         try {
@@ -2205,11 +2210,18 @@ function doGet(e) {
       } catch(ce) { Logger.log('clientMap error: ' + ce); }
 
       var rows = [];
+      var rowLimit = filterPoolId ? (parseInt(e.parameter.limit, 10) || 10) : 500;
       for (var i = data.length - 1; i >= 1; i--) {
         var tech = String(data[i][iTech] || "").trim();
-        if (filterTech && tech.toLowerCase() !== filterTech.toLowerCase()) continue;
-
         var poolId = iPool >= 0 ? data[i][iPool] : "";
+
+        if (filterPoolId) {
+          // Pool-specific lookup: skip tech filter, match pool regardless of technician
+          if (!poolId || poolId.toUpperCase() !== filterPoolId) continue;
+        } else {
+          if (filterTech && tech.toLowerCase() !== filterTech.toLowerCase()) continue;
+        }
+
         var client = clientMap[poolId] || {};
 
         // Build detail: every non-empty column that isn't in skipDetail
@@ -2233,7 +2245,7 @@ function doGet(e) {
           client_service : client.service || '',
           detail         : detail
         });
-        if (rows.length >= 500) break;
+        if (rows.length >= rowLimit) break;
       }
 
       // Build pay_rates map: { "Display Name": rate }
@@ -2482,7 +2494,9 @@ function getPoolContext_(poolId) {
     const sizeColIdx = headers.indexOf('Pool Size');
     const matColIdx = headers.indexOf('Pool Material');
     const tabletColIdx = headers.indexOf('Tablet Level');
-    const clColIdx = headers.indexOf('Free Chlorine (FC)');
+    const clColIdx = headers.indexOf('Free Chlorine (FC)') !== -1
+      ? headers.indexOf('Free Chlorine (FC)')
+      : headers.indexOf('Chlorine (Cl)');
     const phColIdx = headers.indexOf('pH');
     const taColIdx = headers.indexOf('Total Alkalinity (TA)');
     const notesColIdx = headers.indexOf('Internal Notes'); // Fetches the tech-only notes
