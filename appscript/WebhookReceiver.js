@@ -2517,6 +2517,7 @@ function getPoolContext_(poolId) {
     }
 
     if (!visitCount) {
+      Logger.log('getPoolContext_: no rows matched for "' + requestedPool + '" (extractedId: "' + requestedId + '")');
       // No Chemical_Usage_Log history — fall back to Quotes sheet for size & material
       try {
         const crmSs = SpreadsheetApp.openById('1fw2qMdWnNbYlb3F6wM3A69CMDIymYVd2uhOF_iPoB6E');
