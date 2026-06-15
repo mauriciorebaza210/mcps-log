@@ -1063,22 +1063,7 @@ function _renderTechWidgets_(total, done) {
   if (!row) return;
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
 
-  // Drive checklist items
-  const items = ['Chemicals loaded', 'Test kit stocked', 'Brush & net aboard', 'Safety gear ready', 'Phone charged'];
-  const storKey = `mcps_drive_ck_${new Date().toISOString().split('T')[0]}`;
-  const ckd = JSON.parse(localStorage.getItem(storKey) || '[]');
-  const checkRows = items.map((item, i) => {
-    const isChecked = ckd.includes(i);
-    return `<label class="th-ck-item${isChecked ? ' th-ck-done' : ''}">
-      <input type="checkbox" ${isChecked?'checked':''} onchange="toggleDriveCheck(${i})">
-      ${escHtml(item)}</label>`;
-  }).join('');
-
   row.innerHTML = `
-    <div class="hs-card">
-      <div class="th-sec-hdr">Drive Checklist <span class="th-badge th-badge-live">LIVE</span></div>
-      <div class="th-ck-list" id="th-ck-list">${checkRows}</div>
-    </div>
     <div class="hs-card">
       <div class="th-sec-hdr">Today's Progress <span class="th-badge th-badge-live">LIVE</span></div>
       <div style="padding:.25rem 0;">
@@ -1087,14 +1072,6 @@ function _renderTechWidgets_(total, done) {
         </div>
         <div class="th-prog-wrap"><div class="th-prog-fill" style="width:${pct}%"></div></div>
       </div>
-    </div>
-    <div class="hs-card th-kpi-ph">
-      <div class="th-sec-hdr">Equipment Status <span class="th-badge th-badge-ph">SOON</span></div>
-      <div class="th-ph-block"><div class="th-ph-ico">🔧</div><div>No equipment endpoint yet</div></div>
-    </div>
-    <div class="hs-card th-kpi-ph">
-      <div class="th-sec-hdr">Messages & Alerts <span class="th-badge th-badge-ph">SOON</span></div>
-      <div class="th-ph-block"><div class="th-ph-ico">💬</div><div>Messaging system not yet available</div></div>
     </div>`;
 }
 
