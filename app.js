@@ -131,6 +131,7 @@ function showApp(startPage) {
   document.getElementById('home-name').textContent=_s.name.split(' ')[0];
   // Refresh pages list in case ROLE_PAGES was updated
   _s.pages = unionPages_(_s.roles);
+  _activeOp = isAdmin() ? 'all' : _s.username;
   buildNav(); buildHomeCards(); loadHomeIssues();
   if((_s.pages||[]).includes('admin')) { loadUsers(); }
 
