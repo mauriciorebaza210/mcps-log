@@ -31,13 +31,18 @@ function loadOnboarding() {
     updateOnbProgress(status || {});
 
     if (status) {
-      const legalNameEl = document.getElementById('onb-legal-name');
       const phoneEl = document.getElementById('onb-phone');
       const emailEl = document.getElementById('onb-email');
       const preferredEl = document.getElementById('onb-preferred-name');
       const i9SigEl = document.getElementById('onb-i9-signature');
       const contractSigEl = document.getElementById('onb-signed-name');
-      if (legalNameEl && status.full_name && !legalNameEl.value) legalNameEl.value = status.full_name;
+      if (status.full_name) {
+        const parts = splitLegalName_(status.full_name);
+        const firstEl = document.getElementById('onb-first-name');
+        const lastEl = document.getElementById('onb-last-name');
+        if (firstEl && !firstEl.value) firstEl.value = parts.first;
+        if (lastEl && !lastEl.value) lastEl.value = parts.last;
+      }
       if (phoneEl && status.phone && !phoneEl.value) phoneEl.value = status.phone;
       if (emailEl && !emailEl.value) emailEl.value = status.email || (_s && _s.email) || '';
       if (preferredEl && status.preferred_name && !preferredEl.value) preferredEl.value = status.preferred_name;
@@ -97,10 +102,17 @@ function closeOnbTask_(task) {
   if (chev) chev.style.transform = '';
 }
 
+function getFullLegalName_() {
+  const first  = (document.getElementById('onb-first-name')  || {}).value?.trim() || '';
+  const middle = (document.getElementById('onb-middle-name') || {}).value?.trim() || '';
+  const last   = (document.getElementById('onb-last-name')   || {}).value?.trim() || '';
+  return [first, middle, last].filter(Boolean).join(' ');
+}
+
 function submitPersonalInfo() {
   const msgEl = document.getElementById('onb-info-msg');
   const fields = {
-    legal_name: document.getElementById('onb-legal-name').value.trim(),
+    legal_name: getFullLegalName_(),
     preferred_name: document.getElementById('onb-preferred-name').value.trim(),
     dob: document.getElementById('onb-dob').value,
     phone: document.getElementById('onb-phone').value.trim(),
@@ -120,7 +132,7 @@ function submitPersonalInfo() {
     shirt_size: document.getElementById('onb-shirt-size').value,
   };
 
-  if (!fields.legal_name) { showMsg(msgEl, 'Legal name is required.', false); return; }
+  if (!fields.legal_name || fields.legal_name.split(' ').length < 2) { showMsg(msgEl, 'First and last name are required.', false); return; }
   if (!fields.preferred_name) { showMsg(msgEl, 'Preferred name is required.', false); return; }
   if (!fields.dob) { showMsg(msgEl, 'Date of birth is required.', false); return; }
   if (!fields.phone) { showMsg(msgEl, 'Phone number is required.', false); return; }
@@ -173,13 +185,15 @@ function onbI9StatusChanged() {
 }
 
 function collectI9Fields_() {
-  const fullName = document.getElementById('onb-legal-name').value.trim();
-  const parts = splitLegalName_(fullName);
+  const first  = (document.getElementById('onb-first-name')  || {}).value?.trim() || '';
+  const middle = (document.getElementById('onb-middle-name') || {}).value?.trim() || '';
+  const last   = (document.getElementById('onb-last-name')   || {}).value?.trim() || '';
+  const fullName = [first, middle, last].filter(Boolean).join(' ');
   return {
     full_name: fullName,
-    first_name: parts.first,
-    middle_initial: parts.middleInitial,
-    last_name: parts.last,
+    first_name: first,
+    middle_initial: middle ? middle.charAt(0).toUpperCase() : '',
+    last_name: last,
     other_last_names: document.getElementById('onb-i9-other-last').value.trim(),
     dob: document.getElementById('onb-dob').value,
     ssn_full: document.getElementById('onb-i9-ssn').value.replace(/\D/g, ''),
@@ -281,7 +295,6 @@ async function generateAndReviewI9() {
     setPdfText_(form, 'State', fields.address_state);
     setPdfText_(form, 'ZIP Code', fields.address_zip);
     setPdfText_(form, 'Date of Birth mmddyyyy', onbDateInputToMmddyyyy_(fields.dob));
-    setPdfText_(form, 'US Social Security Number', fields.ssn_full.substring(0,3) + '-' + fields.ssn_full.substring(3,5) + '-' + fields.ssn_full.substring(5,9));
     setPdfText_(form, 'Employees E-mail Address', fields.email);
     setPdfText_(form, 'Telephone Number', fields.phone);
 
@@ -301,13 +314,13 @@ async function generateAndReviewI9() {
 
     const pages = pdfDoc.getPages();
     const page = pages[0];
+    const ssnFormatted = fields.ssn_full.substring(0,3) + '-' + fields.ssn_full.substring(3,5) + '-' + fields.ssn_full.substring(5,9);
     const signatureText = fields.signature_name + ' (e-signed)';
     const dateText = fields.signature_date;
+    // Draw SSN, signature, and date directly — form field names vary by PDF version
+    page.drawText(ssnFormatted, { x: 163, y: 545, size: 9 });
     page.drawText(signatureText, { x: 42, y: 430, size: 10 });
     page.drawText(dateText, { x: 372, y: 430, size: 10 });
-
-    setPdfText_(form, 'Signature of Employee', signatureText);
-    setPdfText_(form, "Today's Date mmddyyy", dateText);
 
     const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
     form.updateFieldAppearances(helveticaFont);
@@ -368,7 +381,7 @@ function submitI9Info() {
 function submitW4Info() {
   const msgEl = document.getElementById('onb-w4-msg');
   const fields = {
-    legal_name: document.getElementById('onb-legal-name').value.trim(),
+    legal_name: getFullLegalName_(),
     phone: document.getElementById('onb-phone').value.trim(),
     address_line1: document.getElementById('onb-addr1').value.trim(),
     address_city: document.getElementById('onb-city').value.trim(),
@@ -457,7 +470,7 @@ async function generateAndReviewW9() {
     const form = pdfDoc.getForm();
     
     // Fill fields
-    const nameStr = document.getElementById('onb-legal-name').value.trim();
+    const nameStr = getFullLegalName_();
     const addr1 = document.getElementById('onb-addr1').value.trim();
     const city = document.getElementById('onb-city').value.trim();
     const state = document.getElementById('onb-state').value.trim();
@@ -584,7 +597,7 @@ async function generateAndReviewW4() {
     const form = pdfDoc.getForm();
     
     // Fill fields
-    const fullName = document.getElementById('onb-legal-name').value.trim();
+    const fullName = getFullLegalName_();
     const addr1 = document.getElementById('onb-addr1').value.trim();
     const city = document.getElementById('onb-city').value.trim();
     const state = document.getElementById('onb-state').value.trim();
