@@ -54,9 +54,9 @@ function navigateTo(pageWithSub){
   if (mc) mc.scrollTop = 0;
 
   if(page==='home') loadHomeStats();
-  if(page==='live_map'){ 
-    if(!_routeData) loadRoutes(); 
-    switchHubTab(sub || 'schedule'); 
+  if(page==='live_map'){
+    loadRoutes();
+    switchHubTab(sub || 'schedule');
   }
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
