@@ -30,8 +30,6 @@ function loadOnboarding() {
       fill('onb-city', status.address_city);
       fill('onb-state', status.address_state);
       fill('onb-zip', status.address_zip);
-      fill('onb-dl-number', status.dl_number);
-      fill('onb-dl-exp', status.dl_expiration);
       fill('onb-ec-name', status.emergency_name);
       fill('onb-ec-relationship', status.emergency_relationship);
       fill('onb-ec-phone', status.emergency_phone);
@@ -106,8 +104,6 @@ function submitPersonalInfo() {
     address_city: document.getElementById('onb-city').value.trim(),
     address_state: document.getElementById('onb-state').value.trim(),
     address_zip: document.getElementById('onb-zip').value.trim(),
-    drivers_license_number: document.getElementById('onb-dl-number').value.trim(),
-    drivers_license_expiration: document.getElementById('onb-dl-exp').value,
     emergency_name: document.getElementById('onb-ec-name').value.trim(),
     emergency_relationship: document.getElementById('onb-ec-relationship').value.trim(),
     emergency_phone: document.getElementById('onb-ec-phone').value.trim(),
@@ -296,15 +292,16 @@ async function generateAndReviewI9() {
       setPdfText_(form, 'Foreign Passport Number and Country of IssuanceRow1', [fields.foreign_passport, fields.foreign_passport_country].filter(Boolean).join(' / '));
     }
 
-    const ssnFormatted = fields.ssn_full.substring(0,3) + '-' + fields.ssn_full.substring(3,5) + '-' + fields.ssn_full.substring(5,9);
+    const ssnRaw = fields.ssn_full.substring(0, 9); // PDF field maxLength=9, no dashes
     const signatureText = fields.signature_name + ' (e-signed)';
     const dateText = fields.signature_date;
-    setPdfText_(form, 'US Social Security Number', ssnFormatted);
+    setPdfText_(form, 'US Social Security Number', ssnRaw);
     setPdfText_(form, 'Signature of Employee', signatureText);
     setPdfText_(form, "Today's Date mmddyyy", dateText);
 
     const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
     form.updateFieldAppearances(helveticaFont);
+    form.flatten();
     const pdfBytes = await pdfDoc.save();
     _pendingI9PdfBytes = pdfBytes;
 

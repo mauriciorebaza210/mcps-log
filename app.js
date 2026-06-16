@@ -644,3 +644,48 @@ function previewAlertPhotos(input) {
     preview.innerHTML += `<img src="${url}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" loading="lazy">`;
   });
 }
+
+// ══ TECHNICIAN NAV MODE ══════════════════════════════════════════════════════
+
+function _isTechNavEligible_() {
+  if (!_s) return false;
+  const isTechRole = hasRole('technician') || hasRole('lead');
+  if (!isTechRole) return false;
+  if (isAdmin()) return (window._homeViewOverride || 'admin') === 'technician';
+  return true;
+}
+
+function syncPortalNavigationMode() {
+  const eligible = _isTechNavEligible_();
+  document.body.classList.toggle('is-tech-nav', eligible);
+  _syncTechNav();
+}
+
+function _syncTechNav() {
+  const nav = document.getElementById('tech-bottom-nav');
+  if (!nav) return;
+  nav.querySelectorAll('.tn-tab').forEach(t => {
+    t.classList.remove('tn-active');
+    t.setAttribute('aria-selected', 'false');
+  });
+  let activeId;
+  if (_curPage === 'home') activeId = 'tn-home';
+  else if (_curPage === 'service_log') activeId = 'tn-service';
+  else if (_curPage === 'live_map') {
+    if (_activeHubTab === 'profile') activeId = 'tn-profile';
+    else if (_activeHubTab === 'schedule' || !_activeHubTab) activeId = 'tn-schedule';
+  }
+  if (activeId) {
+    const el = document.getElementById(activeId);
+    if (el) { el.classList.add('tn-active'); el.setAttribute('aria-selected', 'true'); }
+  }
+}
+
+window.techNavTo = function(dest) {
+  switch (dest) {
+    case 'home':     navigateTo('home'); break;
+    case 'schedule': navigateTo('live_map'); break;
+    case 'service':  navigateTo('service_log'); break;
+    case 'profile':  navigateTo('live_map/profile'); break;
+  }
+};

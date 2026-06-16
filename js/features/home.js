@@ -867,6 +867,7 @@ async function loadTechHome() {
   _renderTechKPIs_(pools.length, completedCount, nextPool, todayWeather);
   _renderTechBody_(pools, doneSet, doneKey, nextPool);
   _renderTechWidgets_(pools.length, completedCount);
+  _renderTechAlerts_();
 }
 
 async function _ensureRouteData_() {
@@ -881,10 +882,33 @@ async function _ensureRouteData_() {
 }
 
 function _renderTechKPIs_(total, done, nextPool, weather) {
-  const kpiRow = document.getElementById('th-kpi-row');
-  if (!kpiRow) return;
+  // ── Header (logo + greeting + date/weather + admin toggle) ──
+  const hdrEl = document.getElementById('th-home-header');
+  if (hdrEl) {
+    const firstName = (_s && _s.name) ? _s.name.split(' ')[0] : 'there';
+    const now = new Date();
+    const hour = now.getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+    const calIcon = `<svg class="th-hdr-date-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+    const weatherPill = weather
+      ? `<div class="th-hdr-date-card">
+           <div class="th-hdr-date-side">${calIcon} ${escHtml(dateStr)}</div>
+           <div class="th-hdr-date-sep"></div>
+           <div class="th-hdr-date-side">${escHtml(weather.icon)} ${weather.high}°</div>
+         </div>`
+      : `<div class="th-hdr-date-card"><div class="th-hdr-date-side">${calIcon} ${escHtml(dateStr)}</div></div>`;
+    const adminToggle = (typeof isAdmin === 'function' && isAdmin() && (typeof hasRole === 'function') && (hasRole('technician') || hasRole('lead')))
+      ? `<button id="home-view-toggle-btn" class="hm-btn-ghost" style="font-size:.78rem;padding:.3rem .7rem;" onclick="toggleHomeView()">View as Admin</button>`
+      : '';
+    hdrEl.innerHTML = `
+      ${adminToggle ? `<div class="th-logo-bar" id="home-view-toggle-wrap">${adminToggle}</div>` : ''}
+      <div class="th-hdr-greeting">${escHtml(greeting)}, ${escHtml(firstName)}</div>
+      <div class="th-hdr-sub">Let's make it a great day.</div>
+      ${weatherPill}`;
+  }
 
-  // Weather chip injected into date display area
+  // Keep weather chip in #dash-date-display for admin view compat
   if (weather) {
     const dateWrap = document.getElementById('dash-date-display');
     if (dateWrap && !document.getElementById('th-weather-chip')) {
@@ -897,15 +921,32 @@ function _renderTechKPIs_(total, done, nextPool, weather) {
     }
   }
 
+  // ── Unified "Today's Summary" card ──
+  const kpiRow = document.getElementById('th-kpi-row');
+  if (!kpiRow) return;
+
   const nextAddr = nextPool
     ? escHtml((nextPool.address || '') + (nextPool.city ? ', ' + nextPool.city : ''))
     : (total > 0 ? 'All done!' : 'No jobs today');
-  const nextColor = nextPool ? 'var(--teal)' : 'var(--success)';
 
-  kpiRow.innerHTML =
-    _thKpiCard_('Jobs Today', String(total),  'var(--teal)',    false) +
-    _thKpiCard_('Completed',  `${done}<small style="font-size:.75em;color:var(--muted)"> / ${total}</small>`, 'var(--success)', false) +
-    _thKpiCard_('Next Stop',  nextAddr, nextColor, false);
+  kpiRow.innerHTML = `
+    <div class="th-summary-card" style="grid-column:1/-1;">
+      <div class="th-summary-label">Today's Summary</div>
+      <div class="th-summary-stats">
+        <div class="th-stat">
+          <div class="th-stat-val">${total}</div>
+          <div class="th-stat-lbl">Stops</div>
+        </div>
+        <div class="th-stat">
+          <div class="th-stat-val th-stat-done">${done}<span style="font-size:.75em;font-weight:600;color:var(--muted)"> / ${total}</span></div>
+          <div class="th-stat-lbl">Completed</div>
+        </div>
+        <div class="th-stat">
+          <div class="th-stat-val th-stat-next">${nextAddr}</div>
+          <div class="th-stat-lbl">Next Stop</div>
+        </div>
+      </div>
+    </div>`;
 }
 
 function _thKpiCard_(label, value, color, isPlaceholder, note) {
@@ -921,37 +962,37 @@ function _renderTechBody_(pools, doneSet, doneKey, nextPool) {
   if (!body) return;
 
   const stopsHtml = pools.length === 0
-    ? `<div class="th-empty">No pools scheduled today.</div>`
+    ? `<div class="th-route-empty">No pools scheduled today.</div>`
     : pools.map((pool, idx) => {
         const pId = pool.pool_id || String(idx);
         const done = doneSet.has(pId);
-        const svcCls = getSvcClass_(pool.service);
         const svcLbl = getSvcLabel_(pool.service);
-        return `<div class="pool-stop th-sched-stop${done ? ' ps-done' : ''}" id="th-stop-${idx}" onclick="selectTechStop(${idx})">
-          <div class="stop-num-wrap"><div class="stop-num">${idx + 1}</div></div>
-          <div class="stop-body">
-            <div class="stop-name">${escHtml(pool.customer_name || '—')}</div>
-            <div class="stop-addr">📍 ${escHtml(pool.address || '')}${pool.city ? ', ' + escHtml(pool.city) : ''}</div>
-            <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.25rem;">
-              <span class="stop-svc ${svcCls}">${svcLbl}</span>
-              ${done ? '<span class="stop-svc svc-done">Done</span>' : ''}
+        return `<div class="th-route-stop th-sched-stop${done ? ' ps-done' : ''}" id="th-stop-${idx}" onclick="selectTechStop(${idx})">
+          <div class="th-route-num">${idx + 1}</div>
+          <div class="th-route-info">
+            <div class="th-route-cust">${escHtml(pool.customer_name || '—')}</div>
+            <div class="th-route-addr">${escHtml(pool.address || '')}${pool.city ? ', ' + escHtml(pool.city) : ''}</div>
+            <div class="th-route-badges">
+              <span class="th-route-badge">${escHtml(svcLbl)}</span>
+              ${done ? '<span class="th-route-badge th-route-badge-done">Done</span>' : ''}
             </div>
           </div>
         </div>`;
       }).join('');
 
   body.innerHTML = `
-    <div class="th-sched-col">
-      <div class="hs-card" style="padding:0;overflow:hidden;">
-        <div class="th-sec-hdr">Today's Schedule <span class="th-hdr-ct">${pools.length} stops</span></div>
-        <div class="pool-stops" id="th-stop-list" style="max-height:420px;overflow-y:auto;">${stopsHtml}</div>
+    <div class="th-route-wrap">
+      <div class="th-route-hdr">
+        Today's Route
+        <span class="th-route-hdr-ct">${pools.length} ${pools.length === 1 ? 'stop' : 'stops'}</span>
       </div>
-      <div class="th-map-link" onclick="navigateTo('live_map')">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+      <div class="th-route-stops" id="th-stop-list">${stopsHtml}</div>
+      <div class="th-route-footer" onclick="navigateTo('live_map')">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0 0 21 18.382V7.618a1 1 0 0 0-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
         View Full Route Map
       </div>
     </div>
-    <div class="th-detail-col" id="th-detail-panel">
+    <div id="th-detail-panel">
       ${_renderStopDetail_(nextPool || pools[0])}
     </div>`;
 
@@ -1075,6 +1116,66 @@ function _renderTechWidgets_(total, done) {
     </div>`;
 }
 
+async function _renderTechAlerts_() {
+  const widgetsEl = document.getElementById('th-widgets');
+  if (!widgetsEl) return;
+
+  // Insert placeholder card immediately
+  const cardId = 'th-alerts-card';
+  if (!document.getElementById(cardId)) {
+    const placeholder = document.createElement('div');
+    placeholder.id = cardId;
+    placeholder.className = 'hs-card th-alerts-card';
+    placeholder.innerHTML = `<div class="th-sec-hdr">Active Alerts</div><div class="th-alert-loading">Loading...</div>`;
+    widgetsEl.appendChild(placeholder);
+  }
+
+  // Fetch: try cache first
+  let res = _appCacheGet('issue_alerts', 5 * 60 * 1000);
+  if (!res) {
+    try {
+      res = await apiGet({ action: 'get_issue_alerts', token: _s.token });
+      if (res && res.ok) _appCacheSet('issue_alerts', res);
+    } catch(e) { res = null; }
+  }
+
+  const card = document.getElementById(cardId);
+  if (!card) return;
+
+  const alerts = (res && res.ok && Array.isArray(res.alerts)) ? res.alerts : [];
+  const count = alerts.length;
+
+  if (count === 0) {
+    card.innerHTML = `
+      <div class="th-sec-hdr">Active Alerts</div>
+      <div class="th-alert-empty">All clear — no active alerts.</div>`;
+    return;
+  }
+
+  const shown = alerts.slice(0, 3);
+  const rows = shown.map(a => {
+    const meta = typeof _alertTypeMeta === 'function' ? _alertTypeMeta(a.type) : { label: a.type || 'Issue', icon: '⚠️', tagBg: '#fee2e2', tagFg: '#b91c1c' };
+    const date = a.timestamp ? new Date(a.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    return `
+      <div class="th-alert-row">
+        <span class="th-alert-badge" style="background:${meta.tagBg};color:${meta.tagFg};">${meta.icon} ${escHtml(meta.label)}</span>
+        <div class="th-alert-msg">${escHtml(a.message || '')}</div>
+        <div class="th-alert-meta">${escHtml(a.submitter_name || a.submitter_username || '')}${date ? ' &bull; ' + date : ''}</div>
+      </div>`;
+  }).join('');
+
+  const more = count > 3 ? `<div class="th-alert-more">+${count - 3} more</div>` : '';
+
+  card.innerHTML = `
+    <div class="th-sec-hdr">
+      Active Alerts
+      <span class="th-badge" style="background:#fee2e2;color:#b91c1c;">${count}</span>
+    </div>
+    <div class="th-alert-list">${rows}</div>
+    ${more}
+    <div class="th-alert-footer" onclick="navigateTo('alerts')">View all alerts &rarr;</div>`;
+}
+
 window.toggleDriveCheck = function(idx) {
   const storKey = `mcps_drive_ck_${new Date().toISOString().split('T')[0]}`;
   const ckd = JSON.parse(localStorage.getItem(storKey) || '[]');
@@ -1127,6 +1228,7 @@ window.techCheckOut = function() {
 
 window.toggleHomeView = function() {
   window._homeViewOverride = window._homeViewOverride === 'technician' ? 'admin' : 'technician';
+  if (typeof syncPortalNavigationMode === 'function') syncPortalNavigationMode();
   loadHomeStats();
 };
 

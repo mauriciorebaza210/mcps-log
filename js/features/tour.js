@@ -142,7 +142,7 @@ function _showWelcomeModal() {
   el.innerHTML =
     '<div class="tour-welcome-card">' +
       '<div class="tour-welcome-logo-wrap">' +
-        '<img src="/White Logo Words.png" alt="Mission Custom Pool Solutions" class="tour-welcome-logo-img"' +
+        '<img src="/logo.png" alt="Mission Custom Pool Solutions" class="tour-welcome-logo-img"' +
         '     onerror="this.style.display=\'none\'">' +
       '</div>' +
       '<div class="tour-welcome-body">' +
@@ -462,15 +462,13 @@ function _buildSteps() {
   var mobile = window.innerWidth < 768;
 
   return [
-    // ── 1: Navigation sidebar ────────────────────────────────────────────────
+    // ── 1: Bottom navigation bar ─────────────────────────────────────────────
     {
-      element: mobile ? '#hamburger' : '#sidebar',
+      element: '#tech-bottom-nav',
       popover: {
         title:       'Navigation ' + _prog(1),
-        description: mobile
-          ? 'Tap <strong>≡</strong> to open the menu. Every page in the portal is one tap away.'
-          : 'This sidebar is your command center. Every page is one tap away. On mobile, tap <strong>≡</strong> to open it.',
-        side:  mobile ? 'bottom' : 'right',
+        description: 'These four tabs are your navigation. Home shows your daily dashboard, Schedule shows your route, Service Log is for logging visits, and Profile lets you manage your availability.',
+        side:  'top',
         align: 'start'
       }
     },
@@ -484,20 +482,20 @@ function _buildSteps() {
         side:  'bottom',
         align: 'start',
         onNextClick: function() {
-          _navigateTourTo('live_map', '#htab-schedule', 2, {
+          _navigateTourTo('live_map', '#tn-schedule', 2, {
             message: 'Loading your schedule...'
           });
         }
       }
     },
 
-    // ── 3: Technician Hub — Schedule tab (on live_map) ───────────────────────
+    // ── 3: Schedule tab in bottom nav ───────────────────────────────────────
     {
-      element: '#htab-schedule',
+      element: '#tn-schedule',
       popover: {
-        title:       'Schedule Tab ' + _prog(3),
-        description: 'Your weekly route lives here. Tap a day to load that day\'s assigned pools.',
-        side:  'over',
+        title:       'Schedule ' + _prog(3),
+        description: 'Tap Schedule to open your weekly route. Choose a day to see that day\'s pools.',
+        side:  'top',
         align: 'center',
         onPrevClick: function() {
           _navigateTourTo('home', '#tech-home-dashboard', 1, {

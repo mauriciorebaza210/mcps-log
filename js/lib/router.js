@@ -74,6 +74,7 @@ function navigateTo(pageWithSub){
     }
   }
   if(page==='alerts') loadAlertsPage();
+  if (typeof syncPortalNavigationMode === 'function') syncPortalNavigationMode();
 }
 
 function _setSidebarActive(page, hubTab) {
@@ -129,4 +130,5 @@ function switchHubTab(tab) {
   }
   // Sync sidebar: schedule maps to the parent live_map item; training/profile map to their child items
   _setSidebarActive('live_map', tab === 'schedule' ? null : tab);
+  if (typeof syncPortalNavigationMode === 'function') syncPortalNavigationMode();
 }
