@@ -2602,6 +2602,20 @@ input:disabled,textarea:disabled,select:disabled{
 }
 .tour-restart-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-glow)}
 .tour-restart-btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.profile-logout-btn{
+  background:transparent;
+  border:1px solid #e2b4b4;
+  border-radius:var(--r-sm);
+  color:#b3261e;
+  font-family:'Barlow',sans-serif;
+  font-size:.82rem;font-weight:600;
+  padding:.5rem 1rem;cursor:pointer;
+  transition:all .15s;
+  width:100%;text-align:center;
+  margin-top:.6rem;
+}
+.profile-logout-btn:hover{border-color:#b3261e;color:#fff;background:#b3261e}
+.profile-logout-btn:focus-visible{outline:2px solid #b3261e;outline-offset:2px}
 
 /* ── Finish overlay ── */
 .tour-finish-overlay{
@@ -2678,7 +2692,7 @@ input:disabled,textarea:disabled,select:disabled{
 
 body.is-tech-nav .sidebar      { display: none !important; }
 body.is-tech-nav .sb-overlay   { display: none !important; }
-body.is-tech-nav .topbar       { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; }
+body.is-tech-nav .topbar       { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; position: sticky; top: 0; height: var(--top-h); }
 body.is-tech-nav .tb-brand     { display: none; }
 body.is-tech-nav .hamburger    { visibility: hidden; }
 #tech-topbar-logo              { display: none; }
@@ -2693,13 +2707,40 @@ body.is-tech-nav #tech-topbar-logo {
   bottom: 0;
   pointer-events: none;
 }
-body.is-tech-nav #tech-topbar-logo img { height: 32px; width: auto; object-fit: contain; }
+/* Header logo size — bump this height value to make the top logo bigger.
+   Keep it below --top-h (56px) or also raise --top-h so it still fits. */
+body.is-tech-nav #tech-topbar-logo img { height: 40px; width: auto; object-fit: contain; }
 body.is-tech-nav .hub-tabs-bar { display: none; }
 body.is-tech-nav .dash-header  { display: none; }
 body.is-tech-nav #app          { flex-direction: column; }
 body.is-tech-nav .main-content { min-height: calc(100vh - var(--top-h)); background: #fff; }
 body.is-tech-nav .page-wrap    { padding-bottom: calc(68px + env(safe-area-inset-bottom)); background: #fff; }
 body.is-tech-nav               { background: #fff; }
+
+/* ── NEW HIRE / ONBOARDING NAV ──────────────────────────────────────────────
+   Same clean white header + centered logo as the technician view, white
+   background — but no bottom nav (new hires only have the onboarding page). */
+body.is-onboarding-nav .sidebar    { display: none !important; }
+body.is-onboarding-nav .sb-overlay { display: none !important; }
+body.is-onboarding-nav .topbar     { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; position: sticky; top: 0; height: var(--top-h); }
+body.is-onboarding-nav .tb-brand   { display: none; }
+body.is-onboarding-nav .hamburger  { visibility: hidden; }
+body.is-onboarding-nav #tech-topbar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+body.is-onboarding-nav #tech-topbar-logo img { height: 40px; width: auto; object-fit: contain; }
+body.is-onboarding-nav #app          { flex-direction: column; }
+body.is-onboarding-nav .main-content { min-height: calc(100vh - var(--top-h)); background: #fff; }
+body.is-onboarding-nav .page-wrap    { background: #fff; }
+body.is-onboarding-nav               { background: #fff; }
 
 .tech-nav {
   display: none;

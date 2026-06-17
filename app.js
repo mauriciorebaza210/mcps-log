@@ -655,9 +655,18 @@ function _isTechNavEligible_() {
   return true;
 }
 
+// New hires whose only access is onboarding get the same clean white header
+// treatment as technicians (centered logo on top, white background) — but no
+// bottom nav, since they only have the onboarding page.
+function _isOnboardingNavEligible_() {
+  if (!_s) return false;
+  return hasRole('new_hire') && !hasRole('technician') && !hasRole('lead') && !isAdmin();
+}
+
 function syncPortalNavigationMode() {
   const eligible = _isTechNavEligible_();
   document.body.classList.toggle('is-tech-nav', eligible);
+  document.body.classList.toggle('is-onboarding-nav', !eligible && _isOnboardingNavEligible_());
   _syncTechNav();
 }
 

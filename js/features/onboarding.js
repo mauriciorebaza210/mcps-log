@@ -120,8 +120,6 @@ function submitPersonalInfo() {
   if (!fields.address_line1 || !fields.address_city || !fields.address_state || !fields.address_zip) {
     showMsg(msgEl, 'Complete address is required.', false); return;
   }
-  if (!fields.drivers_license_number) { showMsg(msgEl, 'Driver license number is required.', false); return; }
-  if (!fields.drivers_license_expiration) { showMsg(msgEl, 'Driver license expiration is required.', false); return; }
   if (!fields.emergency_name || !fields.emergency_relationship || !fields.emergency_phone) { showMsg(msgEl, 'Complete emergency contact is required.', false); return; }
   if (!fields.allergies) { showMsg(msgEl, 'Allergies are required. Type None if none.', false); return; }
   if (!fields.shirt_size) { showMsg(msgEl, 'Shirt size is required.', false); return; }
@@ -596,9 +594,14 @@ async function generateAndReviewW4() {
       return;
     }
 
-    const parts = fullName.split(' ');
-    const lastName = parts.pop();
-    const firstMiddle = parts.join(' ');
+    // Build "First M." for the IRS "First name and middle initial" field from the
+    // dedicated inputs — splitting fullName on spaces drops multi-word last names
+    // and prints the full middle name instead of just the initial.
+    const firstName    = (document.getElementById('onb-first-name')  || {}).value?.trim() || '';
+    const middleName   = (document.getElementById('onb-middle-name') || {}).value?.trim() || '';
+    const lastName     = (document.getElementById('onb-last-name')   || {}).value?.trim() || fullName.split(' ').pop();
+    const middleInit   = middleName ? middleName.charAt(0).toUpperCase() + '.' : '';
+    const firstMiddle  = [firstName, middleInit].filter(Boolean).join(' ');
 
     const filingStatus = (document.querySelector('input[name="onb-w4-status"]:checked') || {}).value;
     const step2 = document.getElementById('onb-w4-step2').checked;
@@ -606,7 +609,7 @@ async function generateAndReviewW4() {
     // Convert dependent values
     let dep1Raw = parseFloat(document.getElementById('onb-w4-dep1').value) || 0;
     let dep2Raw = parseFloat(document.getElementById('onb-w4-dep2').value) || 0;
-    let dep1 = dep1Raw * 2000;
+    let dep1 = dep1Raw * 2200;
     let dep2 = dep2Raw * 500;
     let depTotal = dep1 + dep2;
 
@@ -647,8 +650,10 @@ async function generateAndReviewW4() {
     const signatureText = fullName + ' (e-signed)';
     const dateText = new Date().toLocaleDateString();
     
-    page.drawText(signatureText, { x: 80, y: 153, size: 14 });
-    page.drawText(dateText, { x: 440, y: 153, size: 14 });
+    // y is measured from the bottom of the page; lower value = lower on the page.
+    // Sits on the Step 5 "Employee's signature" / "Date" line.
+    page.drawText(signatureText, { x: 110, y: 95, size: 14 });
+    page.drawText(dateText, { x: 470, y: 95, size: 14 });
 
     const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
     form.updateFieldAppearances(helveticaFont);
