@@ -111,12 +111,35 @@ function _appCacheRemove(key) {
 window.onload = () => {
   const stored = localStorage.getItem('mcps_s');
   if (stored) {
-    try { _s = JSON.parse(stored); if (!_s.username) { _s = null; localStorage.removeItem('mcps_s'); } else { showApp(location.hash.replace('#','') || _defaultLandingPage_()); return; } } catch(e) { localStorage.removeItem('mcps_s'); }
+    try { _s = JSON.parse(stored); if (!_s.username) { _s = null; localStorage.removeItem('mcps_s'); } else { showApp(location.hash.replace('#','') || _defaultLandingPage_()); _refreshSessionRoles_(); return; } } catch(e) { localStorage.removeItem('mcps_s'); }
   }
   const deep = location.hash.replace('#','');
   if (typeof initEmployeeRegistration === 'function' && initEmployeeRegistration(deep)) return;
   if (deep) sessionStorage.setItem('mcps_deep', deep);
 };
+
+// Re-check roles with the server on load so role changes (e.g. a new hire being
+// approved as Technician) take effect on refresh without a full re-login. The app
+// renders immediately from the cached session; this reconciles in the background.
+function _refreshSessionRoles_() {
+  if (!_s || !_s.token) return;
+  api({ action: 'validate_token', token: _s.token }).then(res => {
+    if (!res) return;
+    if (!res.ok) {
+      // Session expired or revoked — drop to a clean login.
+      if (res.error) { _s = null; localStorage.removeItem('mcps_s'); location.hash = ''; location.reload(); }
+      return;
+    }
+    const newRoles = res.roles || [];
+    const changed = newRoles.slice().sort().join(',') !== (_s.roles || []).slice().sort().join(',');
+    if (!changed) return;
+    _s.roles = newRoles;
+    _s.pages = unionPages_(newRoles);
+    localStorage.setItem('mcps_s', JSON.stringify(_s));
+    // Re-render the shell and move off any page they can no longer access.
+    showApp((_s.pages || []).includes(_curPage) ? _curPage : _defaultLandingPage_());
+  }).catch(() => {});
+}
 
 // Auth — see js/lib/auth.js
 

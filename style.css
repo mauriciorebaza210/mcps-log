@@ -2709,7 +2709,7 @@ body.is-tech-nav #tech-topbar-logo {
 }
 /* Header logo size — bump this height value to make the top logo bigger.
    Keep it below --top-h (56px) or also raise --top-h so it still fits. */
-body.is-tech-nav #tech-topbar-logo img { height: 90px; width: auto; object-fit: contain; }
+body.is-tech-nav #tech-topbar-logo img { height: 50px; width: auto; object-fit: contain; }
 body.is-tech-nav .hub-tabs-bar { display: none; }
 body.is-tech-nav .dash-header  { display: none; }
 body.is-tech-nav #app          { flex-direction: column; }
