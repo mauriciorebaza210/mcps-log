@@ -4,7 +4,7 @@
   --gold:#c8a84b;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
   --success:#16a34a;--error:#ef4444;--warn:#d97706;
   --bg:#F5F4EB;--card:#fff;--surface:#f8fafc;
-  --top-h:56px;--sb-w:260px;
+  --top-h:70px;--sb-w:260px;
   /* spacing scale */
   --sp-1:.25rem;--sp-2:.5rem;--sp-3:.75rem;--sp-4:1rem;--sp-5:1.25rem;--sp-6:1.5rem;
   /* type scale */
@@ -2709,7 +2709,7 @@ body.is-tech-nav #tech-topbar-logo {
 }
 /* Header logo size — bump this height value to make the top logo bigger.
    Keep it below --top-h (56px) or also raise --top-h so it still fits. */
-body.is-tech-nav #tech-topbar-logo img { height: 40px; width: auto; object-fit: contain; }
+body.is-tech-nav #tech-topbar-logo img { height: 90px; width: auto; object-fit: contain; }
 body.is-tech-nav .hub-tabs-bar { display: none; }
 body.is-tech-nav .dash-header  { display: none; }
 body.is-tech-nav #app          { flex-direction: column; }

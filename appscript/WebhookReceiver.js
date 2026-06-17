@@ -851,7 +851,7 @@ function doPost(e) {
         
         var rowData = [
           new Date().toISOString(), username, payload.legal_name, payload.phone, payload.tax_type, taxLast4, w9Url,
-          "", "", "", "", "in_progress", "", payload.dob, payload.address_line1, payload.address_city, payload.address_state, payload.address_zip, payload.emergency_name, payload.emergency_phone, w4Url || '', workerType
+          "", "", "", "", "pending_review", "", payload.dob, payload.address_line1, payload.address_city, payload.address_state, payload.address_zip, payload.emergency_name, payload.emergency_phone, w4Url || '', workerType
         ];
         
         if (rowIdx > -1) {
@@ -871,6 +871,9 @@ function doPost(e) {
             if (headers[j] === 'address_zip') sheet.getRange(rowIdx, j+1).setValue(payload.address_zip);
             if (headers[j] === 'emergency_name') sheet.getRange(rowIdx, j+1).setValue(payload.emergency_name);
             if (headers[j] === 'emergency_phone') sheet.getRange(rowIdx, j+1).setValue(payload.emergency_phone);
+            // Tax form is the final onboarding step (contract signing retired) — mark
+            // ready for admin review, unless already approved/rejected.
+            if (headers[j] === 'status' && data[i][11] !== 'approved' && data[i][11] !== 'rejected') sheet.getRange(rowIdx, j+1).setValue('pending_review');
           }
         } else {
           while(rowData.length < headers.length) rowData.push('');
@@ -1646,14 +1649,19 @@ function doGet(e) {
       
       var apps = [];
       for (var i = 1; i < data.length; i++) {
-        if (data[i][11] === 'pending_review') {
-          var pendingI9Status = getEmployeeI9StatusForUsername_(data[i][1]);
+        var rowStatus = data[i][11];
+        if (rowStatus === 'approved' || rowStatus === 'rejected') continue;
+        var pendingI9Status = getEmployeeI9StatusForUsername_(data[i][1]);
+        var infoSubmitted = !!data[i][0];
+        // Ready for review once Info + I-9 are complete (contract signing retired).
+        // Also surface legacy 'in_progress' rows so they don't get stranded.
+        if (rowStatus === 'pending_review' || (infoSubmitted && pendingI9Status.done)) {
           apps.push({
             username: data[i][1],
             full_name: data[i][2],
             phone: data[i][3],
             info_submitted_at: data[i][0],
-            info_done: !!data[i][0],
+            info_done: infoSubmitted,
             i9_done: pendingI9Status.done,
             contract_done: !!data[i][7],
             status: 'pending_review',

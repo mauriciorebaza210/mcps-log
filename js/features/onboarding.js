@@ -803,7 +803,13 @@ function loadAllApplications() {
 
   apiGet({ action: 'onboarding_list_all', token: _s.token }).then(res => {
     if (!res.ok) { container.innerHTML = `<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">${res.error || 'Failed to load.'}</div>`; return; }
-    _allRecordsCache = res.applications || [];
+    // Anything still awaiting admin review lives in "New Hire Applications" above —
+    // keep Contractor Records to finalized (approved/rejected) records only.
+    _allRecordsCache = (res.applications || []).filter(a => {
+      const awaitingReview = a.status !== 'approved' && a.status !== 'rejected' &&
+        (a.status === 'pending_review' || (a.info_done && a.i9_done));
+      return !awaitingReview;
+    });
     renderRecords(_allRecordsCache);
   }).catch(() => {
     container.innerHTML = '<div style="color:var(--muted);text-align:center;padding:1rem;font-size:.85rem">Network error.</div>';
@@ -867,11 +873,6 @@ function viewHireDocs(username) {
         <div class="docs-row"><span>Type</span><span style="font-weight:700;color:var(--accent)">${d.worker_type === 'w2_employee' ? 'W-2 Employee' : '1099 Contractor'}</span></div>
         <div class="docs-row"><span>Tax ID Type</span><span>${d.tax_type || '—'}</span></div>
         <div class="docs-row"><span>Last 4 Digits</span><span>${d.tax_id_last4 ? '••••' + d.tax_id_last4 : '—'}</span></div>
-      </div>
-      <div style="margin-bottom:1.25rem">
-        <div class="docs-section-title">Contract Signature</div>
-        <div class="docs-row"><span>Signed Name</span><span>${d.contract_signed_name || '—'}</span></div>
-        <div class="docs-row"><span>Signed At</span><span>${d.contract_signed_at ? new Date(d.contract_signed_at).toLocaleString() : '—'}</span></div>
       </div>
       <div>
         <div class="docs-section-title">I-9</div>
