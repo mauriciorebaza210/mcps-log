@@ -6,6 +6,9 @@
 // SERVICE LOG
 // ══════════════════════════════════════════════════════════════════════════════
 const TF={FC:"Free Chlorine (FC)",PH:"pH",TA:"Total Alkalinity (TA)",CH:"Calcium Hardness (CH)"};
+// Extra (non-mandatory) water-test fields that should use a numeric input but are
+// NOT part of the chemical-dosing recommendation engine.
+const TF_EXTRA=["Cyanuric Acid (CYA)","Salt Level"];
 const SG={small:12000,medium:17500,large:25000};
 const SM=[6,7,8,9];
 
@@ -29,7 +32,9 @@ const FORM_SCHEMA = [
   { id:7,  title:'pH',                               type:'TEXT',           isRequired:false, helpText:''                                                                              },
   { id:8,  title:'Total Alkalinity (TA)',            type:'TEXT',           isRequired:false, helpText:''                                                                              },
   { id:9,  title:'Calcium Hardness (CH)',            type:'TEXT',           isRequired:false, helpText:''                                                                              },
-  // renderSvcForm injects Tablet Level pills after Calcium Hardness (CH)
+  { id:9.1,title:'Cyanuric Acid (CYA)',              type:'TEXT',           isRequired:false, helpText:'Optional — enter ppm if tested (leave blank if not).'                          },
+  { id:9.2,title:'Salt Level',                       type:'TEXT',           isRequired:false, helpText:'Optional — enter ppm if tested (leave blank if not).'                          },
+  // renderSvcForm injects Tablet Level pills after Salt Level (last field in Test Results)
   // ── Used ──────────────────────────────────────────────────────────────────
   { id:11, title:'Used',                             type:'PAGE_BREAK',     isSectionBreak:true                                                                                        },
   { id:12, title:'Liquid Chlorine',                  type:'TEXT',           isRequired:false, helpText:'Enter gallons used (leave blank if none).'                                     },
@@ -41,6 +46,9 @@ const FORM_SCHEMA = [
   { id:18, title:'ScaleTec (Calcium Remover)',       type:'TEXT',           isRequired:false, helpText:'Enter bottles used (leave blank if none).'                                    },
   { id:19, title:'Algaecide',                        type:'TEXT',           isRequired:false, helpText:'Enter bottles used (leave blank if none).'                                    },
   { id:20, title:'Cyanuric Acid (Stabilizer)',       type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+  { id:21, title:'Diatomaceous Earth (DE)',          type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+  { id:22, title:'Salt',                             type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+  { id:23, title:'Cal Hypo',                         type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
 ];
 
 function loadServiceLog(prefillPoolId){
@@ -156,12 +164,12 @@ function renderSvcForm(meta, prefillPoolId){
     }else if(item.type==='PARAGRAPH_TEXT'){
       inp='<textarea class="si" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()"></textarea>';
     }else{
-      const isNum=Object.values(TF).indexOf(item.title)!==-1||(item.helpText&&item.helpText.toLowerCase().indexOf('quantity')!==-1);
+      const isNum=Object.values(TF).indexOf(item.title)!==-1||TF_EXTRA.indexOf(item.title)!==-1||(item.helpText&&item.helpText.toLowerCase().indexOf('quantity')!==-1);
       inp='<input class="si" type="'+(isNum?'number':'text')+'" step="any" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()">';
     }
     grp.innerHTML+=inp;card.appendChild(grp);
-    if(item.title === 'Calcium Hardness (CH)') {
-      // ── Tablet Level pill selector (portal-only) ────────────────────────────
+    if(item.title === 'Salt Level') {
+      // ── Tablet Level pill selector (portal-only) — last item in Test Results ──
       const tg=document.createElement('div');tg.className='sfg';
       tg.innerHTML='<label>Tablet Level</label><span class="sh">Current chlorine tablet level in the chlorinator.</span><div class="cp" id="tablet-pills" style="flex-wrap:wrap"><div class="cpill tbpill" onclick="tTablet(this,\'low\')" data-val="low">Low (0–2 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'medium\')" data-val="medium">Medium (3–4 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'full\')" data-val="full">Full (5–6 tabs)</div><div class="cpill tbpill" onclick="tTablet(this,\'none\')" data-val="none">No Chlorinator</div></div>';
       card.appendChild(tg);
