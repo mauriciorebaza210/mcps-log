@@ -817,8 +817,17 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .sl:hover{border-color:var(--teal-light);background-color:#fff}
 .sl:focus{outline:none;border-color:var(--teal-mid);background-color:#fff;box-shadow:0 0 0 3px rgba(26,122,110,.15)}
 textarea.si{resize:vertical;min-height:72px}
-.scb{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem}
-.scb input{width:auto}
+/* Technician action checklist — clickable selectable chips (no visible checkbox) */
+.scb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:.5rem;margin-top:.5rem}
+.scb{position:relative;display:flex;align-items:center;justify-content:center;text-align:center;min-height:48px;margin:0;padding:.65rem .9rem;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text);font-size:var(--text-base);font-weight:500;line-height:1.25;cursor:pointer;user-select:none;transition:border-color .15s,background-color .15s,box-shadow .15s,color .15s}
+.scb:hover{border-color:var(--teal-light);background:var(--teal-glow)}
+.scb input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
+.scb:has(input:checked){border-color:var(--teal-mid);background:var(--teal-glow);color:var(--teal);font-weight:600;box-shadow:inset 0 0 0 1px var(--teal-mid)}
+.scb:has(input:focus-visible){box-shadow:0 0 0 3px rgba(26,122,110,.3)}
+/* Adjusted-chlorinator-power row spans full width below the grid */
+.scb-chlor{margin-top:.5rem}
+.scb-chlor .scb{width:100%}
+@media (prefers-reduced-motion:reduce){.scb{transition:none}}
 .rec-box{background:#e8f5f3;border:1px dashed var(--teal-mid);border-radius:var(--r-md);padding:.9rem 1rem;margin-bottom:1.25rem;display:none}
 .rb-hdr{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:var(--text-sm);letter-spacing:.12em;text-transform:uppercase;color:var(--teal);display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem}
 .rb-vol{font-size:var(--text-xs);background:rgba(255,255,255,.8);padding:1px 8px;border-radius:var(--r-sm);color:var(--teal-mid)}
@@ -840,6 +849,7 @@ textarea.si{resize:vertical;min-height:72px}
 .cpill.active-ok{border-color:var(--success);background:#f0fdf4;color:var(--success)}
 .cpill.active-cloudy{border-color:var(--warn);background:#fffbeb;color:var(--warn)}
 .tbpill.tactive{border-color:var(--teal-mid);background:var(--teal-mid);color:#fff}
+.chpill.active-ok{border-color:var(--teal-mid);background:var(--teal-mid);color:#fff}
 .btn-svc{width:100%;padding:1.1rem;background:var(--teal);color:#fff;border:none;border-radius:var(--r-md);font-family:'Oswald',sans-serif;font-weight:600;font-size:var(--text-lg);letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(13,77,68,.2)}
 .btn-svc:hover{background:var(--teal-mid);transform:translateY(-1px)}
 .btn-svc:disabled{background:#cbd5e1;cursor:not-allowed;transform:none;box-shadow:none}

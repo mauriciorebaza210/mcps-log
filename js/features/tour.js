@@ -6,7 +6,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 var TOUR_VERSION    = 'technician-tour-v1';
-var TOUR_STEP_COUNT = 13;
+var TOUR_STEP_COUNT = 15;
 var TOUR_DEMO_POOL  = 'Bullock - Weekly Full Service - 24102 Shelton Spring - MCPS-0017';
 var TOUR_DEMO_READINGS = [
   { fc:'1.2', ph:'7.9', ta:'70',  ch:'220', tablet:'low',    size:'medium', mat:'plaster' },
@@ -590,38 +590,72 @@ function _buildSteps() {
       }
     },
 
-    // ── 10: Photo upload ──────────────────────────────────────────────────────
+    // ── 10: Actions performed ────────────────────────────────────────────────
+    {
+      element: '[data-tour="svc-actions"]',
+      onHighlighted: function() {
+        try {
+          ['Vacuumed', 'Brushed', 'Cleaned skimmer basket'].forEach(function(v) {
+            var el = document.querySelector('input[name="Technician Actions"][value="' + v + '"]');
+            if (el && !el.checked) el.checked = true;
+          });
+        } catch (e) {}
+      },
+      popover: {
+        title:       'Actions Performed ' + _prog(10),
+        description: 'Before you submit, tap the tasks you did on this visit — netting, brushing, basket cleaning, and more. These show up on the customer\'s service report so they see the hands-on work. We\'ve checked a few here as an example.',
+        side:  'top',
+        align: 'start'
+      }
+    },
+
+    // ── 11: Photo upload ──────────────────────────────────────────────────────
     {
       element: '#photo-drop-zone',
       popover: {
-        title:       'Visit Photos ' + _prog(10),
+        title:       'Visit Photos ' + _prog(11),
         description: 'Attach up to 4 photos. Before and after shots are best practice — they protect you and help resolve questions from customers or management.',
         side:  'top',
         align: 'start'
       }
     },
 
-    // ── 11: Visit notes ───────────────────────────────────────────────────────
+    // ── 12: Visit notes ───────────────────────────────────────────────────────
     {
       element: '[data-tour="svc-notes"]',
       popover: {
-        title:       'Visit Notes ' + _prog(11),
-        description: 'Leave notes about this visit here — they appear on the customer service report. Use the <em>Internal Notes</em> field above for staff-only observations that won\'t go to the customer.',
+        title:       'Visit Notes ' + _prog(12),
+        description: 'Leave notes about this visit here — these appear on the customer service report, so keep them friendly and customer-facing.',
         side:  'top',
         align: 'start'
       }
     },
 
-    // ── 12: Submit → onNextClick navigates to live_map/profile ───────────────
+    // ── 13: Internal notes (staff-only) ──────────────────────────────────────
+    {
+      element: '[data-tour="svc-internal-notes"]',
+      onHighlighted: function() {
+        var el = document.getElementById('svc-internal-notes');
+        if (el && !el.value) el.value = 'Equipment looks worn — flagging for a manager follow-up.';
+      },
+      popover: {
+        title:       'Internal Notes ' + _prog(13),
+        description: 'Anything you put here is <strong>staff-only</strong> — it\'s saved to the log for the office but never shows up on the customer\'s service report. Use it for equipment concerns, access issues, or follow-ups for management.',
+        side:  'top',
+        align: 'start'
+      }
+    },
+
+    // ── 14: Submit → onNextClick navigates to live_map/profile ───────────────
     {
       element: '#btn-svc',
       popover: {
-        title:       'Submit Your Log ' + _prog(12),
+        title:       'Submit Your Log ' + _prog(14),
         description: 'Tap Submit when everything is complete. If you\'re offline, your log saves locally and sends automatically once you reconnect.',
         side:  'top',
         align: 'start',
         onNextClick: function() {
-          _navigateTourTo('live_map', '#htab-profile', 12, {
+          _navigateTourTo('live_map', '#htab-profile', 14, {
             afterVisible: function() {
               if (typeof switchHubTab === 'function') switchHubTab('profile');
             },
@@ -632,17 +666,17 @@ function _buildSteps() {
       }
     },
 
-    // ── 13: Profile tab — where to restart ───────────────────────────────────
+    // ── 15: Profile tab — where to restart ───────────────────────────────────
     {
       element: '#htab-profile',
       popover: {
-        title:       'Your Profile ' + _prog(13),
+        title:       'Your Profile ' + _prog(15),
         description: 'This is your operator profile. You can review your own profile details here and tap <strong>Restart Tutorial</strong> any time to run this tour again.',
         side:  'over',
         align: 'center',
         nextBtnText: 'Finish Tour',
         onPrevClick: function() {
-          _navigateTourTo('service_log', '#btn-svc', 11, {
+          _navigateTourTo('service_log', '#btn-svc', 13, {
             message: 'Returning to the service log...',
             delayMs: 500
           });

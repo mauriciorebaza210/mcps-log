@@ -32,7 +32,7 @@ const FORM_SCHEMA = [
   { id:7,  title:'pH',                               type:'TEXT',           isRequired:false, helpText:''                                                                              },
   { id:8,  title:'Total Alkalinity (TA)',            type:'TEXT',           isRequired:false, helpText:''                                                                              },
   { id:9,  title:'Calcium Hardness (CH)',            type:'TEXT',           isRequired:false, helpText:''                                                                              },
-  { id:9.1,title:'Cyanuric Acid (CYA)',              type:'TEXT',           isRequired:false, helpText:'Optional — enter ppm if tested (leave blank if not).'                          },
+  { id:9.1,title:'Cyanuric Acid (CYA)',              type:'TEXT',           isRequired:false, helpText:''                          },
   { id:9.2,title:'Salt Level',                       type:'TEXT',           isRequired:false, helpText:'Optional — enter ppm if tested (leave blank if not).'                          },
   // renderSvcForm injects Tablet Level pills after Salt Level (last field in Test Results)
   // ── Used ──────────────────────────────────────────────────────────────────
@@ -49,6 +49,10 @@ const FORM_SCHEMA = [
   { id:21, title:'Diatomaceous Earth (DE)',          type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
   { id:22, title:'Salt',                             type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
   { id:23, title:'Cal Hypo',                         type:'TEXT',           isRequired:false, helpText:'Enter lbs used (leave blank if none).'                                        },
+  // ── Actions ───────────────────────────────────────────────────────────────
+  { id:24, title:'Actions',                          type:'PAGE_BREAK',     isSectionBreak:true                                                                                        },
+  { id:25, title:'Technician Actions',               type:'CHECKBOX',       isRequired:false, helpText:'Check the tasks you performed on this visit.',
+    choices:['Netted','Vacuumed','Brushed','Backwashed','Cleaned pump basket','Cleaned skimmer basket','Cleaned cartridges','Cleaned automatic cleaner','Cleaned deck/coping'] },
 ];
 
 function loadServiceLog(prefillPoolId){
@@ -140,6 +144,7 @@ function renderSvcForm(meta, prefillPoolId){
     if(item.isSectionBreak){
       card=mkCard(item.title||'Chemical Log');root.appendChild(card);
       if(item.title&&item.title.trim().toLowerCase()==='test results') card.setAttribute('data-tour','svc-test-results');
+      if(item.title&&item.title.trim().toLowerCase()==='actions') card.setAttribute('data-tour','svc-actions');
       if(item.title&&item.title.trim().toLowerCase()==='used'){ card.setAttribute('data-tour','svc-chemicals-used');
         const rb=document.createElement('div');rb.id='rec-box';rb.className='rec-box';rb.setAttribute('data-tour','svc-recommendations');
         rb.innerHTML='<div class="rb-hdr">Mr. Chuy Recommends:<span id="rb-vol" class="rb-vol">—</span></div><div id="rb-flags" class="rb-flags"></div><div id="rb-list" class="rb-list"></div>';
@@ -160,7 +165,7 @@ function renderSvcForm(meta, prefillPoolId){
       const isPoolId = item.title && item.title.trim().toLowerCase() === 'pool_id';
       inp='<select class="si" name="'+te+'" '+(item.isRequired?'required':'')+' onchange="'+(isPoolId?'handlePoolChange()':'runRecs()')+'"><option value="">Select...</option>'+item.choices.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>').join('')+'</select>';
     }else if(item.type==='CHECKBOX'){
-      inp=item.choices.map(c=>'<label class="scb"><input type="checkbox" name="'+te+'" value="'+c.replace(/"/g,'&quot;')+'" onchange="runRecs()"><span style="font-weight:400">'+c+'</span></label>').join('');
+      inp='<div class="scb-grid">'+item.choices.map(c=>'<label class="scb"><input type="checkbox" name="'+te+'" value="'+c.replace(/"/g,'&quot;')+'" onchange="runRecs()"><span>'+c+'</span></label>').join('')+'</div>';
     }else if(item.type==='PARAGRAPH_TEXT'){
       inp='<textarea class="si" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()"></textarea>';
     }else{
@@ -168,6 +173,12 @@ function renderSvcForm(meta, prefillPoolId){
       inp='<input class="si" type="'+(isNum?'number':'text')+'" step="any" name="'+te+'" '+(item.isRequired?'required':'')+' oninput="runRecs()">';
     }
     grp.innerHTML+=inp;card.appendChild(grp);
+    if(item.title === 'Technician Actions') {
+      // ── Adjusted chlorinator power → reveals Increased/Decreased ────────────
+      const chg=document.createElement('div');chg.className='sfg scb-chlor';
+      chg.innerHTML='<label class="scb"><input type="checkbox" id="svc-chlor-adj" onchange="toggleChlorAdj(this)"><span>Adjusted chlorinator power</span></label><div id="svc-chlor-dir" class="cp" style="display:none;margin-top:.55rem"><div class="cpill chpill" onclick="tChlor(this)" data-val="Increased">↑ Increased</div><div class="cpill chpill" onclick="tChlor(this)" data-val="Decreased">↓ Decreased</div></div>';
+      card.appendChild(chg);
+    }
     if(item.title === 'Salt Level') {
       // ── Tablet Level pill selector (portal-only) — last item in Test Results ──
       const tg=document.createElement('div');tg.className='sfg';
@@ -185,8 +196,8 @@ function renderSvcForm(meta, prefillPoolId){
       cg.innerHTML='<label>Pool Condition on Arrival</label><span class="sh">Changes chlorine protocol if pool is green or algae.</span><div class="cp"><div class="cpill" onclick="tCond(this,\'green\')" data-val="green">Green / Algae</div><div class="cpill" onclick="tCond(this,\'cloudy\')" data-val="cloudy">Cloudy</div><div class="cpill" onclick="tCond(this,\'clear\')" data-val="clear">Clear</div></div>';
       card.appendChild(cg);
 
-      const ng = document.createElement('div'); ng.className = 'sfg';
-      ng.innerHTML = '<label>Internal Notes</label><span class="sh">Admin-only notes. These do NOT go to the customer report email.</span><textarea class="si" id="svc-internal-notes" name="Internal Notes" oninput="runRecs()"></textarea>';
+      const ng = document.createElement('div'); ng.className = 'sfg'; ng.setAttribute('data-tour','svc-internal-notes');
+      ng.innerHTML = '<label>Internal Notes</label><span class="sh">Admin-only notes. These do NOT go to the customer report email.</span><textarea class="si" id="svc-internal-notes" name="Internal Notes"></textarea>';
       card.appendChild(ng);
     }
   });
@@ -359,9 +370,12 @@ function renderTrendBanner_(trends, visitCount) {
   banner.innerHTML = '<strong>📊 Trend — last ' + visitCount + ' visit' + (visitCount !== 1 ? 's' : '') + '</strong>' + pills;
   root.insertBefore(banner, root.firstChild);
 }
-function tCond(el,type){const was=el.classList.contains('active')||el.classList.contains('active-ok')||el.classList.contains('active-cloudy');document.querySelectorAll('.cpill:not(.tbpill)').forEach(p=>p.classList.remove('active','active-ok','active-cloudy'));if(!was)el.classList.add(type==='green'?'active':type==='clear'?'active-ok':'active-cloudy');runRecs();}
+function tCond(el,type){const was=el.classList.contains('active')||el.classList.contains('active-ok')||el.classList.contains('active-cloudy');document.querySelectorAll('.cpill:not(.tbpill):not(.chpill)').forEach(p=>p.classList.remove('active','active-ok','active-cloudy'));if(!was)el.classList.add(type==='green'?'active':type==='clear'?'active-ok':'active-cloudy');runRecs();}
 // Tablet level pill toggle
 function tTablet(el,level){const was=el.classList.contains('tactive');document.querySelectorAll('.tbpill').forEach(p=>p.classList.remove('tactive'));if(!was)el.classList.add('tactive');runRecs();}
+// Chlorinator power adjustment: checkbox reveals Increased/Decreased pills
+function toggleChlorAdj(cb){const dir=document.getElementById('svc-chlor-dir');if(dir)dir.style.display=cb.checked?'flex':'none';if(!cb.checked)document.querySelectorAll('#svc-chlor-dir .chpill').forEach(p=>p.classList.remove('active-ok'));}
+function tChlor(el){document.querySelectorAll('#svc-chlor-dir .chpill').forEach(p=>p.classList.remove('active-ok'));el.classList.add('active-ok');}
 function getTabletLevel(){const a=document.querySelector('.tbpill.tactive');return a?a.dataset.val:null;}
 
 function gn(t){const el=document.querySelector('[name="'+t+'"]');if(!el||!el.value)return null;const v=parseFloat(el.value);return isNaN(v)?null:v;}
@@ -639,8 +653,16 @@ function submitSvc(){
   const internalNotes = document.getElementById('svc-internal-notes');
   if (internalNotes && internalNotes.value) payload['Internal Notes'] = internalNotes.value;
 
-  const ap = document.querySelector('.cpill.active, .cpill.active-cloudy, .cpill.active-ok');
+  const ap = document.querySelector('.cpill:not(.chpill).active, .cpill:not(.chpill).active-cloudy, .cpill:not(.chpill).active-ok');
   if(ap) payload['Notes'] = ((payload['Notes']||'') + ' [Condition: '+ap.dataset.val+']').trim();
+
+  // ── Chlorinator power adjustment (Adjusted checkbox + direction) ───────────
+  const chlorCb = document.getElementById('svc-chlor-adj');
+  if (chlorCb && chlorCb.checked) {
+    const dir = document.querySelector('#svc-chlor-dir .chpill.active-ok');
+    payload['Chlorinator Adjustment'] = dir ? dir.dataset.val : 'Adjusted';
+  }
+
   // Inject technician name from portal session
   if(_s && _s.name) payload['Technician'] = _s.name;
 
