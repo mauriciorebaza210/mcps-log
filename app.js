@@ -244,7 +244,7 @@ function _migrateAvatarToBase64_(username, url) {
 function _prefetchCommon() {
   // CRM prefetch removed — home.js loadHomeStats caches it on page load for admins
   if (hasRole('technician') || hasRole('lead')) {
-    api({ action: 'get_metadata' })
+    api({ action: 'get_metadata', secret: SEC })
       .then(r => { if (r.ok) _appCacheSet('svc_meta', r); }).catch(()=>{});
   }
 }

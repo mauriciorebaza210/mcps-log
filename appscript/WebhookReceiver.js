@@ -475,9 +475,16 @@ function processPendingSvcJobs_() {
     .forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
   const props = PropertiesService.getScriptProperties();
-  const jobIds = JSON.parse(props.getProperty('svc_jobs_pending') || '[]');
-  if (!jobIds.length) return;
-  props.deleteProperty('svc_jobs_pending');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let jobIds = [];
+  try {
+    jobIds = JSON.parse(props.getProperty('svc_jobs_pending') || '[]');
+    if (!jobIds.length) return;
+    props.deleteProperty('svc_jobs_pending');
+  } finally {
+    lock.releaseLock();
+  }
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
@@ -495,6 +502,7 @@ function processPendingSvcJobs_() {
       const poolId = job.poolId;
       const portalUser = job.portalUser || '';
       const photoUrls = job.photoUrls || [];
+      const scheduledVisitId = String(job.scheduledVisitId || '').trim();
       const e = { range: rawSheet.getRange(rowNum, 1) };
 
       try { snapshotUsageToPriced_(e); } catch (err) { Logger.log('processPendingSvcJobs_ snapshot: ' + err); }
@@ -538,7 +546,8 @@ function processPendingSvcJobs_() {
 
           // Write to Job_Completions table in Routes SS
           const completedDateStr = Utilities.formatDate(safeCompletedAt, 'America/Chicago', 'yyyy-MM-dd');
-          const visitId = svPoolId + '_' + completedDateStr;
+          const visitId = scheduledVisitId || (svPoolId + '_' + completedDateStr);
+          const serviceKey = scheduledVisitId || visitId;
           const dayNum = safeCompletedAt.getDay();
           const weekStartDate = new Date(safeCompletedAt);
           weekStartDate.setDate(weekStartDate.getDate() + (dayNum === 0 ? -6 : 1 - dayNum));
@@ -547,19 +556,46 @@ function processPendingSvcJobs_() {
           let jcSheet = routesSs.getSheetByName('Job_Completions');
           if (!jcSheet) {
             jcSheet = routesSs.insertSheet('Job_Completions');
-            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date']);
+            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key']);
+          } else {
+            const existingHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
+            ['scheduled_visit_id','service_key'].forEach(function(h) {
+              if (existingHeaders.indexOf(h) === -1) {
+                jcSheet.getRange(1, jcSheet.getLastColumn() + 1).setValue(h);
+                existingHeaders.push(h);
+              }
+            });
           }
           let alreadyRecorded = false;
+          let jcHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
           if (jcSheet.getLastRow() >= 2) {
             const jcValues = jcSheet.getRange(1, 1, jcSheet.getLastRow(), jcSheet.getLastColumn()).getValues();
-            const jcHeaders = jcValues[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
             const visitIdCol = jcHeaders.indexOf('visit_id');
             if (visitIdCol >= 0) {
               alreadyRecorded = jcValues.slice(1).some(function(r) { return String(r[visitIdCol] || '') === visitId; });
             }
           }
           if (!alreadyRecorded) {
-            jcSheet.appendRow([visitId, svPoolId, portalUser, safeCompletedAt.toISOString(), weekStart, dayNames[dayNum], rowNum, completedDateStr]);
+            const row = new Array(jcHeaders.length).fill('');
+            const setJc = function(name, value) {
+              const idx = jcHeaders.indexOf(name);
+              if (idx >= 0) row[idx] = value;
+            };
+            setJc('visit_id', visitId);
+            setJc('pool_id', svPoolId);
+            setJc('technician', portalUser);
+            setJc('completed_at', safeCompletedAt.toISOString());
+            setJc('week_start', weekStart);
+            setJc('day_of_week', dayNames[dayNum]);
+            setJc('service_log_row', rowNum);
+            setJc('date', completedDateStr);
+            setJc('scheduled_visit_id', scheduledVisitId);
+            setJc('service_key', serviceKey);
+            jcSheet.appendRow(row);
+          }
+
+          if (scheduledVisitId) {
+            try { markScheduledVisitCompleted_(routesSs, scheduledVisitId, safeCompletedAt, portalUser, rowNum); } catch (markErr) { Logger.log('processPendingSvcJobs_ mark scheduled visit: ' + markErr); }
           }
         } catch (svErr) { Logger.log('processPendingSvcJobs_ Routes writes: ' + svErr); }
       }
@@ -567,6 +603,173 @@ function processPendingSvcJobs_() {
       Logger.log('processPendingSvcJobs_ job ' + jobId + ' error: ' + jobErr);
     }
   });
+}
+
+function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, completedBy, chemLogRef) {
+  if (!scheduledVisitId) return false;
+  const sheet = routesSs.getSheetByName('Scheduled_Visits');
+  if (!sheet || sheet.getLastRow() < 2) return false;
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
+  const col = function(name) { return headers.indexOf(name); };
+  const idCol = col('scheduled_visit_id');
+  if (idCol === -1) return false;
+
+  const required = ['status', 'completed_at', 'completed_by', 'chem_log_ref'];
+  required.forEach(function(h) {
+    if (headers.indexOf(h) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h);
+      headers.push(h);
+    }
+  });
+
+  const updatedHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
+  const updatedCol = function(name) { return updatedHeaders.indexOf(name); };
+  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][idCol] || '').trim() !== scheduledVisitId) continue;
+    const rowNum = i + 2;
+    sheet.getRange(rowNum, updatedCol('status') + 1).setValue('completed');
+    sheet.getRange(rowNum, updatedCol('completed_at') + 1).setValue(completedAt.toISOString());
+    sheet.getRange(rowNum, updatedCol('completed_by') + 1).setValue(completedBy || '');
+    sheet.getRange(rowNum, updatedCol('chem_log_ref') + 1).setValue(chemLogRef || '');
+    return true;
+  }
+  return false;
+}
+
+function backfillJobCompletionsForDate_(dateFilter) {
+  const tz = 'America/Chicago';
+  const targetDate = dateFilter || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+  if (!rawSheet || rawSheet.getLastRow() < 2) return { ok: true, date: targetDate, created: 0, updated: 0 };
+
+  const rawValues = rawSheet.getDataRange().getValues();
+  const rawHeaders = rawValues[0].map(function(h) { return String(h || '').trim(); });
+  const rawCol = function(name) { return rawHeaders.indexOf(name); };
+  const poolCol = rawCol('pool_id');
+  const techCol = rawCol('Technician');
+  const schedCol = rawCol('_scheduled_visit_id');
+  const svcCol = rawCol('_service_visit_id');
+  if (poolCol === -1) return { ok: false, error: 'Chemical_Usage_Log missing pool_id column.' };
+
+  const routesSs = SpreadsheetApp.openById('1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM');
+  let jcSheet = routesSs.getSheetByName('Job_Completions');
+  if (!jcSheet) {
+    jcSheet = routesSs.insertSheet('Job_Completions');
+    jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key']);
+  } else {
+    const existingHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
+    ['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key'].forEach(function(h) {
+      if (existingHeaders.indexOf(h) === -1) {
+        jcSheet.getRange(1, jcSheet.getLastColumn() + 1).setValue(h);
+        existingHeaders.push(h);
+      }
+    });
+  }
+
+  const scheduledByPoolDate = {};
+  const svSheet = routesSs.getSheetByName('Scheduled_Visits');
+  if (svSheet && svSheet.getLastRow() >= 2) {
+    const svValues = svSheet.getDataRange().getValues();
+    const svHeaders = svValues[0].map(function(h) { return String(h || '').trim(); });
+    const svCol = function(name) { return svHeaders.indexOf(name); };
+    const svIdCol = svCol('scheduled_visit_id');
+    const svPidCol = svCol('pool_id');
+    const svDateCol = svCol('scheduled_date');
+    if (svIdCol !== -1 && svPidCol !== -1 && svDateCol !== -1) {
+      for (let i = 1; i < svValues.length; i++) {
+        const poolId = String(svValues[i][svPidCol] || '').trim();
+        let schedDate = svValues[i][svDateCol];
+        schedDate = schedDate instanceof Date ? Utilities.formatDate(schedDate, tz, 'yyyy-MM-dd') : String(schedDate || '').trim();
+        if (!poolId || schedDate !== targetDate) continue;
+        const id = String(svValues[i][svIdCol] || '').trim();
+        if (id && !scheduledByPoolDate[poolId + '|' + schedDate]) scheduledByPoolDate[poolId + '|' + schedDate] = id;
+      }
+    }
+  }
+
+  let jcHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+  const jcCol = function(name) { return jcHeaders.indexOf(name); };
+  const byVisitId = {};
+  const byLogRow = {};
+  if (jcSheet.getLastRow() >= 2) {
+    const jcValues = jcSheet.getRange(1, 1, jcSheet.getLastRow(), jcSheet.getLastColumn()).getValues();
+    const vCol = jcCol('visit_id');
+    const rowCol = jcCol('service_log_row');
+    for (let i = 1; i < jcValues.length; i++) {
+      if (vCol !== -1 && jcValues[i][vCol]) byVisitId[String(jcValues[i][vCol])] = i + 1;
+      if (rowCol !== -1 && jcValues[i][rowCol]) byLogRow[String(jcValues[i][rowCol])] = i + 1;
+    }
+  }
+
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  let created = 0;
+  let updated = 0;
+  for (let i = 1; i < rawValues.length; i++) {
+    const row = rawValues[i];
+    const completedAtRaw = row[0];
+    const completedAt = completedAtRaw ? new Date(completedAtRaw) : null;
+    if (!completedAt || isNaN(completedAt.getTime())) continue;
+    const completedDateStr = Utilities.formatDate(completedAt, tz, 'yyyy-MM-dd');
+    if (completedDateStr !== targetDate) continue;
+
+    const svPoolId = extractPoolId_(String(row[poolCol] || '').trim());
+    if (!svPoolId || svPoolId === 'OTHER / POOL NOT LISTED' || svPoolId === 'Other / Pool not listed') continue;
+
+    const logRowNum = i + 1;
+    const scheduledVisitId = String((schedCol !== -1 ? row[schedCol] : '') || (svcCol !== -1 ? row[svcCol] : '') || scheduledByPoolDate[svPoolId + '|' + completedDateStr] || '').trim();
+    const visitId = scheduledVisitId || (svPoolId + '_' + completedDateStr);
+    const serviceKey = scheduledVisitId || visitId;
+    const existingRow = byVisitId[visitId] || byLogRow[String(logRowNum)];
+
+    if (existingRow) {
+      const dateIdx = jcCol('date');
+      const compIdx = jcCol('completed_at');
+      const poolIdx = jcCol('pool_id');
+      const rowIdx = jcCol('service_log_row');
+      if (dateIdx !== -1) jcSheet.getRange(existingRow, dateIdx + 1).setValue(completedDateStr);
+      if (compIdx !== -1) jcSheet.getRange(existingRow, compIdx + 1).setValue(completedAt.toISOString());
+      if (poolIdx !== -1) jcSheet.getRange(existingRow, poolIdx + 1).setValue(svPoolId);
+      if (rowIdx !== -1) jcSheet.getRange(existingRow, rowIdx + 1).setValue(logRowNum);
+      if (scheduledVisitId) {
+        const schedIdx = jcCol('scheduled_visit_id');
+        const keyIdx = jcCol('service_key');
+        if (schedIdx !== -1) jcSheet.getRange(existingRow, schedIdx + 1).setValue(scheduledVisitId);
+        if (keyIdx !== -1) jcSheet.getRange(existingRow, keyIdx + 1).setValue(serviceKey);
+        markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, techCol !== -1 ? String(row[techCol] || '') : '', logRowNum);
+        updated++;
+      }
+      continue;
+    }
+
+    const dayNum = completedAt.getDay();
+    const weekStartDate = new Date(completedAt);
+    weekStartDate.setDate(weekStartDate.getDate() + (dayNum === 0 ? -6 : 1 - dayNum));
+    const out = new Array(jcHeaders.length).fill('');
+    const setJc = function(name, value) {
+      const idx = jcCol(name);
+      if (idx >= 0) out[idx] = value;
+    };
+    setJc('visit_id', visitId);
+    setJc('pool_id', svPoolId);
+    setJc('technician', techCol !== -1 ? String(row[techCol] || '') : '');
+    setJc('completed_at', completedAt.toISOString());
+    setJc('week_start', Utilities.formatDate(weekStartDate, tz, 'yyyy-MM-dd'));
+    setJc('day_of_week', dayNames[dayNum]);
+    setJc('service_log_row', logRowNum);
+    setJc('date', completedDateStr);
+    setJc('scheduled_visit_id', scheduledVisitId);
+    setJc('service_key', serviceKey);
+    jcSheet.appendRow(out);
+    byVisitId[visitId] = jcSheet.getLastRow();
+    byLogRow[String(logRowNum)] = jcSheet.getLastRow();
+    if (scheduledVisitId) markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, techCol !== -1 ? String(row[techCol] || '') : '', logRowNum);
+    created++;
+  }
+
+  return { ok: true, date: targetDate, created: created, updated: updated };
 }
 
 
@@ -1048,6 +1251,11 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (payload.action === 'backfill_route_distances') {
+      const data = backfillRouteDistances(payload.token || "");
+      return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (payload.action === 'recalculate_routes') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
@@ -1383,6 +1591,28 @@ function doPost(e) {
       return jsonResponse_({ ok: true });
     }
 
+    if (payload.action === 'process_pending_service_jobs') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      processPendingSvcJobs_();
+      return jsonResponse_({ ok: true });
+    }
+
+    if (payload.action === 'backfill_job_completions') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(backfillJobCompletionsForDate_(payload.date || ''));
+    }
+
+    if (payload.action === 'backfill_missing_usage_priced') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(backfillMissingUsagePriced_({ since: payload.since || '' }));
+    }
+
     if (payload.action === 'get_pool_context') {
       const auth = validateToken(payload.token);
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
@@ -1453,11 +1683,18 @@ function doPost(e) {
           rowNum: newRowNum,
           poolId: String(payload.data.pool_id || '').trim(),
           portalUser: portalUserName,
+          scheduledVisitId: String(payload.data._scheduled_visit_id || payload.data._service_visit_id || '').trim(),
           photoUrls: photoUrls
         }));
-        const pending = JSON.parse(props.getProperty('svc_jobs_pending') || '[]');
-        pending.push(jobId);
-        props.setProperty('svc_jobs_pending', JSON.stringify(pending));
+        const lock = LockService.getScriptLock();
+        lock.waitLock(10000);
+        try {
+          const pending = JSON.parse(props.getProperty('svc_jobs_pending') || '[]');
+          pending.push(jobId);
+          props.setProperty('svc_jobs_pending', JSON.stringify(pending));
+        } finally {
+          lock.releaseLock();
+        }
         ScriptApp.newTrigger('processPendingSvcJobs_').timeBased().after(5000).create();
       } catch (queueErr) {
         // Fallback: run synchronously if trigger setup fails
@@ -1844,9 +2081,11 @@ function doGet(e) {
       if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: "Admin access required." });
       try {
         const dateFilter = e.parameter.date || Utilities.formatDate(new Date(), 'America/Chicago', 'yyyy-MM-dd');
+        let backfill = null;
+        try { backfill = backfillJobCompletionsForDate_(dateFilter); } catch (bfErr) { Logger.log('get_job_completions backfill failed: ' + bfErr); }
         const routesSs = SpreadsheetApp.openById('1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM');
         const jcSheet = routesSs.getSheetByName('Job_Completions');
-        if (!jcSheet || jcSheet.getLastRow() < 2) return jsonResponse_({ ok: true, completions: [], date: dateFilter });
+        if (!jcSheet || jcSheet.getLastRow() < 2) return jsonResponse_({ ok: true, completions: [], date: dateFilter, backfill });
         const data = jcSheet.getDataRange().getValues();
         const hdrs = data[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
         const iVisitId = hdrs.indexOf('visit_id');
@@ -1855,10 +2094,19 @@ function doGet(e) {
         const iCompAt  = hdrs.indexOf('completed_at');
         const iDate    = hdrs.indexOf('date');
         const iDow     = hdrs.indexOf('day_of_week');
+        const iSchedId = hdrs.indexOf('scheduled_visit_id');
+        const iSvcKey  = hdrs.indexOf('service_key');
         const tz = 'America/Chicago';
         const completions = [];
         for (var i = 1; i < data.length; i++) {
-          var rowDate = iDate >= 0 ? String(data[i][iDate] || '').trim() : '';
+          var rowDate = '';
+          if (iDate >= 0 && data[i][iDate]) {
+            if (data[i][iDate] instanceof Date) {
+              rowDate = Utilities.formatDate(data[i][iDate], tz, 'yyyy-MM-dd');
+            } else {
+              rowDate = String(data[i][iDate] || '').trim();
+            }
+          }
           if (!rowDate && iCompAt >= 0 && data[i][iCompAt]) {
             try { rowDate = Utilities.formatDate(new Date(data[i][iCompAt]), tz, 'yyyy-MM-dd'); } catch(e2) {}
           }
@@ -1869,9 +2117,11 @@ function doGet(e) {
             technician  : iTech    >= 0 ? String(data[i][iTech]    || '') : '',
             completed_at: iCompAt  >= 0 ? String(data[i][iCompAt]  || '') : '',
             day_of_week : iDow     >= 0 ? String(data[i][iDow]     || '') : '',
+            scheduled_visit_id: iSchedId >= 0 ? String(data[i][iSchedId] || '') : '',
+            service_key : iSvcKey  >= 0 ? String(data[i][iSvcKey]  || '') : '',
           });
         }
-        return jsonResponse_({ ok: true, completions, date: dateFilter });
+        return jsonResponse_({ ok: true, completions, date: dateFilter, backfill });
       } catch(err) {
         return jsonResponse_({ ok: false, error: err.message });
       }

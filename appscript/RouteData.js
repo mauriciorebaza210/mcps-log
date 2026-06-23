@@ -117,7 +117,10 @@ function computeRouteData_(weekStart) {
     const svcVal = String(row[col("service")] || "");
     if (svcVal.toLowerCase().includes("monthly")) {
       const mwIdx = col("monthly_week");
-      const monthlyWeek = mwIdx !== -1 ? row[mwIdx] : "";
+      const monthlyWeek = mwIdx !== -1 ? String(row[mwIdx] || "").trim() : "";
+      // No week assigned yet → don't guess a week; the pool surfaces in the
+      // "needs routing" card (getUnassignedPools) until an admin picks its week.
+      if (!monthlyWeek) continue;
       if (!monthlyMatchesWeek_(effectiveDay, monthlyWeek, weekStart)) continue;
     }
 
@@ -142,10 +145,58 @@ function computeRouteData_(weekStart) {
     });
   }
 
+  // Merge scheduled visits (startup days / first-month weeks / G2C / one-time) into
+  // the day buckets BEFORE ordering, so they get driving-distance ordered alongside
+  // the weekly stops instead of being appended at the end.
+  try {
+    const dateToDay = {};
+    WEEKDAYS.forEach(dn => { dateToDay[getDayDate_(dn, weekStart)] = dn; });
+    const svRes = computeScheduledVisitsForWeek_(weekStart, null);
+    if (svRes && svRes.ok && svRes.visits) {
+      svRes.visits.forEach(v => {
+        const dn = dateToDay[v.scheduled_date];
+        if (!dn || !dayPools[dn]) return;
+        const bucket = dayPools[dn];
+        const existing = bucket.find(p => p.pool_id === v.pool_id);
+        if (existing) {
+          existing._is_scheduled_visit = true;
+          existing._visit_type = v.visit_type;
+          existing._scheduled_visit_id = v.scheduled_visit_id;
+          if (!existing.startup_start_date) existing.startup_start_date = startupDateFromVisit_(v.scheduled_date, v.visit_type);
+        } else {
+          bucket.push({
+            pool_id:            v.pool_id,
+            customer_name:      v.customer_name,
+            address:            v.address,
+            city:               v.city,
+            service:            v.service_type || v.visit_type,
+            maps_url:           '',
+            lat:                '',
+            lng:                '',
+            operator:           v.assigned_technician,
+            pinned:             false,
+            gate_code:          v.gate_code || '',
+            startup_start_date: startupDateFromVisit_(v.scheduled_date, v.visit_type),
+            _is_scheduled_visit:  true,
+            _visit_type:          v.visit_type,
+            _scheduled_visit_id:  v.scheduled_visit_id
+          });
+        }
+      });
+    }
+  } catch (svErr) {
+    Logger.log('computeRouteData_ scheduled-visit merge failed (non-blocking): ' + svErr);
+  }
+
+  // Order each day's stops per technician by real driving distance: farthest from
+  // the office first, looping back toward it. Driving distances are cached in
+  // Route_Distance_Cache, so this only hits the Maps service for unseen pairs.
+  const distCtx = buildDistanceContext_();
   const days = WEEKDAYS.map(dayName => {
-    const pools = dayPools[dayName];
+    const pools = orderDayPoolsByOperator_(dayPools[dayName], distCtx);
     return { day: dayName, date: getDayDate_(dayName, weekStart), pools, maps_url: buildMapsUrl_(pools) };
   });
+  flushDistanceContext_(distCtx);
 
   return { ok: true, week_start: weekStart, today: Utilities.formatDate(new Date(), RD_TZ, "yyyy-MM-dd"), all_operators, days };
 }
@@ -959,13 +1010,29 @@ function monthlyMatchesWeek_(dayOfWeek, monthlyWeek, weekStart) {
 }
 
 
+// Given a Scheduled_Visits scheduled_date + visit_type, compute the startup Day-1
+// date (Day 2 = Day1+1, Day 3 = Day1+2). Mirrors the frontend helper.
+function startupDateFromVisit_(scheduledDate, visitType) {
+  if (!scheduledDate || !visitType) return '';
+  const offset = visitType === 'startup_day_2' ? -1 : visitType === 'startup_day_3' ? -2 : 0;
+  if (offset === 0 && visitType !== 'startup_day_1') return '';
+  try {
+    const d = new Date(String(scheduledDate).split('T')[0] + 'T12:00:00');
+    d.setDate(d.getDate() + offset);
+    return Utilities.formatDate(d, RD_TZ, 'yyyy-MM-dd');
+  } catch (e) { return ''; }
+}
+
 // ─── Scheduled Visits for Week ────────────────────────────────────────────────
 function getScheduledVisitsForWeek(token, weekStartParam, operatorFilter) {
   const auth = validateToken(token);
   if (!auth.ok) return { ok: false, error: auth.error };
+  return computeScheduledVisitsForWeek_(weekStartParam || getWeekStart_(), operatorFilter);
+}
 
-  const weekStart = weekStartParam || getWeekStart_();
-
+// Same logic without auth — callable internally (e.g. from computeRouteData_ so
+// scheduled visits get driving-distance ordered alongside the weekly stops).
+function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
   // Compute Saturday (weekStart + 5 days)
   const [wy, wm, wd] = weekStart.split('-').map(Number);
   const weekEnd = Utilities.formatDate(

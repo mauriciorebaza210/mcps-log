@@ -268,10 +268,14 @@ function renderSvcForm(meta, prefillPoolId){
 function mkCard(t){const d=document.createElement('div');d.className='svc-card';if(t){const h=document.createElement('div');h.className='svc-stitle';h.textContent=t;d.appendChild(h);}return d;}
 
 // ── Map → Service Log flow ────────────────────────────────────────────────────
-function goToSvcLog(poolId, customerName) {
+function goToSvcLog(poolId, customerName, scheduledVisitId, visitType) {
   if (!poolId) return;
   window._pendingSvcPoolId = poolId;
   window._prefillCustomer = customerName || '';
+  window._pendingSvcMeta = {
+    scheduled_visit_id: scheduledVisitId || '',
+    visit_type: visitType || ''
+  };
   navigateTo('service_log');
 }
 
@@ -702,6 +706,17 @@ function submitSvc(){
   // Inject technician name from portal session
   if(_s && _s.name) payload['Technician'] = _s.name;
 
+  // Preserve the exact scheduled service identity when the log was launched
+  // from the route card. This lets admin completion checks distinguish a
+  // one-time/startup/GTC visit from the same pool's recurring service.
+  if (window._pendingSvcMeta && window._pendingSvcMeta.scheduled_visit_id) {
+    payload['_scheduled_visit_id'] = window._pendingSvcMeta.scheduled_visit_id;
+    payload['_service_visit_id'] = window._pendingSvcMeta.scheduled_visit_id;
+  }
+  if (window._pendingSvcMeta && window._pendingSvcMeta.visit_type) {
+    payload['_visit_type'] = window._pendingSvcMeta.visit_type;
+  }
+
   // ── Chemical range validation ─────────────────────────────────────────────
   const CHEM_RANGES = {
     'pH':                    { min: 6.8,  max: 8.5,   label: 'pH'                    },
@@ -827,15 +842,21 @@ function _onSvcSuccess_(payload, photoCount) {
   window.removeEventListener('online', _onSvcOnline_);
   const poolIdKey = Object.keys(payload).find(k => k.trim().toLowerCase() === 'pool_id');
   const pId = poolIdKey ? payload[poolIdKey] : null;
+  const scheduledVisitId = payload['_scheduled_visit_id'] || payload['_service_visit_id'] || '';
   if (pId) {
     localStorage.removeItem('svc_draft_' + pId);
     if (_activeDay && _routeData && _routeData.week_start) {
       const doneKey = `mcps_done_${_routeData.week_start}_${_activeDay}`;
       const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
       if (!done.includes(pId)) { done.push(pId); localStorage.setItem(doneKey, JSON.stringify(done)); }
+      if (scheduledVisitId && !done.includes(scheduledVisitId)) {
+        done.push(scheduledVisitId);
+        localStorage.setItem(doneKey, JSON.stringify(done));
+      }
     }
   }
   window._lastLoadedPoolId = null;
+  window._pendingSvcMeta = null;
   const _successRoot = document.getElementById('svc-root');
   if (!_successRoot) return; // background send — DOM not visible, nothing to update
   _successRoot.innerHTML = '<div style="text-align:center;padding:3rem 1rem">'

@@ -10,10 +10,19 @@
  * @param {Object} payload - The data to send in the POST body.
  * @param {Object} options - Optional fetch overrides (e.g. signal).
  */
+function withSessionToken_(payload) {
+  const out = Object.assign({}, payload || {});
+  if (out.token === undefined && typeof _s !== 'undefined' && _s && _s.token) {
+    out.token = _s.token;
+  }
+  return out;
+}
+
 function api(payload, options = {}) {
+  const bodyPayload = withSessionToken_(payload);
   const fetchOptions = {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(bodyPayload),
     // Intentionally omitting Content-Type header to avoid OPTIONS preflight
     ...options
   };
@@ -43,9 +52,10 @@ function api(payload, options = {}) {
  */
 function apiGet(params, options = {}) {
   const url = new URL(AS);
+  const requestParams = withSessionToken_(params);
   
   // Append params to the URL search string
-  Object.entries(params).forEach(([k, v]) => {
+  Object.entries(requestParams).forEach(([k, v]) => {
     if (v !== undefined && v !== null) {
       url.searchParams.set(k, v);
     }

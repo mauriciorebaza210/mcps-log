@@ -24,8 +24,33 @@ function _completionsForDate_(dateStr) {
   return _jobCompletionsByDate[dateStr] || [];
 }
 
+function _normCompletionKey_(value) {
+  return String(value || '').trim();
+}
+
+function _completionKeysForPool_(pool, fallbackIdx) {
+  const keys = [
+    pool && pool._scheduled_visit_id,
+    pool && pool._service_visit_id,
+    pool && pool.pool_id,
+    fallbackIdx !== undefined ? String(fallbackIdx) : ''
+  ].map(_normCompletionKey_).filter(Boolean);
+  return Array.from(new Set(keys));
+}
+
+function _isPoolCompleted_(doneSet, pool, fallbackIdx) {
+  return _completionKeysForPool_(pool, fallbackIdx).some(k => doneSet.has(k));
+}
+
 function _completionSetForDate_(dateStr) {
-  return new Set(_completionsForDate_(dateStr).map(c => String(c.pool_id || '').trim()).filter(Boolean));
+  const out = new Set();
+  _completionsForDate_(dateStr).forEach(c => {
+    [c.service_key, c.scheduled_visit_id, c.visit_id, c.pool_id].forEach(v => {
+      const key = _normCompletionKey_(v);
+      if (key) out.add(key);
+    });
+  });
+  return out;
 }
 
 function _loadJobCompletionsForDate_(dateStr) {
@@ -48,7 +73,13 @@ function _loadRouteCompletionsForWeek_(silent) {
 }
 
 function refreshRouteCompletions() {
-  return _loadRouteCompletionsForWeek_(false);
+  if (!isAdmin() || !_routeData || !_routeData.days) return _loadRouteCompletionsForWeek_(false);
+  const dates = Array.from(new Set((_routeData.days || []).map(_completionDateForDay_).filter(Boolean)));
+  _flashRouteRefresh_('Checking submitted logs...');
+  return Promise.all(dates.map(date =>
+    api({ action: 'backfill_job_completions', token: _s.token, date: date }).catch(() => null)
+  ))
+    .then(() => _loadRouteCompletionsForWeek_(false));
 }
 
 function _startRouteCompletionPolling_() {
@@ -680,7 +711,7 @@ function loadUnassigned(forceFresh) {
         const st = (p.status || (crmItem ? crmItem.status : '') || '').toUpperCase();
         p._status = st || 'N/A';
 
-        const isEligible = s.includes('weekly full service') || s.includes('startup');
+        const isEligible = s.includes('weekly full service') || s.includes('startup') || p.needs_monthly_week;
         const isActive = st !== 'LOST' && st !== 'COMPLETED';
         return isEligible && isActive;
       });
@@ -703,8 +734,19 @@ function renderNewPoolsBanner() {
     return;
   }
 
-  const pendingStartups = _unassignedPools.filter(p => (p.service || '').toLowerCase().includes('startup'));
-  const regularPools    = _unassignedPools.filter(p => !(p.service || '').toLowerCase().includes('startup'));
+  const monthlyNeedsWeek = _unassignedPools.filter(p => p.needs_monthly_week);
+  const pendingStartups  = _unassignedPools.filter(p => !p.needs_monthly_week && (p.service || '').toLowerCase().includes('startup'));
+  const regularPools     = _unassignedPools.filter(p => !p.needs_monthly_week && !(p.service || '').toLowerCase().includes('startup'));
+
+  const monthlySection = monthlyNeedsWeek.length ? `
+    <div style="font-size:.72rem;font-weight:700;color:var(--teal);letter-spacing:.04em;padding:.4rem .1rem .1rem;text-transform:uppercase">🗓️ Monthly — assign service week</div>
+    ${monthlyNeedsWeek.map(p => `<div class="npb-pool">
+      <div class="npb-pool-info">
+        <div class="npb-pool-name">${escHtml(p.customer_name || p.pool_id)}</div>
+        <div class="npb-pool-addr">${escHtml(p.address || '')}${p.city ? ', ' + escHtml(p.city) : ''}${p.day_of_week ? ' · ' + escHtml(p.day_of_week) : ''}</div>
+      </div>
+      <button class="npb-place-btn" style="background:var(--teal);color:#fff;border-color:var(--teal)" onclick="openPoolAction('${escHtml(p.pool_id)}','${escHtml(p.day_of_week || '')}','${escHtml(p.operator || '')}',false)">Set Week ▸</button>
+    </div>`).join('')}` : '';
 
   const pendingSection = pendingStartups.length ? `
     <div style="font-size:.72rem;font-weight:700;color:#7c3aed;letter-spacing:.04em;padding:.3rem .1rem .1rem;text-transform:uppercase">📌 Pending Startups</div>
@@ -737,7 +779,7 @@ function renderNewPoolsBanner() {
       <span class="npb-count">▼</span>
     </div>
     <div class="npb-body" id="npb-body">
-      ${pendingSection}${regularSection}
+      ${pendingSection}${monthlySection}${regularSection}
     </div>
   </div>`;
   if (!banner) {
@@ -856,7 +898,7 @@ function renderRoutePage() {
     const completionDate = _completionDateForDay_(d);
     const serverDone = _completionSetForDate_(completionDate);
     const doneCount = isAdmin()
-      ? realPools.filter((p, i) => serverDone.has(String(p.pool_id || String(i)))).length
+      ? realPools.filter((p, i) => _isPoolCompleted_(serverDone, p, i)).length
       : 0;
     const locked = d.locked;
     const _dp = parseDateStr_(d.date);
@@ -955,7 +997,7 @@ function renderDayCard(dayData) {
   // Pre-compute progress for initial render (exclude ghost startup day 2/3)
   const realPools = pools.filter(p => !p._startupDay || p._startupDay === 1);
   const totalCount = realPools.length;
-  const doneCount = realPools.filter((p, i) => doneSet.has(p.pool_id || String(i))).length;
+  const doneCount = realPools.filter((p, i) => _isPoolCompleted_(doneSet, p, i)).length;
   const progressPct = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
   const allDone = totalCount > 0 && doneCount === totalCount;
 
@@ -1011,12 +1053,9 @@ function renderDayCard(dayData) {
   html += '<div class="pool-stops">';
   pools.forEach((pool, idx) => {
     const pId = pool.pool_id || String(idx);
-    const done = doneSet.has(String(pId));
+    const done = _isPoolCompleted_(doneSet, pool, idx);
     const svcClass = getSvcClass_(pool.service);
     let svcLabel = getSvcLabel_(pool.service);
-    if (svcClass === 'svc-monthly' && pool.monthly_week) {
-      svcLabel += ' · ' + _monthlyWeekLabel_(pool.monthly_week);
-    }
     const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
     const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const _encAddr = encodeURIComponent(pool.address + ', ' + (pool.city || '') + ', TX');
@@ -1091,7 +1130,7 @@ function renderDayCard(dayData) {
         ${pool.notes ? `<div class="stop-notes" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;font-style:italic">📋 ${pool.notes}</div>` : ''}
 
         <div class="ps-btns" onclick="event.stopPropagation()">
-          <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name || '')}')">
+          <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name || '')}','${escHtml(pool._scheduled_visit_id || '')}','${escHtml(pool._visit_type || '')}')">
             📝 Log Service
           </button>
           <button class="ps-btn ps-sms" data-pool-id="${escHtml(pId)}" data-cust-name="${escHtml(pool.customer_name || '')}" onclick="headsUp(event,this)" title="Send heads up SMS">
@@ -1845,10 +1884,16 @@ function openPlacePool(poolId) {
 }
 
 function findPool_(poolId) {
-  if (!_routeData || !_routeData.days) return null;
-  for (const d of _routeData.days) {
-    const p = (d.pools || []).find(p => p.pool_id === poolId);
-    if (p) return p;
+  if (_routeData && _routeData.days) {
+    for (const d of _routeData.days) {
+      const p = (d.pools || []).find(p => p.pool_id === poolId);
+      if (p) return p;
+    }
+  }
+  // Fall back to the needs-routing list (e.g. monthly pools awaiting a week).
+  if (typeof _unassignedPools !== 'undefined' && _unassignedPools) {
+    const u = _unassignedPools.find(p => p.pool_id === poolId);
+    if (u) return u;
   }
   return null;
 }

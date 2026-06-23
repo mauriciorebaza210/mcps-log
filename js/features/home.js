@@ -857,8 +857,11 @@ async function loadTechHome() {
 
   const doneKey = _routeData ? `mcps_done_${_routeData.week_start}_${todayName}` : null;
   const doneSet = doneKey ? new Set(JSON.parse(localStorage.getItem(doneKey) || '[]')) : new Set();
-  const completedCount = pools.filter(p => doneSet.has(p.pool_id || '')).length;
-  const nextPool = pools.find(p => !doneSet.has(p.pool_id || ''));
+  const isDone = (p, i) => typeof _isPoolCompleted_ === 'function'
+    ? _isPoolCompleted_(doneSet, p, i)
+    : doneSet.has(p.pool_id || '');
+  const completedCount = pools.filter((p, i) => isDone(p, i)).length;
+  const nextPool = pools.find((p, i) => !isDone(p, i));
 
   const cacheKey = _routeData && _routeData.week_start;
   const weatherMap = cacheKey ? (_getWeatherCache(cacheKey) || {}) : {};
@@ -965,7 +968,9 @@ function _renderTechBody_(pools, doneSet, doneKey, nextPool) {
     ? `<div class="th-route-empty">No pools scheduled today.</div>`
     : pools.map((pool, idx) => {
         const pId = pool.pool_id || String(idx);
-        const done = doneSet.has(pId);
+        const done = typeof _isPoolCompleted_ === 'function'
+          ? _isPoolCompleted_(doneSet, pool, idx)
+          : doneSet.has(pId);
         const svcLbl = getSvcLabel_(pool.service);
         return `<div class="th-route-stop th-sched-stop${done ? ' ps-done' : ''}" id="th-stop-${idx}" onclick="selectTechStop(${idx})">
           <div class="th-route-num">${idx + 1}</div>
@@ -1028,7 +1033,7 @@ function _renderStopDetail_(pool) {
     ${pool.notes ? `<div class="th-drow"><span class="th-dlabel">Notes</span>
       <span class="th-dval">${escHtml(pool.notes)}</span></div>` : ''}
     <div class="th-act-row">
-      <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pool.pool_id||'')}','${escHtml(pool.customer_name||'')}')">📝 Log Service</button>
+      <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pool.pool_id||'')}','${escHtml(pool.customer_name||'')}','${escHtml(pool._scheduled_visit_id || '')}','${escHtml(pool._visit_type || '')}')">📝 Log Service</button>
       <button class="ps-btn ps-sms" data-pool-id="${escHtml(pool.pool_id||'')}" data-cust-name="${escHtml(pool.customer_name||'')}" onclick="headsUp(event,this)">📲 On My Way</button>
     </div>
     <div class="th-sec-hdr" style="margin-top:.75rem;">Last Water Reading
