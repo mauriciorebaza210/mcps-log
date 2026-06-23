@@ -162,6 +162,7 @@ function computeRouteData_(weekStart) {
           existing._is_scheduled_visit = true;
           existing._visit_type = v.visit_type;
           existing._scheduled_visit_id = v.scheduled_visit_id;
+          existing._scheduled_visit_status = v.status;
           if (!existing.startup_start_date) existing.startup_start_date = startupDateFromVisit_(v.scheduled_date, v.visit_type);
         } else {
           bucket.push({
@@ -179,7 +180,8 @@ function computeRouteData_(weekStart) {
             startup_start_date: startupDateFromVisit_(v.scheduled_date, v.visit_type),
             _is_scheduled_visit:  true,
             _visit_type:          v.visit_type,
-            _scheduled_visit_id:  v.scheduled_visit_id
+            _scheduled_visit_id:  v.scheduled_visit_id,
+            _scheduled_visit_status: v.status
           });
         }
       });
@@ -1093,7 +1095,10 @@ function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
     for (let i = 1; i < svData.length; i++) {
       const row = svData[i];
       const status = String(row[col('status')] || '').trim().toLowerCase();
-      if (status !== 'scheduled') continue;
+      // Keep completed visits in the dispatch feed so the schedule can still
+      // show the stop and mark it done. Only removed/cancelled outcomes should
+      // disappear from the route view.
+      if (status && status !== 'scheduled' && status !== 'completed') continue;
 
       let schedDate = row[col('scheduled_date')];
       if (schedDate instanceof Date) {

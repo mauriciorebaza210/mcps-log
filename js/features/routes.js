@@ -197,6 +197,7 @@ function _mergeScheduledVisits_(days, visits) {
         dayObj.pools[existingIdx]._is_scheduled_visit = true;
         dayObj.pools[existingIdx]._visit_type = v.visit_type;
         dayObj.pools[existingIdx]._scheduled_visit_id = v.scheduled_visit_id;
+        dayObj.pools[existingIdx]._scheduled_visit_status = v.status;
         // Fill startup_start_date if Routes row didn't have it
         if (!dayObj.pools[existingIdx].startup_start_date) {
           dayObj.pools[existingIdx].startup_start_date = _startupDateFromVisit_(v.scheduled_date, v.visit_type);
@@ -216,7 +217,8 @@ function _mergeScheduledVisits_(days, visits) {
           startup_start_date: _startupDateFromVisit_(v.scheduled_date, v.visit_type),
           _is_scheduled_visit:  true,
           _visit_type:          v.visit_type,
-          _scheduled_visit_id:  v.scheduled_visit_id
+          _scheduled_visit_id:  v.scheduled_visit_id,
+          _scheduled_visit_status: v.status
         });
       }
     }
