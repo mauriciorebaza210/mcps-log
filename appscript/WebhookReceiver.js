@@ -961,7 +961,7 @@ function doPost(e) {
     }
 
     if (payload.action === 'move_pool') {
-      const data = movePool(payload.token || "", payload.pool_id || "", payload.new_day || "", payload.new_operator || "", payload.pinned);
+      const data = movePool(payload.token || "", payload.pool_id || "", payload.new_day || "", payload.new_operator || "", payload.pinned, payload.monthly_week);
       // For startup pools: persist the start date so GAS can filter by week
       if (data.ok && payload.startup_start_date) {
         setStartupDate_(payload.pool_id || "", payload.startup_start_date);

@@ -1013,7 +1013,10 @@ function renderDayCard(dayData) {
     const pId = pool.pool_id || String(idx);
     const done = doneSet.has(String(pId));
     const svcClass = getSvcClass_(pool.service);
-    const svcLabel = getSvcLabel_(pool.service);
+    let svcLabel = getSvcLabel_(pool.service);
+    if (svcClass === 'svc-monthly' && pool.monthly_week) {
+      svcLabel += ' · ' + _monthlyWeekLabel_(pool.monthly_week);
+    }
     const isPinned = pool.pinned === true || pool.pinned === 'TRUE';
     const _isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const _encAddr = encodeURIComponent(pool.address + ', ' + (pool.city || '') + ', TX');
@@ -1579,6 +1582,10 @@ function getSvcClass_(svc) {
   if (s.includes('green') || s.includes('clean')) return 'svc-gtc';
   return 'svc-other';
 }
+function _monthlyWeekLabel_(mw) {
+  const m = { '1': '1st', '2': '2nd', '3': '3rd', '4': '4th', 'last': 'Last' };
+  return m[String(mw).trim().toLowerCase()] || '1st';
+}
 function getSvcLabel_(svc) {
   const s = (svc || '').toLowerCase();
   if (s.includes('weekly full')) return 'Weekly';
@@ -1611,7 +1618,10 @@ function openPoolAction(poolId, day, operator, pinned) {
     }
   }
 
-  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, scope: 'permanent', startup_start_date: startupStartDate };
+  const isMonthly = !!(pool && (pool.service || '').toLowerCase().includes('monthly'));
+  const monthlyWeek = (pool && pool.monthly_week) ? String(pool.monthly_week).trim().toLowerCase() : '1';
+
+  _pasState = { pool_id: poolId, day, operator, pinned, newDay: day, newOp: operator, newPinned: pinned, isStartup, isMonthly, monthlyWeek: monthlyWeek || '1', scope: 'permanent', startup_start_date: startupStartDate };
   // Fill title
   document.getElementById('pas-title').textContent = pool ? pool.customer_name : poolId;
   document.getElementById('pas-sub').textContent = pool ? `${pool.address}, ${pool.city} · ${pool.service}` : '';
@@ -1625,6 +1635,17 @@ function openPoolAction(poolId, day, operator, pinned) {
   dayGrid.innerHTML = ALL_DAYS.map(d =>
     `<button class="pas-day-btn${d === day ? ' active' : ''}" onclick="pasSelectDay(this,'${d}')">${d.slice(0, 3)}</button>`
   ).join('');
+  // Week-of-month selector (Monthly Full Service only)
+  const monthlySection = document.getElementById('pas-monthly-section');
+  if (monthlySection) {
+    monthlySection.style.display = isMonthly ? 'block' : 'none';
+    if (isMonthly) {
+      const opts = [['1', '1st'], ['2', '2nd'], ['3', '3rd'], ['4', '4th'], ['last', 'Last']];
+      document.getElementById('pas-monthly-grid').innerHTML = opts.map(([val, lbl]) =>
+        `<button class="pas-day-btn${val === _pasState.monthlyWeek ? ' active' : ''}" onclick="pasSelectMonthlyWeek(this,'${val}')">${lbl}</button>`
+      ).join('');
+    }
+  }
   // Operator select
   const opSel = document.getElementById('pas-op-select');
   const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
@@ -1650,6 +1671,8 @@ function closePoolAction() {
   _updateStartupSpanPreview_();
   const startupActionsEl = document.getElementById('pas-startup-actions');
   if (startupActionsEl) startupActionsEl.style.display = 'none';
+  const monthlySectionEl = document.getElementById('pas-monthly-section');
+  if (monthlySectionEl) monthlySectionEl.style.display = 'none';
   // Reset recurring picker
   const convertBtn = document.getElementById('pas-convert-btn');
   const picker = document.getElementById('pas-convert-day-picker');
@@ -1669,9 +1692,16 @@ function closePoolAction() {
 }
 
 function pasSelectDay(btn, day) {
-  document.querySelectorAll('.pas-day-btn').forEach(b => b.classList.remove('active'));
+  // Only clear active state within the day grid (the monthly grid reuses the same class)
+  document.querySelectorAll('#pas-day-grid .pas-day-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (_pasState) { _pasState.newDay = day; _updateStartupSpanPreview_(); }
+}
+
+function pasSelectMonthlyWeek(btn, week) {
+  document.querySelectorAll('#pas-monthly-grid .pas-day-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (_pasState) _pasState.monthlyWeek = week;
 }
 
 function togglePasPin() {
@@ -1727,6 +1757,8 @@ function applyPoolAction() {
       new_operator: _pasState.newOp,
       pinned: _pasState.newPinned
     };
+    // Monthly Full Service: persist which week-of-month it runs
+    if (_pasState.isMonthly) payload.monthly_week = _pasState.monthlyWeek || '1';
     // For startup permanent moves, send the start date so GAS can filter by week
     if (_pasState.isStartup) {
       const startupDate = _pasState.startup_start_date || _dateForDay_(_pasState.newDay);

@@ -112,6 +112,15 @@ function computeRouteData_(weekStart) {
     const effectiveDay = (weekOverride.day && dayPools[weekOverride.day]) ? weekOverride.day : day;
     const effectiveOperator = weekOverride.operator || opRowVal;
 
+    // Monthly Full Service pools recur on a single weekday-of-the-month
+    // (1st/2nd/3rd/4th/last <weekday>). Skip weeks that don't match the pattern.
+    const svcVal = String(row[col("service")] || "");
+    if (svcVal.toLowerCase().includes("monthly")) {
+      const mwIdx = col("monthly_week");
+      const monthlyWeek = mwIdx !== -1 ? row[mwIdx] : "";
+      if (!monthlyMatchesWeek_(effectiveDay, monthlyWeek, weekStart)) continue;
+    }
+
     const sdRaw = col("startup_start_date") !== -1 ? row[col("startup_start_date")] : "";
     dayPools[effectiveDay].push({
       pool_id:            poolId,
@@ -124,6 +133,7 @@ function computeRouteData_(weekStart) {
       lng:                row[col("lng")],
       operator:           effectiveOperator,
       pinned:             String(row[col("pinned")] || "").toUpperCase() === "TRUE",
+      monthly_week:       col("monthly_week") !== -1 ? String(row[col("monthly_week")] || "").trim() : "",
       week_override:      effectiveDay !== day,
       gate_code:          col("gate_code") !== -1 ? String(row[col("gate_code")] || "").trim() : "",
       startup_start_date: sdRaw instanceof Date
@@ -921,6 +931,31 @@ function getDayDate_(dayName, weekStart) {
   const [y, m, d] = ws.split("-").map(Number);
   const base = new Date(y, m - 1, d + idx);
   return Utilities.formatDate(base, RD_TZ, "yyyy-MM-dd");
+}
+
+// ─── Monthly recurrence (nth weekday of month) ────────────────────────────────
+// Returns true if the given weekday, in the requested week, is the configured
+// occurrence of that weekday within its month.
+//   monthlyWeek: "1" | "2" | "3" | "4" | "last"  (blank → "1", first occurrence)
+function monthlyMatchesWeek_(dayOfWeek, monthlyWeek, weekStart) {
+  const iso = getDayDate_(dayOfWeek, weekStart);
+  if (!iso) return false;
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+
+  // Which occurrence of this weekday within the month (1-5)
+  const occurrence = Math.ceil(date.getDate() / 7);
+  // Is this the last such weekday? (next week's same weekday falls in a new month)
+  const next = new Date(y, m - 1, d + 7);
+  const isLast = next.getMonth() !== date.getMonth();
+
+  const want = String(monthlyWeek || "").trim().toLowerCase();
+  if (want === "last" || want === "5" || want === "l") return isLast;
+  if (want === "1" || want === "2" || want === "3" || want === "4") {
+    return occurrence === Number(want);
+  }
+  // Blank / unrecognized → default to first occurrence
+  return occurrence === 1;
 }
 
 

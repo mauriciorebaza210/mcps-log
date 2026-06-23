@@ -382,7 +382,7 @@ function gn(t){const el=document.querySelector('[name="'+t+'"]');if(!el||!el.val
 function s2g(v){const s=String(v||'').toLowerCase();if(s.includes('large')||s.includes('>20'))return SG.large;if(s.includes('medium')||s.includes('15,000'))return SG.medium;return SG.small;}
 
 function runRecs(){
-  const fc=gn(TF.FC),ph=gn(TF.PH),ta=gn(TF.TA),ch=gn(TF.CH);
+  const fc=gn(TF.FC),ph=gn(TF.PH),ta=gn(TF.TA),ch=gn(TF.CH),salt=gn('Salt Level');
   const pe=document.querySelector('[name="pool_id"]');
   const szEl=document.getElementById('svc-size');
   const gal=szEl?SG[szEl.value]||SG.small:s2g(pe?pe.value:'');
@@ -390,8 +390,8 @@ function runRecs(){
   const isG=!!document.querySelector('.cpill.active');
   const isS=SM.indexOf(new Date().getMonth()+1)!==-1;
   const rb=document.getElementById('rec-box');if(!rb)return;
-  if(fc===null&&ph===null&&ta===null&&ch===null&&!isG){rb.style.display='none';return;}
-  const recs=buildRecs(fc,ph,ta,ch,gal,mat,isG);
+  if(fc===null&&ph===null&&ta===null&&ch===null&&salt===null&&!isG){rb.style.display='none';return;}
+  const recs=buildRecs(fc,ph,ta,ch,gal,mat,isG,salt);
   const vb=document.getElementById('rb-vol');if(vb)vb.textContent=(gal/1000).toFixed(0)+'K gal';
   const fe=document.getElementById('rb-flags');if(fe)fe.innerHTML=(isS?'<span class="rf summer">Summer +50% Cl</span>':'')+(isG?'<span class="rf green">Algae Protocol</span>':'')+(mat==='fiberglass'?'<span class="rf fiber">Fiberglass</span>':'')+(mat==='plaster'?'<span class="rf plstr">Plaster</span>':'');
   if(!recs.length){rb.style.display='none';} else {
@@ -484,7 +484,30 @@ function handlePoolChange() {
 function roundQ(v){return v===0?0:Math.round(v*4)/4;}  // nearest 0.25 gal (liquids)
 function roundH(v){return v===0?0:Math.round(v*2)/2;}  // nearest 0.5 lbs (solids)
 
-function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
+// ── Smart scoop conversion ──────────────────────────────────────────────────
+// Lbs in one full smart scoop, per chemical. Used to show techs how many
+// scoops a recommended lb amount equals so they can measure without a scale.
+const SCOOP_LB = {
+  'sodium bicarb':3.9, 'alkalinity increaser':3.9,
+  'salt':3.8,
+  'calcium chloride':3.0, 'calcium hardness increaser':3.0,
+  'cal hypo':2.9,
+  'cyanuric acid':2.4, 'stabilizer':2.4,
+  'diatomaceous earth':1.0
+};
+function scoopHint(name, lbs){
+  if(!(lbs>0)) return '';
+  const n=(name||'').toLowerCase();
+  let w=null;
+  for(const k in SCOOP_LB){ if(n.indexOf(k)!==-1){ w=SCOOP_LB[k]; break; } }
+  if(!w) return '';
+  const scoops=Math.round((lbs/w)*4)/4;  // nearest 1/4 scoop
+  if(scoops<=0) return '';
+  return ' ('+scoops+' smart scoop'+(scoops===1?'':'s')+')';
+}
+
+const SALT_TARGET = 3200;  // ppm — target for saltwater chlorine generators (per salt chart)
+function buildRecs(fc, ph, ta, ch, gal, mat, isG, salt) {
   const res = [], isS = SM.indexOf(new Date().getMonth()+1) !== -1, g = gal/10000;
   const szEl = document.getElementById('svc-size');
   const poolSize = szEl ? szEl.value : 'small';
@@ -587,16 +610,29 @@ function buildRecs(fc, ph, ta, ch, gal, mat, isG) {
   }
 
   // ── Rule 3 — Alkalinity ────────────────────────────────────────────────────
-  if (ta !== null && ta < 80 && !isG)
-    res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:roundH(1.4*g*((100-ta)/10)).toFixed(1)+' lbs',reason:'Raise TA to 100 ppm (target 80–120 ppm)'});
+  if (ta !== null && ta < 80 && !isG) {
+    const lbs=roundH(1.4*g*((100-ta)/10));
+    res.push({name:'Alkalinity Increaser (Sodium Bicarb)',status:'warning',amt:lbs.toFixed(1)+' lbs'+scoopHint('sodium bicarb',lbs),reason:'Raise TA to 100 ppm (target 80–120 ppm)'});
+  }
 
   // ── Rule 4 — Calcium Hardness ─────────────────────────────────────────────
   if (ch !== null && !isG) {
-    if (ch < 250) res.push({name:'Calcium Hardness Increaser',status:'warning',amt:roundH(1.2*g*((300-ch)/10)).toFixed(1)+' lbs',reason:'Raise CH to 300 ppm (target 250–350 ppm).'+(mat==='plaster'?' Keep CH toward upper range for plaster surfaces.':'')});
-    if (ch > 450) res.push({name:'Calcium (Very High)',status:'warning',amt:'Partial drain',reason:'CH above 450 — consider partial drain. Common in SA hard water.'});
+    if (ch < 250) {
+      const lbs=roundH(1.2*g*((280-ch)/10));
+      res.push({name:'Calcium Hardness Increaser',status:'warning',amt:lbs.toFixed(1)+' lbs'+scoopHint('calcium hardness increaser',lbs),reason:'Raise CH to 280 ppm (target 250–350 ppm).'+(mat==='plaster'?' Keep CH toward upper range for plaster surfaces.':'')});
+    }
   }
 
-  // ── Rule 5 — Algae Protocol banner (always first) ─────────────────────────
+  // ── Rule 5 — Salt (saltwater pools — target 3200 ppm, per salt chart) ─────
+  if (salt !== null && salt < SALT_TARGET) {
+    // lbs = gallons × (target − current) ppm × 8.34 / 1,000,000
+    const lbs = Math.round(gal * (SALT_TARGET - salt) * 8.34 / 1000000);
+    if (lbs > 0) {
+      res.push({name:'Salt',status:'warning',amt:lbs+' lbs'+scoopHint('salt',lbs),reason:'Raise salt from '+salt+' to '+SALT_TARGET+' ppm for the chlorine generator.'});
+    }
+  }
+
+  // ── Rule 6 — Algae Protocol banner (always first) ─────────────────────────
   if (isG) res.unshift({name:'ALGAE PROTOCOL',status:'bad',amt:'Shock first',reason:'Brush walls & floor. Double-dose chlorine. Wait 24-48 hrs before adjusting pH, TA, or CH.'});
 
   return res;
