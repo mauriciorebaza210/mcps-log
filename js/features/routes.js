@@ -28,13 +28,26 @@ function _normCompletionKey_(value) {
   return String(value || '').trim();
 }
 
+function _mcpsCompletionKey_(value) {
+  const m = String(value || '').match(/(MCPS-\d{4,})/i);
+  return m ? m[1].toUpperCase() : '';
+}
+
+function _completionKeyVariants_(value) {
+  const raw = _normCompletionKey_(value);
+  const keys = raw ? [raw] : [];
+  const mcps = _mcpsCompletionKey_(raw);
+  if (mcps && !keys.includes(mcps)) keys.push(mcps);
+  return keys;
+}
+
 function _completionKeysForPool_(pool, fallbackIdx) {
   const keys = [
     pool && pool._scheduled_visit_id,
     pool && pool._service_visit_id,
     pool && pool.pool_id,
     fallbackIdx !== undefined ? String(fallbackIdx) : ''
-  ].map(_normCompletionKey_).filter(Boolean);
+  ].flatMap(_completionKeyVariants_).filter(Boolean);
   return Array.from(new Set(keys));
 }
 
@@ -46,11 +59,68 @@ function _completionSetForDate_(dateStr) {
   const out = new Set();
   _completionsForDate_(dateStr).forEach(c => {
     [c.service_key, c.scheduled_visit_id, c.visit_id, c.pool_id].forEach(v => {
-      const key = _normCompletionKey_(v);
-      if (key) out.add(key);
+      _completionKeyVariants_(v).forEach(key => out.add(key));
     });
   });
   return out;
+}
+
+function _localDoneKeyForDay_(dayData) {
+  if (!_routeData || !dayData) return '';
+  return `mcps_done_${_routeData.week_start}_${dayData.day}`;
+}
+
+function _findRouteDayForCompletion_(keys) {
+  if (!_routeData || !_routeData.days || !keys || !keys.length) return null;
+  const wanted = new Set(keys);
+  const active = (_routeData.days || []).find(d => d.day === _activeDay);
+  if (active && (active.pools || []).some((p, i) => _completionKeysForPool_(p, i).some(k => wanted.has(k)))) return active;
+  return (_routeData.days || []).find(d =>
+    (d.pools || []).some((p, i) => _completionKeysForPool_(p, i).some(k => wanted.has(k)))
+  ) || null;
+}
+
+function _addLocalRouteCompletion_(keys, dayData) {
+  if (!keys || !keys.length || !dayData) return false;
+  const doneKey = _localDoneKeyForDay_(dayData);
+  if (!doneKey) return false;
+  try {
+    const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
+    let changed = false;
+    keys.forEach(k => {
+      if (k && !done.includes(k)) {
+        done.push(k);
+        changed = true;
+      }
+    });
+    if (changed) localStorage.setItem(doneKey, JSON.stringify(done));
+    return changed;
+  } catch(e) {
+    return false;
+  }
+}
+
+function markSvcSubmittedInRoute_(payload, meta) {
+  payload = payload || {};
+  meta = meta || {};
+  const poolIdKey = Object.keys(payload).find(k => k.trim().toLowerCase() === 'pool_id');
+  const keys = [
+    poolIdKey ? payload[poolIdKey] : '',
+    meta.pool_id,
+    meta.scheduled_visit_id,
+    payload['_scheduled_visit_id'],
+    payload['_service_visit_id']
+  ].flatMap(_completionKeyVariants_).filter(Boolean);
+  const uniqueKeys = Array.from(new Set(keys));
+  const dayData = _findRouteDayForCompletion_(uniqueKeys) || ((_routeData && _routeData.days || []).find(d => d.day === _activeDay));
+  const changed = _addLocalRouteCompletion_(uniqueKeys, dayData);
+  if (dayData) _activeDay = dayData.day;
+  return { changed, day: dayData ? dayData.day : _activeDay, keys: uniqueKeys };
+}
+
+function returnToScheduleAfterSubmit() {
+  window._returningFromSvcSubmit = true;
+  navigateTo('live_map');
 }
 
 function _loadJobCompletionsForDate_(dateStr) {
@@ -100,6 +170,20 @@ function _flashRouteRefresh_(msg) {
 
 function loadRoutes(opOverride) {
   const op = opOverride || _activeOp;
+
+  // ── Submit return: paint the known same-day route immediately ──────────────
+  // Route optimization should not visibly reshuffle after a log submit; it only
+  // needs a fresh server pass when the set of stops changes.
+  if (window._returningFromSvcSubmit && _routeData && _routeData.days && _routeData.days.length) {
+    window._returningFromSvcSubmit = false;
+    document.getElementById('route-loading').style.display = 'none';
+    document.getElementById('route-content').style.display = 'block';
+    _setRouteCache(op, _weekOffset, _routeData);
+    renderRoutePage();
+    _startRouteCompletionPolling_();
+    setTimeout(() => loadRoutes(op), 250);
+    return;
+  }
 
   // ── Cache hit: render immediately, revalidate in background ──
   const cached = _getRouteCache(op, _weekOffset);

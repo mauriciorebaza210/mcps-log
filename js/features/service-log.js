@@ -273,6 +273,7 @@ function goToSvcLog(poolId, customerName, scheduledVisitId, visitType) {
   window._pendingSvcPoolId = poolId;
   window._prefillCustomer = customerName || '';
   window._pendingSvcMeta = {
+    pool_id: poolId || '',
     scheduled_visit_id: scheduledVisitId || '',
     visit_type: visitType || ''
   };
@@ -843,12 +844,20 @@ function _onSvcSuccess_(payload, photoCount) {
   const poolIdKey = Object.keys(payload).find(k => k.trim().toLowerCase() === 'pool_id');
   const pId = poolIdKey ? payload[poolIdKey] : null;
   const scheduledVisitId = payload['_scheduled_visit_id'] || payload['_service_visit_id'] || '';
+  const routeMeta = Object.assign({}, window._pendingSvcMeta || {});
+  if (typeof markSvcSubmittedInRoute_ === 'function') {
+    markSvcSubmittedInRoute_(payload, routeMeta);
+  }
   if (pId) {
     localStorage.removeItem('svc_draft_' + pId);
     if (_activeDay && _routeData && _routeData.week_start) {
       const doneKey = `mcps_done_${_routeData.week_start}_${_activeDay}`;
       const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
       if (!done.includes(pId)) { done.push(pId); localStorage.setItem(doneKey, JSON.stringify(done)); }
+      if (routeMeta.pool_id && !done.includes(routeMeta.pool_id)) {
+        done.push(routeMeta.pool_id);
+        localStorage.setItem(doneKey, JSON.stringify(done));
+      }
       if (scheduledVisitId && !done.includes(scheduledVisitId)) {
         done.push(scheduledVisitId);
         localStorage.setItem(doneKey, JSON.stringify(done));
@@ -864,7 +873,8 @@ function _onSvcSuccess_(payload, photoCount) {
     + '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'
     + '<p style="color:#64748b;margin-bottom:.35rem">Log written, inventory deducted, email sent.</p>'
     + (photoCount ? '<p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">📸 ' + photoCount + ' photo' + (photoCount > 1 ? 's' : '') + ' saved to Drive.</p>' : '<br>')
-    + '<button onclick="resetSvc()" style="padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'
+    + '<button onclick="returnToScheduleAfterSubmit()" style="display:block;width:100%;padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-bottom:.75rem">Back to Schedule</button>'
+    + '<button onclick="resetSvc()" style="display:block;width:100%;padding:.85rem 1.75rem;background:transparent;color:#0d4d44;border:2px solid #0d4d44;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'
     + '</div>';
 }
 // ── Photo handlers ──────────────────────────────────────────────────────────
