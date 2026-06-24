@@ -1740,7 +1740,11 @@ function _finEmpComputeWithholding(emp, gross, periodStart, payDate) {
     const prior = (_finEmpPaychecks || []).filter(p => refOf(p).startsWith(yr) && refOf(p) < ref);
     const ytdGrossPrior = prior.reduce((s, p) => s + (p.gross || 0), 0);
     const ytdFedPrior   = prior.reduce((s, p) => s + (p.fed || 0), 0);
-    const elapsed = _finWeeksElapsedInYear(ref); // payroll periods elapsed through the pay date
+    const elapsedPeriodStart = periodStart || (() => {
+      const [y, m, d] = ref.split('-').map(Number);
+      return _finFmtYmd(_finThursdayOf(new Date(y, m - 1, d)));
+    })();
+    const elapsed = _finWeeksElapsedInYear(elapsedPeriodStart); // payroll periods elapsed through the Thu period start
     return _calcW2WithholdingCumulative(gross, w4, elapsed, ytdGrossPrior, ytdFedPrior, ppy, prior.length);
   }
   return _calcW2WithholdingW4(gross, w4, ppy);

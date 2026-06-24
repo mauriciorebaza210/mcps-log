@@ -677,6 +677,145 @@ function DRYRUN_serviceLogChemicals_NoEmail() {
   return report;
 }
 
+function DRYRUN_serviceLogEmailPreview_NoSend(payloadOverride) {
+  const report = buildServiceLogEmailSubmissionDryRun_({
+    data: payloadOverride || null,
+    photos: []
+  }, { ok: true, user: { name: 'DRY RUN - NO SEND', username: 'dryrun' } });
+  Logger.log(JSON.stringify({
+    ok: report.ok,
+    mode: report.mode,
+    to: report.email && report.email.to,
+    subject: report.email && report.email.subject,
+    chemicals: report.simulated_submission && report.simulated_submission.detected_chemicals,
+    writes_performed: report.writes_performed,
+    email_sent: report.email_sent
+  }, null, 2));
+  return report;
+}
+
+function buildServiceLogEmailSubmissionDryRun_(payload, auth) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+  const chemSheet = ss.getSheetByName('Chem_Costs');
+  if (!rawSheet) throw new Error('Missing Chemical_Usage_Log');
+  if (!chemSheet) throw new Error('Missing Chem_Costs');
+
+  const chemNames = chemSheet.getLastRow() >= 2
+    ? chemSheet.getRange(2, 1, chemSheet.getLastRow() - 1, 1).getValues()
+        .flat().map(function(v) { return String(v || '').trim(); }).filter(Boolean)
+    : [];
+
+  const inputData = payload && payload.data && typeof payload.data === 'object'
+    ? payload.data
+    : buildDryRunServicePayload_(chemNames);
+  const simulatedData = Object.assign({}, inputData);
+
+  const userObj = (auth && auth.user) || auth || {};
+  const portalUserName = String(userObj.name || userObj.display_name || userObj.username || '').trim();
+  if (portalUserName) simulatedData.Technician = portalUserName;
+  normalizeChemicalPayloadKeys_(simulatedData);
+  if (!simulatedData._chemical_fields) {
+    simulatedData._chemical_fields = JSON.stringify(getStaticChemicalFieldsForDryRun_(chemNames));
+  }
+
+  const rawHeaders = rawSheet.getLastColumn() > 0
+    ? rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); })
+    : [];
+
+  const simulatedHeaders = rawHeaders.slice();
+  if (simulatedHeaders.indexOf('Timestamp') === -1) simulatedHeaders.unshift('Timestamp');
+  Object.keys(simulatedData).forEach(function(k) {
+    if (k && simulatedHeaders.indexOf(k) === -1) simulatedHeaders.push(k);
+  });
+  if (Array.isArray(payload && payload.photos) && payload.photos.length && simulatedHeaders.indexOf('_photo_urls') === -1) {
+    simulatedHeaders.push('_photo_urls');
+  }
+
+  const now = new Date();
+  const simulatedPhotoUrls = Array.isArray(payload && payload.photoUrls) ? payload.photoUrls : [];
+  const simulatedRow = simulatedHeaders.map(function(h) {
+    if (h === 'Timestamp') return now;
+    if (h === '_photo_urls') return simulatedPhotoUrls.length ? JSON.stringify(simulatedPhotoUrls) : '';
+    const v = simulatedData[h];
+    if (v === undefined || v === null) return '';
+    return Array.isArray(v) ? v.join(', ') : v;
+  });
+
+  const detectedChemicals = collectChemicalsFromRowForDryRun_(simulatedRow, simulatedHeaders);
+  const poolId = typeof extractPoolId_ === 'function'
+    ? extractPoolId_(String(simulatedData.pool_id || ''))
+    : String(simulatedData.pool_id || '');
+
+  let dedupWouldBlock = false;
+  let dedupReason = '';
+  if (rawSheet.getLastRow() > 1) {
+    const poolColIdx = rawHeaders.indexOf('pool_id');
+    const lastData = rawSheet.getRange(rawSheet.getLastRow(), 1, 1, rawSheet.getLastColumn()).getValues()[0];
+    const lastTs = new Date(lastData[0]);
+    const lastPool = poolColIdx !== -1 ? String(lastData[poolColIdx] || '') : '';
+    const incomingPool = String(simulatedData.pool_id || '');
+    if (lastPool === incomingPool && (new Date() - lastTs) < 300000) {
+      dedupWouldBlock = true;
+      dedupReason = 'Live submit_form would return ok:true without appending a row because the same pool was submitted within 5 minutes.';
+    }
+  }
+
+  let emailPayload = null;
+  let emailError = '';
+  if (!poolId || poolId === 'OTHER / POOL NOT LISTED' || poolId === 'Other / Pool not listed') {
+    emailError = 'Email would be skipped because pool_id is not a matched customer.';
+  } else {
+    try {
+      emailPayload = buildVisitReportPayload_(simulatedRow, simulatedHeaders, poolId, simulatedPhotoUrls);
+      if (!emailPayload) emailError = 'Email payload could not be built, likely because no client email was found for this pool.';
+    } catch (err) {
+      emailError = String(err);
+    }
+  }
+
+  const rowObject = {};
+  simulatedHeaders.forEach(function(h, i) {
+    if (h) rowObject[h] = simulatedRow[i] instanceof Date ? simulatedRow[i].toISOString() : simulatedRow[i];
+  });
+
+  return {
+    ok: !!emailPayload,
+    mode: 'DRY_RUN_SUBMIT_FORM_EMAIL_PREVIEW_NO_WRITES_NO_SEND',
+    writes_performed: 0,
+    email_sent: false,
+    zapier_called: false,
+    inventory_deducted: false,
+    usage_priced_created: false,
+    scheduled_visit_completed: false,
+    photos_saved_to_drive: false,
+    simulated_submission: {
+      pool_id_input: simulatedData.pool_id || '',
+      pool_id_resolved: poolId,
+      technician: simulatedData.Technician || '',
+      dedup_would_block_live_submit: dedupWouldBlock,
+      dedup_reason: dedupReason,
+      payload_keys: Object.keys(simulatedData),
+      headers_after_submit_simulation: simulatedHeaders,
+      detected_chemicals: detectedChemicals,
+      raw_row: rowObject
+    },
+    email: emailPayload ? {
+      to: emailPayload.to,
+      bcc: emailPayload.bcc,
+      from: emailPayload.from,
+      from_name: emailPayload.from_name,
+      subject: emailPayload.subject,
+      clientName: emailPayload.clientName,
+      pool_id: emailPayload.pool_id,
+      html_body: emailPayload.html_body,
+      text_body: emailPayload.text_body
+    } : null,
+    error: emailError || undefined,
+    note: 'This emulates submit_form row construction and the delayed sendVisitReportEmail payload build. It does not append a row, call Zapier, save photos, deduct inventory, snapshot Usage_Priced, or update schedules.'
+  };
+}
+
 function buildServiceLogChemicalDryRunReport_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
@@ -871,9 +1010,13 @@ function collectChemicalsFromRowForDryRun_(row, headers) {
   ]);
   const unitMap = typeof getChemicalUnitMap_ === 'function' ? getChemicalUnitMap_() : {};
   const fallback = typeof VR_UNIT_FALLBACK !== 'undefined' ? VR_UNIT_FALLBACK : {};
+  const chemicalFieldSet = typeof getSubmittedChemicalFieldSet_ === 'function'
+    ? getSubmittedChemicalFieldSet_(row, headers)
+    : null;
   const chemicals = [];
   headers.forEach(function(h, i) {
-    if (!h || nonChem.has(h) || h.endsWith(' Unit Cost (Snapshot)')) return;
+    if (!h || h.endsWith(' Unit Cost (Snapshot)')) return;
+    if (chemicalFieldSet ? !chemicalFieldSet.has(h) : nonChem.has(h)) return;
     const qty = Number(row[i]);
     if (!isFinite(qty) || qty <= 0) return;
     chemicals.push({ name: h, qty: qty, unit: unitMap[h] || fallback[h] || '' });
@@ -1937,6 +2080,17 @@ function doPost(e) {
       const auth = validateToken(payload.token);
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
       return jsonResponse_({ ok: true, data: getPoolContext_(payload.pool_id || '') });
+    }
+
+    if (payload.action === 'dry_run_submit_form_email') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!canAccess(auth, 'service_log')) return jsonResponse_({ ok: false, error: 'Access denied.' });
+      try {
+        return jsonResponse_(buildServiceLogEmailSubmissionDryRun_(payload, auth));
+      } catch (err) {
+        return jsonResponse_({ ok: false, error: String(err), email_sent: false, writes_performed: 0 });
+      }
     }
 
     if (payload.action === 'submit_form') {
