@@ -39,6 +39,12 @@ const FIN_PERIODS = [
 
 // Returns { start: Date, end: Date } for the given period key, or null for 'all'
 function _finGetDateRange(period) {
+  return _finGetDateRangeBy(period, _finCustomFrom, _finCustomTo);
+}
+
+// Parameterized variant — lets callers (e.g. the W2 employee section) supply their own
+// custom-date state instead of mutating the shared Payouts/Profit globals.
+function _finGetDateRangeBy(period, customFrom, customTo) {
   const now   = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   switch (period) {
@@ -66,8 +72,8 @@ function _finGetDateRange(period) {
     case 'ytd':
       return { start: new Date(now.getFullYear(), 0, 1), end: today };
     case 'custom': {
-      const s = _finCustomFrom ? new Date(_finCustomFrom + 'T00:00:00') : new Date(now.getFullYear(), now.getMonth(), 1);
-      const e = _finCustomTo   ? new Date(_finCustomTo   + 'T00:00:00') : today;
+      const s = customFrom ? new Date(customFrom + 'T00:00:00') : new Date(now.getFullYear(), now.getMonth(), 1);
+      const e = customTo   ? new Date(customTo   + 'T00:00:00') : today;
       return { start: s, end: e };
     }
     default:
@@ -96,11 +102,19 @@ function _finFmtCurrency(n) {
 }
 
 function _finFilterRows(rows) {
-  const range = _finGetDateRange(_finPeriod);
+  return _finFilterRowsBy(rows, _finPeriod, _finCustomFrom, _finCustomTo);
+}
+
+// Parameterized variant — filters by an explicit period/custom range and an optional
+// date-field accessor (defaults to `r.timestamp`; the employee feed uses `r.date`).
+function _finFilterRowsBy(rows, period, from, to, dateField) {
+  const range = _finGetDateRangeBy(period, from, to);
   if (!range) return rows;
   const endMs = range.end.getTime() + 86399999; // inclusive end-of-day
+  const field = dateField || 'timestamp';
   return rows.filter(r => {
-    const d = new Date(r.timestamp);
+    const raw = r[field];
+    const d = (field === 'date' && typeof raw === 'string') ? new Date(raw + 'T12:00:00') : new Date(raw);
     return !isNaN(d) && d >= range.start && d.getTime() <= endMs;
   });
 }
@@ -1517,29 +1531,252 @@ function _calcW2Withholding(grossMonthly) {
   };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// W2 EMPLOYEE PAYROLL — per-pool pay + persistent approvals + full-W4 withholding
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _finEmpEmployees   = [];   // [{ username, name, pay_rate, w4 }]
+let _finEmpSelected    = '';   // username
+let _finEmpCompletions = [];   // rows from get_employee_completions (review range)
+let _finEmpApprovals   = {};   // { payroll_uid: true }
+let _finEmpPeriod      = 'this_month'; // review-range period (independent of _finPeriod)
+let _finEmpCustomFrom  = '';
+let _finEmpCustomTo     = '';
+let _finEmpPeriodStart = '';   // 'YYYY-MM-DD' Thursday — start of the weekly (Thu–Wed) pay period
+let _finEmpPayCompletions = []; // completions for the pay period (independent of review range)
+let _finEmpPaychecks   = [];   // recorded paychecks for the selected employee (history)
+let _finEmpPayDate     = '';   // inline "Pay date" input ('' = default to today) — drives cumulative tax year
+let _finEmpVerifiedDate = '';  // inline "Date verified" input ('' = default to today)
+let _finDetailPhotos   = [];   // high-res photo URLs for the open submission-detail modal
+let _finEmpLoading     = false;
+let _finEmpPayLoading  = false;
+let _prlActiveW4       = null; // w4 object for the currently open log-payment modal
+
+// ── IRS Pub. 15-T (2026) Worksheet 1A — Percentage Method for Automated Payroll Systems ──
+// 2026 Percentage Method Tables (Pub 15-T p.12). The standard deduction is NOT baked into
+// these brackets — it is applied via Worksheet 1A line 1g ($12,900 MFJ / $8,600 otherwise
+// when the Step 2 box is not checked). Two full schedule sets: STANDARD (Step 2 box not
+// checked) and STEP 2 CHECKBOX (box checked). Rows: { a: at-least/excess-over, c: base
+// amount, d: rate } from columns A, C, D of each table.
+const _PUB15T_2026 = {
+  standard: {
+    single: [
+      { a: 0,      c: 0,         d: 0    },
+      { a: 7500,   c: 0,         d: 0.10 },
+      { a: 19900,  c: 1240.00,   d: 0.12 },
+      { a: 57900,  c: 5800.00,   d: 0.22 },
+      { a: 113200, c: 17966.00,  d: 0.24 },
+      { a: 209275, c: 41024.00,  d: 0.32 },
+      { a: 263725, c: 58448.00,  d: 0.35 },
+      { a: 648100, c: 192979.25, d: 0.37 },
+    ],
+    mfj: [
+      { a: 0,      c: 0,         d: 0    },
+      { a: 19300,  c: 0,         d: 0.10 },
+      { a: 44100,  c: 2480.00,   d: 0.12 },
+      { a: 120100, c: 11600.00,  d: 0.22 },
+      { a: 230700, c: 35932.00,  d: 0.24 },
+      { a: 422850, c: 82048.00,  d: 0.32 },
+      { a: 531750, c: 116896.00, d: 0.35 },
+      { a: 788000, c: 206583.50, d: 0.37 },
+    ],
+    hoh: [
+      { a: 0,      c: 0,         d: 0    },
+      { a: 15550,  c: 0,         d: 0.10 },
+      { a: 33250,  c: 1770.00,   d: 0.12 },
+      { a: 83000,  c: 7740.00,   d: 0.22 },
+      { a: 121250, c: 16155.00,  d: 0.24 },
+      { a: 217300, c: 39207.00,  d: 0.32 },
+      { a: 271750, c: 56631.00,  d: 0.35 },
+      { a: 656150, c: 191171.00, d: 0.37 },
+    ],
+  },
+  step2: {
+    single: [
+      { a: 0,      c: 0,         d: 0    },
+      { a: 8050,   c: 0,         d: 0.10 },
+      { a: 14250,  c: 620.00,    d: 0.12 },
+      { a: 33250,  c: 2900.00,   d: 0.22 },
+      { a: 60900,  c: 8983.00,   d: 0.24 },
+      { a: 108938, c: 20512.00,  d: 0.32 },
+      { a: 136163, c: 29224.00,  d: 0.35 },
+      { a: 328350, c: 96489.63,  d: 0.37 },
+    ],
+    mfj: [
+      { a: 0,      c: 0,         d: 0    },
+      { a: 16100,  c: 0,         d: 0.10 },
+      { a: 28500,  c: 1240.00,   d: 0.12 },
+      { a: 66500,  c: 5800.00,   d: 0.22 },
+      { a: 121800, c: 17966.00,  d: 0.24 },
+      { a: 217875, c: 41024.00,  d: 0.32 },
+      { a: 272325, c: 58448.00,  d: 0.35 },
+      { a: 400450, c: 103291.75, d: 0.37 },
+    ],
+    hoh: [
+      { a: 0,      c: 0,         d: 0    },
+      { a: 12075,  c: 0,         d: 0.10 },
+      { a: 20925,  c: 885.00,    d: 0.12 },
+      { a: 45800,  c: 3870.00,   d: 0.22 },
+      { a: 64925,  c: 8077.50,   d: 0.24 },
+      { a: 112950, c: 19603.50,  d: 0.32 },
+      { a: 140175, c: 28315.50,  d: 0.35 },
+      { a: 332375, c: 95585.50,  d: 0.37 },
+    ],
+  },
+};
+
+// Compute federal withholding + FICA for one pay period via Pub 15-T (2026) Worksheet 1A.
+// grossPerPeriod: this paycheck's gross wages (line 1a). w4: stored 2020+ W-4 fields.
+function _calcW2WithholdingW4(grossPerPeriod, w4, periodsPerYear) {
+  const r = n => Math.round(n * 100) / 100;
+  w4 = w4 || {};
+  const p      = parseInt(periodsPerYear, 10) || parseInt(w4.pay_periods_per_year, 10) || 26; // 1b
+  const status = ['single', 'mfj', 'hoh'].indexOf(w4.filing_status) >= 0 ? w4.filing_status : 'single';
+  const checked = !!w4.multiple_jobs;
+  const gross  = parseFloat(grossPerPeriod) || 0; // 1a
+
+  // Step 1 — Adjusted Annual Wage Amount (lines 1c–1i)
+  const c1 = gross * p;                                            // 1c
+  const e1 = c1 + (parseFloat(w4.other_income) || 0);             // 1e = 1c + 1d (Step 4a)
+  const f1 = parseFloat(w4.deductions) || 0;                     // 1f = Step 4b
+  const g1 = checked ? 0 : (status === 'mfj' ? 12900 : 8600);    // 1g
+  const h1 = f1 + g1;                                             // 1h
+  const adjAnnual = Math.max(0, e1 - h1);                         // 1i
+
+  // Step 2 — Tentative Withholding Amount (lines 2a–2h)
+  const table = (checked ? _PUB15T_2026.step2 : _PUB15T_2026.standard)[status];
+  let row = table[0];
+  for (let i = table.length - 1; i >= 0; i--) {
+    if (adjAnnual >= table[i].a) { row = table[i]; break; }
+  }
+  const tentativeAnnual    = row.c + (adjAnnual - row.a) * row.d; // 2g
+  const perPeriodTentative = tentativeAnnual / p;                 // 2h
+
+  // Step 3 — tax credits (lines 3a–3c)
+  const step3PerPeriod = (parseFloat(w4.dependents_amt) || 0) / p; // 3b
+  const afterCredits   = Math.max(0, perPeriodTentative - step3PerPeriod); // 3c
+
+  // Step 4 — final amount to withhold (lines 4a–4b)
+  const fed = afterCredits + (parseFloat(w4.extra_withholding) || 0);
+
+  const ss  = gross * 0.062;
+  const med = gross * 0.0145;
+  return { fed: r(fed), ss: r(ss), med: r(med), net: r(gross - fed - ss - med), er_ss: r(ss), er_med: r(med) };
+}
+
+// Browser-console fixture test (no test runner exists). Run: _payrollWithholdingSelfTest()
+// Fixtures derived directly from the 2026 Pub 15-T Worksheet 1A tables (p.12).
+function _payrollWithholdingSelfTest() {
+  const approx = (a, b) => Math.abs(a - b) <= 1.0;
+  const cases = [
+    // STANDARD: Single $4,000/mo (12) → 1i=39,400 → 1,240+12%×19,500=3,580/yr → 298.33/period
+    { label: 'Standard Single $4000/mo',          gross: 4000, periods: 12, w4: { filing_status: 'single' }, expectFed: 298.33 },
+    // STEP 2 CHECKBOX: Single $4,000/mo → 1i=48,000 → 2,900+22%×14,750=6,145/yr → 512.08/period
+    { label: 'Step2 Single $4000/mo',             gross: 4000, periods: 12, w4: { filing_status: 'single', multiple_jobs: true }, expectFed: 512.08 },
+    // STEP 3 CREDIT: Single $4,000/mo + $2,000 dependents → 298.33 − 166.67 = 131.67
+    { label: 'Standard Single $4000/mo +2k dep',  gross: 4000, periods: 12, w4: { filing_status: 'single', dependents_amt: 2000 }, expectFed: 131.67 },
+    // STEP 4(c) EXTRA: MFJ $6,000 semimonthly (24) +$100 → 1i=131,100 → 14,020/yr → 584.17 +100 = 684.17
+    { label: 'MFJ $6000 semimo +$100 4(c)',       gross: 6000, periods: 24, w4: { filing_status: 'mfj', extra_withholding: 100 }, expectFed: 684.17 },
+  ];
+  let pass = 0;
+  cases.forEach(c => {
+    const got = _calcW2WithholdingW4(c.gross, c.w4, c.periods).fed;
+    const ok = approx(got, c.expectFed);
+    if (ok) pass++;
+    console.log(`${ok ? '✅' : '❌'} ${c.label}: fed=${got} (expected ~${c.expectFed})`);
+  });
+  console.log(`Pub 15-T (2026) self-test: ${pass}/${cases.length} passed`);
+  return pass === cases.length;
+}
+
+// Cumulative-wages method (IRS Pub 15-T): withholds based on year-to-date average pace,
+// so lumpy per-pool pay tracks his real annual liability instead of annualizing one check.
+//   periodsElapsed   = weekly payroll periods elapsed this year, incl. this one
+//   ytdGrossPrior    = gross from recorded paychecks earlier this year
+//   ytdFedPrior      = federal income tax already withheld earlier this year
+//   priorCount       = number of recorded paychecks earlier this year (for 4c reconciliation)
+function _calcW2WithholdingCumulative(grossThisPeriod, w4, periodsElapsed, ytdGrossPrior, ytdFedPrior, periodsPerYear, priorCount) {
+  const r = n => Math.round(n * 100) / 100;
+  w4 = w4 || {};
+  const p = parseInt(periodsPerYear, 10) || 52;
+  const extra = parseFloat(w4.extra_withholding) || 0;
+  const gross = parseFloat(grossThisPeriod) || 0;
+  const elapsed = Math.max(1, periodsElapsed || 1);
+
+  const totalGross = (parseFloat(ytdGrossPrior) || 0) + gross;
+  const avg = totalGross / elapsed; // average wage per payroll period YTD
+
+  // Income-tax-only per period on the average (exclude 4c, which is a flat per-check add)
+  const w4NoExtra = Object.assign({}, w4, { extra_withholding: 0 });
+  const taxPerPeriodOnAvg = _calcW2WithholdingW4(avg, w4NoExtra, p).fed;
+  const cumulativeShould  = taxPerPeriodOnAvg * elapsed; // total income tax that should be withheld YTD
+  const priorIncomeTax    = Math.max(0, (parseFloat(ytdFedPrior) || 0) - extra * (priorCount || 0));
+  const fed = Math.max(0, cumulativeShould - priorIncomeTax) + extra;
+
+  const ss = gross * 0.062, med = gross * 0.0145;
+  return { fed: r(fed), ss: r(ss), med: r(med), net: r(gross - fed - ss - med), er_ss: r(ss), er_med: r(med) };
+}
+
+// Weekly payroll periods elapsed this calendar year through the given period start (Thu).
+function _finWeeksElapsedInYear(periodStartYmd) {
+  const [y, m, d] = periodStartYmd.split('-').map(Number);
+  const periodStart = new Date(y, m - 1, d);
+  const yearStart = _finThursdayOf(new Date(y, 0, 1)); // Thursday of the week containing Jan 1
+  return Math.round((periodStart - yearStart) / (7 * 86400000)) + 1;
+}
+
+// Single source of truth for an employee's withholding on a given weekly period.
+// The pay schedule is weekly (Thu–Wed) → 52 periods/year, regardless of the W4 field.
+// Cumulative YTD follows the PAY DATE (W-2 convention: wages count in the year paid),
+// falling back to the period start when a check has no pay date. `payDate` is the pay
+// date for THIS paycheck (defaults to today in the live panel).
+function _finEmpComputeWithholding(emp, gross, periodStart, payDate) {
+  const w4 = (emp && emp.w4) || {};
+  const ppy = 52;
+  if (emp && emp.withholding_method === 'cumulative') {
+    const ref = payDate || _finFmtYmd(new Date()); // this check's pay date
+    const yr  = ref.slice(0, 4);
+    const refOf = p => (p.pay_date || p.period_start || '');           // a recorded check's effective date
+    const prior = (_finEmpPaychecks || []).filter(p => refOf(p).startsWith(yr) && refOf(p) < ref);
+    const ytdGrossPrior = prior.reduce((s, p) => s + (p.gross || 0), 0);
+    const ytdFedPrior   = prior.reduce((s, p) => s + (p.fed || 0), 0);
+    const elapsed = _finWeeksElapsedInYear(ref); // payroll periods elapsed through the pay date
+    return _calcW2WithholdingCumulative(gross, w4, elapsed, ytdGrossPrior, ytdFedPrior, ppy, prior.length);
+  }
+  return _calcW2WithholdingW4(gross, w4, ppy);
+}
+
 async function _loadAndRenderPayroll() {
   const now = new Date();
   if (!_finPayrollMonth) {
     _finPayrollMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
+  if (!_finEmpPeriodStart) _finEmpPeriodStart = _finFmtYmd(_finThursdayOf(new Date()));
   const el = document.getElementById('payroll-content');
   if (el) el.innerHTML = `<div style="padding:2rem;text-align:center;color:var(--muted)">Loading payroll data…</div>`;
   try {
-    const year = _finPayrollMonth.slice(0, 4);
-    const [configRes, logRes] = await Promise.all([
-      apiGet({ action: 'get_payroll_config', token: _s.token }),
-      apiGet({ action: 'get_payroll_log',    token: _s.token, year }),
+    // Fetch the full log (all years) and filter client-side, so the owner month-nav and
+    // the employee paycheck pay-period can sit in different years without stale YTD/paid state.
+    const [configRes, logRes, empRes] = await Promise.all([
+      apiGet({ action: 'get_payroll_config',    token: _s.token }),
+      apiGet({ action: 'get_payroll_log',       token: _s.token }),
+      apiGet({ action: 'get_payroll_employees', token: _s.token }),
     ]);
     _finPayrollData = {
       w2:       configRes.w2       || null,
       partners: configRes.partners || [],
       log:      logRes.rows        || [],
     };
+    _finEmpEmployees = (empRes && empRes.employees) || [];
+    if (!_finEmpSelected || !_finEmpEmployees.some(e => e.username === _finEmpSelected)) {
+      _finEmpSelected = _finEmpEmployees.length ? _finEmpEmployees[0].username : '';
+    }
   } catch (e) {
     if (el) el.innerHTML = `<div style="padding:2rem;color:var(--error)">Failed to load payroll data.</div>`;
     return;
   }
   _renderPayrollTab();
+  if (_finEmpSelected) { _loadEmpCompletions(); _loadEmpPayCompletions(); _loadEmpPaychecks(); }
 }
 
 function _payrollPrevMonth() {
@@ -1570,7 +1807,11 @@ function _renderPayrollTab() {
     ? `<button class="adm-new-btn" style="background:var(--teal)" onclick="_finPayrollSetupModal()">⚙ Setup Payroll</button>`
     : '';
 
-  if (notConfigured) {
+  const empConfigured = _finEmpEmployees.length > 0;
+
+  // Only the all-empty state short-circuits — and it still shows the W2-employee section
+  // (with its own setup empty state) so employee payroll works without owner/K-1 config.
+  if (notConfigured && !empConfigured) {
     el.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem">
         <h3 style="margin:0;color:var(--teal)">Payroll</h3>
@@ -1578,10 +1819,12 @@ function _renderPayrollTab() {
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2rem;text-align:center;color:var(--muted)">
         <div style="font-size:2rem;margin-bottom:.75rem">💼</div>
-        <div style="font-weight:600;margin-bottom:.5rem">Payroll not configured</div>
-        <div style="font-size:.9rem">Set up your W-2 employee and K-1 partners to get started.</div>
-        ${isAdmin() ? `<button class="adm-new-btn" style="margin-top:1.25rem;background:var(--teal)" onclick="_finPayrollSetupModal()">Setup Payroll</button>` : ''}
-      </div>`;
+        <div style="font-weight:600;margin-bottom:.5rem">Owner payroll not configured</div>
+        <div style="font-size:.9rem">Set up your W-2 owner and K-1 partners, or add a W2 employee below.</div>
+        ${isAdmin() ? `<button class="adm-new-btn" style="margin-top:1.25rem;background:var(--teal)" onclick="_finPayrollSetupModal()">Setup Owner Payroll</button>` : ''}
+      </div>
+      <div id="emp-payroll-section" style="margin-top:1rem"></div>`;
+    _renderEmpSection();
     return;
   }
 
@@ -1722,7 +1965,7 @@ function _renderPayrollTab() {
           <span style="color:var(--muted);padding-top:.5rem">FUTA owed YTD (Form 940)</span><span style="padding-top:.5rem">${_finFmtCurrency(ytdFuta)} <span style="font-size:.8rem;color:var(--muted)">(${_finFmtCurrency(futaBase)} of $7,000 wage base)</span></span>
           <span style="color:var(--muted)">SUTA TX owed YTD</span><span>${_finFmtCurrency(ytdSuta)} <span style="font-size:.8rem;color:var(--muted)">(${_finFmtCurrency(sutaBase)} of $9,000 wage base)</span></span>
         </div>
-        <div style="font-size:.78rem;color:var(--muted);margin-top:.75rem">All amounts based on logged W-2 payments only. Confirm totals with your accountant before filing.</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:.75rem">All amounts based on logged W-2 payments only.</div>
       </div>`;
   }
 
@@ -1732,7 +1975,7 @@ function _renderPayrollTab() {
     <tr>
       <td style="color:var(--muted);font-size:.85rem">${r.timestamp ? r.timestamp.split(' ')[0] : '—'}</td>
       <td style="font-weight:600">${escHtml(r.person)}</td>
-      <td><span style="background:${r.type==='w2'?'#dbeafe':'#fef9c3'};color:${r.type==='w2'?'#1d4ed8':'#854d0e'};padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">${r.type.toUpperCase()}</span></td>
+      <td><span style="background:${(r.type==='w2'||r.type==='w2_employee')?'#dbeafe':'#fef9c3'};color:${(r.type==='w2'||r.type==='w2_employee')?'#1d4ed8':'#854d0e'};padding:.15rem .55rem;border-radius:99px;font-size:.78rem;font-weight:600">${r.type==='w2_employee'?'W-2 EMP':r.type.toUpperCase()}</span></td>
       <td style="text-align:right;font-weight:600">${_finFmtCurrency(r.gross)}</td>
       <td style="text-align:right;color:var(--muted)">${r.net && r.net !== r.gross ? _finFmtCurrency(r.net) : '—'}</td>
       <td style="color:var(--muted);font-size:.85rem">${r.period}</td>
@@ -1771,7 +2014,9 @@ function _renderPayrollTab() {
     ${w2Html}
     ${k1Html}
     ${trackerHtml}
-    ${histHtml}`;
+    ${histHtml}
+    <div id="emp-payroll-section" style="margin-top:1rem"></div>`;
+  _renderEmpSection();
 }
 
 // ── Generic payroll modal helper ──────────────────────────────────────────────
@@ -1810,14 +2055,15 @@ function _prlUpdatePctTotal() {
 }
 
 // ── Log payment modal ─────────────────────────────────────────────────────────
-function _finPayrollLogModal(type, person, grossAmount, netAmount, period) {
-  const isW2 = type === 'w2';
+function _finPayrollLogModal(type, person, grossAmount, netAmount, period, w4) {
+  const isW2 = type === 'w2' || type === 'w2_employee';
   const gross = parseFloat(grossAmount) || 0;
   const net   = parseFloat(netAmount)   || gross;
+  _prlActiveW4 = (type === 'w2_employee' && w4) ? w4 : null;
 
   let withholding = '';
   if (isW2) {
-    const wh = _calcW2Withholding(gross);
+    const wh = _prlActiveW4 ? _calcW2WithholdingW4(gross, _prlActiveW4, _prlActiveW4.pay_periods_per_year) : _calcW2Withholding(gross);
     withholding = `
       <div style="background:rgba(0,0,0,.04);border-radius:8px;padding:.75rem;font-size:.83rem;margin-bottom:1rem">
         <div id="prl-wh-breakdown" style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem">
@@ -1866,9 +2112,11 @@ function _finPayrollModalSync() {
   const whCont = document.getElementById('prl-wh-breakdown');
   
   const gross = parseFloat(grossIn?.value) || 0;
-  
-  if (type === 'w2') {
-    const wh = _calcW2Withholding(gross);
+
+  if (type === 'w2' || type === 'w2_employee') {
+    const wh = (type === 'w2_employee' && _prlActiveW4)
+      ? _calcW2WithholdingW4(gross, _prlActiveW4, _prlActiveW4.pay_periods_per_year)
+      : _calcW2Withholding(gross);
     if (netIn) netIn.value = wh.net.toFixed(2);
     if (whCont) {
       whCont.innerHTML = `
@@ -1901,10 +2149,9 @@ async function _finPayrollSave() {
     const res = await api({ action: 'log_payroll_payment', token: _s.token, type, person, period, gross_amount: gross, net_amount: net, note });
     if (!res.ok) throw new Error(res.error || 'Failed to save');
     _prlCloseModal();
-    const year = period.slice(0, 4);
-    const logRes = await apiGet({ action: 'get_payroll_log', token: _s.token, year });
+    const logRes = await apiGet({ action: 'get_payroll_log', token: _s.token });
     if (_finPayrollData) _finPayrollData.log = logRes.rows || [];
-    _finPayrollMonth = period;
+    if (type !== 'w2_employee') _finPayrollMonth = period; // owner nav jumps to saved month; employee paychecks don't move it
     _renderPayrollTab();
   } catch (e) {
     alert('Error: ' + e.message);
@@ -1980,6 +2227,767 @@ async function _finPayrollSetupSave() {
   } catch (e) {
     showErr('Error: ' + e.message);
     if (btn) { btn.disabled = false; btn.textContent = 'Save Setup'; }
+  }
+}
+
+// ── W2 employee section: helpers, load, render, handlers ──────────────────────
+
+function _finEmpSelectedObj() {
+  return _finEmpEmployees.find(e => e.username === _finEmpSelected) || null;
+}
+
+function _finParsePayrollNumber(value) {
+  const m = String(value ?? '').replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+  return m ? (parseFloat(m[0]) || 0) : 0;
+}
+
+function _finW4HasValues(w4) {
+  if (!w4) return false;
+  return ['filing_status', 'multiple_jobs', 'dependents_amt', 'other_income', 'deductions', 'extra_withholding', 'pay_periods_per_year']
+    .some(k => w4[k] !== undefined && w4[k] !== null && String(w4[k]) !== '');
+}
+
+async function _finFetchOnboardingW4(username) {
+  if (!username) return null;
+  try {
+    const res = await apiGet({ action: 'get_payroll_onboarding_w4', token: _s.token, username });
+    return res && res.ok ? (res.w4 || null) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function _finEmpConfiguredObj(username) {
+  return _finEmpEmployees.find(e => e.username === username) || null;
+}
+
+function _finFmtYmd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Weekly pay period = Thursday → Wednesday. Returns the Thursday on/before a date.
+function _finThursdayOf(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const off = (x.getDay() - 4 + 7) % 7; // 4 = Thursday
+  x.setDate(x.getDate() - off);
+  return x;
+}
+function _finPeriodEnd(startYmd) { // Wednesday = start + 6 days
+  const [y, m, d] = startYmd.split('-').map(Number);
+  return _finFmtYmd(new Date(y, m - 1, d + 6));
+}
+function _finPeriodLabel(startYmd) {
+  const [y, m, d] = startYmd.split('-').map(Number);
+  const s = new Date(y, m - 1, d), e = new Date(y, m - 1, d + 6);
+  const f = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${f(s)} – ${f(e)}, ${e.getFullYear()}`;
+}
+
+async function _loadEmpCompletions() {
+  if (!_finEmpSelected) { _finEmpCompletions = []; _finEmpApprovals = {}; _renderEmpSection(); return; }
+  _finEmpLoading = true;
+  _renderEmpSection();
+  const range = _finGetDateRangeBy(_finEmpPeriod, _finEmpCustomFrom, _finEmpCustomTo);
+  const start = range ? _finFmtYmd(range.start) : '';
+  const end   = range ? _finFmtYmd(range.end)   : '';
+  try {
+    const [compRes, apprRes] = await Promise.all([
+      apiGet({ action: 'get_employee_completions', token: _s.token, username: _finEmpSelected, start, end }),
+      apiGet({ action: 'get_payroll_approvals',    token: _s.token, username: _finEmpSelected }),
+    ]);
+    _finEmpCompletions = (compRes && compRes.rows) || [];
+    _finEmpApprovals   = (apprRes && apprRes.approved) || {};
+  } catch (e) {
+    _finEmpCompletions = [];
+  }
+  _finEmpLoading = false;
+  _renderEmpSection();
+}
+
+// Loads completions for the weekly (Thu–Wed) pay period, independent of the review range,
+// so paycheck gross is correct even when the review range is narrower/elsewhere.
+async function _loadEmpPayCompletions() {
+  if (!_finEmpSelected || !_finEmpPeriodStart) { _finEmpPayCompletions = []; _renderEmpSection(); return; }
+  _finEmpPayLoading = true;
+  _renderEmpSection();
+  const start = _finEmpPeriodStart;
+  const end   = _finPeriodEnd(start);
+  try {
+    const res = await apiGet({ action: 'get_employee_completions', token: _s.token, username: _finEmpSelected, start, end });
+    _finEmpPayCompletions = (res && res.rows) || [];
+  } catch (e) {
+    _finEmpPayCompletions = [];
+  }
+  _finEmpPayLoading = false;
+  _renderEmpSection();
+}
+
+async function _loadEmpPaychecks() {
+  if (!_finEmpSelected) { _finEmpPaychecks = []; _renderEmpSection(); return; }
+  try {
+    const res = await apiGet({ action: 'get_employee_paychecks', token: _s.token, username: _finEmpSelected });
+    _finEmpPaychecks = (res && res.paychecks) || [];
+  } catch (e) {
+    _finEmpPaychecks = [];
+  }
+  _renderEmpSection();
+}
+
+function _renderEmpSection() {
+  const el = document.getElementById('emp-payroll-section');
+  if (!el) return;
+
+  const adminBtns = isAdmin()
+    ? `<button class="mvt-btn" onclick="_finEmpSetupModal()">⚙ Employee W4</button>`
+    : '';
+
+  // No employees configured yet.
+  if (!_finEmpEmployees.length) {
+    el.innerHTML = `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+          <div style="font-weight:700;font-size:1rem;color:var(--teal)">W2 Employee Payroll</div>
+          ${adminBtns}
+        </div>
+        <div style="text-align:center;color:var(--muted);padding:1rem">
+          <div style="font-size:1.6rem;margin-bottom:.5rem">🧑‍🔧</div>
+          <div style="font-weight:600;margin-bottom:.35rem">No W2 employee set up</div>
+          <div style="font-size:.88rem">Add an employee and their W-4 to track per-pool pay and withholding.</div>
+          ${isAdmin() ? `<button class="adm-new-btn" style="margin-top:1rem;background:var(--teal)" onclick="_finEmpSetupModal()">Add W2 Employee</button>` : ''}
+        </div>
+      </div>`;
+    return;
+  }
+
+  const emp  = _finEmpSelectedObj();
+  const rate = emp ? (parseFloat(emp.pay_rate) || 0) : 0;
+  const w4   = (emp && emp.w4) || {};
+
+  const empOptions = _finEmpEmployees.map(e =>
+    `<option value="${escHtml(e.username)}" ${e.username === _finEmpSelected ? 'selected' : ''}>${escHtml(e.name)}</option>`
+  ).join('');
+
+  const periodOptions = FIN_PERIODS.map(p =>
+    `<option value="${p.key}" ${p.key === _finEmpPeriod ? 'selected' : ''}>${p.label}</option>`
+  ).join('');
+  const customInputs = _finEmpPeriod === 'custom'
+    ? `<input type="date" class="si" value="${_finEmpCustomFrom}" onchange="_finEmpSetCustom('from', this.value)" style="max-width:150px">
+       <input type="date" class="si" value="${_finEmpCustomTo}" onchange="_finEmpSetCustom('to', this.value)" style="max-width:150px">`
+    : '';
+
+  // Review-range aggregates
+  const rows = _finEmpCompletions;
+  const totalVisits   = rows.length;
+  const distinctPools = new Set(rows.map(r => r.pool_id)).size;
+  const approvedRows  = rows.filter(r => _finEmpApprovals[r.payroll_uid]);
+  const approvedCount = approvedRows.length;
+  const pendingCount  = totalVisits - approvedCount;
+
+  const tableRows = rows.map(r => {
+    const uid = r.payroll_uid || '';
+    const approved = !!_finEmpApprovals[uid];
+    const manualTag = r.manual ? ` <span style="background:#fef3c7;color:#92400e;padding:.05rem .35rem;border-radius:99px;font-size:.68rem;font-weight:600">manual</span>` : '';
+    return `<tr style="cursor:pointer" onclick="_finEmpShowDetail('${uid}')">
+      <td onclick="event.stopPropagation()" style="text-align:center">
+        <input type="checkbox" ${approved ? 'checked' : ''} ${uid ? '' : 'disabled'} onchange="_finEmpToggleApproval('${uid}', this)">
+      </td>
+      <td style="color:var(--muted);font-size:.85rem">${escHtml(r.date || '—')}</td>
+      <td style="font-weight:600">${escHtml(r.pool_id || '—')}${manualTag}</td>
+      <td>${escHtml(r.client_name || '')}</td>
+    </tr>`;
+  }).join('');
+
+  const tableHtml = _finEmpLoading
+    ? `<div style="padding:1.5rem;text-align:center"><div class="spinner"></div></div>`
+    : (totalVisits === 0
+        ? `<div style="padding:1.25rem;text-align:center;color:var(--muted)">No pools serviced in this range.</div>`
+        : `<div style="overflow-x:auto">
+            <table class="adm-table" style="width:100%">
+              <thead><tr><th style="width:2.5rem">✓</th><th>Date</th><th>Pool</th><th>Client</th></tr></thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>`);
+
+  // ── Paycheck panel (weekly Thu–Wed pay period, independent of the review range) ──
+  const periodStart = _finEmpPeriodStart;
+  const periodEnd   = _finPeriodEnd(periodStart);
+  const periodYear  = periodStart.slice(0, 4);
+  const payApproved = _finEmpPayCompletions.filter(r => _finEmpApprovals[r.payroll_uid]);
+  const payVisits = payApproved.length;
+  const gross = payVisits * rate;
+  const todayYmd     = _finFmtYmd(new Date());
+  const payDateVal   = _finEmpPayDate || todayYmd;       // drives cumulative tax year — kept in sync with the input
+  const verifiedVal  = _finEmpVerifiedDate || todayYmd;
+  // Compute with the entered pay date so the displayed federal/net match what Record Paycheck saves.
+  const wh = _finEmpComputeWithholding(emp, gross, periodStart, payDateVal);
+  const methodLabel = (emp && emp.withholding_method === 'cumulative') ? 'Cumulative YTD' : 'Standard per-paycheck';
+
+  // YTD + already-recorded check come from recorded paychecks (Employee_Paychecks).
+  const ytdChecks = _finEmpPaychecks.filter(p => (p.period_start || '').startsWith(periodYear));
+  const ytdGross = ytdChecks.reduce((s, p) => s + (p.gross || 0), 0);
+  const recordedThisPeriod = _finEmpPaychecks.find(p => p.period_start === periodStart);
+  const prevYtd = ytdGross - (recordedThisPeriod ? (recordedThisPeriod.gross || 0) : 0);
+  const futaWages = Math.max(0, Math.min(gross, 7000 - prevYtd));
+  const sutaWages = Math.max(0, Math.min(gross, 9000 - prevYtd));
+
+  const atAnchorFloor = emp && emp.pay_anchor && periodStart <= emp.pay_anchor;
+
+  const recordControls = recordedThisPeriod
+    ? `<div style="background:#dcfce7;color:#166534;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;font-weight:600">
+         Recorded ${_finFmtCurrency(recordedThisPeriod.net)} net${recordedThisPeriod.pay_date ? ` · paid ${recordedThisPeriod.pay_date}` : ''} ·
+         <a href="#" onclick="_finEmpShowPaycheck('${recordedThisPeriod.paycheck_id}');return false" style="color:#166534;text-decoration:underline">view</a>
+       </div>`
+    : (isAdmin()
+        ? `<div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
+             <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Date verified</label>
+               <input id="emp-verified-date" type="date" class="si" value="${verifiedVal}" onchange="_finEmpSetVerifiedDate(this.value)" style="max-width:160px"></div>
+             <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Pay date</label>
+               <input id="emp-pay-date" type="date" class="si" value="${payDateVal}" onchange="_finEmpSetPayDate(this.value)" style="max-width:160px"></div>
+             <button class="adm-new-btn" style="background:var(--teal)${gross > 0 ? '' : ';opacity:.5'}" ${gross > 0 ? '' : 'disabled'} onclick="_finEmpRecordPaycheck()">Record Paycheck</button>
+           </div>`
+        : '');
+
+  el.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:1rem;color:var(--teal)">W2 Employee Payroll</span>
+          <select class="si" onchange="_finEmpChangeSelected(this.value)" style="max-width:200px">${empOptions}</select>
+        </div>
+        ${adminBtns}
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.4rem">
+        <span style="font-weight:600;font-size:.85rem;color:var(--muted)">Review pools serviced</span>
+        ${isAdmin() ? `<button class="mvt-btn" style="font-size:.8rem" onclick="_finEmpAddPoolModal()">+ Add pool manually</button>` : ''}
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+        <select class="si" onchange="_finEmpChangeReviewPeriod(this.value)" style="max-width:170px">${periodOptions}</select>
+        ${customInputs}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.5rem;margin-bottom:1rem">
+        <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700;color:var(--teal)">${distinctPools}</div><div style="font-size:.78rem;color:var(--muted)">Pools</div></div>
+        <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700">${totalVisits}</div><div style="font-size:.78rem;color:var(--muted)">Visits</div></div>
+        <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700;color:#166534">${approvedCount}</div><div style="font-size:.78rem;color:var(--muted)">Approved</div></div>
+        <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700;color:#b45309">${pendingCount}</div><div style="font-size:.78rem;color:var(--muted)">Pending</div></div>
+      </div>
+
+      ${tableHtml}
+    </div>
+
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem">
+        <span style="font-weight:700;font-size:1rem;color:var(--teal)">Paycheck</span>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <button class="mvt-btn" ${atAnchorFloor ? 'disabled style="opacity:.4"' : ''} onclick="_finEmpShiftPeriod(-1)">←</button>
+          <span style="font-weight:600;font-size:.9rem;min-width:155px;text-align:center">${_finPeriodLabel(periodStart)}</span>
+          <button class="mvt-btn" onclick="_finEmpShiftPeriod(1)">→</button>
+        </div>
+      </div>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem">Pay period: Thu ${periodStart} → Wed ${periodEnd}${_finEmpPayLoading ? ' · loading…' : ''}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem 2rem;font-size:.9rem;margin-bottom:1rem">
+        <span style="color:var(--muted)">Approved pools this period</span><span style="font-weight:600">${payVisits} × ${_finFmtCurrency(rate)}</span>
+        <span style="color:var(--muted)">Gross wages</span><span style="font-weight:700">${_finFmtCurrency(gross)}</span>
+        <span style="color:var(--muted)">Federal income tax</span><span style="color:#dc2626">−${_finFmtCurrency(wh.fed)}</span>
+        <span style="color:var(--muted)">Social Security (6.2%)</span><span style="color:#dc2626">−${_finFmtCurrency(wh.ss)}</span>
+        <span style="color:var(--muted)">Medicare (1.45%)</span><span style="color:#dc2626">−${_finFmtCurrency(wh.med)}</span>
+        <span style="border-top:1px solid var(--border);padding-top:.4rem;font-weight:600">Net take-home</span>
+        <span style="border-top:1px solid var(--border);padding-top:.4rem;font-weight:700;color:var(--teal)">${_finFmtCurrency(wh.net)}</span>
+      </div>
+      ${recordControls}
+      <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.75rem;font-size:.82rem;color:var(--muted);margin-top:.5rem">
+        <strong style="color:var(--text)">Employer taxes also owed (EFTPS):</strong> SS ${_finFmtCurrency(wh.er_ss)} · Medicare ${_finFmtCurrency(wh.er_med)}
+        ${futaWages > 0 ? ` · FUTA ${_finFmtCurrency(futaWages * 0.006)}` : ' · FUTA $0 (wage base met)'}
+        ${sutaWages > 0 ? ` · SUTA TX ${_finFmtCurrency(sutaWages * 0.027)}` : ' · SUTA TX $0 (wage base met)'}
+        <div style="margin-top:.4rem">YTD ${periodYear} gross paid: <strong>${_finFmtCurrency(ytdGross)}</strong> · Federal withholding per IRS Pub 15-T (2026) Worksheet 1A · ${methodLabel} method (weekly, 52/yr).</div>
+      </div>
+    </div>
+
+    ${_finEmpPaychecksHistoryHtml()}`;
+}
+
+// Recorded-paychecks history (browse any past paycheck anytime).
+function _finEmpPaychecksHistoryHtml() {
+  const checks = _finEmpPaychecks || [];
+  const rows = checks.map(p => `
+    <tr style="cursor:pointer" onclick="_finEmpShowPaycheck('${p.paycheck_id}')">
+      <td style="font-weight:600">${escHtml(_finPeriodLabel(p.period_start))}</td>
+      <td style="color:var(--muted);font-size:.85rem">${escHtml(p.pay_date || '—')}</td>
+      <td style="text-align:center">${p.pool_count}</td>
+      <td style="text-align:right">${_finFmtCurrency(p.gross)}</td>
+      <td style="text-align:right;font-weight:600;color:var(--teal)">${_finFmtCurrency(p.net)}</td>
+    </tr>`).join('');
+  return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
+      <div style="font-weight:700;font-size:1rem;color:var(--teal);margin-bottom:1rem">Paycheck History</div>
+      ${checks.length === 0
+        ? `<div style="color:var(--muted);text-align:center;padding:1rem">No paychecks recorded yet.</div>`
+        : `<div style="overflow-x:auto"><table class="adm-table" style="width:100%">
+             <thead><tr><th>Pay period</th><th>Paid</th><th style="text-align:center">Pools</th><th style="text-align:right">Gross</th><th style="text-align:right">Net</th></tr></thead>
+             <tbody>${rows}</tbody></table></div>`}
+    </div>`;
+}
+
+function _finEmpChangeSelected(username) { _finEmpSelected = username; _finEmpPayDate = ''; _finEmpVerifiedDate = ''; _loadEmpCompletions(); _loadEmpPayCompletions(); _loadEmpPaychecks(); }
+
+function _finEmpChangeReviewPeriod(v) {
+  _finEmpPeriod = v;
+  if (v === 'custom') _renderEmpSection(); else _loadEmpCompletions();
+}
+
+function _finEmpSetCustom(which, val) {
+  if (which === 'from') _finEmpCustomFrom = val; else _finEmpCustomTo = val;
+  if (_finEmpCustomFrom && _finEmpCustomTo) _loadEmpCompletions(); else _renderEmpSection();
+}
+
+function _finEmpShiftPeriod(deltaWeeks) {
+  const [y, m, d] = _finEmpPeriodStart.split('-').map(Number);
+  let next = _finFmtYmd(new Date(y, m - 1, d + deltaWeeks * 7));
+  const emp = _finEmpSelectedObj();
+  if (emp && emp.pay_anchor && next < emp.pay_anchor) next = emp.pay_anchor; // don't go before first counted week
+  _finEmpPeriodStart = next;
+  _finEmpPayDate = ''; _finEmpVerifiedDate = ''; // reset dates to today for the new period
+  _loadEmpPayCompletions();
+}
+
+// Pay date drives the cumulative tax year, so re-render to keep the displayed federal/net
+// exactly matching what _finEmpRecordPaycheck will save.
+function _finEmpSetPayDate(v) { _finEmpPayDate = v || ''; _renderEmpSection(); }
+// Verified date doesn't affect withholding — just persist it so a re-render won't lose it.
+function _finEmpSetVerifiedDate(v) { _finEmpVerifiedDate = v || ''; }
+
+async function _finEmpToggleApproval(uid, cb) {
+  if (!uid) return;
+  const approved = cb.checked;
+  const row = _finEmpCompletions.find(r => r.payroll_uid === uid) || {};
+  if (approved) _finEmpApprovals[uid] = true; else delete _finEmpApprovals[uid];
+  _renderEmpSection();
+  try {
+    const res = await api({ action: 'set_payroll_approval', token: _s.token, payroll_uid: uid,
+                            username: _finEmpSelected, pool_id: row.pool_id, visit_date: row.date, approved });
+    if (!res.ok) throw new Error(res.error || 'failed');
+  } catch (e) {
+    if (approved) delete _finEmpApprovals[uid]; else _finEmpApprovals[uid] = true; // revert
+    _renderEmpSection();
+    alert('Could not save approval: ' + e.message);
+  }
+}
+
+async function _finEmpShowDetail(uid) {
+  if (!uid) return;
+  // Manual entries have no submitted form — show the entry itself, no fetch.
+  const row = _finEmpCompletions.find(r => r.payroll_uid === uid) || _finEmpPayCompletions.find(r => r.payroll_uid === uid);
+  if (row && row.manual) {
+    _prlOpenModal('Manual Pool Entry', `<div style="padding:.5rem">
+      <div style="margin-bottom:.4rem">Pool: <strong>${escHtml(row.pool_id || '')}</strong></div>
+      <div style="margin-bottom:.4rem">Date: ${escHtml(row.date || '')}</div>
+      ${row.client_name ? `<div style="margin-bottom:.4rem">Client: ${escHtml(row.client_name)}</div>` : ''}
+      <div style="margin-top:.5rem;color:var(--muted);font-size:.85rem">Manually added (no submitted form).${row.note ? ' Note: ' + escHtml(row.note) : ''}</div>
+    </div>`);
+    return;
+  }
+  _prlOpenModal('Submission Detail', `<div style="padding:1rem;text-align:center"><div class="spinner"></div></div>`);
+  let detail = null;
+  try {
+    const res = await apiGet({ action: 'get_submission_detail', token: _s.token, payroll_uid: uid });
+    if (res && res.ok) detail = res.detail;
+  } catch (e) {}
+  const body = document.getElementById('prl-modal-body');
+  if (!body) return;
+  if (!detail) {
+    // No chem-log detail resolved — show the completion's basic info instead of a dead end.
+    body.innerHTML = `<div style="padding:.5rem">
+      ${row && row.pool_id ? `<div style="margin-bottom:.4rem">Pool: <strong>${escHtml(row.pool_id)}</strong></div>` : ''}
+      ${row && row.date ? `<div style="margin-bottom:.4rem">Date: ${escHtml(row.date)}</div>` : ''}
+      ${row && row.client_name ? `<div style="margin-bottom:.4rem">Client: ${escHtml(row.client_name)}</div>` : ''}
+      ${row && row.technician ? `<div style="margin-bottom:.4rem">Technician: ${escHtml(row.technician)}</div>` : ''}
+      <div style="margin-top:.5rem;color:var(--muted);font-size:.85rem">No chemical-log detail found for this completion (it may predate chem logging or have been voided).</div>
+    </div>`;
+    return;
+  }
+  body.innerHTML = _finSubmissionDetailHtml(detail, row);
+}
+
+// Renders the categorized submission detail: Timestamp · Test · Chemicals (used vs
+// recommended) · Notes · Pictures.
+function _finSubmissionDetailHtml(detail, row) {
+  const sectionTitle = t => `<div style="font-weight:700;font-size:.82rem;text-transform:uppercase;letter-spacing:.04em;color:var(--teal);margin:1rem 0 .5rem">${t}</div>`;
+  const kv = (k, v) => `<div style="display:flex;justify-content:space-between;gap:1rem;padding:.3rem 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--muted);font-size:.85rem">${k}</span><span style="font-weight:600;font-size:.85rem;text-align:right">${v}</span></div>`;
+
+  // ── Timestamp ──
+  let html = sectionTitle('When') + kv('Timestamp', escHtml(detail.timestamp || row?.date || '—'));
+  const poolBits = [detail.pool_size && `${escHtml(detail.pool_size)} pool`, detail.pool_material && escHtml(detail.pool_material), detail.tablet_level && `tablets: ${escHtml(detail.tablet_level)}`].filter(Boolean).join(' · ');
+  if (poolBits) html += kv('Pool', poolBits);
+
+  // ── Tests (with target / status) ──
+  const tests = detail.tests || [];
+  if (tests.length) {
+    html += sectionTitle('Test');
+    html += tests.map(t => {
+      const badge = t.status
+        ? `<span style="background:${t.ok ? '#dcfce7' : '#fef3c7'};color:${t.ok ? '#166534' : '#92400e'};padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:600">${t.status}</span>`
+        : '';
+      return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:.5rem;align-items:center;padding:.3rem 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--muted);font-size:.85rem">${escHtml(t.label)} <span style="opacity:.6">(target ${escHtml(t.target)})</span></span>
+        <span style="font-weight:700;font-size:.9rem">${escHtml(t.value)}${t.unit ? ' ' + escHtml(t.unit) : ''}</span>
+        ${badge}</div>`;
+    }).join('');
+  }
+
+  // ── Chemicals: used vs recommended (from this visit's readings) ──
+  const used = detail.chemicals || [];
+  const rec = _finRecommendedChems(tests, detail.gallons);
+  html += sectionTitle('Chemicals');
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div><div style="font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:.3rem">Used</div>
+      ${used.length ? used.map(c => `<div style="display:flex;justify-content:space-between;gap:.5rem;font-size:.84rem;padding:.2rem 0"><span>${escHtml(c.name)}</span><span style="font-weight:600">${c.qty}${c.unit ? ' ' + escHtml(c.unit) : ''}</span></div>`).join('') : `<div style="color:var(--muted);font-size:.82rem">None recorded</div>`}
+    </div>
+    <div><div style="font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:.3rem">Recommended <span style="opacity:.6">(from readings)</span></div>
+      ${rec.length ? rec.map(c => `<div style="font-size:.84rem;padding:.2rem 0"><div style="display:flex;justify-content:space-between;gap:.5rem"><span>${escHtml(c.name)}</span><span style="font-weight:600">${escHtml(c.amt)}</span></div>${c.reason ? `<div style="font-size:.72rem;color:var(--muted)">↳ ${escHtml(c.reason)}</div>` : ''}</div>`).join('') : `<div style="color:var(--muted);font-size:.82rem">Readings in range — none needed</div>`}
+    </div>
+  </div>
+  <div style="font-size:.72rem;color:var(--muted);margin-top:.4rem">Recommended amounts are estimated from the readings + ${detail.gallons ? detail.gallons.toLocaleString() + ' gal' : 'pool size'}, for sanity-checking only.</div>`;
+
+  // ── Notes ──
+  if (detail.notes) html += sectionTitle('Notes') + `<div style="font-size:.86rem;white-space:pre-wrap">${escHtml(detail.notes)}</div>`;
+
+  // ── Pictures (buttons → full-quality lightbox) ──
+  _finDetailPhotos = (detail.photos || []).map(u => _finDrivePhotoUrl(u, 2000));
+  if (_finDetailPhotos.length) {
+    html += sectionTitle('Pictures');
+    html += `<div style="display:flex;gap:.5rem;flex-wrap:wrap">` +
+      _finDetailPhotos.map((u, i) => `<button class="mvt-btn" style="font-size:.82rem" onclick="_finPhotoLightbox(_finDetailPhotos[${i}])">📷 Photo ${i + 1}</button>`).join('') +
+      `</div>`;
+  }
+
+  return `<div style="max-height:65vh;overflow-y:auto;padding-right:.25rem">${html}</div>`;
+}
+
+// Port of the FormUI live dosing engine — recommended chemicals from FC/pH/TA/CH + gallons.
+function _finRecommendedChems(tests, gallons) {
+  const g = gallons || 12000;
+  const v = k => { const t = (tests || []).find(x => x.key === k); const n = t ? parseFloat(t.value) : NaN; return isFinite(n) ? n : null; };
+  const fc = v('fc'), ph = v('ph'), ta = v('ta'), ch = v('ch');
+  const out = [];
+  let poolSize = 'small';
+  if (g > 15000 && g <= 20000) poolSize = 'medium'; else if (g > 20000) poolSize = 'large';
+
+  if (fc !== null) {
+    if (poolSize === 'small' || poolSize === 'medium') {
+      if (fc <= 2) out.push({ name: 'Chlorine', amt: '2 gal', reason: 'FC low' });
+      else if (fc <= 4) out.push({ name: 'Chlorine', amt: '1 gal', reason: 'FC maintaining' });
+    } else {
+      if (fc <= 2) out.push({ name: 'Chlorine', amt: '3 gal', reason: 'FC low' });
+      else if (fc <= 4) out.push({ name: 'Chlorine', amt: '2 gal', reason: 'FC maintaining' });
+    }
+  }
+  if (ph !== null) {
+    if (ph >= 7.6) {
+      const drop = ph - 7.4;
+      let rate = 0.15;
+      if (ta !== null) { if (ta < 90) rate = 0.20; else if (ta > 120) rate = 0.10; }
+      let gal = ((drop / rate) * (g / 10000)) / 4;
+      const maxGal = 0.25 * (g / 10000);
+      let reason = 'Lower pH to 7.4 (factoring TA)';
+      if (gal > maxGal) { gal = maxGal; reason = 'Max safe dose applied to avoid crash'; }
+      let fl = Math.round(gal * 4) / 4; if (fl < 0.25) fl = 0.25;
+      out.push({ name: 'Muriatic Acid', amt: fl.toFixed(2) + ' gal', reason });
+    } else if (ph <= 7.0) {
+      out.push({ name: 'Soda Ash', amt: 'As needed', reason: 'pH low' });
+    }
+  }
+  if (ta !== null && ta < 90) out.push({ name: 'Baking Soda', amt: (1.4 * (g / 10000) * ((100 - ta) / 10)).toFixed(1) + ' lbs', reason: 'Raise TA to 100ppm' });
+  if (ch !== null && ch < 200) out.push({ name: 'Calcium Chloride', amt: (1.2 * (g / 10000) * ((200 - ch) / 10)).toFixed(1) + ' lbs', reason: 'Raise CH to 200ppm' });
+  return out;
+}
+
+// Google Drive photo helpers: extract the file id, build a high-res view URL.
+function _finDrivePhotoId(url) {
+  const s = String(url || '');
+  const m = s.match(/[?&]id=([^&]+)/) || s.match(/\/d\/([^/]+)/);
+  return m ? m[1] : '';
+}
+function _finDrivePhotoUrl(url, size) {
+  const id = _finDrivePhotoId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${size || 2000}` : url;
+}
+
+// Full-quality photo lightbox — opens in-place as an overlay (same tab, no navigation).
+function _finPhotoLightbox(url) {
+  const ex = document.getElementById('fin-photo-lightbox');
+  if (ex) ex.remove();
+  const el = document.createElement('div');
+  el.id = 'fin-photo-lightbox';
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;cursor:zoom-out';
+  el.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.6)">
+    <button style="position:absolute;top:1rem;right:1rem;background:rgba(255,255,255,.15);color:#fff;border:none;font-size:1.5rem;width:2.4rem;height:2.4rem;border-radius:50%;cursor:pointer">✕</button>`;
+  el.addEventListener('click', () => el.remove());
+  document.body.appendChild(el);
+}
+
+async function _finEmpRecordPaycheck() {
+  const emp = _finEmpSelectedObj();
+  if (!emp) return;
+  const rate = parseFloat(emp.pay_rate) || 0;
+  const start = _finEmpPeriodStart, end = _finPeriodEnd(start);
+  const approved = _finEmpPayCompletions.filter(r => _finEmpApprovals[r.payroll_uid]);
+  if (!approved.length) { alert('No approved pools in this pay period. Approve submissions first.'); return; }
+  const gross = approved.length * rate;
+  const verified = document.getElementById('emp-verified-date')?.value || '';
+  const payDate  = document.getElementById('emp-pay-date')?.value || '';
+  // Compute withholding with the actual pay date so cumulative YTD lands in the right tax year.
+  const wh = _finEmpComputeWithholding(emp, gross, start, payDate);
+  if (!confirm(`Record paycheck for ${emp.name}\n${_finPeriodLabel(start)}\n${approved.length} pools · gross ${_finFmtCurrency(gross)} · net ${_finFmtCurrency(wh.net)}`)) return;
+
+  const paycheck = {
+    username: _finEmpSelected, name: emp.name,
+    period_start: start, period_end: end,
+    verified_date: verified, pay_date: payDate,
+    pool_count: approved.length, gross, fed: wh.fed, ss: wh.ss, med: wh.med, net: wh.net,
+    pool_uids: approved.map(r => r.payroll_uid), note: ''
+  };
+  try {
+    const res = await api({ action: 'save_employee_paycheck', token: _s.token, paycheck });
+    if (!res.ok) throw new Error(res.error || 'failed');
+    await _loadEmpPaychecks();
+  } catch (e) {
+    alert('Could not record paycheck: ' + e.message);
+  }
+}
+
+function _finEmpShowPaycheck(paycheckId) {
+  const p = (_finEmpPaychecks || []).find(x => x.paycheck_id === paycheckId);
+  if (!p) return;
+  const line = (label, val) => `<div style="display:flex;justify-content:space-between;gap:1rem;padding:.3rem 0;border-bottom:1px solid var(--border)">
+    <span style="color:var(--muted);font-size:.85rem">${label}</span><span style="font-weight:600;font-size:.85rem">${val}</span></div>`;
+  _prlOpenModal(`Paycheck — ${escHtml(p.name || '')}`, `
+    <div style="max-height:65vh;overflow-y:auto">
+      ${line('Pay period', escHtml(_finPeriodLabel(p.period_start)))}
+      ${line('Date verified', escHtml(p.verified_date || '—'))}
+      ${line('Pay date', escHtml(p.pay_date || '—'))}
+      ${line('Pools paid', String(p.pool_count))}
+      ${line('Gross wages', _finFmtCurrency(p.gross))}
+      ${line('Federal income tax', '−' + _finFmtCurrency(p.fed))}
+      ${line('Social Security', '−' + _finFmtCurrency(p.ss))}
+      ${line('Medicare', '−' + _finFmtCurrency(p.med))}
+      ${line('Net take-home', _finFmtCurrency(p.net))}
+      ${p.note ? line('Note', escHtml(p.note)) : ''}
+      ${line('Recorded by', escHtml(p.logged_by || '—'))}
+    </div>`);
+}
+
+// ── Manual pool entry (missed-form fallback) ──────────────────────────────────
+async function _finEmpAddPoolModal() {
+  if (!isAdmin() || !_finEmpSelected) return;
+  _prlOpenModal('Add Pool Manually', `<div style="padding:1rem;text-align:center"><div class="spinner"></div></div>`);
+  let pools = [];
+  try {
+    const res = await api({ action: 'get_pool_list', token: _s.token });
+    pools = (res && res.pools) || [];
+  } catch (e) {}
+  const opts = pools.map(p => {
+    const pid = p.pool_id || p.poolId || '';
+    const label = pid + (p.last_name || p.name ? ' — ' + (p.last_name || p.name) : '');
+    return `<option value="${escHtml(pid)}">${escHtml(label)}</option>`;
+  }).join('');
+  const body = document.getElementById('prl-modal-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">Use this only when a pool was serviced but no form was submitted. It counts toward pay once approved.</div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Pool</label>
+      ${opts ? `<select id="man-pool" class="si" style="width:100%">${opts}</select>`
+             : `<input id="man-pool" class="si" type="text" placeholder="MCPS-0000" style="width:100%">`}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Date serviced</label>
+        <input id="man-date" type="date" class="si" value="${_finFmtYmd(new Date())}" style="width:100%"></div>
+    </div>
+    <div style="margin-bottom:1rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Note (optional)</label>
+      <input id="man-note" class="si" type="text" placeholder="why this was added manually" style="width:100%">
+    </div>
+    <div id="man-err" style="color:var(--error);font-size:.85rem;display:none;margin-bottom:.5rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="mvt-btn" onclick="_prlCloseModal()">Cancel</button>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="_finEmpSaveManualPool()">Add Pool</button>
+    </div>`;
+}
+
+async function _finEmpSaveManualPool() {
+  const pool = document.getElementById('man-pool')?.value?.trim() || '';
+  const date = document.getElementById('man-date')?.value || '';
+  const note = document.getElementById('man-note')?.value?.trim() || '';
+  const errEl = document.getElementById('man-err');
+  const showErr = m => { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } };
+  if (!pool) { showErr('Select or enter a pool.'); return; }
+  if (!date) { showErr('Pick the date serviced.'); return; }
+  const btn = document.querySelector('#prl-modal-backdrop .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  try {
+    const res = await api({ action: 'add_manual_pool', token: _s.token, username: _finEmpSelected, pool_id: pool, date, note });
+    if (!res.ok) throw new Error(res.error || 'failed');
+    _prlCloseModal();
+    _loadEmpCompletions();
+    _loadEmpPayCompletions();
+  } catch (e) {
+    showErr(e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Add Pool'; }
+  }
+}
+
+// ── W2 employee W4 setup modal ────────────────────────────────────────────────
+async function _finEmpSetupModal() {
+  if (!isAdmin()) return;
+  _prlOpenModal('W2 Employee Payroll Setup', `<div style="padding:1rem;text-align:center"><div class="spinner"></div></div>`);
+  let users = [];
+  try {
+    const res = await api({ action: 'list_users', token: _s.token, secret: SEC });
+    users = (res.users || []).filter(u => String(u.worker_type) === 'w2_employee'
+      && (u.active === undefined || String(u.active).toUpperCase() === 'TRUE'));
+  } catch (e) {}
+
+  const editing = _finEmpSelectedObj();
+  const cur = editing || {};
+
+  if (!users.length) {
+    const body = document.getElementById('prl-modal-body');
+    if (body) body.innerHTML = `<div style="padding:1rem;color:var(--muted)">No active users with worker type <strong>W2 employee</strong> found. Set a user's worker type to "W2 Employee" in the Admin → Users page first.</div>`;
+    return;
+  }
+
+  const defUser = users.find(u => u.username === cur.username) || users[0];
+  const onboardingW4 = _finW4HasValues(cur.w4) ? null : await _finFetchOnboardingW4(defUser.username);
+  const w4 = _finW4HasValues(cur.w4) ? cur.w4 : (onboardingW4 || {});
+
+  const userOptions = users.map(u =>
+    `<option value="${escHtml(u.username)}" data-name="${escHtml(u.name || '')}" data-rate="${escHtml(String(_finParsePayrollNumber(u.pay_rate)))}" ${u.username === defUser.username ? 'selected' : ''}>${escHtml(u.name || u.username)}</option>`
+  ).join('');
+  const sel = s => w4.filing_status === s ? 'selected' : '';
+  const defRate = cur.pay_rate !== undefined ? _finParsePayrollNumber(cur.pay_rate) : _finParsePayrollNumber(defUser.pay_rate);
+
+  const body = document.getElementById('prl-modal-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:1rem">Pay is per pool serviced. Withholding is estimated from the employee's W-4 (IRS Pub 15-T).</div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Employee (W2)</label>
+      <select id="emp-username" class="si" style="width:100%" onchange="_finEmpSetupUserChange(this)">${userOptions}</select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Pay per pool ($)</label><input id="emp-rate" class="si" type="number" min="0" step="0.01" value="${escHtml(String(defRate))}" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Withholding method</label>
+        <select id="emp-method" class="si" style="width:100%">
+          <option value="standard" ${cur.withholding_method !== 'cumulative' ? 'selected' : ''}>Standard (per paycheck)</option>
+          <option value="cumulative" ${cur.withholding_method === 'cumulative' ? 'selected' : ''}>Cumulative (year-to-date)</option>
+        </select></div>
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">First counted week (a Thursday)</label>
+      <input id="emp-anchor" class="si" type="date" value="${escHtml(String(cur.pay_anchor || ''))}" style="width:100%">
+      <div style="font-size:.74rem;color:var(--muted);margin-top:.2rem">Pay periods run Thursday → Wednesday (weekly, 52/yr). This sets the earliest week to count from.</div>
+    </div>
+    <div style="font-weight:600;margin:.5rem 0;font-size:.9rem">W-4 (2020+)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+      <div><label style="display:block;font-weight:600;font-size:.82rem;margin-bottom:.3rem">Filing status (Step 1c)</label>
+        <select id="emp-status" class="si" style="width:100%">
+          <option value="single" ${sel('single')}>Single / MFS</option>
+          <option value="mfj" ${sel('mfj')}>Married filing jointly</option>
+          <option value="hoh" ${sel('hoh')}>Head of household</option>
+        </select></div>
+      <div><label style="display:block;font-weight:600;font-size:.82rem;margin-bottom:.3rem">Multiple jobs (Step 2 box)</label>
+        <select id="emp-multi" class="si" style="width:100%"><option value="no" ${!w4.multiple_jobs ? 'selected' : ''}>No</option><option value="yes" ${w4.multiple_jobs ? 'selected' : ''}>Yes</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+      <div><label style="display:block;font-weight:600;font-size:.82rem;margin-bottom:.3rem">Dependents $ (Step 3)</label><input id="emp-dep" class="si" type="number" min="0" step="1" value="${escHtml(String(w4.dependents_amt || 0))}" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.82rem;margin-bottom:.3rem">Other income (4a)</label><input id="emp-other" class="si" type="number" min="0" step="1" value="${escHtml(String(w4.other_income || 0))}" style="width:100%"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.82rem;margin-bottom:.3rem">Deductions (4b)</label><input id="emp-deduct" class="si" type="number" min="0" step="1" value="${escHtml(String(w4.deductions || 0))}" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.82rem;margin-bottom:.3rem">Extra withholding (4c)</label><input id="emp-extra" class="si" type="number" min="0" step="0.01" value="${escHtml(String(w4.extra_withholding || 0))}" style="width:100%"></div>
+    </div>
+    <div id="emp-setup-err" style="color:var(--error);font-size:.85rem;display:none;margin-bottom:.5rem"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      <button class="mvt-btn" onclick="_prlCloseModal()">Cancel</button>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="_finEmpSetupSave()">Save Employee</button>
+    </div>`;
+}
+
+// Auto-fill pay rate from the selected user when none is set yet.
+async function _finEmpSetupUserChange(selectEl) {
+  const opt = selectEl.options[selectEl.selectedIndex];
+  const rateEl = document.getElementById('emp-rate');
+  const username = selectEl.value;
+  const configured = _finEmpConfiguredObj(username);
+  const configuredW4 = configured && _finW4HasValues(configured.w4) ? configured.w4 : null;
+  if (rateEl) {
+    const configuredRate = configured ? _finParsePayrollNumber(configured.pay_rate) : 0;
+    rateEl.value = String(configuredRate || _finParsePayrollNumber(opt.getAttribute('data-rate')));
+  }
+  const anchorEl = document.getElementById('emp-anchor');
+  if (anchorEl) anchorEl.value = (configured && configured.pay_anchor) || '';
+  const methodEl = document.getElementById('emp-method');
+  if (methodEl) methodEl.value = (configured && configured.withholding_method === 'cumulative') ? 'cumulative' : 'standard';
+  _finApplyW4ToSetupForm(configuredW4 || await _finFetchOnboardingW4(username) || {});
+}
+
+function _finApplyW4ToSetupForm(w4) {
+  w4 = w4 || {};
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val ?? ''); };
+  setVal('emp-status', w4.filing_status || 'single');
+  setVal('emp-multi', w4.multiple_jobs ? 'yes' : 'no');
+  setVal('emp-dep', _finParsePayrollNumber(w4.dependents_amt));
+  setVal('emp-other', _finParsePayrollNumber(w4.other_income));
+  setVal('emp-deduct', _finParsePayrollNumber(w4.deductions));
+  setVal('emp-extra', _finParsePayrollNumber(w4.extra_withholding));
+}
+
+async function _finEmpSetupSave() {
+  const usel = document.getElementById('emp-username');
+  const username = usel ? usel.value : '';
+  const name = usel ? usel.options[usel.selectedIndex].getAttribute('data-name') : '';
+  const errEl = document.getElementById('emp-setup-err');
+  const showErr = m => { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } };
+  if (!username) { showErr('Select an employee.'); return; }
+
+  let anchor = document.getElementById('emp-anchor')?.value || '';
+  // Snap the anchor to the Thursday on/before the chosen date (periods are Thu–Wed).
+  if (anchor) anchor = _finFmtYmd(_finThursdayOf(new Date(anchor + 'T12:00:00')));
+
+  const employee = {
+    username, name,
+    pay_rate: _finParsePayrollNumber(document.getElementById('emp-rate')?.value),
+    pay_anchor: anchor,
+    withholding_method: document.getElementById('emp-method')?.value === 'cumulative' ? 'cumulative' : 'standard',
+    w4: {
+      filing_status:        document.getElementById('emp-status')?.value || 'single',
+      multiple_jobs:        document.getElementById('emp-multi')?.value === 'yes',
+      dependents_amt:       _finParsePayrollNumber(document.getElementById('emp-dep')?.value),
+      other_income:         _finParsePayrollNumber(document.getElementById('emp-other')?.value),
+      deductions:           _finParsePayrollNumber(document.getElementById('emp-deduct')?.value),
+      extra_withholding:    _finParsePayrollNumber(document.getElementById('emp-extra')?.value),
+      pay_periods_per_year: 52, // weekly Thu–Wed schedule
+    },
+  };
+
+  const btn = document.querySelector('#prl-modal-backdrop .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const res = await api({ action: 'save_payroll_employee', token: _s.token, employee });
+    if (!res.ok) throw new Error(res.error || 'Failed to save');
+    _finEmpEmployees = res.employees || _finEmpEmployees;
+    _finEmpSelected = username;
+    if (employee.pay_anchor && _finEmpPeriodStart < employee.pay_anchor) _finEmpPeriodStart = employee.pay_anchor;
+    _prlCloseModal();
+    _renderEmpSection();
+    _loadEmpCompletions();
+    _loadEmpPayCompletions();
+    _loadEmpPaychecks();
+  } catch (e) {
+    showErr(e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Employee'; }
   }
 }
 

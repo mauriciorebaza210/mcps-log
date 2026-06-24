@@ -556,10 +556,10 @@ function processPendingSvcJobs_() {
           let jcSheet = routesSs.getSheetByName('Job_Completions');
           if (!jcSheet) {
             jcSheet = routesSs.insertSheet('Job_Completions');
-            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key']);
+            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key','payroll_uid']);
           } else {
             const existingHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
-            ['scheduled_visit_id','service_key'].forEach(function(h) {
+            ['scheduled_visit_id','service_key','payroll_uid'].forEach(function(h) {
               if (existingHeaders.indexOf(h) === -1) {
                 jcSheet.getRange(1, jcSheet.getLastColumn() + 1).setValue(h);
                 existingHeaders.push(h);
@@ -591,6 +591,7 @@ function processPendingSvcJobs_() {
             setJc('date', completedDateStr);
             setJc('scheduled_visit_id', scheduledVisitId);
             setJc('service_key', serviceKey);
+            setJc('payroll_uid', Utilities.getUuid()); // payroll-only immutable id (additive)
             jcSheet.appendRow(row);
           }
 
@@ -638,6 +639,248 @@ function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, c
   return false;
 }
 
+function normalizeChemicalPayloadKeys_(data) {
+  if (!data || typeof data !== 'object') return data;
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const chemSheet = ss.getSheetByName('Chem_Costs');
+    if (!chemSheet || chemSheet.getLastRow() < 2) return data;
+
+    const currentNames = new Set(
+      chemSheet.getRange(2, 1, chemSheet.getLastRow() - 1, 1).getValues()
+        .flat()
+        .map(function(v) { return String(v || '').trim(); })
+        .filter(Boolean)
+    );
+    const aliases = typeof buildLegacyAliasMap_ === 'function' ? buildLegacyAliasMap_() : {};
+
+    Object.keys(data).forEach(function(key) {
+      const cleanKey = String(key || '').trim();
+      const currentName = aliases[cleanKey];
+      if (!currentName || !currentNames.has(currentName) || currentName === cleanKey) return;
+      const existing = data[currentName];
+      const incoming = data[key];
+      if ((existing === undefined || existing === null || String(existing).trim() === '') &&
+          incoming !== undefined && incoming !== null && String(incoming).trim() !== '') {
+        data[currentName] = incoming;
+      }
+    });
+  } catch (err) {
+    Logger.log('normalizeChemicalPayloadKeys_ warning: ' + err);
+  }
+  return data;
+}
+
+function DRYRUN_serviceLogChemicals_NoEmail() {
+  const report = buildServiceLogChemicalDryRunReport_();
+  Logger.log(JSON.stringify(report, null, 2));
+  return report;
+}
+
+function buildServiceLogChemicalDryRunReport_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+  const chemSheet = ss.getSheetByName('Chem_Costs');
+  if (!rawSheet) throw new Error('Missing Chemical_Usage_Log');
+  if (!chemSheet) throw new Error('Missing Chem_Costs');
+
+  const rawHeaders = rawSheet.getLastColumn() > 0
+    ? rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); })
+    : [];
+  const chemNames = chemSheet.getLastRow() >= 2
+    ? chemSheet.getRange(2, 1, chemSheet.getLastRow() - 1, 1).getValues()
+        .flat().map(function(v) { return String(v || '').trim(); }).filter(Boolean)
+    : [];
+
+  const rawHeaderSet = {};
+  rawHeaders.forEach(function(h) { if (h) rawHeaderSet[h] = true; });
+
+  const testPayload = buildDryRunServicePayload_(chemNames);
+  const normalizedPayload = Object.assign({}, testPayload);
+  normalizeChemicalPayloadKeys_(normalizedPayload);
+  const submittedChemicalFields = parseSubmittedChemicalFieldsForDryRun_(normalizedPayload);
+  const submittedSet = {};
+  submittedChemicalFields.forEach(function(h) { if (h) submittedSet[h] = true; });
+
+  const submittedMissingFromChemCosts = submittedChemicalFields.filter(function(name) { return chemNames.indexOf(name) === -1; });
+  const chemCostsMissingFromSubmitted = chemNames.filter(function(name) { return submittedSet[name] !== true; });
+  const chemCostsMissingFromRawHeaders = chemNames.filter(function(name) { return rawHeaderSet[name] !== true; });
+
+  const simulatedHeaders = rawHeaders.slice();
+  Object.keys(normalizedPayload).forEach(function(k) {
+    if (k && simulatedHeaders.indexOf(k) === -1) simulatedHeaders.push(k);
+  });
+
+  const simulatedRow = simulatedHeaders.map(function(h) {
+    if (h === 'Timestamp') return new Date();
+    const v = normalizedPayload[h];
+    if (v === undefined || v === null) return '';
+    return Array.isArray(v) ? v.join(', ') : v;
+  });
+
+  const detectedChemicals = collectChemicalsFromRowForDryRun_(simulatedRow, simulatedHeaders);
+  const priceMap = typeof buildPriceMap_ === 'function' ? buildPriceMap_() : {};
+  let estimatedCost = 0;
+  detectedChemicals.forEach(function(c) {
+    const unitCost = Number(priceMap[c.name]);
+    if (isFinite(unitCost)) estimatedCost += c.qty * unitCost;
+  });
+
+  const poolId = typeof extractPoolId_ === 'function'
+    ? extractPoolId_(String(normalizedPayload.pool_id || ''))
+    : String(normalizedPayload.pool_id || '');
+  let emailPayloadDryRun = { attempted: false, ok: false, reason: 'buildVisitReportPayload_ not available' };
+  if (typeof buildVisitReportPayload_ === 'function') {
+    emailPayloadDryRun.attempted = true;
+    try {
+      const emailPayload = buildVisitReportPayload_(simulatedRow, simulatedHeaders, poolId, []);
+      emailPayloadDryRun = {
+        attempted: true,
+        ok: !!emailPayload,
+        subject: emailPayload ? emailPayload.subject : '',
+        to_present: !!(emailPayload && emailPayload.to),
+        detected_chemicals_before_payload_build: detectedChemicals.length,
+        text_body_mentions_first_chemical: !!(emailPayload && detectedChemicals.length &&
+          String(emailPayload.text_body || '').indexOf(detectedChemicals[0].name) !== -1),
+        note: 'No email sent; Zapier webhook was not called.'
+      };
+    } catch (err) {
+      emailPayloadDryRun = { attempted: true, ok: false, error: String(err), note: 'No email sent.' };
+    }
+  }
+
+  const ok = chemCostsMissingFromSubmitted.length === 0 &&
+    detectedChemicals.length > 0;
+
+  return {
+    ok: ok,
+    mode: 'DRY_RUN_NO_WRITES_NO_EMAIL',
+    writes_performed: 0,
+    email_sent: false,
+    draft_created: false,
+    inventory_deducted: false,
+    sheets_checked: ['Chem_Costs', 'Chemical_Usage_Log'],
+    counts: {
+      chem_costs: chemNames.length,
+      submitted_chemical_fields: submittedChemicalFields.length,
+      raw_headers: rawHeaders.length,
+      simulated_payload_keys: Object.keys(normalizedPayload).length,
+      detected_chemicals: detectedChemicals.length
+    },
+    schema_check: {
+      submitted_chemical_fields: submittedChemicalFields,
+      chem_costs_missing_from_submitted_fields: chemCostsMissingFromSubmitted,
+      submitted_fields_missing_from_chem_costs_warning: submittedMissingFromChemCosts,
+      chem_costs_missing_from_raw_headers: chemCostsMissingFromRawHeaders
+    },
+    simulated_submission: {
+      pool_id: normalizedPayload.pool_id,
+      tested_chemical_fields: Object.keys(normalizedPayload).filter(function(k) {
+        return chemNames.indexOf(k) !== -1 && String(normalizedPayload[k] || '').trim() !== '';
+      }),
+      detected_chemicals: detectedChemicals,
+      estimated_total_chemical_cost: estimatedCost
+    },
+    email_payload_dry_run: emailPayloadDryRun,
+    next_action: ok
+      ? 'Chemical capture looks good. Check email_payload_dry_run separately for customer-email payload readiness.'
+      : 'Fix missing Chem_Costs fields from the submitted static client list before trusting live submissions.'
+  };
+}
+
+function parseSubmittedChemicalFieldsForDryRun_(payload) {
+  const raw = payload ? payload._chemical_fields : '';
+  if (Array.isArray(raw)) return raw.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+    } catch (e) {}
+    return raw.split(',').map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+  }
+  return [];
+}
+
+function buildDryRunServicePayload_(chemNames) {
+  const submittedChemicalFields = getStaticChemicalFieldsForDryRun_(chemNames);
+  const payload = {
+    pool_id: getDryRunPoolId_(),
+    Technician: 'DRY RUN - NO WRITE',
+    _chemical_fields: JSON.stringify(submittedChemicalFields),
+    Notes: 'DRY RUN ONLY - no row written, no email sent',
+    'Free Chlorine (FC)': '5',
+    pH: '7.4',
+    'Total Alkalinity (TA)': '90',
+    'Calcium Hardness (CH)': '250',
+    'Technician Actions': 'Brushed'
+  };
+
+  chemNames.slice(0, 3).forEach(function(name, i) {
+    payload[name] = String(i + 1);
+  });
+  return payload;
+}
+
+function getStaticChemicalFieldsForDryRun_(chemNames) {
+  const staticFields = [
+    'Liquid Chlorine',
+    'Muriatic Acid',
+    'Alkalinity Increaser',
+    'Calcium Hardness Increaser',
+    'Chlorine Tablets (3")',
+    'Startup-Tec',
+    'ScaleTec (Calcium Remover)',
+    'Algaecide',
+    'Cyanuric Acid (Stabilizer)',
+    'Diatomaceous Earth (DE)',
+    'Salt',
+    'Cal Hypo'
+  ];
+  const seen = {};
+  return staticFields.concat(chemNames || []).filter(function(name) {
+    name = String(name || '').trim();
+    if (!name || seen[name]) return false;
+    seen[name] = true;
+    return true;
+  });
+}
+
+function getDryRunPoolId_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+  if (rawSheet && rawSheet.getLastRow() >= 2 && rawSheet.getLastColumn() >= 1) {
+    const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0]
+      .map(function(h) { return String(h || '').trim(); });
+    const poolCol = headers.indexOf('pool_id');
+    if (poolCol !== -1) {
+      const values = rawSheet.getRange(2, poolCol + 1, rawSheet.getLastRow() - 1, 1).getValues();
+      for (let i = values.length - 1; i >= 0; i--) {
+        const poolId = String(values[i][0] || '').trim();
+        if (poolId) return poolId;
+      }
+    }
+  }
+  return 'DRY-RUN-POOL';
+}
+
+function collectChemicalsFromRowForDryRun_(row, headers) {
+  const nonChem = typeof VR_NON_CHEM !== 'undefined' ? VR_NON_CHEM : new Set([
+    'Timestamp', 'pool_id', 'Technician', 'Notes', '_chemical_fields',
+    'Free Chlorine (FC)', 'pH', 'Total Alkalinity (TA)', 'Calcium Hardness (CH)',
+    'Cyanuric Acid (CYA)', 'Salt Level', 'Technician Actions'
+  ]);
+  const unitMap = typeof getChemicalUnitMap_ === 'function' ? getChemicalUnitMap_() : {};
+  const fallback = typeof VR_UNIT_FALLBACK !== 'undefined' ? VR_UNIT_FALLBACK : {};
+  const chemicals = [];
+  headers.forEach(function(h, i) {
+    if (!h || nonChem.has(h) || h.endsWith(' Unit Cost (Snapshot)')) return;
+    const qty = Number(row[i]);
+    if (!isFinite(qty) || qty <= 0) return;
+    chemicals.push({ name: h, qty: qty, unit: unitMap[h] || fallback[h] || '' });
+  });
+  return chemicals;
+}
+
 function backfillJobCompletionsForDate_(dateFilter) {
   const tz = 'America/Chicago';
   const targetDate = dateFilter || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
@@ -658,10 +901,10 @@ function backfillJobCompletionsForDate_(dateFilter) {
   let jcSheet = routesSs.getSheetByName('Job_Completions');
   if (!jcSheet) {
     jcSheet = routesSs.insertSheet('Job_Completions');
-    jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key']);
+    jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key','payroll_uid']);
   } else {
     const existingHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
-    ['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key'].forEach(function(h) {
+    ['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key','payroll_uid'].forEach(function(h) {
       if (existingHeaders.indexOf(h) === -1) {
         jcSheet.getRange(1, jcSheet.getLastColumn() + 1).setValue(h);
         existingHeaders.push(h);
@@ -762,6 +1005,7 @@ function backfillJobCompletionsForDate_(dateFilter) {
     setJc('date', completedDateStr);
     setJc('scheduled_visit_id', scheduledVisitId);
     setJc('service_key', serviceKey);
+    setJc('payroll_uid', Utilities.getUuid()); // payroll-only immutable id (additive)
     jcSheet.appendRow(out);
     byVisitId[visitId] = jcSheet.getLastRow();
     byLogRow[String(logRowNum)] = jcSheet.getLastRow();
@@ -1043,6 +1287,13 @@ function doPost(e) {
           sheet.getRange(1, headers.length + 1).setValue('worker_type');
           headers.push('worker_type');
         }
+        ['w4_filing_status', 'w4_multiple_jobs', 'w4_dependents_1', 'w4_dependents_2',
+         'w4_other_income', 'w4_deductions', 'w4_extra_withholding'].forEach(function(h) {
+          if (headers.indexOf(h) === -1) {
+            sheet.getRange(1, headers.length + 1).setValue(h);
+            headers.push(h);
+          }
+        });
 
         var data = sheet.getDataRange().getValues();
         var rowIdx = -1;
@@ -1052,10 +1303,40 @@ function doPost(e) {
         
         var taxLast4 = payload.tax_id_full ? payload.tax_id_full.replace(/\D/g, '').slice(-4) : '';
         
-        var rowData = [
-          new Date().toISOString(), username, payload.legal_name, payload.phone, payload.tax_type, taxLast4, w9Url,
-          "", "", "", "", "pending_review", "", payload.dob, payload.address_line1, payload.address_city, payload.address_state, payload.address_zip, payload.emergency_name, payload.emergency_phone, w4Url || '', workerType
-        ];
+        var rowValuesByHeader = {
+          info_submitted_at: new Date().toISOString(),
+          username: username,
+          full_name: payload.legal_name,
+          phone: payload.phone,
+          tax_type: payload.tax_type,
+          tax_id_last4: taxLast4,
+          w9_url: w9Url,
+          contract_signed_at: '',
+          contract_signed_name: '',
+          approved_by: '',
+          approved_at: '',
+          status: 'pending_review',
+          admin_notes: '',
+          dob: payload.dob,
+          address_line1: payload.address_line1,
+          address_city: payload.address_city,
+          address_state: payload.address_state,
+          address_zip: payload.address_zip,
+          emergency_name: payload.emergency_name,
+          emergency_phone: payload.emergency_phone,
+          w4_url: w4Url || '',
+          worker_type: workerType,
+          w4_filing_status: payload.w4_filing_status || '',
+          w4_multiple_jobs: payload.w4_multiple_jobs ? 'TRUE' : 'FALSE',
+          w4_dependents_1: payload.w4_dependents_1 || '0',
+          w4_dependents_2: payload.w4_dependents_2 || '0',
+          w4_other_income: payload.w4_other_income || '0',
+          w4_deductions: payload.w4_deductions || '0',
+          w4_extra_withholding: payload.w4_extra_withholding || '0'
+        };
+        var rowData = headers.map(function(h) {
+          return rowValuesByHeader[h] !== undefined ? rowValuesByHeader[h] : '';
+        });
         
         if (rowIdx > -1) {
           for (var j = 0; j < headers.length; j++) {
@@ -1067,6 +1348,13 @@ function doPost(e) {
             if (w9Url && headers[j] === 'w9_url') sheet.getRange(rowIdx, j+1).setValue(w9Url);
             if (w4Url && headers[j] === 'w4_url') sheet.getRange(rowIdx, j+1).setValue(w4Url);
             if (headers[j] === 'worker_type') sheet.getRange(rowIdx, j+1).setValue(workerType);
+            if (headers[j] === 'w4_filing_status') sheet.getRange(rowIdx, j+1).setValue(payload.w4_filing_status || '');
+            if (headers[j] === 'w4_multiple_jobs') sheet.getRange(rowIdx, j+1).setValue(payload.w4_multiple_jobs ? 'TRUE' : 'FALSE');
+            if (headers[j] === 'w4_dependents_1') sheet.getRange(rowIdx, j+1).setValue(payload.w4_dependents_1 || '0');
+            if (headers[j] === 'w4_dependents_2') sheet.getRange(rowIdx, j+1).setValue(payload.w4_dependents_2 || '0');
+            if (headers[j] === 'w4_other_income') sheet.getRange(rowIdx, j+1).setValue(payload.w4_other_income || '0');
+            if (headers[j] === 'w4_deductions') sheet.getRange(rowIdx, j+1).setValue(payload.w4_deductions || '0');
+            if (headers[j] === 'w4_extra_withholding') sheet.getRange(rowIdx, j+1).setValue(payload.w4_extra_withholding || '0');
             if (headers[j] === 'dob') sheet.getRange(rowIdx, j+1).setValue(payload.dob);
             if (headers[j] === 'address_line1') sheet.getRange(rowIdx, j+1).setValue(payload.address_line1);
             if (headers[j] === 'address_city') sheet.getRange(rowIdx, j+1).setValue(payload.address_city);
@@ -1487,6 +1775,38 @@ function doPost(e) {
       return jsonResponse_(logPayrollPayment_(payload.type, payload.person, payload.period, payload.gross_amount, payload.net_amount, payload.note, name));
     }
 
+    if (payload.action === 'save_payroll_employee') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(savePayrollEmployee_(payload.employee));
+    }
+
+    if (payload.action === 'set_payroll_approval') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      const by = (auth.user && auth.user.name) ? auth.user.name : (auth.name || auth.username || '');
+      const meta = { username: payload.username, pool_id: payload.pool_id, visit_date: payload.visit_date };
+      return jsonResponse_(setPayrollApproval_(payload.payroll_uid, meta, !!payload.approved, by));
+    }
+
+    if (payload.action === 'add_manual_pool') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      const by = (auth.user && auth.user.name) ? auth.user.name : (auth.name || auth.username || '');
+      return jsonResponse_(addManualPool_(payload.username, payload.pool_id, payload.date, payload.note, by));
+    }
+
+    if (payload.action === 'save_employee_paycheck') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      const by = (auth.user && auth.user.name) ? auth.user.name : (auth.name || auth.username || '');
+      return jsonResponse_(saveEmployeePaycheck_(payload.paycheck, by));
+    }
+
     if (payload.action === 'save_startup_checklist') {
       return handleSaveStartupChecklist_(payload);
     }
@@ -1628,6 +1948,7 @@ function doPost(e) {
       if (portalUserName) {
         payload.data.Technician = portalUserName;
       }
+      normalizeChemicalPayloadKeys_(payload.data);
 
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
@@ -2396,6 +2717,48 @@ function doGet(e) {
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
       if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
       return jsonResponse_(getPayrollLog_(e.parameter.year || ''));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_payroll_employees') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(getPayrollEmployees_());
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_payroll_approvals') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(getPayrollApprovals_(e.parameter.username || ''));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_payroll_onboarding_w4') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(getPayrollOnboardingW4_(e.parameter.username || ''));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_employee_completions') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(getEmployeeCompletions_(e.parameter.username || '', e.parameter.start || '', e.parameter.end || ''));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_submission_detail') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(getSubmissionDetail_(e.parameter.payroll_uid || ''));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_employee_paychecks') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(getEmployeePaychecks_(e.parameter.username || ''));
     }
 
     if (e && e.parameter && e.parameter.action === 'get_visit_history') {

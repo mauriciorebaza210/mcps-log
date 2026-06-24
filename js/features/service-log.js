@@ -54,13 +54,17 @@ const FORM_SCHEMA = [
   { id:25, title:'Technician Actions',               type:'CHECKBOX',       isRequired:false, helpText:'Check the tasks you performed on this visit.',
     choices:['Netted','Vacuumed','Brushed','Backwashed','Cleaned pump basket','Cleaned skimmer basket','Cleaned cartridges','Cleaned automatic cleaner','Cleaned deck/coping'] },
 ];
+const SVC_CHEMICAL_FIELDS = FORM_SCHEMA.slice(
+  FORM_SCHEMA.findIndex(i => i.isSectionBreak && String(i.title || '').trim().toLowerCase() === 'used') + 1,
+  FORM_SCHEMA.findIndex(i => i.isSectionBreak && String(i.title || '').trim().toLowerCase() === 'actions')
+).filter(i => i && i.type === 'TEXT' && i.title).map(i => i.title);
 
 function loadServiceLog(prefillPoolId){
   window._lastLoadedPoolId = null;
   window._svcLoadCounter = (window._svcLoadCounter||0) + 1;
   const thisRequest = window._svcLoadCounter;
 
-  // Render immediately from static schema — no network wait
+  // Render immediately from the static schema. No Portal_Schema dependency.
   renderSvcForm(FORM_SCHEMA, prefillPoolId);
   document.getElementById('svc-loading').style.display = 'none';
   document.getElementById('svc-root').style.display = 'block';
@@ -707,6 +711,9 @@ function submitSvc(){
   // Inject technician name from portal session
   if(_s && _s.name) payload['Technician'] = _s.name;
 
+  // Tell GAS exactly which static fields this client considers chemical usage.
+  payload['_chemical_fields'] = JSON.stringify(SVC_CHEMICAL_FIELDS);
+
   // Preserve the exact scheduled service identity when the log was launched
   // from the route card. This lets admin completion checks distinguish a
   // one-time/startup/GTC visit from the same pool's recurring service.
@@ -744,7 +751,7 @@ function submitSvc(){
 }
 function showSvcConfirm(payload){
   window._svcPayload=payload;
-  const rows=Object.entries(payload).map(([k,v])=>
+  const rows=Object.entries(payload).filter(([k]) => String(k || '').charAt(0) !== '_').map(([k,v])=>
     '<div class="conf-row"><span class="conf-key">'+k+'</span><span class="conf-val">'+(Array.isArray(v)?v.join(', '):v)+'</span></div>'
   ).join('');
   const pc=(window._svcPhotos||[]).length;
