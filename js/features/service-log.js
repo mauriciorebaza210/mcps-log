@@ -59,6 +59,16 @@ const SVC_CHEMICAL_FIELDS = FORM_SCHEMA.slice(
   FORM_SCHEMA.findIndex(i => i.isSectionBreak && String(i.title || '').trim().toLowerCase() === 'actions')
 ).filter(i => i && i.type === 'TEXT' && i.title).map(i => i.title);
 
+// Build a querySelector for a [name="…"] attribute. Inputs are rendered with the title
+// HTML-encoded (`&quot;`), which the browser DECODES — so the live attribute holds a real
+// quote (e.g. Chlorine Tablets (3")). When reading the value back we must CSS-escape the
+// quote, NOT re-encode it as &quot; (CSS does not decode HTML entities, so &quot; silently
+// matches nothing). That mismatch is why the only quote-bearing field — Chlorine Tablets (3")
+// — was never collected, logged, or emailed.
+function svcNameSel_(title){
+  return '[name="' + String(title).replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"]';
+}
+
 function loadServiceLog(prefillPoolId){
   window._lastLoadedPoolId = null;
   window._svcLoadCounter = (window._svcLoadCounter||0) + 1;
@@ -421,10 +431,10 @@ function saveDraft(poolId) {
     if(!item.title) return;
     let val;
     if(item.type==='CHECKBOX') {
-      const bs=document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');
+      const bs=document.querySelectorAll('input'+svcNameSel_(item.title)+':checked');
       val=Array.from(bs).map(b=>b.value);
     } else {
-      const el=document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+      const el=document.querySelector(svcNameSel_(item.title));
       if(el) val=el.value;
     }
     draft[item.title] = val;
@@ -457,10 +467,10 @@ function loadDraft(poolId) {
       if(item.title.trim().toLowerCase() === 'pool_id') return; // Do not overwrite pool_id
       
       if(item.type === 'CHECKBOX') {
-        const bs = document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+        const bs = document.querySelectorAll('input'+svcNameSel_(item.title));
         bs.forEach(b => b.checked = (val || []).includes(b.value));
       } else {
-        const el = document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');
+        const el = document.querySelector(svcNameSel_(item.title));
         if(el) el.value = val;
       }
     });
@@ -652,8 +662,8 @@ function submitSvc(){
   const payload={};let hasErr=false;
   _formItems.forEach(item=>{
     if(!item.title)return;let val;
-    if(item.type==='CHECKBOX'){const bs=document.querySelectorAll('input[name="'+item.title.replace(/"/g,'&quot;')+'"]:checked');val=Array.from(bs).map(b=>b.value);if(!val.length)val=null;}
-    else{const el=document.querySelector('[name="'+item.title.replace(/"/g,'&quot;')+'"]');if(el)val=el.value.trim();}
+    if(item.type==='CHECKBOX'){const bs=document.querySelectorAll('input'+svcNameSel_(item.title)+':checked');val=Array.from(bs).map(b=>b.value);if(!val.length)val=null;}
+    else{const el=document.querySelector(svcNameSel_(item.title));if(el)val=el.value.trim();}
     const _softOpt = (item.title === 'Calcium Hardness (CH)');
     if(item.isRequired && !_softOpt &&(!val||(Array.isArray(val)&&!val.length)))hasErr=true;
     if(val)payload[item.title]=val;
@@ -680,7 +690,7 @@ function submitSvc(){
     let errStr = missingFields.length ? ('Please fill in required fields:\n' + missingFields.join(', ')) : 'Fill out all required fields.';
     alert(errStr);
     missingFields.forEach(f => {
-      const el = document.querySelector('[name="' + f.replace(/"/g,'&quot;') + '"]');
+      const el = document.querySelector(svcNameSel_(f));
       if (el) { el.style.borderColor = 'var(--error)'; el.focus(); el.addEventListener('input', () => { el.style.borderColor = ''; }, { once: true }); }
     });
     return;
