@@ -66,11 +66,19 @@ export function crmSpreadsheetId() {
   return process.env.CRM_SPREADSHEET_ID || DEFAULT_CRM_SS_ID;
 }
 
-export async function validatePortalToken(token) {
+// Spreadsheet that holds QBO config tabs (QBO_Tokens, QBO_Account_Map).
+// Defaults to the CRM spreadsheet the service account can already reach.
+export function qboConfigSpreadsheetId() {
+  return process.env.QBO_CONFIG_SPREADSHEET_ID || crmSpreadsheetId();
+}
+
+// Full session object from GAS validate_token (includes roles). Cached briefly.
+// Returns null when the token is missing or invalid.
+export async function validatePortalSession(token) {
   const clean = String(token || '').trim();
-  if (!clean) return false;
+  if (!clean) return null;
   const hit = tokenValidationCache.get(clean);
-  if (hit && hit.expiresAt > Date.now()) return hit.ok;
+  if (hit && hit.expiresAt > Date.now()) return hit.session;
 
   const base = process.env.APPS_SCRIPT_URL || process.env.MCPS_APPS_SCRIPT_URL || DEFAULT_APPS_SCRIPT_URL;
   const url = new URL(base);
@@ -79,8 +87,41 @@ export async function validatePortalToken(token) {
   const res = await fetch(url.toString());
   const json = await res.json().catch(() => ({}));
   const ok = !!(res.ok && json && json.ok);
-  tokenValidationCache.set(clean, { ok, expiresAt: Date.now() + 10 * 60 * 1000 });
-  return ok;
+  const session = ok ? json : null;
+  tokenValidationCache.set(clean, { ok, session, expiresAt: Date.now() + 10 * 60 * 1000 });
+  return session;
+}
+
+export async function validatePortalToken(token) {
+  return !!(await validatePortalSession(token));
+}
+
+// Roles can arrive as session.roles[] or nested under session.user.roles[].
+export function hasAdminAccess(session) {
+  if (!session) return false;
+  const roles = []
+    .concat(session.roles || [])
+    .concat((session.user && session.user.roles) || [])
+    .map(r => String(r).trim().toLowerCase());
+  return roles.includes('admin') || roles.includes('manager');
+}
+
+// Route guard for QBO admin endpoints. Reads token from query or JSON body.
+// On failure it sends the response and returns null; on success returns the session.
+export async function requireAdminPortalToken(req, res) {
+  const token = (req.query && req.query.token)
+    || (req.body && req.body.token)
+    || '';
+  const session = await validatePortalSession(token);
+  if (!session) {
+    sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+    return null;
+  }
+  if (!hasAdminAccess(session)) {
+    sendJson(res, 403, { ok: false, error: 'Admin access required.' });
+    return null;
+  }
+  return session;
 }
 
 export function normalizeHeader(name) {
@@ -131,9 +172,9 @@ export function rowsToObjects(values) {
   });
 }
 
-export async function readSheetRange(range) {
+export async function readSheetRange(range, spreadsheetId = crmSpreadsheetId()) {
   const token = await getAccessToken();
-  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${crmSpreadsheetId()}/values/${encodeURIComponent(range)}`);
+  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`);
   url.searchParams.set('majorDimension', 'ROWS');
   const res = await fetch(url.toString(), {
     headers: { authorization: `Bearer ${token}` }
@@ -141,6 +182,82 @@ export async function readSheetRange(range) {
   const json = await res.json();
   if (!res.ok) throw new Error(json.error?.message || 'Sheets API read failed');
   return json.values || [];
+}
+
+// Overwrite a range with a 2D array of values.
+export async function writeSheetRange(range, values, spreadsheetId = crmSpreadsheetId()) {
+  const token = await getAccessToken();
+  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`);
+  url.searchParams.set('valueInputOption', 'RAW');
+  const res = await fetch(url.toString(), {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ range, majorDimension: 'ROWS', values })
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || 'Sheets API write failed');
+  return json;
+}
+
+// Append rows to a sheet/tab (Google picks the next empty row).
+export async function appendSheetRows(sheetName, rows, spreadsheetId = crmSpreadsheetId()) {
+  const token = await getAccessToken();
+  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append`);
+  url.searchParams.set('valueInputOption', 'RAW');
+  url.searchParams.set('insertDataOption', 'INSERT_ROWS');
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ majorDimension: 'ROWS', values: rows })
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || 'Sheets API append failed');
+  return json;
+}
+
+export async function clearSheetRange(range, spreadsheetId = crmSpreadsheetId()) {
+  const token = await getAccessToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:clear`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: '{}'
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || 'Sheets API clear failed');
+  return json;
+}
+
+// Ensure a tab exists with the given header row. Creates the tab (and writes
+// headers) when missing; otherwise leaves existing data untouched. Returns the
+// header row currently in the sheet.
+export async function ensureSheetWithHeaders(sheetName, headers, spreadsheetId = crmSpreadsheetId()) {
+  const token = await getAccessToken();
+  const meta = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+    { headers: { authorization: `Bearer ${token}` } }
+  ).then(r => r.json());
+  const titles = (meta.sheets || []).map(s => s.properties && s.properties.title);
+  if (!titles.includes(sheetName)) {
+    const addRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: sheetName } } }] })
+      }
+    );
+    const addJson = await addRes.json();
+    if (!addRes.ok) throw new Error(addJson.error?.message || 'Sheets API addSheet failed');
+    await writeSheetRange(`${sheetName}!A1`, [headers], spreadsheetId);
+    return headers.slice();
+  }
+  const existing = await readSheetRange(`${sheetName}!1:1`, spreadsheetId);
+  if (!existing.length || !existing[0].length) {
+    await writeSheetRange(`${sheetName}!A1`, [headers], spreadsheetId);
+    return headers.slice();
+  }
+  return existing[0];
 }
 
 export async function getCached(key, ttlMs, loader) {

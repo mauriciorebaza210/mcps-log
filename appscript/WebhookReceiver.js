@@ -1950,6 +1950,18 @@ function doPost(e) {
       return jsonResponse_(saveEmployeePaycheck_(payload.paycheck, by));
     }
 
+    if (payload.action === 'set_paycheck_qbo_ref') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(setPaycheckQboRef_(payload.paycheck_id, {
+        je_id:      payload.je_id,
+        status:     payload.status,
+        doc_number: payload.doc_number,
+        error:      payload.error
+      }));
+    }
+
     if (payload.action === 'save_startup_checklist') {
       return handleSaveStartupChecklist_(payload);
     }

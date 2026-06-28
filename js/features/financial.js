@@ -2342,7 +2342,8 @@ function _renderEmpSection() {
   if (!el) return;
 
   const adminBtns = isAdmin()
-    ? `<button class="mvt-btn" onclick="_finEmpSetupModal()">⚙ Employee W4</button>`
+    ? `<button class="mvt-btn" onclick="_finEmpSetupModal()">⚙ Employee W4</button>
+       <button class="mvt-btn" onclick="_finQboSetupModal()">📘 QuickBooks</button>`
     : '';
 
   // No employees configured yet.
@@ -2430,9 +2431,10 @@ function _renderEmpSection() {
   const ytdChecks = _finEmpPaychecks.filter(p => (p.period_start || '').startsWith(periodYear));
   const ytdGross = ytdChecks.reduce((s, p) => s + (p.gross || 0), 0);
   const recordedThisPeriod = _finEmpPaychecks.find(p => p.period_start === periodStart);
-  const prevYtd = ytdGross - (recordedThisPeriod ? (recordedThisPeriod.gross || 0) : 0);
-  const futaWages = Math.max(0, Math.min(gross, 7000 - prevYtd));
-  const sutaWages = Math.max(0, Math.min(gross, 9000 - prevYtd));
+  // Employer taxes (employer FICA + FUTA/SUTA). FUTA/SUTA wage bases follow the
+  // PAY-DATE year so they agree with federal withholding (wages count when paid).
+  // Same helper is used by _finEmpRecordPaycheck, so shown and saved values match.
+  const et = _finEmpComputeEmployerTaxes(gross, periodStart, payDateVal);
 
   const atAnchorFloor = emp && emp.pay_anchor && periodStart <= emp.pay_anchor;
 
@@ -2440,7 +2442,8 @@ function _renderEmpSection() {
     ? `<div style="background:#dcfce7;color:#166534;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;font-weight:600">
          Recorded ${_finFmtCurrency(recordedThisPeriod.net)} net${recordedThisPeriod.pay_date ? ` · paid ${recordedThisPeriod.pay_date}` : ''} ·
          <a href="#" onclick="_finEmpShowPaycheck('${recordedThisPeriod.paycheck_id}');return false" style="color:#166534;text-decoration:underline">view</a>
-       </div>`
+       </div>
+       <div style="margin-top:.5rem">${_finQboStatusHtml(recordedThisPeriod)}</div>`
     : (isAdmin()
         ? `<div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
              <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Date verified</label>
@@ -2501,9 +2504,9 @@ function _renderEmpSection() {
       </div>
       ${recordControls}
       <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.75rem;font-size:.82rem;color:var(--muted);margin-top:.5rem">
-        <strong style="color:var(--text)">Employer taxes also owed (EFTPS):</strong> SS ${_finFmtCurrency(wh.er_ss)} · Medicare ${_finFmtCurrency(wh.er_med)}
-        ${futaWages > 0 ? ` · FUTA ${_finFmtCurrency(futaWages * 0.006)}` : ' · FUTA $0 (wage base met)'}
-        ${sutaWages > 0 ? ` · SUTA TX ${_finFmtCurrency(sutaWages * 0.027)}` : ' · SUTA TX $0 (wage base met)'}
+        <strong style="color:var(--text)">Employer taxes also owed (EFTPS):</strong> SS ${_finFmtCurrency(et.er_ss)} · Medicare ${_finFmtCurrency(et.er_med)}
+        ${et.futaWages > 0 ? ` · FUTA ${_finFmtCurrency(et.futa)}` : ' · FUTA $0 (wage base met)'}
+        ${et.sutaWages > 0 ? ` · SUTA TX ${_finFmtCurrency(et.suta)}` : ' · SUTA TX $0 (wage base met)'}
         <div style="margin-top:.4rem">YTD ${periodYear} gross paid: <strong>${_finFmtCurrency(ytdGross)}</strong> · Federal withholding per IRS Pub 15-T (2026) Worksheet 1A · ${methodLabel} method (weekly, 52/yr).</div>
       </div>
     </div>
@@ -2521,6 +2524,7 @@ function _finEmpPaychecksHistoryHtml() {
       <td style="text-align:center">${p.pool_count}</td>
       <td style="text-align:right">${_finFmtCurrency(p.gross)}</td>
       <td style="text-align:right;font-weight:600;color:var(--teal)">${_finFmtCurrency(p.net)}</td>
+      <td style="text-align:right" onclick="event.stopPropagation()">${_finQboStatusHtml(p)}</td>
     </tr>`).join('');
   return `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
@@ -2528,7 +2532,7 @@ function _finEmpPaychecksHistoryHtml() {
       ${checks.length === 0
         ? `<div style="color:var(--muted);text-align:center;padding:1rem">No paychecks recorded yet.</div>`
         : `<div style="overflow-x:auto"><table class="adm-table" style="width:100%">
-             <thead><tr><th>Pay period</th><th>Paid</th><th style="text-align:center">Pools</th><th style="text-align:right">Gross</th><th style="text-align:right">Net</th></tr></thead>
+             <thead><tr><th>Pay period</th><th>Paid</th><th style="text-align:center">Pools</th><th style="text-align:right">Gross</th><th style="text-align:right">Net</th><th style="text-align:right">QuickBooks</th></tr></thead>
              <tbody>${rows}</tbody></table></div>`}
     </div>`;
 }
@@ -2743,6 +2747,7 @@ async function _finEmpRecordPaycheck() {
   const payDate  = document.getElementById('emp-pay-date')?.value || '';
   // Compute withholding with the actual pay date so cumulative YTD lands in the right tax year.
   const wh = _finEmpComputeWithholding(emp, gross, start, payDate);
+  const et = _finEmpComputeEmployerTaxes(gross, start, payDate);
   if (!confirm(`Record paycheck for ${emp.name}\n${_finPeriodLabel(start)}\n${approved.length} pools · gross ${_finFmtCurrency(gross)} · net ${_finFmtCurrency(wh.net)}`)) return;
 
   const paycheck = {
@@ -2750,15 +2755,102 @@ async function _finEmpRecordPaycheck() {
     period_start: start, period_end: end,
     verified_date: verified, pay_date: payDate,
     pool_count: approved.length, gross, fed: wh.fed, ss: wh.ss, med: wh.med, net: wh.net,
+    er_ss: et.er_ss, er_med: et.er_med, futa: et.futa, suta: et.suta,
     pool_uids: approved.map(r => r.payroll_uid), note: ''
   };
+  let saved;
   try {
-    const res = await api({ action: 'save_employee_paycheck', token: _s.token, paycheck });
-    if (!res.ok) throw new Error(res.error || 'failed');
-    await _loadEmpPaychecks();
+    saved = await api({ action: 'save_employee_paycheck', token: _s.token, paycheck });
+    if (!saved.ok) throw new Error(saved.error || 'failed');
   } catch (e) {
     alert('Could not record paycheck: ' + e.message);
+    return;
   }
+  // Paycheck is saved (source of truth). Posting to QuickBooks is a best-effort
+  // side effect — failure here never undoes the save; the row shows a Retry chip.
+  const qb = await _finEmpPostToQbo(saved.paycheck_id, Object.assign({ paycheck_id: saved.paycheck_id }, paycheck));
+  await _loadEmpPaychecks();
+  if (qb && !qb.ok) alert('Paycheck saved. QuickBooks sync failed — you can retry from the history.\n\n' + qb.error);
+}
+
+// ── QuickBooks Online sync ────────────────────────────────────────────────────
+// Employer taxes for a period. FUTA/SUTA wage bases use the PAY-DATE year so they
+// agree with federal withholding. This is the single source of truth used by both
+// the live panel display and Record Paycheck, so shown == saved.
+function _finEmpComputeEmployerTaxes(gross, periodStart, payDate) {
+  const r = n => Math.round(n * 100) / 100;
+  const payYear = String(payDate || _finFmtYmd(new Date())).slice(0, 4);
+  const prior = (_finEmpPaychecks || []).filter(p =>
+    String(p.pay_date || p.period_start || '').startsWith(payYear) && p.period_start !== periodStart);
+  const prevYtd = prior.reduce((s, p) => s + (p.gross || 0), 0);
+  const futaWages = Math.max(0, Math.min(gross, 7000 - prevYtd));
+  const sutaWages = Math.max(0, Math.min(gross, 9000 - prevYtd));
+  return {
+    er_ss:  r(gross * 0.062),
+    er_med: r(gross * 0.0145),
+    futa:   r(futaWages * 0.006),
+    suta:   r(sutaWages * 0.027),
+    futaWages, sutaWages
+  };
+}
+
+// Post a saved paycheck to QBO, then stamp the result back onto the Sheets row.
+async function _finEmpPostToQbo(paycheckId, paycheckObj) {
+  if (!paycheckId) return { ok: false, error: 'missing paycheck id' };
+  let result;
+  try {
+    const res = await fetch('/api/qbo/journal', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: _s.token, paycheck_id: paycheckId, paycheck: paycheckObj })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+      const msg = (json.missing && json.missing.length)
+        ? 'QuickBooks accounts not mapped: ' + json.missing.join(', ')
+        : (json.error || 'QuickBooks sync failed');
+      result = { ok: false, error: msg };
+    } else {
+      result = { ok: true, je_id: json.je_id, doc_number: json.doc_number };
+    }
+  } catch (e) {
+    result = { ok: false, error: String(e.message || e) };
+  }
+  // Best-effort status write; the UI treats a blank status as unsynced + retryable.
+  await _finSetQboRef(paycheckId, result.ok
+    ? { status: 'synced', je_id: result.je_id, doc_number: result.doc_number }
+    : { status: 'failed', error: result.error });
+  return result;
+}
+
+async function _finSetQboRef(paycheckId, fields) {
+  try {
+    await api(Object.assign({ action: 'set_paycheck_qbo_ref', token: _s.token, paycheck_id: paycheckId }, fields));
+  } catch (e) { /* status write is best-effort */ }
+}
+
+// Retry / first-time post from the badge, history row, or detail modal.
+async function _finEmpSyncPaycheckToQbo(paycheckId) {
+  const p = (_finEmpPaychecks || []).find(x => x.paycheck_id === paycheckId);
+  if (!p) return;
+  const r = await _finEmpPostToQbo(paycheckId, p);
+  await _loadEmpPaychecks();
+  if (r && !r.ok) alert('QuickBooks sync failed: ' + r.error);
+}
+
+// Inline status chip (+ Post/Retry button for admins) for a paycheck row.
+function _finQboStatusHtml(p) {
+  const st = String((p && p.qbo_status) || '').toLowerCase();
+  if (st === 'synced') {
+    return `<span style="background:#dcfce7;color:#166534;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700">✓ Synced</span>`;
+  }
+  const label = st === 'failed'
+    ? `<span style="background:#fee2e2;color:#b91c1c;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700" title="${escHtml(p.qbo_error || '')}">Failed</span>`
+    : `<span style="background:#f1f5f9;color:#64748b;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700">Not synced</span>`;
+  const btn = isAdmin()
+    ? ` <button class="mvt-btn" style="font-size:.72rem;padding:.1rem .45rem" onclick="event.stopPropagation();_finEmpSyncPaycheckToQbo('${p.paycheck_id}')">${st === 'failed' ? 'Retry' : 'Post to QuickBooks'}</button>`
+    : '';
+  return label + btn;
 }
 
 function _finEmpShowPaycheck(paycheckId) {
@@ -2776,10 +2868,139 @@ function _finEmpShowPaycheck(paycheckId) {
       ${line('Federal income tax', '−' + _finFmtCurrency(p.fed))}
       ${line('Social Security', '−' + _finFmtCurrency(p.ss))}
       ${line('Medicare', '−' + _finFmtCurrency(p.med))}
+      ${(p.er_ss || p.er_med || p.futa || p.suta)
+        ? line('Employer taxes (EFTPS)', `SS ${_finFmtCurrency(p.er_ss)} · Medicare ${_finFmtCurrency(p.er_med)} · FUTA ${_finFmtCurrency(p.futa)} · SUTA ${_finFmtCurrency(p.suta)}`)
+        : ''}
       ${line('Net take-home', _finFmtCurrency(p.net))}
       ${p.note ? line('Note', escHtml(p.note)) : ''}
       ${line('Recorded by', escHtml(p.logged_by || '—'))}
+      ${line('QuickBooks', _finQboStatusHtml(p) + (p.qbo_je_id ? ` <span style="color:var(--muted);font-size:.78rem">JE #${escHtml(p.qbo_je_id)}</span>` : ''))}
     </div>`);
+}
+
+// ── QuickBooks setup modal (connect + account mapping) ────────────────────────
+const _FIN_QBO_BUCKETS = [
+  ['wages_expense',              'Wages Expense',                'Debit'],
+  ['payroll_tax_expense',       'Payroll Tax Expense',          'Debit'],
+  ['federal_income_tax_payable','Federal Income Tax Payable',   'Credit'],
+  ['fica_payable',              'FICA Payable (SS + Medicare)',  'Credit'],
+  ['futa_payable',              'FUTA Payable',                  'Credit'],
+  ['suta_payable',              'SUTA TX Payable',               'Credit'],
+  ['bank_checking',             'Bank / Checking (net pay)',     'Credit']
+];
+
+async function _finQboSetupModal() {
+  if (!isAdmin()) return;
+  _prlOpenModal('QuickBooks Online', `<div style="padding:1.5rem;text-align:center"><div class="spinner"></div></div>`);
+  await _finQboRenderSetup();
+}
+
+async function _finQboRenderSetup() {
+  const body = document.getElementById('prl-modal-body');
+  if (!body) return;
+  let status = {};
+  try {
+    const res = await fetch(`/api/qbo/status?token=${encodeURIComponent(_s.token)}`);
+    status = await res.json();
+  } catch (e) { status = { ok: false, error: String(e) }; }
+
+  if (!status.ok) {
+    body.innerHTML = `<div style="color:var(--error);padding:1rem">Could not reach QuickBooks status. ${escHtml(status.error || '')}</div>`;
+    return;
+  }
+
+  if (!status.connected) {
+    body.innerHTML = `
+      <div style="font-size:.9rem;color:var(--muted);margin-bottom:1rem">Connect your QuickBooks Online company so recorded paychecks post as balanced journal entries.</div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="adm-new-btn" style="background:var(--teal)" onclick="window.open('/api/qbo/connect?token=${encodeURIComponent(_s.token)}','_blank')">Connect QuickBooks</button>
+        <button class="mvt-btn" onclick="_finQboRenderSetup()">I've connected — refresh</button>
+      </div>`;
+    return;
+  }
+
+  body.innerHTML = `<div style="padding:1rem;text-align:center"><div class="spinner"></div><div style="font-size:.82rem;color:var(--muted);margin-top:.5rem">Loading accounts…</div></div>`;
+  let accounts = [], map = {};
+  try {
+    const [aRes, mRes] = await Promise.all([
+      fetch(`/api/qbo/accounts?token=${encodeURIComponent(_s.token)}`).then(r => r.json()),
+      fetch(`/api/qbo/map?token=${encodeURIComponent(_s.token)}`).then(r => r.json())
+    ]);
+    accounts = (aRes && aRes.accounts) || [];
+    map = (mRes && mRes.map) || {};
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--error);padding:1rem">Could not load QuickBooks accounts. ${escHtml(String(e.message || e))}</div>`;
+    return;
+  }
+
+  const optionsFor = (selId) => `<option value="">— choose account —</option>` + accounts.map(a =>
+    `<option value="${escHtml(a.id)}" ${a.id === selId ? 'selected' : ''}>${escHtml(a.name)}${a.type ? ' · ' + escHtml(a.type) : ''}</option>`
+  ).join('');
+
+  const rows = _FIN_QBO_BUCKETS.map(([key, label, side]) => `
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap">
+      <label style="flex:1 1 200px;font-size:.85rem;font-weight:600">${label}
+        <span style="color:var(--muted);font-weight:400">(${side})</span></label>
+      <select class="si" id="qbo-map-${key}" data-bucket="${key}" style="flex:1 1 240px">${optionsFor((map[key] || {}).account_id)}</select>
+    </div>`).join('');
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+      <div style="font-size:.9rem"><span style="color:var(--muted)">Connected:</span> <strong>${escHtml(status.companyName || 'QuickBooks company')}</strong></div>
+      <button class="mvt-btn" style="font-size:.78rem" onclick="_finQboDisconnect()">Disconnect</button>
+    </div>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem">Map each payroll bucket to a QuickBooks account. Buckets may share an account.</div>
+    ${rows}
+    <div id="qbo-map-err" style="color:var(--error);font-size:.85rem;display:none;margin:.5rem 0"></div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button class="mvt-btn" onclick="_prlCloseModal()">Close</button>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="_finQboSaveMap()">Save mapping</button>
+    </div>`;
+}
+
+async function _finQboSaveMap() {
+  const errEl = document.getElementById('qbo-map-err');
+  const showErr = m => { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } };
+  const accNameById = {};
+  document.querySelectorAll('#prl-modal-body select[data-bucket] option').forEach(o => {
+    if (o.value) accNameById[o.value] = o.textContent.split(' · ')[0];
+  });
+  const map = {};
+  let missing = [];
+  _FIN_QBO_BUCKETS.forEach(([key]) => {
+    const sel = document.getElementById(`qbo-map-${key}`);
+    const id = sel ? sel.value : '';
+    if (!id) missing.push(key);
+    map[key] = { account_id: id, account_name: accNameById[id] || '' };
+  });
+  if (missing.length) { showErr('Map every bucket before saving.'); return; }
+  const btn = document.querySelector('#prl-modal-body .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const res = await fetch('/api/qbo/map', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: _s.token, map })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) throw new Error(json.error || 'save failed');
+    _prlCloseModal();
+  } catch (e) {
+    showErr(String(e.message || e));
+    if (btn) { btn.disabled = false; btn.textContent = 'Save mapping'; }
+  }
+}
+
+async function _finQboDisconnect() {
+  if (!confirm('Disconnect QuickBooks? New paychecks will stop posting until you reconnect.')) return;
+  try {
+    await fetch('/api/qbo/disconnect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: _s.token })
+    });
+  } catch (e) {}
+  _finQboRenderSetup();
 }
 
 // ── Manual pool entry (missed-form fallback) ──────────────────────────────────
