@@ -18,7 +18,11 @@ function b64url(value) {
 
 function privateKey() {
   const raw = process.env.GOOGLE_PRIVATE_KEY || '';
-  return raw.replace(/\\n/g, '\n');
+  return raw
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\\n/g, '\n')
+    .trim();
 }
 
 async function getAccessToken() {
@@ -80,11 +84,15 @@ export async function validatePortalSession(token) {
   const hit = tokenValidationCache.get(clean);
   if (hit && hit.expiresAt > Date.now()) return hit.session;
 
-  const base = process.env.APPS_SCRIPT_URL || process.env.MCPS_APPS_SCRIPT_URL || DEFAULT_APPS_SCRIPT_URL;
-  const url = new URL(base);
-  url.searchParams.set('action', 'validate_token');
-  url.searchParams.set('token', clean);
-  const res = await fetch(url.toString());
+  const base = process.env.APPS_SCRIPT_URL || process.env.MCPS_APPS_SCRIPT_URL || process.env.GAS_URL || DEFAULT_APPS_SCRIPT_URL;
+  const res = await fetch(base, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      action: 'validate_token',
+      token: clean
+    })
+  });
   const json = await res.json().catch(() => ({}));
   const ok = !!(res.ok && json && json.ok);
   const session = ok ? json : null;
