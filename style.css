@@ -1485,6 +1485,126 @@ select.q-inp{cursor:pointer}
   margin-top: .5rem;
 }
 
+.svc-photo-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+}
+.svc-photo-slot {
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: .8rem;
+  transition: border-color .16s, background .16s, box-shadow .16s;
+}
+.svc-photo-slot.has-photo { background: var(--card); }
+.svc-photo-slot.missing {
+  border-color: var(--error);
+  background: #fef2f2;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+.svc-photo-slot.processing {
+  opacity: .72;
+  pointer-events: none;
+}
+.svc-photo-slot-head {
+  display: flex;
+  justify-content: space-between;
+  gap: .65rem;
+  align-items: flex-start;
+  margin-bottom: .65rem;
+}
+.svc-photo-slot-title {
+  font-family: 'Oswald', sans-serif;
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+.svc-photo-slot-hint {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-top: .12rem;
+  line-height: 1.25;
+}
+.svc-photo-slot-req {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: .12rem .45rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.svc-photo-slot-req.required { background: #fef2f2; color: var(--error); }
+.svc-photo-slot-req.optional { background: var(--teal-glow); color: var(--teal-mid); }
+.svc-photo-empty {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--r-sm);
+  padding: .9rem .65rem;
+  text-align: center;
+  background: var(--card);
+}
+.svc-photo-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .45rem;
+  margin-top: .55rem;
+}
+.svc-photo-actions.filled-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.svc-photo-action {
+  min-width: 0;
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--teal-mid);
+  padding: .45rem .45rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.svc-photo-action.primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+.svc-photo-action.danger {
+  color: var(--error);
+  border-color: #fca5a5;
+}
+.svc-photo-action:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+.svc-photo-thumb {
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+}
+.svc-photo-thumb-label {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  max-width: calc(100% - 12px);
+  border-radius: 6px;
+  background: rgba(0,0,0,.64);
+  color: #fff;
+  padding: .12rem .45rem;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.2;
+}
+@media (max-width: 560px) {
+  .svc-photo-slot-grid { grid-template-columns: 1fr; }
+  .svc-photo-actions,
+  .svc-photo-actions.filled-actions { grid-template-columns: 1fr; }
+}
+
 /* ── TRAINING MODULES ─────────────────────────────────────────────────────── */
 /* Training page */
 .tr-page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}

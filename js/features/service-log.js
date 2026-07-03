@@ -59,6 +59,13 @@ const SVC_CHEMICAL_FIELDS = FORM_SCHEMA.slice(
   FORM_SCHEMA.findIndex(i => i.isSectionBreak && String(i.title || '').trim().toLowerCase() === 'actions')
 ).filter(i => i && i.type === 'TEXT' && i.title).map(i => i.title);
 
+const SVC_PHOTO_SLOTS = [
+  { id:'before',    label:'Before',    hint:'Upon arrival', fileName:'before-upon-arrival.jpg', required:true  },
+  { id:'after',     label:'After',     hint:'Pool after service', fileName:'after-pool.jpg', required:true  },
+  { id:'equipment', label:'Equipment', hint:'Pump, filter, heater, or issue area', fileName:'equipment.jpg', required:true  },
+  { id:'other',     label:'Other',     hint:'Extra / optional', fileName:'other-extra.jpg', required:false }
+];
+
 // Build a querySelector for a [name="…"] attribute. Inputs are rendered with the title
 // HTML-encoded (`&quot;`), which the browser DECODES — so the live attribute holds a real
 // quote (e.g. Chlorine Tablets (3")). When reading the value back we must CSS-escape the
@@ -223,23 +230,36 @@ function renderSvcForm(meta, prefillPoolId){
     }
   });
   // ── Photo upload card ──────────────────────────────────────────────────────
-  window._svcPhotos = [];
+  initSvcPhotoState_();
   const photoCard = mkCard('📸 Visit Photos');
   photoCard.innerHTML += `
     <p style="font-size:.8rem;color:var(--muted);margin:0 0 .85rem">
-      Optional — attach up to 4 photos (before/after, equipment, water).
+      Before, after, and equipment photos are required. Other is optional.
     </p>
-    <div class="photo-upload-area" id="photo-drop-zone"
-         ondragover="event.preventDefault();this.classList.add('drag-over')"
-         ondragleave="this.classList.remove('drag-over')"
-         ondrop="handlePhotoDrop(event)">
-      <input type="file" id="photo-file-input" accept="image/*" multiple
-             onchange="handlePhotoSelect(this)">
-      <div class="pu-icon">📷</div>
-      <div class="pu-label">Tap to take photo or choose from library</div>
-      <div class="pu-sub">JPEG · PNG · max 4 photos · 10 MB each</div>
+    <div class="svc-photo-slot-grid" id="svc-photo-slot-grid">
+      ${SVC_PHOTO_SLOTS.map(slot => `
+        <div class="svc-photo-slot" id="svc-photo-slot-${slot.id}" data-slot="${slot.id}">
+          <div class="svc-photo-slot-head">
+            <div>
+              <div class="svc-photo-slot-title">${escHtml(slot.label)}</div>
+              <div class="svc-photo-slot-hint">${escHtml(slot.hint)}</div>
+            </div>
+            <span class="svc-photo-slot-req ${slot.required ? 'required' : 'optional'}">${slot.required ? 'Required' : 'Optional'}</span>
+          </div>
+          <div class="svc-photo-empty">
+            <div class="pu-icon">📷</div>
+            <div class="svc-photo-actions">
+              <button type="button" class="svc-photo-action primary" onclick="triggerSvcPhotoInput_('${slot.id}','camera')">Take Photo</button>
+              <button type="button" class="svc-photo-action" onclick="triggerSvcPhotoInput_('${slot.id}','library')">Choose Photo</button>
+            </div>
+            <div class="pu-sub">JPEG · PNG · large photos compressed</div>
+          </div>
+          <div class="svc-photo-filled" style="display:none"></div>
+          <input type="file" id="svc-photo-${slot.id}-camera" accept="image/*" capture="environment" onchange="handlePhotoSlotSelect(this,'${slot.id}')" hidden>
+          <input type="file" id="svc-photo-${slot.id}-library" accept="image/*" onchange="handlePhotoSlotSelect(this,'${slot.id}')" hidden>
+        </div>
+      `).join('')}
     </div>
-    <div class="photo-preview-grid" id="photo-preview-grid" style="display:none"></div>
     <div style="text-align:center" id="photo-count-wrap"></div>
   `;
   root.appendChild(photoCard);
@@ -586,14 +606,21 @@ function handlePoolChange() {
   const poolId = pe ? pe.value : null;
   if (poolId && window._lastLoadedPoolId !== poolId) {
     window._lastLoadedPoolId = poolId;
+    initSvcPhotoState_();
+    renderPhotoPreviews_();
     // Reset the cached recipient; the banner shows name/address from the label
     // immediately and the authoritative email fills in when context returns.
     window._svcRecipient = null;
     updateSvcIdentityBanner_(poolId, !!(pe && pe.disabled));
-    loadPoolContextForSelection_(poolId).then(() => loadDraft(poolId));
+    loadPoolContextForSelection_(poolId).then(() => {
+      loadDraft(poolId);
+      loadSvcDraftPhotos_(poolId);
+    });
   } else if (!poolId) {
     window._lastLoadedPoolId = null;
     window._svcRecipient = null;
+    initSvcPhotoState_();
+    renderPhotoPreviews_();
     updateSvcIdentityBanner_(null, false);
   }
   runRecs();
@@ -856,6 +883,13 @@ function submitSvc(){
     if (!confirm(msg)) return;
   }
 
+  const missingPhotos = svcMissingRequiredPhotos_();
+  if (missingPhotos.length) {
+    alert('Please attach required service photos:\n' + missingPhotos.join(', '));
+    highlightMissingPhotoSlots_(missingPhotos);
+    return;
+  }
+
   showSvcConfirm(payload);
 }
 function showSvcConfirm(payload){
@@ -883,8 +917,12 @@ function showSvcConfirm(payload){
   const rows=Object.entries(payload).filter(([k]) => String(k || '').charAt(0) !== '_').map(([k,v])=>
     '<div class="conf-row"><span class="conf-key">'+k+'</span><span class="conf-val">'+(Array.isArray(v)?v.join(', '):v)+'</span></div>'
   ).join('');
-  const pc=(window._svcPhotos||[]).length;
-  const photoRow=pc?'<div class="conf-row"><span class="conf-key">Photos</span><span class="conf-val">'+pc+' attached</span></div>':'';
+  const pc=svcPhotoCount_();
+  const photoRows=SVC_PHOTO_SLOTS.map(slot => {
+    const attached = !!svcPhotoForSlot_(slot.id);
+    return '<div class="conf-row"><span class="conf-key">'+escHtml(slot.label)+'</span><span class="conf-val">'+(attached?'attached':(slot.required?'missing':'optional'))+'</span></div>';
+  }).join('');
+  const photoRow=pc?photoRows:'';
   const details = '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:.85rem;color:#0d4d44;font-weight:600;padding:4px 0">Show all details</summary><div style="margin-top:8px">' + rows + photoRow + '</div></details>';
 
   document.getElementById('conf-modal-body').innerHTML = hero + details;
@@ -896,7 +934,7 @@ function closeSvcConfirm(event){
 }
 function confirmAndSubmit(){
   document.getElementById('conf-modal-backdrop').classList.remove('open');
-  _doSvcSubmit_(window._svcPayload, window._svcPhotos || []);
+  _doSvcSubmit_(window._svcPayload, svcPhotosForSubmit_());
 }
 
 function _doSvcSubmit_(payload, photos) {
@@ -989,6 +1027,7 @@ function _onSvcSuccess_(payload, photoCount, res) {
   }
   if (pId) {
     localStorage.removeItem('svc_draft_' + pId);
+    clearSvcDraftPhotos_(pId, scheduledVisitId);
     if (_activeDay && _routeData && _routeData.week_start) {
       const doneKey = `mcps_logged_${_routeData.week_start}_${_activeDay}`;
       const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
@@ -1102,17 +1141,99 @@ function _undoSvcSend_() {
 }
 // ── Photo handlers ──────────────────────────────────────────────────────────
 const MAX_PHOTOS = 4;
-const MAX_BYTES  = 10 * 1024 * 1024;
+const MAX_ORIGINAL_PHOTO_BYTES = 50 * 1024 * 1024;
+const SVC_PHOTO_DB_NAME = 'mcps_service_log_photo_drafts';
+const SVC_PHOTO_DB_STORE = 'photos';
+let _svcPhotoDbPromise = null;
 
-function handlePhotoSelect(input) {
-  addPhotos_(Array.from(input.files || []));
-  input.value = '';
+function initSvcPhotoState_() {
+  window._svcPhotos = {};
+  SVC_PHOTO_SLOTS.forEach(slot => { window._svcPhotos[slot.id] = null; });
 }
 
-function handlePhotoDrop(event) {
-  event.preventDefault();
-  document.getElementById('photo-drop-zone').classList.remove('drag-over');
-  addPhotos_(Array.from(event.dataTransfer.files || []).filter(f => f.type.startsWith('image/')));
+function svcPhotoSlot_(slotId) {
+  return SVC_PHOTO_SLOTS.find(slot => slot.id === slotId) || null;
+}
+
+function svcPhotoForSlot_(slotId) {
+  if (Array.isArray(window._svcPhotos)) return null;
+  return window._svcPhotos && window._svcPhotos[slotId] ? window._svcPhotos[slotId] : null;
+}
+
+function svcPhotoCount_() {
+  if (Array.isArray(window._svcPhotos)) return window._svcPhotos.length;
+  return SVC_PHOTO_SLOTS.filter(slot => svcPhotoForSlot_(slot.id)).length;
+}
+
+function svcPhotosForSubmit_() {
+  if (Array.isArray(window._svcPhotos)) return window._svcPhotos;
+  return SVC_PHOTO_SLOTS.map(slot => {
+    const photo = svcPhotoForSlot_(slot.id);
+    return photo ? { base64: photo.base64, mimeType: photo.mimeType || 'image/jpeg', name: slot.fileName } : null;
+  }).filter(Boolean);
+}
+
+function svcMissingRequiredPhotos_() {
+  return SVC_PHOTO_SLOTS
+    .filter(slot => slot.required && !svcPhotoForSlot_(slot.id))
+    .map(slot => slot.label);
+}
+
+function highlightMissingPhotoSlots_(missingLabels) {
+  SVC_PHOTO_SLOTS.forEach(slot => {
+    const el = document.getElementById('svc-photo-slot-' + slot.id);
+    if (!el) return;
+    const missing = missingLabels.indexOf(slot.label) !== -1;
+    el.classList.toggle('missing', missing);
+    if (missing) setTimeout(() => el.classList.remove('missing'), 2200);
+  });
+  const first = SVC_PHOTO_SLOTS.find(slot => missingLabels.indexOf(slot.label) !== -1);
+  const firstEl = first ? document.getElementById('svc-photo-slot-' + first.id) : null;
+  if (firstEl) firstEl.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function triggerSvcPhotoInput_(slotId, source) {
+  const input = document.getElementById('svc-photo-' + slotId + '-' + source);
+  if (input) input.click();
+}
+
+async function handlePhotoSlotSelect(input, slotId) {
+  const slot = svcPhotoSlot_(slotId);
+  const file = input && input.files && input.files[0];
+  if (input) input.value = '';
+  if (!slot || !file) return;
+  const draftKey = svcCurrentPhotoDraftKey_();
+  if (!draftKey) {
+    alert('Select the pool before attaching photos so the draft can be saved.');
+    return;
+  }
+  if (isUnsupportedPhoto_(file)) {
+    alert('HEIC photos are not supported yet. Please choose JPEG or PNG.');
+    return;
+  }
+  if (file.size > MAX_ORIGINAL_PHOTO_BYTES) {
+    alert((file.name || 'Photo') + ' is too large to process (max ' + formatPhotoBytes_(MAX_ORIGINAL_PHOTO_BYTES) + ' before compression).');
+    return;
+  }
+  setSvcPhotoSlotProcessing_(slotId, true);
+  const compressed = await compressPhoto_(file);
+  setSvcPhotoSlotProcessing_(slotId, false);
+  if (!compressed) {
+    alert('Could not read ' + (file.name || 'that photo') + '. Please try a JPEG or PNG.');
+    return;
+  }
+  window._svcPhotos[slotId] = { base64: compressed.base64, mimeType: compressed.mimeType || 'image/jpeg', name: slot.fileName };
+  renderPhotoPreviews_();
+  saveSvcDraftPhoto_(slotId);
+}
+
+function formatPhotoBytes_(bytes) {
+  const mb = bytes / (1024 * 1024);
+  return (mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10) + ' MB';
+}
+
+function isUnsupportedPhoto_(file) {
+  return /heic|heif/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
 }
 
 function compressPhoto_(file) {
@@ -1131,8 +1252,10 @@ function compressPhoto_(file) {
       c.width = w; c.height = h;
       c.getContext('2d').drawImage(img, 0, 0, w, h);
       c.toBlob(blob => {
+        if (!blob) { resolve(null); return; }
         const r = new FileReader();
         r.onload = e => resolve({ base64: e.target.result.split(',')[1], mimeType: 'image/jpeg', name: file.name.replace(/\.\w+$/, '.jpg') });
+        r.onerror = () => resolve(null);
         r.readAsDataURL(blob);
       }, 'image/jpeg', 0.72);
     };
@@ -1141,49 +1264,146 @@ function compressPhoto_(file) {
   });
 }
 
-async function addPhotos_(files) {
-  const remaining = MAX_PHOTOS - window._svcPhotos.length;
-  const toAdd = files.slice(0, remaining);
-  if (files.length > remaining) alert('Max 4 photos per visit. Only the first ' + remaining + ' were added.');
-  if (!toAdd.length) return;
-  const zone = document.getElementById('photo-drop-zone');
-  const label = zone && zone.querySelector('.pu-label');
-  if (label) label.textContent = 'Compressing...';
-  for (const file of toAdd) {
-    if (file.size > MAX_BYTES) { alert(file.name + ' is too large (max 10 MB).'); continue; }
-    const compressed = await compressPhoto_(file);
-    if (compressed) window._svcPhotos.push(compressed);
-  }
-  if (label) label.textContent = 'Tap to take photo or choose from library';
-  renderPhotoPreviews_();
+function setSvcPhotoSlotProcessing_(slotId, processing) {
+  const el = document.getElementById('svc-photo-slot-' + slotId);
+  if (!el) return;
+  el.classList.toggle('processing', !!processing);
+  const actions = el.querySelectorAll('button');
+  actions.forEach(btn => { btn.disabled = !!processing; });
 }
 
-function removePhoto_(idx) {
-  window._svcPhotos.splice(idx, 1);
+function removePhoto_(slotId) {
+  if (!window._svcPhotos || Array.isArray(window._svcPhotos)) initSvcPhotoState_();
+  if (window._svcPhotos[slotId]) window._svcPhotos[slotId] = null;
   renderPhotoPreviews_();
+  removeSvcDraftPhoto_(slotId);
 }
 
 function renderPhotoPreviews_() {
-  const grid      = document.getElementById('photo-preview-grid');
   const countWrap = document.getElementById('photo-count-wrap');
-  const dropZone  = document.getElementById('photo-drop-zone');
-  if (!grid) return;
-  if (!window._svcPhotos.length) {
-    grid.style.display = 'none';
-    countWrap.innerHTML = '';
-    dropZone.style.display = 'block';
-    return;
-  }
-  dropZone.style.display = window._svcPhotos.length >= MAX_PHOTOS ? 'none' : 'block';
-  grid.style.display = 'grid';
-  countWrap.innerHTML = '<span class="photo-count-badge">' + window._svcPhotos.length + ' / ' + MAX_PHOTOS + ' photos</span>';
-  grid.innerHTML = window._svcPhotos.map((p, i) =>
-    `<div class="photo-thumb">
-      <img src="data:${p.mimeType};base64,${p.base64}" alt="Photo ${i+1}">
-      <button class="photo-thumb-remove" onclick="removePhoto_(${i})">✕</button>
-    </div>`
-  ).join('');
+  SVC_PHOTO_SLOTS.forEach(slot => {
+    const card = document.getElementById('svc-photo-slot-' + slot.id);
+    if (!card) return;
+    const empty = card.querySelector('.svc-photo-empty');
+    const filled = card.querySelector('.svc-photo-filled');
+    const photo = svcPhotoForSlot_(slot.id);
+    card.classList.toggle('has-photo', !!photo);
+    if (empty) empty.style.display = photo ? 'none' : 'block';
+    if (!filled) return;
+    if (!photo) {
+      filled.style.display = 'none';
+      filled.innerHTML = '';
+      return;
+    }
+    filled.style.display = 'block';
+    filled.innerHTML =
+      '<div class="photo-thumb svc-photo-thumb">'
+      + '<img src="data:' + (photo.mimeType || 'image/jpeg') + ';base64,' + photo.base64 + '" alt="' + escHtml(slot.label) + ' photo">'
+      + '<div class="svc-photo-thumb-label">' + escHtml(slot.label) + '</div>'
+      + '</div>'
+      + '<div class="svc-photo-actions filled-actions">'
+      + '<button type="button" class="svc-photo-action primary" onclick="triggerSvcPhotoInput_(\'' + slot.id + '\',\'camera\')">Retake</button>'
+      + '<button type="button" class="svc-photo-action" onclick="triggerSvcPhotoInput_(\'' + slot.id + '\',\'library\')">Replace</button>'
+      + '<button type="button" class="svc-photo-action danger" onclick="removePhoto_(\'' + slot.id + '\')">Remove</button>'
+      + '</div>';
+  });
+  if (countWrap) countWrap.innerHTML = '<span class="photo-count-badge">' + svcPhotoCount_() + ' / ' + MAX_PHOTOS + ' photos</span>';
 }
+
+function svcSelectedPoolId_() {
+  const pe = document.querySelector('[name="pool_id"]');
+  return pe && pe.value ? pe.value : '';
+}
+
+function svcPhotoDraftKeyFor_(poolId, scheduledVisitId) {
+  if (scheduledVisitId) return 'visit:' + scheduledVisitId;
+  if (poolId) return 'pool:' + poolId;
+  return '';
+}
+
+function svcCurrentPhotoDraftKey_(poolId) {
+  const meta = window._pendingSvcMeta || {};
+  return svcPhotoDraftKeyFor_(poolId || svcSelectedPoolId_(), meta.scheduled_visit_id || '');
+}
+
+function svcDraftPhotoRecordKey_(draftKey, slotId) {
+  return draftKey + '::' + slotId;
+}
+
+function svcIdbRequest_(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IndexedDB request failed'));
+  });
+}
+
+function svcPhotoDb_() {
+  if (!window.indexedDB) return Promise.reject(new Error('IndexedDB unavailable'));
+  if (_svcPhotoDbPromise) return _svcPhotoDbPromise;
+  _svcPhotoDbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(SVC_PHOTO_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(SVC_PHOTO_DB_STORE)) db.createObjectStore(SVC_PHOTO_DB_STORE, { keyPath:'key' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('Could not open photo draft storage'));
+  });
+  return _svcPhotoDbPromise;
+}
+
+function saveSvcDraftPhoto_(slotId) {
+  const draftKey = svcCurrentPhotoDraftKey_();
+  const photo = svcPhotoForSlot_(slotId);
+  if (!draftKey || !photo) return;
+  svcPhotoDb_().then(db => {
+    const tx = db.transaction(SVC_PHOTO_DB_STORE, 'readwrite');
+    tx.objectStore(SVC_PHOTO_DB_STORE).put({
+      key: svcDraftPhotoRecordKey_(draftKey, slotId),
+      draftKey,
+      slotId,
+      photo,
+      updatedAt: Date.now()
+    });
+  }).catch(e => console.warn('Photo draft save failed', e));
+}
+
+function loadSvcDraftPhotos_(poolId) {
+  const draftKey = svcCurrentPhotoDraftKey_(poolId);
+  if (!draftKey) return;
+  svcPhotoDb_().then(db => {
+    const tx = db.transaction(SVC_PHOTO_DB_STORE, 'readonly');
+    const store = tx.objectStore(SVC_PHOTO_DB_STORE);
+    return Promise.all(SVC_PHOTO_SLOTS.map(slot => svcIdbRequest_(store.get(svcDraftPhotoRecordKey_(draftKey, slot.id)))));
+  }).then(records => {
+    if (draftKey !== svcCurrentPhotoDraftKey_(poolId)) return;
+    if (!window._svcPhotos || Array.isArray(window._svcPhotos)) initSvcPhotoState_();
+    records.forEach(record => {
+      if (record && record.slotId && record.photo) window._svcPhotos[record.slotId] = record.photo;
+    });
+    renderPhotoPreviews_();
+  }).catch(e => console.warn('Photo draft load failed', e));
+}
+
+function removeSvcDraftPhoto_(slotId) {
+  const draftKey = svcCurrentPhotoDraftKey_();
+  if (!draftKey) return;
+  svcPhotoDb_().then(db => {
+    const tx = db.transaction(SVC_PHOTO_DB_STORE, 'readwrite');
+    tx.objectStore(SVC_PHOTO_DB_STORE).delete(svcDraftPhotoRecordKey_(draftKey, slotId));
+  }).catch(e => console.warn('Photo draft remove failed', e));
+}
+
+function clearSvcDraftPhotos_(poolId, scheduledVisitId) {
+  const draftKey = svcPhotoDraftKeyFor_(poolId, scheduledVisitId);
+  if (!draftKey) return;
+  svcPhotoDb_().then(db => {
+    const tx = db.transaction(SVC_PHOTO_DB_STORE, 'readwrite');
+    const store = tx.objectStore(SVC_PHOTO_DB_STORE);
+    SVC_PHOTO_SLOTS.forEach(slot => store.delete(svcDraftPhotoRecordKey_(draftKey, slot.id)));
+  }).catch(e => console.warn('Photo draft clear failed', e));
+}
+
 function resetSvc(){
   document.getElementById('svc-root').style.display='none';
   document.getElementById('svc-root').innerHTML='';
