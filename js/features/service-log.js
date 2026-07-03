@@ -109,7 +109,10 @@ function loadServiceLog(prefillPoolId){
   if (prefillPoolId) {
     api({ secret:SEC, action:'get_pool_context', token:_s.token, pool_id:prefillPoolId }).then(res => {
       if (thisRequest !== window._svcLoadCounter) return;
-      if (res && res.ok && res.data && res.data.found) applyPoolContext_(res.data, prefillPoolId);
+      if (res && res.ok && res.data) {
+        setSvcRecipient_(res.data);
+        if (res.data.found) applyPoolContext_(res.data, prefillPoolId);
+      }
     });
   }
 }
@@ -132,6 +135,9 @@ function _applyLivePoolList_(pools, prefillPoolId) {
     if (opt === prefillPoolId || (mcpsId && opt.toUpperCase().includes(mcpsId[1].toUpperCase()))) {
       sel.selectedIndex = i;
       sel.dispatchEvent(new Event('change'));
+      // Launched from a specific scheduled job — lock the pool + show the
+      // identity banner so the tech can't silently log the wrong customer.
+      updateSvcIdentityBanner_(sel.value, true);
       break;
     }
   }
@@ -144,6 +150,7 @@ function renderSvcForm(meta, prefillPoolId){
 
   // ── Back Button / Header ──────────────────────────────────────────────────
   const hdr = document.createElement('div');
+  hdr.id = 'svc-form-header';
   hdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:0 4px';
   hdr.innerHTML = `
     <button onclick="navigateTo('live_map')" style="background:var(--teal);color:#fff;border:none;padding:8px 14px;border-radius:10px;font-family:Oswald;font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -306,6 +313,87 @@ function clearPoolContextBanners_() {
   if (oldTrend) oldTrend.remove();
 }
 
+// ── Wrong-pool mitigation: identity banner + recipient (Layers 1 & 2) ─────────
+// The dropdown labels pools as "LastName - ServiceType - Address - MCPS-0001".
+// Parse a customer name + address out of that for an at-a-glance banner, even
+// before the authoritative contact (with email) arrives from get_pool_context.
+function _parsePoolLabel_(label) {
+  const parts = String(label || '').split(' - ').map(s => s.trim()).filter(Boolean);
+  let name = '', address = '';
+  if (parts.length) {
+    name = parts[0] || '';
+    if (parts.length >= 3) address = parts[parts.length - 2] || '';
+  }
+  return { name, address };
+}
+
+// Render/refresh the big "Logging visit for …" banner. When `lock` is true the
+// pool dropdown is disabled (the tech arrived from a specific scheduled job).
+function updateSvcIdentityBanner_(poolId, lock) {
+  const root = document.getElementById('svc-root');
+  if (!root) return;
+  const sel = document.querySelector('[name="pool_id"]');
+  let banner = document.getElementById('svc-identity-banner');
+
+  if (!poolId) { if (banner) banner.remove(); return; }
+
+  let label = poolId;
+  if (sel && sel.selectedIndex >= 0 && sel.options[sel.selectedIndex]) {
+    label = sel.options[sel.selectedIndex].text || poolId;
+  }
+  const parsed = _parsePoolLabel_(label);
+  const rec = window._svcRecipient || {};
+  const name = rec.name || parsed.name || '—';
+  const address = rec.address || parsed.address || '';
+
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'svc-identity-banner';
+    const hdr = document.getElementById('svc-form-header');
+    if (hdr && hdr.nextSibling) root.insertBefore(banner, hdr.nextSibling);
+    else root.insertBefore(banner, root.firstChild);
+  }
+
+  const changeBtn = lock
+    ? '<button type="button" onclick="_unlockSvcPool_()" style="background:transparent;border:1px solid rgba(255,255,255,.55);color:#fff;font-size:.7rem;padding:4px 9px;border-radius:8px;cursor:pointer;white-space:nowrap;font-family:Oswald,sans-serif">Wrong pool?</button>'
+    : '';
+  banner.style.cssText = 'background:var(--teal,#0d4d44);color:#fff;border-radius:12px;padding:12px 14px;margin:0 4px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.12)';
+  banner.innerHTML =
+    '<div style="min-width:0">'
+    + '<div style="font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;opacity:.8;font-family:Oswald,sans-serif">Logging visit for</div>'
+    + '<div style="font-size:1.15rem;font-weight:700;font-family:Oswald,sans-serif;line-height:1.15">' + escHtml(name) + '</div>'
+    + (address ? '<div style="font-size:.82rem;opacity:.95">' + escHtml(address) + '</div>' : '')
+    + '</div>'
+    + changeBtn;
+
+  if (sel && lock) { sel.disabled = true; sel.style.opacity = '.6'; }
+}
+
+function _unlockSvcPool_() {
+  const sel = document.querySelector('[name="pool_id"]');
+  if (sel) { sel.disabled = false; sel.style.opacity = ''; sel.focus(); }
+  const btn = document.querySelector('#svc-identity-banner button');
+  if (btn) btn.remove();
+}
+
+// Store the authoritative contact from get_pool_context and refresh the banner.
+function setSvcRecipient_(data) {
+  if (!data) return;
+  // Only treat the email as "known" (and thus trust a missing one → warning) when
+  // the backend actually returned the contact field. An older backend that predates
+  // the get_pool_context contact change omits it entirely — don't cry wolf then.
+  const hasContact = Object.prototype.hasOwnProperty.call(data, 'customer_email');
+  window._svcRecipient = {
+    name: String(data.customer_name || '').trim(),
+    address: String(data.customer_address || '').trim(),
+    email: String(data.customer_email || '').trim(),
+    resolved: hasContact
+  };
+  const sel = document.querySelector('[name="pool_id"]');
+  const poolId = sel ? sel.value : null;
+  if (poolId) updateSvcIdentityBanner_(poolId, !!(sel && sel.disabled));
+}
+
 function applyPoolContext_(ctx, poolId) {
   clearPoolContextBanners_();
 
@@ -372,8 +460,13 @@ function loadPoolContextForSelection_(poolId) {
   return api({ secret:SEC, action:'get_pool_context', token:_s.token, pool_id:poolId })
     .then(res => {
       if (reqId !== _svcContextReqId) return;
-      if (res && res.ok && res.data && res.data.found) applyPoolContext_(res.data, poolId);
-      else clearPoolContextBanners_();
+      if (res && res.ok && res.data) {
+        setSvcRecipient_(res.data);
+        if (res.data.found) applyPoolContext_(res.data, poolId);
+        else clearPoolContextBanners_();
+      } else {
+        clearPoolContextBanners_();
+      }
     })
     .catch(e => console.warn('Pool context load failed', e));
 }
@@ -493,9 +586,15 @@ function handlePoolChange() {
   const poolId = pe ? pe.value : null;
   if (poolId && window._lastLoadedPoolId !== poolId) {
     window._lastLoadedPoolId = poolId;
+    // Reset the cached recipient; the banner shows name/address from the label
+    // immediately and the authoritative email fills in when context returns.
+    window._svcRecipient = null;
+    updateSvcIdentityBanner_(poolId, !!(pe && pe.disabled));
     loadPoolContextForSelection_(poolId).then(() => loadDraft(poolId));
   } else if (!poolId) {
     window._lastLoadedPoolId = null;
+    window._svcRecipient = null;
+    updateSvcIdentityBanner_(null, false);
   }
   runRecs();
 }
@@ -761,12 +860,34 @@ function submitSvc(){
 }
 function showSvcConfirm(payload){
   window._svcPayload=payload;
+
+  // ── Hero: WHO this report is going to (wrong-pool mitigation, Layer 2) ──────
+  let poolLabel = payload['pool_id'] || '';
+  if (!poolLabel) {
+    const pk = Object.keys(payload).find(k => k.trim().toLowerCase() === 'pool_id');
+    if (pk) poolLabel = payload[pk];
+  }
+  const rec = window._svcRecipient || {};
+  const parsed = _parsePoolLabel_(poolLabel);
+  const name = rec.name || parsed.name || '—';
+  const address = rec.address || parsed.address || '';
+
+  const hero =
+    '<div style="background:#f0fdfa;border:2px solid var(--teal,#0d4d44);border-radius:12px;padding:14px 16px;margin-bottom:14px">'
+    + '<div style="font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:#0d4d44;opacity:.8;font-family:Oswald,sans-serif">You are submitting a visit for</div>'
+    + '<div style="font-size:1.35rem;font-weight:700;font-family:Oswald,sans-serif;color:#0d4d44;line-height:1.15;margin-top:2px">' + escHtml(name) + '</div>'
+    + (address ? '<div style="font-size:.9rem;color:#334155;margin-top:2px">' + escHtml(address) + '</div>' : '')
+    + '</div>';
+
+  // ── Collapsed detail dump (unchanged data, just tucked away) ────────────────
   const rows=Object.entries(payload).filter(([k]) => String(k || '').charAt(0) !== '_').map(([k,v])=>
     '<div class="conf-row"><span class="conf-key">'+k+'</span><span class="conf-val">'+(Array.isArray(v)?v.join(', '):v)+'</span></div>'
   ).join('');
   const pc=(window._svcPhotos||[]).length;
   const photoRow=pc?'<div class="conf-row"><span class="conf-key">Photos</span><span class="conf-val">'+pc+' attached</span></div>':'';
-  document.getElementById('conf-modal-body').innerHTML=rows+photoRow;
+  const details = '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:.85rem;color:#0d4d44;font-weight:600;padding:4px 0">Show all details</summary><div style="margin-top:8px">' + rows + photoRow + '</div></details>';
+
+  document.getElementById('conf-modal-body').innerHTML = hero + details;
   document.getElementById('conf-modal-backdrop').classList.add('open');
 }
 function closeSvcConfirm(event){
@@ -789,7 +910,7 @@ function _doSvcSubmit_(payload, photos) {
 
   api({ secret:SEC, action:'submit_form', token:_s.token, data:payload, photos:photos }).then(res => {
     if (res.ok) {
-      _onSvcSuccess_(payload, photos.length);
+      _onSvcSuccess_(payload, photos.length, res);
     } else {
       if (btn) { btn.disabled = false; btn.textContent = 'Submit Log to MCPS'; }
       if (document.getElementById('svc-root')) alert('Error: ' + res.error);
@@ -855,7 +976,8 @@ function _onSvcOnline_() {
   } catch(e) {}
 }
 
-function _onSvcSuccess_(payload, photoCount) {
+function _onSvcSuccess_(payload, photoCount, res) {
+  res = res || {};
   localStorage.removeItem('svc_queued_submit');
   window.removeEventListener('online', _onSvcOnline_);
   const poolIdKey = Object.keys(payload).find(k => k.trim().toLowerCase() === 'pool_id');
@@ -868,7 +990,7 @@ function _onSvcSuccess_(payload, photoCount) {
   if (pId) {
     localStorage.removeItem('svc_draft_' + pId);
     if (_activeDay && _routeData && _routeData.week_start) {
-      const doneKey = `mcps_done_${_routeData.week_start}_${_activeDay}`;
+      const doneKey = `mcps_logged_${_routeData.week_start}_${_activeDay}`;
       const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
       if (!done.includes(pId)) { done.push(pId); localStorage.setItem(doneKey, JSON.stringify(done)); }
       if (routeMeta.pool_id && !done.includes(routeMeta.pool_id)) {
@@ -883,16 +1005,100 @@ function _onSvcSuccess_(payload, photoCount) {
   }
   window._lastLoadedPoolId = null;
   window._pendingSvcMeta = null;
+
+  // Capture what we need to reverse the local "completed" markings if the tech
+  // undoes the send (wrong pool). doneKey/ids mirror the writes just above.
+  const _undoDoneKey = (pId && _activeDay && _routeData && _routeData.week_start)
+    ? `mcps_logged_${_routeData.week_start}_${_activeDay}` : null;
+  window._svcUndoCtx = {
+    uid: res.log_uid || '',
+    doneKey: _undoDoneKey,
+    ids: [pId, routeMeta.pool_id, scheduledVisitId].filter(Boolean)
+  };
+
   const _successRoot = document.getElementById('svc-root');
   if (!_successRoot) return; // background send — DOM not visible, nothing to update
+
+  const canUndo = !!(res.undoable && res.log_uid);
+  const undoSecs = res.undo_seconds || 60;
+  const undoBar = canUndo
+    ? '<div id="svc-undo-bar" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 14px;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:12px">'
+        + '<div style="text-align:left;min-width:0"><div style="font-size:.85rem;color:#92400e;font-weight:600">Wrong pool? You can still stop it.</div>'
+        + '<div style="font-size:.75rem;color:#b45309">Customer email sends in <span id="svc-undo-count">' + undoSecs + '</span>s</div></div>'
+        + '<button id="svc-undo-btn" onclick="_undoSvcSend_()" style="background:#b45309;color:#fff;border:none;padding:8px 14px;border-radius:10px;font-family:Oswald,sans-serif;font-weight:600;font-size:.85rem;cursor:pointer;white-space:nowrap">↩ UNDO</button>'
+        + '</div>'
+    : '';
+  const subtitle = canUndo
+    ? 'Log received. The customer report sends shortly — undo below if this was the wrong pool.'
+    : 'Log written, inventory deducted, email sent.';
+
   _successRoot.innerHTML = '<div style="text-align:center;padding:3rem 1rem">'
     + '<div style="font-size:3.5rem;margin-bottom:1rem">✅</div>'
     + '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">SUBMITTED</div>'
-    + '<p style="color:#64748b;margin-bottom:.35rem">Log written, inventory deducted, email sent.</p>'
+    + '<p style="color:#64748b;margin-bottom:.35rem">' + subtitle + '</p>'
     + (photoCount ? '<p style="color:#64748b;font-size:.85rem;margin-bottom:1.5rem">📸 ' + photoCount + ' photo' + (photoCount > 1 ? 's' : '') + ' saved to Drive.</p>' : '<br>')
+    + undoBar
     + '<button onclick="returnToScheduleAfterSubmit()" style="display:block;width:100%;padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-bottom:.75rem">Back to Schedule</button>'
     + '<button onclick="resetSvc()" style="display:block;width:100%;padding:.85rem 1.75rem;background:transparent;color:#0d4d44;border:2px solid #0d4d44;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Log Another Pool</button>'
     + '</div>';
+
+  if (canUndo) _startSvcUndoCountdown_(undoSecs);
+}
+
+// Countdown for the undo window. When it hits 0 the button disappears (the
+// server-side trigger fires shortly after and the report is sent).
+function _startSvcUndoCountdown_(secs) {
+  if (window._svcUndoTimer) { clearInterval(window._svcUndoTimer); }
+  let remaining = secs;
+  window._svcUndoTimer = setInterval(function () {
+    remaining--;
+    const countEl = document.getElementById('svc-undo-count');
+    if (countEl) countEl.textContent = Math.max(0, remaining);
+    if (remaining <= 0) {
+      clearInterval(window._svcUndoTimer);
+      window._svcUndoTimer = null;
+      const bar = document.getElementById('svc-undo-bar');
+      if (bar) bar.remove();
+    }
+  }, 1000);
+}
+
+function _undoSvcSend_() {
+  const ctx = window._svcUndoCtx || {};
+  if (!ctx.uid) return;
+  if (window._svcUndoTimer) { clearInterval(window._svcUndoTimer); window._svcUndoTimer = null; }
+  const btn = document.getElementById('svc-undo-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
+
+  api({ secret:SEC, action:'cancel_service_log', token:_s.token, log_uid: ctx.uid }).then(res => {
+    const root = document.getElementById('svc-root');
+    if (res && res.ok) {
+      // Reverse the local "completed" markings so the schedule no longer shows it done.
+      if (ctx.doneKey) {
+        try {
+          const done = JSON.parse(localStorage.getItem(ctx.doneKey) || '[]').filter(id => ctx.ids.indexOf(id) === -1);
+          localStorage.setItem(ctx.doneKey, JSON.stringify(done));
+        } catch (e) {}
+      }
+      if (typeof _clearRouteCache === 'function') _clearRouteCache();
+      window._svcUndoCtx = null;
+      if (root) {
+        root.innerHTML = '<div style="text-align:center;padding:3rem 1rem">'
+          + '<div style="font-size:3.5rem;margin-bottom:1rem">↩️</div>'
+          + '<div style="font-family:Oswald,sans-serif;font-size:1.8rem;font-weight:700;letter-spacing:.1em;color:#0d4d44;margin-bottom:.5rem">CANCELLED</div>'
+          + '<p style="color:#64748b;margin-bottom:1.5rem">Nothing was sent — no email, no inventory change. Log the correct pool now.</p>'
+          + '<button onclick="resetSvc()" style="display:block;width:100%;padding:.85rem 1.75rem;background:#0d4d44;color:#fff;border:none;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-bottom:.75rem">Log Correct Pool</button>'
+          + '<button onclick="navigateTo(\'live_map\')" style="display:block;width:100%;padding:.85rem 1.75rem;background:transparent;color:#0d4d44;border:2px solid #0d4d44;border-radius:12px;font-family:Oswald,sans-serif;font-size:1rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">Back to Hub</button>'
+          + '</div>';
+      }
+    } else {
+      const bar = document.getElementById('svc-undo-bar');
+      if (bar) bar.innerHTML = '<span style="color:#991b1b;font-size:.85rem">Could not cancel' + (res && res.error ? ': ' + res.error : '') + '. The report may have already sent.</span>';
+    }
+  }).catch(() => {
+    const bar = document.getElementById('svc-undo-bar');
+    if (bar) bar.innerHTML = '<span style="color:#991b1b;font-size:.85rem">Network error — could not cancel.</span>';
+  });
 }
 // ── Photo handlers ──────────────────────────────────────────────────────────
 const MAX_PHOTOS = 4;

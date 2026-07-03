@@ -8,6 +8,163 @@
 let _jobCompletionsByDate = {};
 let _routeCompletionTimer = null;
 
+// ── Pool Notes (operational alerts on schedule cards) ──
+let _poolNotes = {};            // pool_id -> [note,...] for the current route week
+let _notesExpanded = new Set(); // pool_ids whose notes panel is open (survives re-render)
+
+function _safeId_(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+// Fetch notes for the current week and re-render (decoupled from route_data cache).
+function _loadPoolNotes_() {
+  return apiGet({ action: 'get_pool_notes', token: _s.token, week_start: _weekStartForOffset_(_weekOffset) })
+    .then(res => {
+      if (res && res.ok) {
+        _poolNotes = res.notes || {};
+        if (_routeData) renderRoutePage();
+      }
+    })
+    .catch(() => {});
+}
+
+// Renders the collapsible NOTES block for one pool card. Shown when the pool has
+// notes OR the viewer can add them (admin/manager). Admin edit controls live inside
+// the expanded panel only, keeping the default tech view clean.
+function _renderPoolNotesBlock_(pId) {
+  const notes   = _poolNotes[pId] || [];
+  const canEdit = isAdmin();
+  if (!notes.length && !canEdit) return '';
+
+  const sid      = _safeId_(pId);
+  const hasWeek  = notes.some(n => n.scope === 'week');
+  const expanded = _notesExpanded.has(String(pId));
+
+  const label = notes.length
+    ? `NOTES (${notes.length})` + (hasWeek ? ` <span class="ps-notes-weektag">THIS WEEK</span>` : '')
+    : `NOTES`;
+
+  const listHtml = notes.map(n => {
+    const isWeek = n.scope === 'week';
+    return `<div class="ps-note${isWeek ? ' ps-note-week' : ''}">
+      <div class="ps-note-body">
+        ${isWeek ? `<span class="ps-note-tag">This week</span>` : ''}
+        <span class="ps-note-text">${escHtml(n.text)}</span>
+      </div>
+      ${canEdit ? `<div class="ps-note-actions">
+        <button type="button" onclick="event.stopPropagation();editPoolNote('${escHtml(pId)}','${escHtml(n.note_id)}')">Edit</button>
+        <button type="button" onclick="event.stopPropagation();deletePoolNoteFromCard('${escHtml(n.note_id)}','${escHtml(pId)}')">Delete</button>
+      </div>` : ''}
+    </div>`;
+  }).join('') || (canEdit ? '' : `<div class="ps-note-empty">No notes yet</div>`);
+
+  const composer = canEdit ? `
+    <div class="ps-note-composer">
+      <textarea class="ps-note-input" id="note-input-${sid}" maxlength="800" rows="2"
+        placeholder="Add a note or alert…" oninput="_poolNoteCount('${sid}')"></textarea>
+      <div class="ps-note-composer-row">
+        <label class="ps-note-scope"><input type="radio" name="note-scope-${sid}" value="always" checked> Recurring</label>
+        <label class="ps-note-scope"><input type="radio" name="note-scope-${sid}" value="week"> This route week</label>
+        <span class="ps-note-counter" id="note-count-${sid}">0/800</span>
+      </div>
+      <div class="ps-note-composer-row">
+        <button type="button" class="ps-note-save" onclick="event.stopPropagation();savePoolNoteFromCard('${escHtml(pId)}','${sid}')">Save note</button>
+        <button type="button" class="ps-note-cancel" id="note-cancel-${sid}" style="display:none" onclick="event.stopPropagation();cancelPoolNoteEdit('${sid}')">Cancel</button>
+        <input type="hidden" id="note-edit-id-${sid}" value="">
+      </div>
+    </div>` : '';
+
+  return `
+    <button type="button" class="ps-notes-toggle${hasWeek ? ' has-week' : ''}${expanded ? ' open' : ''}"
+      onclick="event.stopPropagation();togglePoolNotes('${escHtml(pId)}')">
+      <span class="ps-notes-label">📋 ${label}</span>
+      <span class="ps-notes-chev">${expanded ? '▲' : '▼'}</span>
+    </button>
+    <div class="ps-notes-panel" id="notes-${sid}" style="display:${expanded ? 'block' : 'none'}">
+      ${listHtml}
+      ${composer}
+    </div>`;
+}
+
+function togglePoolNotes(pId) {
+  const key = String(pId);
+  if (_notesExpanded.has(key)) _notesExpanded.delete(key);
+  else _notesExpanded.add(key);
+  renderRoutePage();
+}
+
+function _poolNoteCount(sid) {
+  const input = document.getElementById('note-input-' + sid);
+  const label = document.getElementById('note-count-' + sid);
+  if (input && label) label.textContent = (input.value || '').length + '/800';
+}
+
+function editPoolNote(pId, noteId) {
+  const note = (_poolNotes[pId] || []).find(n => n.note_id === noteId);
+  if (!note) return;
+  const sid = _safeId_(pId);
+  _notesExpanded.add(String(pId));
+  const input = document.getElementById('note-input-' + sid);
+  const editId = document.getElementById('note-edit-id-' + sid);
+  const cancel = document.getElementById('note-cancel-' + sid);
+  if (!input) return;
+  input.value = note.text;
+  if (editId) editId.value = noteId;
+  const scopeRadio = document.querySelector(`input[name="note-scope-${sid}"][value="${note.scope === 'week' ? 'week' : 'always'}"]`);
+  if (scopeRadio) scopeRadio.checked = true;
+  if (cancel) cancel.style.display = '';
+  _poolNoteCount(sid);
+  input.focus();
+}
+
+function cancelPoolNoteEdit(sid) {
+  const input = document.getElementById('note-input-' + sid);
+  const editId = document.getElementById('note-edit-id-' + sid);
+  const cancel = document.getElementById('note-cancel-' + sid);
+  if (input) input.value = '';
+  if (editId) editId.value = '';
+  if (cancel) cancel.style.display = 'none';
+  _poolNoteCount(sid);
+}
+
+function savePoolNoteFromCard(pId, sid) {
+  const input = document.getElementById('note-input-' + sid);
+  const editId = document.getElementById('note-edit-id-' + sid);
+  const text = input ? input.value.trim() : '';
+  if (!text) { input && input.focus(); return; }
+  const scopeEl = document.querySelector(`input[name="note-scope-${sid}"]:checked`);
+  const scope = scopeEl ? scopeEl.value : 'always';
+
+  const payload = {
+    action: 'save_pool_note',
+    token: _s.token,
+    pool_id: pId,
+    text: text,
+    scope: scope,
+    week_start: _weekStartForOffset_(_weekOffset)
+  };
+  if (editId && editId.value) payload.note_id = editId.value;
+
+  _notesExpanded.add(String(pId));
+  api(payload).then(res => {
+    if (!res || !res.ok) { alert((res && res.error) || 'Could not save note'); return; }
+    // Update local store in place, then re-render (panel stays open).
+    const list = _poolNotes[pId] || (_poolNotes[pId] = []);
+    const idx = list.findIndex(n => n.note_id === res.note.note_id);
+    if (idx !== -1) list[idx] = res.note; else list.unshift(res.note);
+    _clearRouteCache();
+    renderRoutePage();
+  }).catch(() => alert('Network error saving note'));
+}
+
+function deletePoolNoteFromCard(noteId, pId) {
+  if (!confirm('Delete this note?')) return;
+  api({ action: 'delete_pool_note', token: _s.token, note_id: noteId }).then(res => {
+    if (!res || !res.ok) { alert((res && res.error) || 'Could not delete note'); return; }
+    _poolNotes[pId] = (_poolNotes[pId] || []).filter(n => n.note_id !== noteId);
+    _clearRouteCache();
+    renderRoutePage();
+  }).catch(() => alert('Network error deleting note'));
+}
+
 function _dateISOFromLocal_(dateObj = new Date()) {
   const pad = n => String(n).padStart(2, '0');
   return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
@@ -67,7 +224,10 @@ function _completionSetForDate_(dateStr) {
 
 function _localDoneKeyForDay_(dayData) {
   if (!_routeData || !dayData) return '';
-  return `mcps_done_${_routeData.week_start}_${dayData.day}`;
+  // `mcps_logged_` (was `mcps_done_`) — the namespace bump retires every free
+  // manual "done" tick from the old system. Only real service-log submits
+  // (optimistic injection) repopulate this key now; the checkmark = logged.
+  return `mcps_logged_${_routeData.week_start}_${dayData.day}`;
 }
 
 function _findRouteDayForCompletion_(keys) {
@@ -124,7 +284,7 @@ function returnToScheduleAfterSubmit() {
 }
 
 function _loadJobCompletionsForDate_(dateStr) {
-  if (!isAdmin() || !_s || !_s.token) return Promise.resolve({ ok: true, completions: [], date: dateStr });
+  if (!_s || !_s.token) return Promise.resolve({ ok: true, completions: [], date: dateStr });
   return apiGet({ action: 'get_job_completions', token: _s.token, date: dateStr })
     .then(res => {
       if (res && res.ok) _jobCompletionsByDate[dateStr] = res.completions || [];
@@ -133,19 +293,25 @@ function _loadJobCompletionsForDate_(dateStr) {
 }
 
 function _loadRouteCompletionsForWeek_(silent) {
-  if (!isAdmin() || !_routeData || !_routeData.days) return Promise.resolve();
+  if (!_routeData || !_routeData.days) return Promise.resolve();
+  const before = JSON.stringify(_jobCompletionsByDate);
   const dates = Array.from(new Set((_routeData.days || []).map(_completionDateForDay_).filter(Boolean)));
   return Promise.all(dates.map(d => _loadJobCompletionsForDate_(d).catch(() => null)))
     .then(() => {
-      if (_routeData) renderRoutePage();
+      const changed = before !== JSON.stringify(_jobCompletionsByDate);
+      if (changed && _routeData) renderRoutePage();
       if (!silent) _flashRouteRefresh_('Completion data refreshed.');
     });
 }
 
 function refreshRouteCompletions() {
-  if (!isAdmin() || !_routeData || !_routeData.days) return _loadRouteCompletionsForWeek_(false);
-  const dates = Array.from(new Set((_routeData.days || []).map(_completionDateForDay_).filter(Boolean)));
+  if (!_routeData || !_routeData.days) return _loadRouteCompletionsForWeek_(false);
   _flashRouteRefresh_('Checking submitted logs...');
+  // Non-admins can't call the standalone backfill action, but get_job_completions
+  // backfills the requested date server-side on every read — so a plain reload
+  // still forces a fresh reconciliation for them.
+  if (!isAdmin()) return _loadRouteCompletionsForWeek_(false);
+  const dates = Array.from(new Set((_routeData.days || []).map(_completionDateForDay_).filter(Boolean)));
   return Promise.all(dates.map(date =>
     api({ action: 'backfill_job_completions', token: _s.token, date: date }).catch(() => null)
   ))
@@ -153,7 +319,6 @@ function refreshRouteCompletions() {
 }
 
 function _startRouteCompletionPolling_() {
-  if (!isAdmin()) return;
   if (_routeCompletionTimer) clearInterval(_routeCompletionTimer);
   _routeCompletionTimer = setInterval(() => {
     if (_curPage === 'live_map' && _activeHubTab === 'schedule') _loadRouteCompletionsForWeek_(true);
@@ -194,6 +359,7 @@ function loadRoutes(opOverride) {
     renderRoutePage();
     _loadRouteCompletionsForWeek_(true);
     _startRouteCompletionPolling_();
+    _loadPoolNotes_();
     if (isAdmin()) loadUnassigned(true);
     // Revalidate route_data + scheduled_visits in background; re-render only if data changed
     const rdParams = { action: 'route_data', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
@@ -253,6 +419,7 @@ function loadRoutes(opOverride) {
       renderRoutePage();
       _loadRouteCompletionsForWeek_(true);
       _startRouteCompletionPolling_();
+      _loadPoolNotes_();
       if (isAdmin()) loadUnassigned(true);
     })
     .catch(e => {
@@ -335,6 +502,8 @@ let _calYear = new Date().getFullYear();
 function navWeek(dir) {
   _weekOffset += dir;
   _routeData = null;
+  _poolNotes = {};        // week-scoped notes differ per week — refetch clean
+  _notesExpanded.clear();
   _clearRouteCache();
   loadRoutes();
 }
@@ -1000,7 +1169,7 @@ function renderRoutePage() {
     </div>`;
   }).join('');
 
-  // Auto-select today (or Monday if Sunday), then scroll into view
+  // Auto-select today (or Monday if Sunday)
   const jsDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   let autoDay = jsDays[new Date().getDay()];
   if (autoDay === 'Sunday') autoDay = 'Monday';
@@ -1008,7 +1177,7 @@ function renderRoutePage() {
   if (_weekOffset !== 0) autoDay = (days[0] || {}).day || 'Monday';
 
   const selectedDay = (_activeDay && days.some(d => d.day === _activeDay)) ? _activeDay : autoDay;
-  _doSelectDay(selectedDay); // bypass debounce for initial auto-select
+  _doSelectDay(selectedDay, false); // bypass debounce for initial auto-select
 
   // Fetch weather after tabs are rendered
   fetchWeekWeather();
@@ -1024,10 +1193,10 @@ function switchOp(op) {
 function selectDay(dayName) {
   // Debounce: ignore rapid double-taps within 80ms
   if (_daySelectTimer) clearTimeout(_daySelectTimer);
-  _daySelectTimer = setTimeout(() => { _daySelectTimer = null; _doSelectDay(dayName); }, 80);
+  _daySelectTimer = setTimeout(() => { _daySelectTimer = null; _doSelectDay(dayName, true); }, 80);
 }
 
-function _doSelectDay(dayName) {
+function _doSelectDay(dayName, userInitiated) {
   _activeDay = dayName;
 
   // Update tab active state
@@ -1036,7 +1205,7 @@ function _doSelectDay(dayName) {
   if (tab) {
     tab.classList.add('active');
     // Smooth-scroll the active tab into the center of the bar (mobile-friendly)
-    tab.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+    if (userInitiated) tab.scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
   }
 
   const dayData = (_routeData && _routeData.days || []).find(d => d.day === dayName);
@@ -1067,10 +1236,13 @@ function renderDayCard(dayData) {
   const completionDate = _completionDateForDay_(dayData);
   const serverDoneSet = _completionSetForDate_(completionDate);
 
-  // Load done state from localStorage
-  const doneKey = `mcps_done_${_routeData.week_start}_${dayData.day}`;
+  // A stop is "logged" only when a real service log backs it. Union the
+  // server-confirmed completions with the local optimistic set (populated the
+  // instant a tech submits, before the server catches up). The local set no
+  // longer holds free manual ticks — same meaning for techs and admins.
+  const doneKey = `mcps_logged_${_routeData.week_start}_${dayData.day}`;
   const localDoneSet = new Set(JSON.parse(localStorage.getItem(doneKey) || '[]'));
-  const doneSet = isAdmin() ? serverDoneSet : localDoneSet;
+  const doneSet = new Set([...serverDoneSet, ...localDoneSet]);
 
   let html = '';
 
@@ -1097,8 +1269,8 @@ function renderDayCard(dayData) {
     <div class="rdc-badges">
       ${isToday ? '<span class="rdc-badge today-badge">Today</span>' : ''}
       ${locked ? '<span class="rdc-badge locked">Locked 🔒</span>' : ''}
-      ${totalCount > 0 ? `<span class="rdc-progress-badge${allDone ? ' all-done' : ''}" id="rdc-progress-badge">${doneCount}/${totalCount} Done</span>` : ''}
-      ${isAdmin() ? '<button class="pin-all-btn" onclick="refreshRouteCompletions()" title="Refresh completed jobs">Refresh</button><span id="route-completion-status" style="font-size:.75rem;opacity:0;transition:opacity .2s"></span>' : ''}
+      ${totalCount > 0 ? `<span class="rdc-progress-badge${allDone ? ' all-done' : ''}" id="rdc-progress-badge">${doneCount}/${totalCount} Logged</span>` : ''}
+      <button class="pin-all-btn" onclick="refreshRouteCompletions()" title="Re-check submitted service logs">Refresh</button><span id="route-completion-status" style="font-size:.75rem;opacity:0;transition:opacity .2s"></span>
       ${isAdmin() ? '<button class="pin-all-btn" onclick="pinAllDay(\'' + dayData.day + '\')" title="Pin all pools on this day">📌 Pin All</button>' : ''}
     </div>
     <div class="rdc-progress-bar-wrap">
@@ -1210,10 +1382,9 @@ function renderDayCard(dayData) {
           ${scheduledBadgeHtml ? scheduledBadgeHtml : `<span class="ps-label ${svcClass}">${svcLabel}</span>` + startupDayBadge}
           ${pool.operator && isAdmin() ? `<span class="ps-label svc-other">${pool.op_name || pool.operator}</span>` : ''}
           ${pool.priority ? `<span class="ps-label" style="background:#fee2e2;color:#ef4444">High Priority</span>` : ''}
-          ${done && isAdmin() ? `<span class="ps-label svc-done">Done</span>` : ''}
+          ${done ? `<span class="ps-label svc-done">Logged</span>` : ''}
         </div>
         ${pool.gate_code ? `<div class="stop-gate-code" style="font-size:.75rem;color:var(--teal);margin-top:.25rem;font-weight:600;letter-spacing:.01em">🔑 ${escHtml(pool.gate_code)}</div>` : ''}
-        ${pool.notes ? `<div class="stop-notes" style="font-size:.75rem;color:var(--muted);margin-top:.3rem;font-style:italic">📋 ${pool.notes}</div>` : ''}
 
         <div class="ps-btns" onclick="event.stopPropagation()">
           <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(pId)}','${escHtml(pool.customer_name || '')}','${escHtml(pool._scheduled_visit_id || '')}','${escHtml(pool._visit_type || '')}')">
@@ -1225,8 +1396,9 @@ function renderDayCard(dayData) {
           <a class="ps-btn ps-nav" href="${indivMaps}" target="_blank" rel="noopener" title="Navigate to this pool"></a>
           ${isGtcVisit ? `<button class="ps-btn ps-gtc-next" onclick="openGtcModal('${escHtml(pId)}','${escHtml(pool.customer_name || '')}','${escHtml(pool.operator || '')}')">+ Next Visit</button>` : ''}
         </div>
+        ${_renderPoolNotesBlock_(pId)}
       </div>
-      <div class="ps-action-col${isAdmin() ? ' ps-server-check' : ''}" ${isAdmin() ? 'title="Server-confirmed from submitted service log"' : `onclick="event.stopPropagation();toggleDoneInHub(this,${idx},'${escHtml(pId)}','${doneKey}')"`}>
+      <div class="ps-action-col ps-server-check" title="${done ? 'Service logged' : 'Not logged yet — tap Log Service'}">
         <div class="ps-check">${done ? '✓' : ''}</div>
       </div>
     </div>`;
@@ -1637,57 +1809,10 @@ function initOrUpdateMap_(pools) {
   }, 100);
 }
 
-function toggleDone(cb, idx, poolId, doneKey) {
-  const row = document.getElementById('stop-' + idx);
-  const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
-  if (cb.checked) { if (!done.includes(poolId)) done.push(poolId); }
-  else { const i = done.indexOf(poolId); if (i !== -1) done.splice(i, 1); }
-  localStorage.setItem(doneKey, JSON.stringify(done));
-  if (row) row.classList.toggle('done-stop', cb.checked);
-}
-
-function toggleDoneInHub(actionCol, idx, poolId, doneKey) {
-  const row = document.getElementById('stop-' + idx);
-  const checkEl = actionCol.querySelector('.ps-check');
-
-  // 1. Read current state from DOM — no localStorage read needed
-  const isDone = row ? row.classList.contains('ps-done') : false;
-  const nowDone = !isDone;
-
-  // 2. Apply visual change to DOM IMMEDIATELY (optimistic)
-  if (row) row.classList.toggle('ps-done', nowDone);
-  if (checkEl) checkEl.textContent = nowDone ? '✓' : '';
-
-  // 3. Update progress counter immediately from DOM
-  _updateProgressCounter();
-
-  // 4. Persist to localStorage
-  try {
-    const done = JSON.parse(localStorage.getItem(doneKey) || '[]');
-    if (nowDone) { if (!done.includes(poolId)) done.push(poolId); }
-    else { const i = done.indexOf(poolId); if (i !== -1) done.splice(i, 1); }
-    localStorage.setItem(doneKey, JSON.stringify(done));
-  } catch (e) { }
-}
-
-function _updateProgressCounter() {
-  const allStops = document.querySelectorAll('#route-day-card .pool-stop:not(.startup-ghost)');
-  const doneStops = document.querySelectorAll('#route-day-card .pool-stop.ps-done:not(.startup-ghost)');
-  const total = allStops.length;
-  const done = doneStops.length;
-  const allDone = total > 0 && done === total;
-
-  const badge = document.getElementById('rdc-progress-badge');
-  const bar = document.getElementById('rdc-progress-bar-fill');
-  if (badge) {
-    badge.textContent = `${done}/${total} Done`;
-    badge.classList.toggle('all-done', allDone);
-  }
-  if (bar) {
-    bar.style.width = (total > 0 ? Math.round(done / total * 100) : 0) + '%';
-    bar.classList.toggle('all-done', allDone);
-  }
-}
+// Completion state is now derived entirely from submitted service logs
+// (server-confirmed + optimistic-on-submit). There is no manual "done" toggle:
+// a stop can only become logged by going through Log Service. See
+// renderDayCard() `doneSet` and markSvcSubmittedInRoute_().
 
 function buildAppleMapsUrl_(pools) {
   if (!pools.length) return '#';

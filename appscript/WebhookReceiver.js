@@ -461,6 +461,116 @@ function saveEmployeeI9Info_(payload, auth) {
   };
 }
 
+// ── Service-log undo helpers (wrong-pool mitigation, Layer 3) ─────────────────
+// Find a Chemical_Usage_Log row by its immutable _log_uid. Returns 1-based row
+// number, or 0 if not found. Stable across row deletions/shifts.
+function _findChemRowByUid_(rawSheet, headers, uid) {
+  if (!uid) return 0;
+  const uidCol = headers.indexOf('_log_uid');
+  if (uidCol === -1) return 0;
+  const last = rawSheet.getLastRow();
+  if (last < 2) return 0;
+  const col = rawSheet.getRange(2, uidCol + 1, last - 1, 1).getValues();
+  for (let i = 0; i < col.length; i++) {
+    if (String(col[i][0] || '').trim() === uid) return i + 2;
+  }
+  return 0;
+}
+
+function _isSvcCancelled_(props, uid) {
+  if (!uid) return false;
+  const set = JSON.parse(props.getProperty('svc_cancelled') || '[]');
+  return set.indexOf(uid) !== -1;
+}
+
+function _addSvcCancelled_(props, uid) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const set = JSON.parse(props.getProperty('svc_cancelled') || '[]');
+    if (set.indexOf(uid) === -1) set.push(uid);
+    // Cap growth — keep the most recent 200 cancellations.
+    while (set.length > 200) set.shift();
+    props.setProperty('svc_cancelled', JSON.stringify(set));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function _clearSvcCancelled_(props, uid) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const set = JSON.parse(props.getProperty('svc_cancelled') || '[]');
+    const idx = set.indexOf(uid);
+    if (idx !== -1) { set.splice(idx, 1); props.setProperty('svc_cancelled', JSON.stringify(set)); }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Admin rollback helpers (wrong-pool mitigation, Layer 4) ───────────────────
+// Resolve a Chemical_Usage_Log row by pool_id + Timestamp — robust against row
+// shifts (unlike a stored row number). Returns 1-based row, or 0.
+function _findChemRowByPoolAndTs_(rawSheet, headers, poolId, tsIso) {
+  const tsCol = headers.indexOf('Timestamp');
+  const poolCol = headers.indexOf('pool_id');
+  if (tsCol === -1 || poolCol === -1) return 0;
+  const last = rawSheet.getLastRow();
+  if (last < 2) return 0;
+  const want = extractPoolId_(String(poolId || ''));
+  const wantTime = tsIso ? new Date(tsIso).getTime() : NaN;
+  if (isNaN(wantTime)) return 0;
+  const data = rawSheet.getRange(2, 1, last - 1, headers.length).getValues();
+  for (let i = 0; i < data.length; i++) {
+    if (extractPoolId_(String(data[i][poolCol] || '')) !== want) continue;
+    const cell = data[i][tsCol];
+    const cellTime = (cell instanceof Date) ? cell.getTime() : new Date(cell).getTime();
+    if (!isNaN(cellTime) && Math.abs(cellTime - wantTime) <= 2000) return i + 2;
+  }
+  return 0;
+}
+
+// Remove the schedule/payroll completion records for a voided log so the pool no
+// longer shows as serviced. Matches by the original Chemical_Usage_Log row ref.
+// Best-effort — the core reversal (applyVoid) has already succeeded by this point.
+function _reverseCompletionTracking_(ss, chemRef, poolId) {
+  chemRef = Number(chemRef);
+  if (!chemRef) return;
+  const want = extractPoolId_(String(poolId || ''));
+
+  // Portal Scheduled_Visits — delete the completed visit row.
+  try {
+    const sv = ss.getSheetByName('Scheduled_Visits');
+    if (sv && sv.getLastRow() >= 2) {
+      const h = sv.getRange(1, 1, 1, sv.getLastColumn()).getValues()[0].map(function(x){ return String(x||'').trim().toLowerCase(); });
+      const rc = h.indexOf('chem_log_ref'), pc = h.indexOf('pool_id');
+      if (rc !== -1) {
+        const d = sv.getRange(2, 1, sv.getLastRow() - 1, sv.getLastColumn()).getValues();
+        for (let i = d.length - 1; i >= 0; i--) {
+          if (Number(d[i][rc]) === chemRef && (pc === -1 || extractPoolId_(String(d[i][pc] || '')) === want)) sv.deleteRow(i + 2);
+        }
+      }
+    }
+  } catch (e) { Logger.log('_reverseCompletionTracking_ portal SV: ' + e); }
+
+  // Routes SS Job_Completions — delete the payroll completion row.
+  try {
+    const routesSs = SpreadsheetApp.openById('1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM');
+    const jc = routesSs.getSheetByName('Job_Completions');
+    if (jc && jc.getLastRow() >= 2) {
+      const h = jc.getRange(1, 1, 1, jc.getLastColumn()).getValues()[0].map(function(x){ return String(x||'').trim().toLowerCase().replace(/ /g,'_'); });
+      const rc = h.indexOf('service_log_row'), pc = h.indexOf('pool_id');
+      if (rc !== -1) {
+        const d = jc.getRange(2, 1, jc.getLastRow() - 1, jc.getLastColumn()).getValues();
+        for (let i = d.length - 1; i >= 0; i--) {
+          if (Number(d[i][rc]) === chemRef && (pc === -1 || extractPoolId_(String(d[i][pc] || '')) === want)) jc.deleteRow(i + 2);
+        }
+      }
+    }
+  } catch (e) { Logger.log('_reverseCompletionTracking_ JC: ' + e); }
+}
+
 // ── processPendingSvcJobs_ ────────────────────────────────────────────────────
 // Time-based trigger fired ~5s after submit_form returns ok:true.
 // Handles the slow post-processing that would otherwise block the technician:
@@ -492,13 +602,43 @@ function processPendingSvcJobs_() {
   const lastCol = rawSheet.getLastColumn();
   const headers = rawSheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h || '').trim(); });
 
+  // A batch trigger fires for the whole pending list at once. Don't process a job
+  // whose own undo window (60s) hasn't closed yet — that would email/deduct while
+  // the tech can still hit UNDO. Defer young jobs and let a later trigger handle
+  // them. 65s = 60s window + 5s margin.
+  const MIN_AGE_MS = 65000;
+  const deferred = [];
+
   jobIds.forEach(function(jobId) {
     const jobRaw = props.getProperty('svc_job_' + jobId);
     if (!jobRaw) return;
-    props.deleteProperty('svc_job_' + jobId);
     try {
       const job = JSON.parse(jobRaw);
-      const rowNum = job.rowNum;
+
+      // Undo guard — if the tech cancelled this log during the 60s window, skip
+      // ALL downstream work (no email, no inventory deduction, no sheet writes).
+      if (job.logUid && _isSvcCancelled_(props, job.logUid)) {
+        props.deleteProperty('svc_job_' + jobId);
+        _clearSvcCancelled_(props, job.logUid);
+        return;
+      }
+
+      // Too young — its undo window is still open. Keep the job and reprocess later.
+      if (job.queuedAt && (Date.now() - job.queuedAt) < MIN_AGE_MS) {
+        deferred.push(jobId);
+        return;
+      }
+
+      props.deleteProperty('svc_job_' + jobId);
+      // Re-resolve the row by its immutable uid: a cancel earlier in this same
+      // batch may have deleted a row and shifted every row below it.
+      let rowNum = job.rowNum;
+      if (job.logUid) {
+        const resolved = _findChemRowByUid_(rawSheet, headers, job.logUid);
+        if (!resolved) return; // row is gone (cancelled) — nothing to process
+        rowNum = resolved;
+      }
+
       const poolId = job.poolId;
       const portalUser = job.portalUser || '';
       const photoUrls = job.photoUrls || [];
@@ -556,10 +696,10 @@ function processPendingSvcJobs_() {
           let jcSheet = routesSs.getSheetByName('Job_Completions');
           if (!jcSheet) {
             jcSheet = routesSs.insertSheet('Job_Completions');
-            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key','payroll_uid']);
+            jcSheet.appendRow(['visit_id','pool_id','technician','completed_at','week_start','day_of_week','service_log_row','date','scheduled_visit_id','service_key','payroll_uid','service_log_uid']);
           } else {
             const existingHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim(); });
-            ['scheduled_visit_id','service_key','payroll_uid'].forEach(function(h) {
+            ['scheduled_visit_id','service_key','payroll_uid','service_log_uid'].forEach(function(h) {
               if (existingHeaders.indexOf(h) === -1) {
                 jcSheet.getRange(1, jcSheet.getLastColumn() + 1).setValue(h);
                 existingHeaders.push(h);
@@ -592,6 +732,7 @@ function processPendingSvcJobs_() {
             setJc('scheduled_visit_id', scheduledVisitId);
             setJc('service_key', serviceKey);
             setJc('payroll_uid', Utilities.getUuid()); // payroll-only immutable id (additive)
+            setJc('service_log_uid', job.logUid || ''); // links back to Chemical_Usage_Log row for rollback
             jcSheet.appendRow(row);
           }
 
@@ -604,6 +745,20 @@ function processPendingSvcJobs_() {
       Logger.log('processPendingSvcJobs_ job ' + jobId + ' error: ' + jobErr);
     }
   });
+
+  // Re-queue any jobs still inside their undo window and schedule another pass.
+  if (deferred.length) {
+    const lock2 = LockService.getScriptLock();
+    lock2.waitLock(10000);
+    try {
+      const pending = JSON.parse(props.getProperty('svc_jobs_pending') || '[]');
+      deferred.forEach(function(id) { if (pending.indexOf(id) === -1) pending.push(id); });
+      props.setProperty('svc_jobs_pending', JSON.stringify(pending));
+    } finally {
+      lock2.releaseLock();
+    }
+    ScriptApp.newTrigger('processPendingSvcJobs_').timeBased().after(20000).create();
+  }
 }
 
 function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, completedBy, chemLogRef) {
@@ -1620,6 +1775,20 @@ function doPost(e) {
       return jsonResponse_({ ok: saved, error: saved ? undefined : 'Pool not found in Routes sheet' });
     }
 
+    if (payload.action === 'save_pool_note') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(savePoolNote_(payload, auth));
+    }
+
+    if (payload.action === 'delete_pool_note') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(deletePoolNote_(String(payload.note_id || "")));
+    }
+
     if (payload.action === 'reschedule_startup') {
       return jsonResponse_(rescheduleStartupVisits(
         payload.token || "", payload.pool_id || "", payload.day_1_date || ""
@@ -2116,6 +2285,11 @@ function doPost(e) {
       }
       normalizeChemicalPayloadKeys_(payload.data);
 
+      // Immutable id for this log row — the stable key for undo (cancel_service_log)
+      // and admin rollback (delete_service_log). Survives row shifts from deletes.
+      const logUid = Utilities.getUuid();
+      payload.data._log_uid = logUid;
+
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
       const lastRow = rawSheet.getLastRow();
@@ -2162,12 +2336,16 @@ function doPost(e) {
       // Queue slow post-processing (inventory deduction, email, Scheduled_Visits)
       // in a time-based trigger so the technician gets an instant response.
       // Each of these operations opens external spreadsheets or calls Zapier,
-      // which can take 10–20s combined. The trigger fires ~5s after return.
+      // which can take 10–20s combined. The trigger fires ~60s after return —
+      // that delay is the tech's "undo send" window (see cancel_service_log).
+      let undoable = false;
       try {
         const jobId = Utilities.getUuid();
         const props = PropertiesService.getScriptProperties();
         props.setProperty('svc_job_' + jobId, JSON.stringify({
           rowNum: newRowNum,
+          logUid: logUid,
+          queuedAt: Date.now(),
           poolId: String(payload.data.pool_id || '').trim(),
           portalUser: portalUserName,
           scheduledVisitId: String(payload.data._scheduled_visit_id || payload.data._service_visit_id || '').trim(),
@@ -2182,9 +2360,13 @@ function doPost(e) {
         } finally {
           lock.releaseLock();
         }
-        ScriptApp.newTrigger('processPendingSvcJobs_').timeBased().after(5000).create();
+        // Server fires at 75s; client offers undo for only 60s. The 15s margin
+        // guarantees a cancel always lands before the trigger runs (no TOCTOU).
+        ScriptApp.newTrigger('processPendingSvcJobs_').timeBased().after(75000).create();
+        undoable = true;
       } catch (queueErr) {
-        // Fallback: run synchronously if trigger setup fails
+        // Fallback: run synchronously if trigger setup fails. No undo window here —
+        // the email goes out immediately, so the client must not offer undo.
         Logger.log('svc queue setup failed, running sync: ' + queueErr);
         try { snapshotUsageToPriced_({ range: rawSheet.getRange(newRowNum, 1) }); } catch (e) {}
         try { deductInventoryOnFormSubmit_({ range: rawSheet.getRange(newRowNum, 1) }); } catch (e) {}
@@ -2198,7 +2380,92 @@ function doPost(e) {
         } catch (e) {}
       }
 
-      return jsonResponse_({ ok: true });
+      return jsonResponse_({ ok: true, log_uid: logUid, undoable: undoable, undo_seconds: 60 });
+    }
+
+    // ── cancel_service_log — the tech's "undo send" (Layer 3) ──────────────────
+    // Called within the 60s window after submit_form. Marks the log cancelled so
+    // the pending trigger skips ALL downstream work (email, inventory, sheets),
+    // then deletes the Chemical_Usage_Log row. Nothing else has run yet.
+    if (payload.action === 'cancel_service_log') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!canAccess(auth, 'service_log')) return jsonResponse_({ ok: false, error: 'Access denied.' });
+      const uid = String(payload.log_uid || '').trim();
+      if (!uid) return jsonResponse_({ ok: false, error: 'Missing log_uid.' });
+
+      const props = PropertiesService.getScriptProperties();
+      _addSvcCancelled_(props, uid); // mark FIRST so the trigger skips even on a race
+
+      try {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+        if (rawSheet) {
+          const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0].map(function(h){ return String(h||'').trim(); });
+          const rowNum = _findChemRowByUid_(rawSheet, headers, uid);
+          if (rowNum >= 2) rawSheet.deleteRow(rowNum);
+        }
+      } catch (delErr) {
+        Logger.log('cancel_service_log delete row: ' + delErr);
+      }
+      return jsonResponse_({ ok: true, cancelled: true });
+    }
+
+    // ── void_service_log — admin rollback after the undo window (Layer 4) ──────
+    // Reuses the battle-tested applyVoid() (archives to Voided_Log, marks
+    // Chemical_Usage_Log + Usage_Priced, reverses inventory, rebuilds analytics),
+    // then removes the schedule/payroll completion records. The customer email
+    // (if already sent) cannot be recalled.
+    if (payload.action === 'void_service_log') {
+      const auth = validateToken(payload.token);
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+
+      const poolId  = String(payload.pool_id || '').trim();
+      const tsIso   = String(payload.timestamp || '').trim();
+      const refHint = Number(payload.chem_log_ref || 0);
+      const reason  = String(payload.reason || '').trim() || 'Wrong pool — voided from portal';
+      const uObj    = auth.user || {};
+      const voidedBy = String(uObj.name || uObj.display_name || uObj.username || 'admin').trim();
+
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const rawSheet = ss.getSheetByName('Chemical_Usage_Log');
+      if (!rawSheet) return jsonResponse_({ ok: false, error: 'Chemical_Usage_Log not found.' });
+      const headers = rawSheet.getRange(1, 1, 1, rawSheet.getLastColumn()).getValues()[0].map(function(h){ return String(h||'').trim(); });
+
+      // Prefer pool+timestamp resolution; fall back to the row hint if it still
+      // points at the right pool (guards against a stale/shifted row number).
+      let rowIndex = _findChemRowByPoolAndTs_(rawSheet, headers, poolId, tsIso);
+      if (!rowIndex && refHint >= 2) {
+        const poolCol = headers.indexOf('pool_id');
+        if (poolCol !== -1) {
+          const rp = extractPoolId_(String(rawSheet.getRange(refHint, poolCol + 1).getValue() || ''));
+          if (rp === extractPoolId_(poolId)) rowIndex = refHint;
+        }
+      }
+      if (!rowIndex) return jsonResponse_({ ok: false, error: 'Could not locate the log row to void. Void it from the spreadsheet instead.' });
+
+      let result;
+      try { result = applyVoid(rowIndex, voidedBy, reason); }
+      catch (err) { return jsonResponse_({ ok: false, error: 'Void failed: ' + err }); }
+      if (!result || !result.ok) return jsonResponse_({ ok: false, error: (result && result.error) || 'Void failed.' });
+
+      // Remove schedule/payroll completion records (best-effort).
+      try { _reverseCompletionTracking_(ss, refHint || rowIndex, poolId); } catch (trkErr) { Logger.log('void_service_log tracking: ' + trkErr); }
+
+      // Invalidate the route-data cache for the affected week.
+      try {
+        const d = tsIso ? new Date(tsIso) : null;
+        if (d && !isNaN(d.getTime())) {
+          const dow = d.getDay();
+          const monday = new Date(d);
+          monday.setDate(monday.getDate() + (dow === 0 ? -6 : 1 - dow));
+          const ws = Utilities.formatDate(monday, 'America/Chicago', 'yyyy-MM-dd');
+          CacheService.getScriptCache().remove('rd:' + ws);
+        }
+      } catch (cErr) { Logger.log('void_service_log cache: ' + cErr); }
+
+      return jsonResponse_({ ok: true, voided: true, pool_id: result.poolId || poolId, inventory: result.invResults || [] });
     }
 
     if (e && e.parameter && e.parameter.action === 'get_inventory') {
@@ -2565,7 +2832,9 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'get_job_completions') {
       const auth = validateToken(e.parameter.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
-      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: "Admin access required." });
+      // Any authenticated user (techs included) may read completions — the
+      // schedule's checkmark now derives from this for everyone, so the mark
+      // always means "service logged" rather than a free manual tick.
       try {
         const dateFilter = e.parameter.date || Utilities.formatDate(new Date(), 'America/Chicago', 'yyyy-MM-dd');
         let backfill = null;
@@ -2618,6 +2887,15 @@ function doGet(e) {
       const auth = validateToken(e.parameter.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
       return jsonResponse_(getRouteData(e.parameter.token || "", e.parameter.operator || "", e.parameter.week_start || ""));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'get_pool_notes') {
+      const auth = validateToken(e.parameter.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
+      if (e.parameter.pool_id) {
+        return jsonResponse_(getPoolNotesForPool_(e.parameter.pool_id, e.parameter.week_start || ""));
+      }
+      return jsonResponse_(getPoolNotesForWeek_(e.parameter.week_start || ""));
     }
 
     if (e && e.parameter && e.parameter.action === 'calendar_data') {
@@ -3271,14 +3549,24 @@ function testDedup() {
  * Helper to fetch history/context for a specific pool
  * This powers the popups and pre-filling in the service log
  */
+// Customer contact for the service-log identity banner + confirm modal.
+// Intentionally a no-op: the technician view shows the customer name + address
+// parsed from the pool dropdown label, and the recipient email is deliberately
+// NOT surfaced to techs. Kept as a seam so a CRM lookup can be reinstated here
+// (via lookupClientByPoolId_) if that ever changes — without touching callers.
+function getPoolContactForContext_(poolId) {
+  return {};
+}
+
 function getPoolContext_(poolId) {
+  const contact = getPoolContactForContext_(poolId);
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Chemical_Usage_Log');
-    if (!sheet) return { found: false };
+    if (!sheet) return Object.assign({ found: false }, contact);
 
     const data = sheet.getDataRange().getDisplayValues();
-    if (data.length < 2) return { found: false };
+    if (data.length < 2) return Object.assign({ found: false }, contact);
 
     const headers = data[0].map(h => String(h || '').trim());
     const poolColIdx = headers.indexOf('pool_id');
@@ -3343,7 +3631,7 @@ function getPoolContext_(poolId) {
                 const sz  = qSize !== -1 ? String(qData[i][qSize] || '').trim().toLowerCase() : '';
                 const mat = qMat  !== -1 ? String(qData[i][qMat]  || '').trim().toLowerCase() : '';
                 if (sz || mat) {
-                  return { found: true, last_size: sz, last_material: mat, last_tablet: '', internal_notes: '', visit_count: 0, trends: [] };
+                  return Object.assign({ found: true, last_size: sz, last_material: mat, last_tablet: '', internal_notes: '', visit_count: 0, trends: [] }, contact);
                 }
                 break;
               }
@@ -3353,7 +3641,7 @@ function getPoolContext_(poolId) {
       } catch (e) {
         Logger.log('getPoolContext_ CRM fallback error: ' + e);
       }
-      return { found: false };
+      return Object.assign({ found: false }, contact);
     }
 
     function avg(colIdx) {
@@ -3391,7 +3679,7 @@ function getPoolContext_(poolId) {
       else if (taAvg < 80) trends.push('TA runs low (avg ' + Math.round(taAvg) + ' ppm)');
     }
 
-    return {
+    return Object.assign({
       found: true,
       last_size: lastSize,
       last_material: lastMat,
@@ -3400,10 +3688,10 @@ function getPoolContext_(poolId) {
       last_notes: lastPublicNote,       // regular visit notes (triggers yellow banner too)
       visit_count: visitCount,
       trends: trends
-    };
+    }, contact);
   } catch (err) {
     Logger.log("getPoolContext error: " + err);
-    return { found: false, error: String(err) };
+    return Object.assign({ found: false, error: String(err) }, contact);
   }
 }
 

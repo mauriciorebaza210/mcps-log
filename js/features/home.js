@@ -855,8 +855,18 @@ async function loadTechHome() {
   const todayData = _routeData && (_routeData.days || []).find(d => d.day === todayName);
   const pools = (todayData && todayData.pools) || [];
 
-  const doneKey = _routeData ? `mcps_done_${_routeData.week_start}_${todayName}` : null;
-  const doneSet = doneKey ? new Set(JSON.parse(localStorage.getItem(doneKey) || '[]')) : new Set();
+  // Same "logged only" truth as the schedule: server-confirmed service logs
+  // unioned with the local optimistic set. Pull today's completions first so a
+  // reload reflects what was actually logged, not stale manual ticks.
+  const todayISO = typeof _dateISOFromLocal_ === 'function' ? _dateISOFromLocal_() : null;
+  if (todayISO && typeof _loadJobCompletionsForDate_ === 'function') {
+    try { await _loadJobCompletionsForDate_(todayISO); } catch (e) {}
+  }
+  const serverDone = (todayISO && typeof _completionSetForDate_ === 'function')
+    ? _completionSetForDate_(todayISO) : new Set();
+  const doneKey = _routeData ? `mcps_logged_${_routeData.week_start}_${todayName}` : null;
+  const localDone = doneKey ? new Set(JSON.parse(localStorage.getItem(doneKey) || '[]')) : new Set();
+  const doneSet = new Set([...serverDone, ...localDone]);
   const isDone = (p, i) => typeof _isPoolCompleted_ === 'function'
     ? _isPoolCompleted_(doneSet, p, i)
     : doneSet.has(p.pool_id || '');
@@ -1211,7 +1221,7 @@ window.techCheckOut = function() {
     // Count completed pools from localStorage for today
     const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const weekStart = _routeData && _routeData.week_start;
-    const doneKey = weekStart ? `mcps_done_${weekStart}_${todayName}` : null;
+    const doneKey = weekStart ? `mcps_logged_${weekStart}_${todayName}` : null;
     const poolsCompleted = doneKey ? JSON.parse(localStorage.getItem(doneKey) || '[]').length : 0;
 
     api({ action: 'technician_check_out', token: _s.token, week_start: weekStart || '', pools_completed: poolsCompleted })

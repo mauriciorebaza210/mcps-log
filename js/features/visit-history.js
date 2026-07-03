@@ -160,6 +160,12 @@ function _vhRenderTable() {
       ? `<button class="mvt-btn" style="font-size:.75rem;padding:.25rem .6rem"
            onclick="_vhOpenLog('${_vhEsc(v.pool_id)}')">View Log</button>`
       : `<span style="color:var(--muted);font-size:.75rem">—</span>`;
+    const canVoid = (typeof isAdmin === 'function' && isAdmin())
+      && v.chem_log_ref && String(v.status || '').toLowerCase() === 'completed';
+    const voidBtn = canVoid
+      ? `<button class="mvt-btn" style="font-size:.75rem;padding:.25rem .6rem;margin-left:.4rem;color:#b91c1c;border-color:#f0aeae"
+           onclick="_vhVoidLog('${encodeURIComponent(v.pool_id)}','${encodeURIComponent(v.date || '')}',${v.chem_log_ref})">Void</button>`
+      : '';
 
     return `<tr>
       <td style="white-space:nowrap">${dateStr}</td>
@@ -168,7 +174,7 @@ function _vhRenderTable() {
       <td>${_vhEsc(v.technician) || '<span style="color:var(--muted)">—</span>'}</td>
       <td>${_vhEsc(v.service_type)}</td>
       <td>${statusBadge}</td>
-      <td style="text-align:right">${viewBtn}</td>
+      <td style="text-align:right;white-space:nowrap">${viewBtn}${voidBtn}</td>
     </tr>`;
   }).join('');
 }
@@ -197,6 +203,33 @@ function _vhOpenLog(poolId) {
   if (!poolId) return;
   window._pendingSvcPoolId = poolId;
   navigateTo('service_log');
+}
+
+// Admin: void a wrongly-submitted service log. Reverses the log, inventory, and
+// analytics server-side (via applyVoid) and removes the completion record.
+function _vhVoidLog(poolIdEnc, dateEnc, chemRef) {
+  const poolId  = decodeURIComponent(poolIdEnc || '');
+  const dateIso = decodeURIComponent(dateEnc || '');
+  const reason = prompt(
+    'Void the service log for ' + poolId + '?\n\n'
+    + 'This archives the log, reverses inventory, rebuilds analytics, and removes the completion record. '
+    + 'A customer email that already went out cannot be recalled.\n\nReason (optional):',
+    'Wrong pool'
+  );
+  if (reason === null) return; // cancelled
+
+  api({ secret:SEC, action:'void_service_log', token:_s.token,
+        pool_id:poolId, timestamp:dateIso, chem_log_ref:chemRef, reason:reason })
+    .then(res => {
+      if (res && res.ok) {
+        const invCount = (res.inventory || []).filter(i => i.applied).length;
+        alert('✅ Voided' + (invCount ? ' — inventory restored for ' + invCount + ' chemical(s).' : '.'));
+        loadVisitHistoryTab();
+      } else {
+        alert('Could not void: ' + ((res && res.error) || 'unknown error'));
+      }
+    })
+    .catch(() => alert('Network error while voiding the log.'));
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

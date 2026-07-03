@@ -269,6 +269,8 @@ async function viewCRMDetail(quoteId) {
   document.getElementById('lead-backdrop').classList.add('open');
   document.getElementById('lead-drawer').classList.add('open');
 
+  if (item.pool_id) loadLeadPoolNotes(item.pool_id);
+
   try {
     const res = await apiLocalGet('/api/crm/detail', { token: _s.token, quote_id: quoteId });
     if (res.ok && res.item && _activeLeadId === quoteId) {
@@ -549,6 +551,12 @@ function buildLeadDrawerHTML(item) {
         <textarea class="si" id="log-notes" rows="2" placeholder="What was discussed? (optional)"></textarea>
       </div>
 
+      ${item.pool_id ? `<!-- Pool Notes -->
+      <div class="lead-section">
+        <div class="lead-sec-label">Pool Notes</div>
+        <div id="lead-pool-notes">${_leadPoolNotesInner_(item)}</div>
+      </div>` : ''}
+
       <!-- Contact History -->
       <div class="lead-section">
         <div class="lead-sec-label">Contact History (${contactLog.length})</div>
@@ -557,6 +565,146 @@ function buildLeadDrawerHTML(item) {
 
       <div class="im" id="lead-drawer-msg" style="display:none"></div>
     </div>`;
+}
+
+// ── Pool Notes in the Sales Hub drawer (shares save_pool_note / delete_pool_note
+//    with the Schedule card; reuses PoolNotes GAS backend) ──
+let _leadPoolNotes = [];      // notes for the currently-open pool
+let _leadPoolNotesPid = '';   // pool_id the cached notes belong to
+
+// Sales Hub can be opened without the Schedule ever loading, so fall back to the
+// current calendar Monday. Server also normalizes when week_start is omitted.
+function _crmWeekStart_() {
+  const d = new Date();
+  const day = d.getDay();                 // 0=Sun
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return d.toISOString().split('T')[0];
+}
+
+function _leadPoolNotesInner_(item) {
+  const canEdit = isAdmin();
+  const loaded = _leadPoolNotesPid === item.pool_id;
+  if (!loaded) return `<div style="color:var(--muted);font-size:.8rem">Loading notes…</div>`;
+
+  const listHtml = _leadPoolNotes.map(n => {
+    const isWeek = n.scope === 'week';
+    return `<div class="ps-note${isWeek ? ' ps-note-week' : ''}">
+      <div class="ps-note-body">
+        ${isWeek ? `<span class="ps-note-tag">This week</span>` : ''}
+        <span class="ps-note-text">${escHtml(n.text)}</span>
+      </div>
+      <div class="ps-note-actions">
+        <button type="button" onclick="editLeadPoolNote('${escHtml(n.note_id)}')">Edit</button>
+        <button type="button" onclick="deleteLeadPoolNote('${escHtml(n.note_id)}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('') || `<div class="ps-note-empty">No notes yet</div>`;
+
+  const composer = canEdit ? `
+    <div class="ps-note-composer">
+      <textarea class="ps-note-input" id="lead-note-input" maxlength="800" rows="2"
+        placeholder="Add a note or alert…" oninput="_leadPoolNoteCount()"></textarea>
+      <div class="ps-note-composer-row">
+        <label class="ps-note-scope"><input type="radio" name="lead-note-scope" value="always" checked> Recurring</label>
+        <label class="ps-note-scope"><input type="radio" name="lead-note-scope" value="week"> This route week</label>
+        <span class="ps-note-counter" id="lead-note-count">0/800</span>
+      </div>
+      <div class="ps-note-composer-row">
+        <button type="button" class="ps-note-save" onclick="saveLeadPoolNote('${escHtml(item.pool_id)}')">Save note</button>
+        <button type="button" class="ps-note-cancel" id="lead-note-cancel" style="display:none" onclick="cancelLeadPoolNoteEdit()">Cancel</button>
+        <input type="hidden" id="lead-note-edit-id" value="">
+      </div>
+    </div>` : '';
+
+  return listHtml + composer;
+}
+
+function _refreshLeadPoolNotesSection_() {
+  const item = _crmCache.find(i => i.quote_id === _activeLeadId);
+  const box = document.getElementById('lead-pool-notes');
+  if (item && box) box.innerHTML = _leadPoolNotesInner_(item);
+}
+
+function loadLeadPoolNotes(poolId) {
+  _leadPoolNotesPid = '';
+  apiGet({ action: 'get_pool_notes', token: _s.token, pool_id: poolId, week_start: _crmWeekStart_() })
+    .then(res => {
+      if (res && res.ok && _activeLeadId) {
+        _leadPoolNotes = res.notes || [];
+        _leadPoolNotesPid = poolId;
+        _refreshLeadPoolNotesSection_();
+      }
+    })
+    .catch(() => {});
+}
+
+function _leadPoolNoteCount() {
+  const input = document.getElementById('lead-note-input');
+  const label = document.getElementById('lead-note-count');
+  if (input && label) label.textContent = (input.value || '').length + '/800';
+}
+
+function editLeadPoolNote(noteId) {
+  const note = _leadPoolNotes.find(n => n.note_id === noteId);
+  if (!note) return;
+  const input = document.getElementById('lead-note-input');
+  const editId = document.getElementById('lead-note-edit-id');
+  const cancel = document.getElementById('lead-note-cancel');
+  if (!input) return;
+  input.value = note.text;
+  if (editId) editId.value = noteId;
+  const radio = document.querySelector(`input[name="lead-note-scope"][value="${note.scope === 'week' ? 'week' : 'always'}"]`);
+  if (radio) radio.checked = true;
+  if (cancel) cancel.style.display = '';
+  _leadPoolNoteCount();
+  input.focus();
+}
+
+function cancelLeadPoolNoteEdit() {
+  const input = document.getElementById('lead-note-input');
+  const editId = document.getElementById('lead-note-edit-id');
+  const cancel = document.getElementById('lead-note-cancel');
+  if (input) input.value = '';
+  if (editId) editId.value = '';
+  if (cancel) cancel.style.display = 'none';
+  _leadPoolNoteCount();
+}
+
+function saveLeadPoolNote(poolId) {
+  const input = document.getElementById('lead-note-input');
+  const editId = document.getElementById('lead-note-edit-id');
+  const text = input ? input.value.trim() : '';
+  if (!text) { input && input.focus(); return; }
+  const scopeEl = document.querySelector('input[name="lead-note-scope"]:checked');
+  const scope = scopeEl ? scopeEl.value : 'always';
+
+  const payload = {
+    action: 'save_pool_note',
+    token: _s.token,
+    pool_id: poolId,
+    text: text,
+    scope: scope,
+    week_start: _crmWeekStart_()
+  };
+  if (editId && editId.value) payload.note_id = editId.value;
+
+  api(payload).then(res => {
+    if (!res || !res.ok) { alert((res && res.error) || 'Could not save note'); return; }
+    const idx = _leadPoolNotes.findIndex(n => n.note_id === res.note.note_id);
+    if (idx !== -1) _leadPoolNotes[idx] = res.note; else _leadPoolNotes.unshift(res.note);
+    if (typeof _clearRouteCache === 'function') _clearRouteCache();  // Schedule may hold stale routes
+    _refreshLeadPoolNotesSection_();
+  }).catch(() => alert('Network error saving note'));
+}
+
+function deleteLeadPoolNote(noteId) {
+  if (!confirm('Delete this note?')) return;
+  api({ action: 'delete_pool_note', token: _s.token, note_id: noteId }).then(res => {
+    if (!res || !res.ok) { alert((res && res.error) || 'Could not delete note'); return; }
+    _leadPoolNotes = _leadPoolNotes.filter(n => n.note_id !== noteId);
+    if (typeof _clearRouteCache === 'function') _clearRouteCache();
+    _refreshLeadPoolNotesSection_();
+  }).catch(() => alert('Network error deleting note'));
 }
 
 // ── Billing Tracker Helpers ────────────────────────────────────────────────────

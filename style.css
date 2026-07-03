@@ -346,6 +346,79 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
   padding:.3rem .6rem;border-radius:0 var(--r-sm) var(--r-sm) 0;
 }
 
+/* ── Pool Notes (operational alerts on schedule cards + Sales Hub drawer) ── */
+.ps-notes-toggle{
+  display:flex;align-items:center;justify-content:space-between;gap:.4rem;
+  width:100%;margin-top:.5rem;padding:.5rem .7rem;
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-sm);
+  font-family:'Barlow Condensed',sans-serif;font-size:var(--text-sm);font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--muted);cursor:pointer;
+  transition:all .15s;
+}
+.ps-notes-toggle:hover{border-color:var(--teal-light);color:var(--teal)}
+/* Week-scoped alert present → make it impossible to overlook */
+.ps-notes-toggle.has-week{
+  background:rgba(200,168,75,.14);border-color:rgba(180,83,9,.4);color:#92400e;
+}
+.ps-notes-toggle.has-week:hover{background:rgba(200,168,75,.22)}
+.ps-notes-label{display:flex;align-items:center;gap:.4rem}
+.ps-notes-weektag{
+  background:#b45309;color:#fff;font-size:.6rem;font-weight:700;
+  padding:.1rem .35rem;border-radius:4px;letter-spacing:.04em;
+}
+.ps-notes-chev{font-size:.7rem;opacity:.7}
+
+.ps-notes-panel{
+  margin-top:.4rem;padding:.5rem;background:var(--card);
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  display:flex;flex-direction:column;gap:.4rem;
+}
+.ps-note{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;
+  background:var(--surface);border-left:3px solid var(--border);
+  padding:.4rem .55rem;border-radius:0 var(--r-sm) var(--r-sm) 0;
+}
+.ps-note-week{border-left-color:#b45309;background:rgba(200,168,75,.1)}
+.ps-note-body{display:flex;flex-direction:column;gap:.2rem;min-width:0;flex:1}
+.ps-note-tag{
+  align-self:flex-start;background:#b45309;color:#fff;font-size:.58rem;font-weight:700;
+  padding:.08rem .3rem;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;
+}
+.ps-note-text{
+  font-size:var(--text-sm);color:var(--text);line-height:1.35;
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.ps-note-actions{display:flex;gap:.25rem;flex-shrink:0}
+.ps-note-actions button{
+  border:none;background:transparent;color:var(--muted);cursor:pointer;
+  font-size:.7rem;font-weight:600;padding:.15rem .3rem;border-radius:4px;
+}
+.ps-note-actions button:hover{background:var(--surface);color:var(--teal)}
+.ps-note-empty{font-size:var(--text-sm);color:var(--muted);font-style:italic;padding:.2rem .1rem}
+
+.ps-note-composer{
+  display:flex;flex-direction:column;gap:.4rem;
+  margin-top:.2rem;padding-top:.5rem;border-top:1px dashed var(--border);
+}
+.ps-note-input{
+  width:100%;box-sizing:border-box;resize:vertical;
+  border:1.5px solid var(--border);border-radius:var(--r-sm);
+  padding:.45rem .55rem;font-family:inherit;font-size:var(--text-sm);color:var(--text);
+}
+.ps-note-input:focus{outline:none;border-color:var(--teal-light)}
+.ps-note-composer-row{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+.ps-note-scope{display:flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--muted);cursor:pointer}
+.ps-note-counter{margin-left:auto;font-size:.68rem;color:var(--muted)}
+.ps-note-save{
+  background:var(--teal);color:#fff;border:none;border-radius:var(--r-sm);
+  padding:.4rem .8rem;font-weight:600;font-size:var(--text-sm);cursor:pointer;
+}
+.ps-note-save:hover{background:var(--teal-mid)}
+.ps-note-cancel{
+  background:transparent;color:var(--muted);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:.4rem .7rem;font-size:var(--text-sm);cursor:pointer;
+}
+
 .stop-nav-btn{
   flex-shrink:0;width:34px;height:34px;border-radius:var(--r-sm);
   border:1.5px solid var(--border);background:var(--card);

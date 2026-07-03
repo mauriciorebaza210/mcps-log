@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — Mission Custom Pool Solutions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --teal:#0D3D3E; --aqua:#1FA7A8; --charcoal:#2b2b2b; --gray:#f4f6f6; --line:#e2e8e8; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:'Open Sans',-apple-system,Segoe UI,Roboto,sans-serif; color:var(--charcoal); line-height:1.65; background:#fff; }
+    header { background:var(--teal); color:#fff; padding:2.5rem 1.5rem; }
+    .wrap { max-width:820px; margin:0 auto; }
+    header .brand { font-family:'Montserrat',sans-serif; font-weight:700; letter-spacing:.02em; font-size:1.05rem; opacity:.9; }
+    header h1 { font-family:'Montserrat',sans-serif; font-weight:700; margin:.4rem 0 .2rem; font-size:1.9rem; }
+    header .eff { color:#bfe3e3; font-size:.9rem; }
+    main { padding:2.5rem 1.5rem 4rem; }
+    h2 { font-family:'Montserrat',sans-serif; font-weight:700; color:var(--teal); font-size:1.2rem; margin:2rem 0 .5rem; }
+    h2:first-of-type { margin-top:0; }
+    a { color:var(--aqua); }
+    ul { padding-left:1.2rem; }
+    li { margin:.3rem 0; }
+    .note { background:var(--gray); border-left:4px solid var(--aqua); padding:1rem 1.25rem; border-radius:6px; margin:1.25rem 0; }
+    footer { border-top:1px solid var(--line); padding:1.5rem; text-align:center; color:#6b7a7a; font-size:.85rem; }
+    footer a { color:var(--teal); text-decoration:none; }
+  </style>
+</head>
+<body>
+  <header><div class="wrap">
+    <div class="brand">MISSION CUSTOM POOL SOLUTIONS</div>
+    <h1>Privacy Policy</h1>
+    <div class="eff">Last updated: June 2026</div>
+  </div></header>
+
+  <main class="wrap">
+    <p>This Privacy Policy describes how <strong>Mission Custom Pool Solutions LLC</strong> ("MCPS," "we," "us") handles information in connection with the MCPS staff portal and its QuickBooks Online integration (the "Service"), available at <a href="https://mcps-log.vercel.app">mcps-log.vercel.app</a>. The Service is an internal business tool used by MCPS staff to record payroll and post the corresponding accounting entries to our own QuickBooks Online company.</p>
+
+    <h2>Information We Collect</h2>
+    <ul>
+      <li><strong>Account information.</strong> Names, usernames, roles, and contact details of MCPS staff who use the portal.</li>
+      <li><strong>Payroll records.</strong> Pay periods, hours/visits, wages, tax withholding, and related figures entered or calculated in the portal.</li>
+      <li><strong>QuickBooks connection data.</strong> When an authorized administrator connects QuickBooks Online, we store the OAuth access and refresh tokens, the company (realm) identifier, the account mapping you configure, and the identifiers of the journal entries we create on your behalf.</li>
+    </ul>
+    <div class="note">We access your QuickBooks Online chart of accounts only so an administrator can map payroll categories to your accounts, and we create journal entries that you initiate. <strong>We do not retrieve or store your customers' financial records, bank details, or transaction history.</strong></div>
+
+    <h2>How We Use Information</h2>
+    <p>Information is used solely to operate the Service: to authenticate staff, calculate and record payroll, and post the journal entries an administrator chooses to send to QuickBooks Online. We do not use it for advertising and we do not sell it.</p>
+
+    <h2>How Information Is Stored and Protected</h2>
+    <ul>
+      <li>All data is transmitted over encrypted HTTPS connections.</li>
+      <li>QuickBooks OAuth tokens are stored in a private, access-restricted Google Sheet and are never exposed to the web browser.</li>
+      <li>Access to administrative functions, including the QuickBooks connection, is limited to authorized MCPS administrators and managers.</li>
+    </ul>
+
+    <h2>Service Providers</h2>
+    <p>We rely on the following third parties to provide the Service. Each processes data only as needed to deliver their function:</p>
+    <ul>
+      <li><strong>Intuit (QuickBooks Online)</strong> — accounting platform we post entries to.</li>
+      <li><strong>Google (Sheets &amp; Apps Script)</strong> — data storage and backend processing.</li>
+      <li><strong>Vercel</strong> — application hosting.</li>
+    </ul>
+
+    <h2>Data Retention and Deletion</h2>
+    <p>QuickBooks tokens are removed when an administrator disconnects QuickBooks within the portal, which also revokes our access. To request deletion of other information, contact us at the address below.</p>
+
+    <h2>Intuit Data</h2>
+    <p>We request only the QuickBooks Online Accounting scope required to read your chart of accounts and create journal entries. We handle Intuit data in accordance with Intuit's developer requirements and this Policy.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this Policy from time to time. Material changes will be reflected by the "Last updated" date above.</p>
+
+    <h2>Contact</h2>
+    <p>Mission Custom Pool Solutions LLC<br>
+    Email: <a href="mailto:mauricio@mcpoolsolutions.org">mauricio@mcpoolsolutions.org</a></p>
+  </main>
+
+  <footer class="wrap">
+    &copy; 2026 Mission Custom Pool Solutions LLC · <a href="/terms.html">Terms of Use</a>
+  </footer>
+</body>
+</html>
