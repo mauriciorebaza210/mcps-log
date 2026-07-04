@@ -357,7 +357,25 @@
       🔄 Recalculate All Routes
     </button>
   </div>
-  
+
+  <!-- Pool Startup Requests (external builder intake) -->
+  <div class="adm-card" id="adm-startup-requests-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+      <span id="sr-card-title">Pool Startup Requests</span>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="adm-new-btn" style="background:#475569" onclick="srToggleHistory()">History</button>
+        <button class="adm-new-btn" onclick="loadStartupRequests()">↻ Refresh</button>
+      </div>
+    </div>
+    <div style="padding:.85rem 1.1rem">
+      <div id="sr-link-row" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.85rem"></div>
+      <div id="startup-requests-list">
+        <div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Loading startup requests…</div>
+      </div>
+      <div id="startup-requests-history" style="display:none"></div>
+    </div>
+  </div>
+
   <!-- Service Log Form Editor -->
   <div class="adm-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -1883,6 +1901,7 @@
 <script src="/js/features/training.js"></script>
 <script src="/js/features/home.js"></script>
 <script src="/js/features/onboarding.js"></script>
+<script src="/js/features/startup-requests.js"></script>
 <script src="/js/features/registration.js"></script>
 <script src="/js/features/financial.js"></script>
 <script src="/js/features/visit-history.js"></script>

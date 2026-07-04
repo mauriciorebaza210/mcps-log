@@ -1520,6 +1520,40 @@ function doPost(e) {
       return jsonResponse_(proposalResponse);
     }
 
+    // ── STARTUP REQUESTS: public builder intake (each handler validates the
+    //    per-company request_token itself — see StartupRequests.js) ──────────
+    if (payload.action === 'startup_request_lookup') {
+      return jsonResponse_(handleStartupRequestLookup_(payload));
+    }
+
+    if (payload.action === 'startup_request_extract') {
+      return jsonResponse_(handleStartupRequestExtract_(payload));
+    }
+
+    if (payload.action === 'startup_request_submit') {
+      return jsonResponse_(handleStartupRequestSubmit_(payload));
+    }
+
+    // ── STARTUP REQUESTS: admin queue (token + admin/manager role, validated
+    //    inside each handler via srRequireAdmin_) ─────────────────────────────
+    if (payload.action === 'startup_request_update') {
+      return jsonResponse_(handleStartupRequestUpdate_(payload));
+    }
+
+    if (payload.action === 'startup_request_approve') {
+      return jsonResponse_(handleStartupRequestApprove_(payload));
+    }
+
+    if (payload.action === 'startup_request_reject') {
+      return jsonResponse_(handleStartupRequestReject_(payload));
+    }
+
+    if (payload.action === 'get_startup_request_link') {
+      const srGate = srRequireAdmin_(payload.token);
+      if (!srGate.ok) return jsonResponse_(srGate);
+      return jsonResponse_(handleGetStartupRequestLink_(payload, srGate.auth));
+    }
+
     if (payload.action === 'save_sensitive_info') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || "Unauthorized" });
@@ -2628,6 +2662,10 @@ function doGet(e) {
       return jsonResponse_(Object.assign({ ok: true, sensitive_info_done: sensitiveStatus.done, i9_done: i9Status.done, info_done: false, contract_done: false, status: 'in_progress', worker_type: workerType }, sensitiveFields));
     }
     
+    if (e && e.parameter && e.parameter.action === 'startup_requests_list') {
+      return jsonResponse_(handleStartupRequestsList_(e.parameter.token || '', e.parameter.scope || 'pending'));
+    }
+
     if (e && e.parameter && e.parameter.action === 'onboarding_list_pending') {
       var _auth = validateToken(e.parameter.token || "");
       if (!_auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });

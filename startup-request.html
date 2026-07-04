@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Pool Startup Request</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --teal: #0D3D3E;
+      --aqua: #1FA7A8;
+      --aqua-light: #5ED6D3;
+      --gray: #F3F5F6;
+      --ink: #222222;
+      --muted: #5c6b6b;
+      --line: #d8e2e4;
+      --danger: #b42318;
+      --ok-bg: #ecfdf3;
+      --ok-ink: #067647;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--gray);
+      color: var(--ink);
+      font-family: 'Open Sans', Arial, Helvetica, sans-serif;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+    }
+    h1, h2, h3 { font-family: 'Montserrat', Arial, sans-serif; }
+    .card {
+      width: 100%;
+      max-width: 760px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(13, 61, 62, 0.12);
+      overflow: hidden;
+    }
+    .top {
+      background: var(--teal);
+      color: #fff;
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .top img { width: 48px; height: 48px; object-fit: contain; background: #fff; border-radius: 8px; }
+    .top h1 { margin: 0; font-size: 18px; letter-spacing: .04em; text-transform: uppercase; font-weight: 800; }
+    .top .co { font-size: 12px; color: var(--aqua-light); font-weight: 600; margin-top: 2px; }
+    .body { padding: 24px; }
+    .eyebrow { color: var(--aqua); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-family: 'Montserrat', Arial, sans-serif; }
+    h2 { margin: 8px 0 6px; font-size: 24px; color: var(--teal); }
+    p { line-height: 1.55; }
+    .muted { color: var(--muted); }
+    .steps { display: flex; gap: 6px; margin-bottom: 18px; }
+    .steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+    .steps span.on { background: var(--aqua); }
+    button, .btn {
+      border: 1px solid var(--aqua);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 14px;
+      font-family: 'Open Sans', Arial, sans-serif;
+      text-decoration: none;
+      cursor: pointer;
+      background: #fff;
+      color: var(--aqua);
+    }
+    button:disabled { opacity: .55; cursor: default; }
+    .primary { background: var(--aqua); color: #fff; }
+    .ghost { border-color: transparent; color: var(--muted); text-decoration: underline; background: transparent; padding: 8px 4px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .photo-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+    .photo-choice {
+      border: 2px dashed var(--line);
+      border-radius: 10px;
+      background: var(--gray);
+      padding: 26px 14px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--teal);
+    }
+    .photo-choice:hover { border-color: var(--aqua); }
+    .photo-choice .ic { font-size: 30px; display: block; margin-bottom: 8px; }
+    .thumb-wrap { margin: 14px 0; text-align: center; }
+    .thumb-wrap img { max-width: 100%; max-height: 320px; border-radius: 10px; border: 1px solid var(--line); }
+    .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .fgroup { margin: 20px 0 8px; }
+    .fgroup h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .07em; text-transform: uppercase; color: var(--teal); border-bottom: 2px solid var(--gray); padding-bottom: 6px; }
+    .fld { display: flex; flex-direction: column; gap: 4px; }
+    .fld.full { grid-column: 1 / -1; }
+    .fld label { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .fld input, .fld select, .fld textarea {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      background: #fff;
+      color: var(--ink);
+      width: 100%;
+    }
+    .fld input:focus, .fld select:focus, .fld textarea:focus { outline: 2px solid var(--aqua-light); border-color: var(--aqua); }
+    .fld.warn input { border-color: #d97706; background: #fffbeb; }
+    .fld .warn-note { font-size: 11px; color: #b45309; font-weight: 600; }
+    textarea { min-height: 80px; resize: vertical; }
+    .msg { margin-top: 16px; border-radius: 8px; padding: 12px; background: var(--ok-bg); color: var(--ok-ink); display: none; font-weight: 600; }
+    .msg.err { background: #fef3f2; color: var(--danger); }
+    .notice { border: 1px solid var(--aqua-light); background: #f0fbfb; border-radius: 8px; padding: 12px 14px; margin: 14px 0; font-size: 14px; }
+    .spinner {
+      width: 44px; height: 44px; margin: 26px auto 14px;
+      border: 4px solid var(--gray); border-top-color: var(--aqua);
+      border-radius: 50%; animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ref { font-family: 'Montserrat', Arial, sans-serif; font-weight: 800; font-size: 22px; color: var(--teal); letter-spacing: .05em; }
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .body { padding: 18px; }
+      .fgrid, .photo-choices { grid-template-columns: 1fr; }
+      .actions button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="top">
+      <img src="/logo.png" alt="MCPS">
+      <div>
+        <h1>Pool Startup Request</h1>
+        <div class="co" id="hdr-company"></div>
+      </div>
+    </div>
+    <div class="body" id="app">
+      <div class="eyebrow">Loading</div>
+      <h2>Checking your request link...</h2>
+      <p class="muted">This should only take a moment.</p>
+    </div>
+  </main>
+
+  <input type="file" accept="image/*" capture="environment" id="file-camera" style="display:none">
+  <input type="file" accept="image/*" id="file-library" style="display:none">
+
+  <script src="/js/lib/constants.js"></script>
+  <script src="/js/lib/api.js"></script>
+  <script>
+    const T = new URLSearchParams(location.search).get('t') || '';
+    const S = {
+      company: null,
+      photo: null,          // { base64, mimeType, name, dataUrl }
+      fields: null,         // current editable values
+      initialFields: null,  // untouched extraction (for "Send as-is")
+      illegible: [],
+      raw: '',
+      extractFailed: false
+    };
+
+    const FIELD_GROUPS = [
+      { title: 'Customer', fields: [
+        ['first_name', 'First name'], ['last_name', 'Last name'],
+        ['phone', 'Phone'], ['email', 'Email'],
+        ['address', 'Street address', 'full'], ['city', 'City'], ['zip_code', 'ZIP code']
+      ]},
+      { title: 'Pool', fields: [
+        ['pool_dimensions', 'Pool dimensions'], ['pool_depth', 'Pool depth'],
+        ['spa', 'Spa', '', 'yesno'], ['water_features', 'Water features']
+      ]},
+      { title: 'Surface', fields: [
+        ['plaster_type', 'Plaster / finish'], ['plaster_date', 'Plaster date', '', 'date']
+      ]},
+      { title: 'Equipment', fields: [
+        ['equip_filter', 'Filter'], ['equip_pump', 'Pump'],
+        ['equip_heater', 'Heater'], ['equip_chlorinator', 'Chlorinator'],
+        ['equip_salt_system', 'Salt system'], ['equip_booster', 'Booster pump']
+      ]},
+      { title: 'Startup', fields: [
+        ['requested_start_date', 'Requested startup date', '', 'date'],
+        ['notes', 'Notes for MCPS', 'full', 'textarea']
+      ]}
+    ];
+    const ALL_FIELDS = FIELD_GROUPS.flatMap(g => g.fields.map(f => f[0]));
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function app() { return document.getElementById('app'); }
+    function stepsBar(n) {
+      return '<div class="steps">' + [1,2,3].map(i => `<span class="${i <= n ? 'on' : ''}"></span>`).join('') + '</div>';
+    }
+
+    // ── Step 0: validate link ──────────────────────────────────────────────
+    async function init() {
+      if (!T) { renderBadLink('The request link is missing its access code.'); return; }
+      try {
+        const res = await api({ action: 'startup_request_lookup', t: T });
+        if (!res.ok) { renderBadLink(res.error); return; }
+        S.company = res;
+        document.getElementById('hdr-company').textContent = res.company_name || '';
+        renderPhotoStep();
+      } catch (e) {
+        renderBadLink('We couldn\'t reach the server. Please check your connection and reload this page.');
+      }
+    }
+
+    function renderBadLink(message) {
+      app().innerHTML = `
+        <div class="eyebrow">Link unavailable</div>
+        <h2>This request link isn't active</h2>
+        <p class="muted">${esc(message || 'This link is invalid or no longer active.')}</p>
+        <p class="muted">Please contact Mission Custom Pool Solutions for a new link.</p>
+      `;
+    }
+
+    // ── Step 1: photo ──────────────────────────────────────────────────────
+    function renderPhotoStep() {
+      app().innerHTML = `
+        ${stepsBar(1)}
+        <div class="eyebrow">Step 1 of 3</div>
+        <h2>Add the construction sheet</h2>
+        <p class="muted">Take a photo of the handwritten construction record sheet for this pool.
+        A slightly angled or rotated photo is fine — we'll read it either way.</p>
+        <div class="photo-choices">
+          <div class="photo-choice" onclick="document.getElementById('file-camera').click()">
+            <span class="ic">📷</span>Take a photo
+          </div>
+          <div class="photo-choice" onclick="document.getElementById('file-library').click()">
+            <span class="ic">🖼️</span>Choose from library
+          </div>
+        </div>
+        ${S.photo ? `
+          <div class="thumb-wrap"><img src="${S.photo.dataUrl}" alt="Construction sheet"></div>
+          <div class="actions">
+            <button class="primary" onclick="runExtract()">Read sheet &amp; continue</button>
+          </div>
+        ` : ''}
+        <div class="actions" style="margin-top:8px">
+          <button class="ghost" onclick="startManualEntry()">Skip the photo — type the details in manually</button>
+        </div>
+        <div class="msg err" id="photo-msg"></div>
+      `;
+    }
+
+    function isUnsupportedPhoto(file) {
+      return /heic|heif/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
+    }
+
+    function compressPhoto(file) {
+      return new Promise(resolve => {
+        const MAX_DIM = 1400; // handwriting needs more resolution than pool photos
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.width, h = img.height;
+          if (w > MAX_DIM || h > MAX_DIM) {
+            if (w >= h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+            else { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+          }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          c.toBlob(blob => {
+            if (!blob) { resolve(null); return; }
+            const r = new FileReader();
+            r.onload = e => resolve({
+              base64: e.target.result.split(',')[1],
+              dataUrl: e.target.result,
+              mimeType: 'image/jpeg',
+              name: (file.name || 'sheet').replace(/\.\w+$/, '') + '.jpg'
+            });
+            r.onerror = () => resolve(null);
+            r.readAsDataURL(blob);
+          }, 'image/jpeg', 0.8);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      });
+    }
+
+    async function handleFileChosen(input) {
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      const msg = document.getElementById('photo-msg');
+      if (isUnsupportedPhoto(file)) {
+        if (msg) { msg.textContent = 'That photo format isn\'t supported. Please use a JPEG or PNG photo.'; msg.style.display = 'block'; }
+        return;
+      }
+      const compressed = await compressPhoto(file);
+      if (!compressed) {
+        if (msg) { msg.textContent = 'We couldn\'t read that photo file. Please try a different one.'; msg.style.display = 'block'; }
+        return;
+      }
+      S.photo = compressed;
+      renderPhotoStep();
+    }
+    document.getElementById('file-camera').addEventListener('change', e => handleFileChosen(e.target));
+    document.getElementById('file-library').addEventListener('change', e => handleFileChosen(e.target));
+
+    function startManualEntry() {
+      S.fields = blankFields();
+      S.initialFields = null;
+      S.illegible = [];
+      S.raw = '';
+      renderReviewStep(false);
+    }
+
+    function blankFields() {
+      const f = {};
+      ALL_FIELDS.forEach(k => f[k] = '');
+      return f;
+    }
+
+    // ── Step 2: AI extraction ──────────────────────────────────────────────
+    async function runExtract() {
+      app().innerHTML = `
+        ${stepsBar(2)}
+        <div class="eyebrow">Step 2 of 3</div>
+        <h2>Reading your construction sheet</h2>
+        <div class="spinner"></div>
+        <p class="muted" style="text-align:center">This usually takes about 15 seconds.</p>
+      `;
+      try {
+        const res = await api({
+          action: 'startup_request_extract',
+          t: T,
+          photo: { base64: S.photo.base64, mimeType: S.photo.mimeType, name: S.photo.name }
+        });
+        if (res.ok && res.fields) {
+          const f = blankFields();
+          ALL_FIELDS.forEach(k => { if (res.fields[k] !== undefined && res.fields[k] !== null) f[k] = String(res.fields[k]); });
+          S.fields = f;
+          S.initialFields = Object.assign({}, f);
+          S.illegible = Array.isArray(res.fields.illegible_fields) ? res.fields.illegible_fields : [];
+          S.raw = res.raw || '';
+          S.extractFailed = false;
+          renderReviewStep(true);
+        } else if (res.ok && !res.fields) {
+          extractFallback();
+        } else {
+          // rate limited or rejected — surface the reason, keep the photo
+          extractFallback(res.error);
+        }
+      } catch (e) {
+        extractFallback();
+      }
+    }
+
+    function extractFallback(reason) {
+      S.fields = blankFields();
+      S.initialFields = null;
+      S.illegible = [];
+      S.raw = '';
+      S.extractFailed = true;
+      S.extractFailReason = reason || '';
+      renderReviewStep(false);
+    }
+
+    // ── Step 3: review & submit ────────────────────────────────────────────
+    function fieldInput(key, label, type) {
+      const val = esc(S.fields[key]);
+      const isWarn = S.illegible.includes(key);
+      const warnNote = isWarn ? '<span class="warn-note">We couldn\'t read this clearly — please check it.</span>' : '';
+      if (type === 'yesno') {
+        const v = String(S.fields[key]).toLowerCase() === 'yes' ? 'Yes' : (String(S.fields[key]).toLowerCase() === 'no' ? 'No' : '');
+        return `<label>${label}</label><select id="f-${key}">
+          <option value=""${v === '' ? ' selected' : ''}>—</option>
+          <option value="Yes"${v === 'Yes' ? ' selected' : ''}>Yes</option>
+          <option value="No"${v === 'No' ? ' selected' : ''}>No</option>
+        </select>${warnNote}`;
+      }
+      if (type === 'textarea') {
+        return `<label>${label}</label><textarea id="f-${key}">${val}</textarea>${warnNote}`;
+      }
+      if (type === 'date') {
+        const dateVal = /^\d{4}-\d{2}-\d{2}$/.test(S.fields[key]) ? S.fields[key] : '';
+        const extra = (S.fields[key] && !dateVal) ? `<span class="warn-note">Written on the sheet as "${val}" — please pick the date.</span>` : warnNote;
+        return `<label>${label}</label><input type="date" id="f-${key}" value="${dateVal}">${extra}`;
+      }
+      return `<label>${label}</label><input type="text" id="f-${key}" value="${val}">${warnNote}`;
+    }
+
+    function renderReviewStep(fromExtraction) {
+      const groupsHtml = FIELD_GROUPS.map(g => `
+        <div class="fgroup">
+          <h3>${g.title}</h3>
+          <div class="fgrid">
+            ${g.fields.map(([key, label, span, type]) => `
+              <div class="fld ${span === 'full' ? 'full' : ''} ${S.illegible.includes(key) ? 'warn' : ''}">
+                ${fieldInput(key, label, type)}
+              </div>`).join('')}
+          </div>
+        </div>`).join('');
+
+      app().innerHTML = `
+        ${stepsBar(3)}
+        <div class="eyebrow">Step 3 of 3</div>
+        <h2>${fromExtraction ? 'Check the details' : 'Enter the details'}</h2>
+        ${S.extractFailed ? `<div class="notice">We couldn't read the sheet automatically${S.extractFailReason ? ' (' + esc(S.extractFailReason) + ')' : ''}. Please type the details below — your photo will still be included with the request.</div>` : ''}
+        ${fromExtraction ? `<p class="muted">We read these details from your sheet. Please correct anything that's off, or send it exactly as we read it — MCPS reviews every request before scheduling.</p>` : ''}
+        ${S.photo ? `<div class="thumb-wrap"><img src="${S.photo.dataUrl}" alt="Construction sheet" style="max-height:200px"></div>` : ''}
+        ${groupsHtml}
+        <div class="actions">
+          <button class="primary" onclick="submitRequest(true)">Review &amp; submit request</button>
+          ${fromExtraction ? `<button onclick="submitRequest(false)">Send as-is</button>` : ''}
+          ${S.photo ? '' : `<button class="ghost" onclick="renderPhotoStep()">Back to photo</button>`}
+        </div>
+        <div class="msg" id="submit-msg"></div>
+      `;
+    }
+
+    function readFormFields() {
+      const f = {};
+      ALL_FIELDS.forEach(k => {
+        const el = document.getElementById('f-' + k);
+        f[k] = el ? el.value.trim() : '';
+      });
+      return f;
+    }
+
+    async function submitRequest(reviewed) {
+      const fields = reviewed ? readFormFields() : Object.assign({}, S.initialFields || readFormFields());
+      const msg = document.getElementById('submit-msg');
+      if (!(fields.first_name || fields.last_name || fields.address)) {
+        msg.className = 'msg err';
+        msg.textContent = 'Please provide at least the customer name or address.';
+        msg.style.display = 'block';
+        return;
+      }
+      document.querySelectorAll('button').forEach(b => b.disabled = true);
+      msg.className = 'msg';
+      msg.textContent = 'Sending your request...';
+      msg.style.display = 'block';
+      try {
+        const res = await api({
+          action: 'startup_request_submit',
+          t: T,
+          fields: fields,
+          photos: S.photo ? [{ base64: S.photo.base64, mimeType: S.photo.mimeType, name: S.photo.name }] : [],
+          raw_extraction: S.raw,
+          reviewed_by_builder: !!reviewed
+        });
+        if (!res.ok) {
+          msg.className = 'msg err';
+          msg.textContent = res.error || 'We couldn\'t send your request. Please try again.';
+          document.querySelectorAll('button').forEach(b => b.disabled = false);
+          return;
+        }
+        renderDone(res.request_id, fields);
+      } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'We couldn\'t reach the server. Please check your connection and try again.';
+        document.querySelectorAll('button').forEach(b => b.disabled = false);
+      }
+    }
+
+    function renderDone(requestId, fields) {
+      const who = [fields.first_name, fields.last_name].filter(Boolean).join(' ') || fields.address;
+      app().innerHTML = `
+        <div class="eyebrow">Request received</div>
+        <h2>Thank you — we have it from here</h2>
+        <p>Your startup request${who ? ' for <b>' + esc(who) + '</b>' : ''} has been received and is pending review.</p>
+        <p class="muted">Reference number:</p>
+        <div class="ref">${esc(requestId)}</div>
+        <p class="muted" style="margin-top:18px">Mission Custom Pool Solutions will review the details and confirm the startup date shortly. You can close this page.</p>
+        <div class="actions">
+          <button onclick="resetForNext()">Submit another pool</button>
+        </div>
+      `;
+    }
+
+    function resetForNext() {
+      S.photo = null; S.fields = null; S.initialFields = null;
+      S.illegible = []; S.raw = ''; S.extractFailed = false;
+      renderPhotoStep();
+    }
+
+    init();
+  </script>
+</body>
+</html>
