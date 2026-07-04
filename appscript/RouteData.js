@@ -208,7 +208,11 @@ function computeRouteData_(weekStart) {
 // Returns the Monday (yyyy-MM-dd) for any given date value
 function getWeekStartForDate_(dateVal) {
   try {
-    const d = dateVal instanceof Date ? dateVal : new Date(String(dateVal));
+    const raw = String(dateVal || '').trim();
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const d = dateVal instanceof Date
+      ? dateVal
+      : (m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(raw));
     if (isNaN(d.getTime())) return "";
     const ct = new Date(d.toLocaleString("en-US", { timeZone: RD_TZ }));
     const day = ct.getDay();

@@ -76,6 +76,10 @@ export function qboConfigSpreadsheetId() {
   return process.env.QBO_CONFIG_SPREADSHEET_ID || crmSpreadsheetId();
 }
 
+export function appsScriptUrl() {
+  return process.env.APPS_SCRIPT_URL || process.env.MCPS_APPS_SCRIPT_URL || process.env.GAS_URL || DEFAULT_APPS_SCRIPT_URL;
+}
+
 // Full session object from GAS validate_token (includes roles). Cached briefly.
 // Returns null when the token is missing or invalid.
 export async function validatePortalSession(token) {
@@ -84,7 +88,7 @@ export async function validatePortalSession(token) {
   const hit = tokenValidationCache.get(clean);
   if (hit && hit.expiresAt > Date.now()) return hit.session;
 
-  const base = process.env.APPS_SCRIPT_URL || process.env.MCPS_APPS_SCRIPT_URL || process.env.GAS_URL || DEFAULT_APPS_SCRIPT_URL;
+  const base = appsScriptUrl();
   const res = await fetch(base, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

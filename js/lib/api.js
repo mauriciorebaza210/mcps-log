@@ -2,10 +2,28 @@
 // API — shared fetch helpers (AS and SEC defined in constants.js)
 // ══════════════════════════════════════════════════════════════════════════════
 
+const GAS_PROXY_PATH = '/api/gas';
+
+function gasEndpoint_() {
+  const protocol = window.location && window.location.protocol;
+  if (protocol === 'http:' || protocol === 'https:') return GAS_PROXY_PATH;
+  return AS;
+}
+
+function parseApiResponse_(res) {
+  return res.text().then(text => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 160)}`);
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new Error(`Expected JSON from ${res.url}, got: ${text.slice(0, 160)}`);
+    }
+  });
+}
+
 /**
- * Performs a POST request to Google Apps Script. 
- * Sends body as a plain string without Content-Type to avoid CORS preflight.
- * Google Apps Script handles this as a "Simple Request".
+ * Performs a POST request through the same-origin GAS proxy when hosted.
+ * Falls back to direct Apps Script requests when opened outside http(s).
  * 
  * @param {Object} payload - The data to send in the POST body.
  * @param {Object} options - Optional fetch overrides (e.g. signal).
@@ -20,15 +38,19 @@ function withSessionToken_(payload) {
 
 function api(payload, options = {}) {
   const bodyPayload = withSessionToken_(payload);
+  const endpoint = gasEndpoint_();
   const fetchOptions = {
     method: 'POST',
     body: JSON.stringify(bodyPayload),
-    // Intentionally omitting Content-Type header to avoid OPTIONS preflight
     ...options
   };
 
-  // Ensure no Content-Type was accidentally passed in options.headers
-  if (fetchOptions.headers) {
+  if (endpoint === GAS_PROXY_PATH) {
+    const headers = new Headers(fetchOptions.headers || {});
+    headers.set('Content-Type', 'application/json');
+    fetchOptions.headers = headers;
+  } else if (fetchOptions.headers) {
+    // Ensure no Content-Type was accidentally passed in options.headers
     if (fetchOptions.headers instanceof Headers) {
       fetchOptions.headers.delete('Content-Type');
     } else {
@@ -37,21 +59,18 @@ function api(payload, options = {}) {
     }
   }
 
-  return fetch(AS, fetchOptions).then(res => {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  });
+  return fetch(endpoint, fetchOptions).then(parseApiResponse_);
 }
 
 /**
- * Performs a GET request to Google Apps Script.
- * Encodes all parameters into the URL query string to ensure a "Simple Request".
+ * Performs a GET request through the same-origin GAS proxy when hosted.
+ * Encodes all parameters into the URL query string.
  * 
  * @param {Object} params - Key-value pairs for the query string (e.g. {action: '...'}).
  * @param {Object} options - Optional fetch overrides (e.g. signal).
  */
 function apiGet(params, options = {}) {
-  const url = new URL(AS);
+  const url = new URL(gasEndpoint_(), window.location.origin);
   const requestParams = withSessionToken_(params);
   
   // Append params to the URL search string
@@ -66,13 +85,10 @@ function apiGet(params, options = {}) {
     ...options
   };
 
-  // Completely remove custom headers for GET to avoid any preflight triggers
+  // GET does not need custom headers here, and direct fallback should stay simple.
   delete fetchOptions.headers;
 
-  return fetch(url.toString(), fetchOptions).then(res => {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  });
+  return fetch(url.toString(), fetchOptions).then(parseApiResponse_);
 }
 
 function apiLocalGet(path, params = {}, options = {}) {

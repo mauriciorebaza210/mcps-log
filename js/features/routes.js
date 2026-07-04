@@ -1425,6 +1425,12 @@ function renderDayCard(dayData) {
 // Default service area coords — update if needed; used when no pools have lat/lng
 const SERVICE_LAT = 29.4235;
 const SERVICE_LNG = -98.4850;
+const WEATHER_TIMEOUT_MS = 12000;
+const WEATHER_RETRY_MS = 15 * 60 * 1000;
+const WEATHER_TIMEOUT_RETRY_MS = 30 * 1000;
+const _weatherRetried = {};
+let _weatherFetchInFlight = null;
+const _weatherFailedUntil = {};
 
 function wmoIcon(code) {
   if (code === 0) return '☀️';
@@ -1486,6 +1492,8 @@ function fetchWeekWeather() {
     injectWeatherChips(cachedW, days);
     return;
   }
+  if (_weatherFetchInFlight && _weatherFetchInFlight.key === cacheKey) return;
+  if (_weatherFailedUntil[cacheKey] && _weatherFailedUntil[cacheKey] > Date.now()) return;
 
   // Derive lat/lng from first pool with coordinates
   let lat = 0, lng = 0;
@@ -1515,15 +1523,21 @@ function fetchWeekWeather() {
     console.warn('[weather] No date range available — skipping fetch');
     return;
   }
-  console.log('[weather] Fetching', startISO, '→', endISO, 'lat:', lat, 'lng:', lng);
 
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
     `&daily=weathercode,temperature_2m_max,temperature_2m_min` +
     `&temperature_unit=fahrenheit&timezone=auto` +
     `&start_date=${startISO}&end_date=${endISO}`;
 
-  fetch(url)
-    .then(r => r.json())
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), WEATHER_TIMEOUT_MS);
+  _weatherFetchInFlight = { key: cacheKey };
+
+  fetch(url, { signal: controller.signal })
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
     .then(data => {
       if (!data.daily || !data.daily.time) { console.warn('[weather] No daily data in response', data); return; }
       const result = {};
@@ -1545,7 +1559,24 @@ function fetchWeekWeather() {
         renderDayCard(days.find(d => d.day === _activeDay));
       }
     })
-    .catch(err => console.warn('[weather] Fetch failed:', err));
+    .catch(err => {
+      const timedOut = err && err.name === 'AbortError';
+      if (timedOut && !_weatherRetried[cacheKey]) {
+        // Timeouts are usually transient load-time contention — retry once shortly after
+        _weatherRetried[cacheKey] = true;
+        setTimeout(() => {
+          if (_curPage === 'live_map' && _routeData) fetchWeekWeather();
+        }, WEATHER_TIMEOUT_RETRY_MS);
+      } else {
+        _weatherFailedUntil[cacheKey] = Date.now() + WEATHER_RETRY_MS;
+      }
+    })
+    .finally(() => {
+      clearTimeout(timeoutId);
+      if (_weatherFetchInFlight && _weatherFetchInFlight.key === cacheKey) {
+        _weatherFetchInFlight = null;
+      }
+    });
 }
 
 function injectWeatherChips(weatherMap, days) {
