@@ -15,17 +15,40 @@ const SR_FIELD_GROUPS = [
     ['address', 'Address'], ['city', 'City'], ['zip_code', 'ZIP']
   ]],
   ['Pool', [
-    ['pool_dimensions', 'Dimensions'], ['pool_depth', 'Depth'],
-    ['spa', 'Spa'], ['water_features', 'Water features'],
+    ['pool_shape', 'Shape'], ['pool_dimensions', 'Dimensions'],
+    ['pool_length_ft', 'Length ft'], ['pool_width_ft', 'Width ft'],
+    ['pool_depth', 'Depth'], ['depth_min_ft', 'Min depth ft'], ['depth_max_ft', 'Max depth ft'],
+    ['spa', 'Spa'], ['water_features', 'Water features'], ['sheer_descents', 'Sheer descents'],
     ['plaster_type', 'Plaster'], ['plaster_date', 'Plaster date']
+  ]],
+  ['L-shape', [
+    ['l_leg_count', 'Leg count'], ['l_leg_length_ft', 'Leg length ft'],
+    ['l_leg_width_ft', 'Leg width ft'], ['l_overlap_assumption', 'Overlap']
+  ]],
+  ['Spa', [
+    ['spa_shape', 'Spa shape'], ['spa_diameter_ft', 'Diameter ft'],
+    ['spa_length_ft', 'Length ft'], ['spa_width_ft', 'Width ft'],
+    ['spa_depth_ft', 'Depth ft'], ['spa_shared_circulation', 'Shared circulation']
+  ]],
+  ['Gallons', [
+    ['pool_area_sqft', 'Pool area'], ['pool_gallons_est', 'Pool est'],
+    ['pool_gallons_low', 'Pool low'], ['pool_gallons_high', 'Pool high'],
+    ['pool_gallons_method', 'Method'], ['pool_gallons_confidence', 'Confidence'],
+    ['spa_gallons_est', 'Spa est'], ['spa_gallons_low', 'Spa low'],
+    ['spa_gallons_high', 'Spa high'], ['total_gallons_est', 'Total est'],
+    ['total_gallons_low', 'Total low'], ['total_gallons_high', 'Total high'],
+    ['pool_gallons_notes', 'Notes']
   ]],
   ['Equipment', [
     ['equip_filter', 'Filter'], ['equip_pump', 'Pump'],
     ['equip_heater', 'Heater'], ['equip_chlorinator', 'Chlorinator'],
     ['equip_salt_system', 'Salt system'], ['equip_booster', 'Booster']
+  ]],
+  ['Notes', [
+    ['notes', 'Notes']
   ]]
 ];
-const SR_ALL_FIELDS = SR_FIELD_GROUPS.flatMap(g => g[1].map(f => f[0])).concat(['requested_start_date', 'notes']);
+const SR_ALL_FIELDS = SR_FIELD_GROUPS.flatMap(g => g[1].map(f => f[0])).concat(['requested_start_date']);
 
 function loadStartupRequests() {
   const container = document.getElementById('startup-requests-list');
@@ -107,6 +130,9 @@ function srRenderList_() {
     return;
   }
   container.innerHTML = _srPending.map(r => {
+    if (r.status === 'approved' && String(r.change_requested_at || '').trim()) {
+      return srFlaggedChangeCardHtml_(r);
+    }
     const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
     const reviewed = String(r.reviewed_by_builder).toUpperCase() === 'TRUE';
     const illegible = srIllegible_(r);
@@ -140,12 +166,57 @@ function srToggleDetail(requestId) {
   srRenderList_();
 }
 
+function srFlaggedChangeCardHtml_(r) {
+  const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
+  const id = escHtml(r.request_id);
+  return `
+    <div class="pend-card" id="sr-card-${id}" style="border-color:#d97706">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+        <div class="pend-sku">${id}</div>
+        <span style="font-size:.65rem;background:#d97706;color:#fff;padding:.1rem .4rem;border-radius:4px;font-weight:700">Date change requested</span>
+      </div>
+      <div class="pend-desc">${escHtml(name)}</div>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">
+        Currently scheduled: ${escHtml(r.requested_start_date || '—')} · Pool ${escHtml(r.pool_id || '—')}
+      </div>
+      <div style="font-size:.85rem;margin-bottom:.5rem">
+        Builder requested: <b>${escHtml(r.change_requested_date || '—')}</b>
+        ${r.change_requested_note ? `<div style="color:var(--muted);font-size:.8rem;margin-top:.2rem">"${escHtml(r.change_requested_note)}"</div>` : ''}
+      </div>
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">
+        To apply this, use Jobs → Startups → Reschedule Startup Days, then dismiss this flag.
+      </div>
+      <div class="pend-btns">
+        <button class="pend-approve" onclick="srDismissChangeRequest('${id}')">Dismiss</button>
+      </div>
+      <div id="sr-msg-${id}" style="font-size:.8rem;margin-top:.4rem"></div>
+    </div>`;
+}
+
+function srDismissChangeRequest(requestId) {
+  const msg = document.getElementById(`sr-msg-${requestId}`);
+  if (msg) msg.textContent = 'Dismissing…';
+  api({ action: 'startup_request_update', token: _s.token, request_id: requestId, clear_change_request: true }).then(res => {
+    if (!res.ok) { if (msg) { msg.style.color = 'var(--error)'; msg.textContent = res.error || 'Failed to dismiss.'; } return; }
+    _srPending = _srPending.filter(r => r.request_id !== requestId);
+    const title = document.getElementById('sr-card-title');
+    if (title) title.textContent = 'Pool Startup Requests' + (_srPending.length ? ` (${_srPending.length})` : '');
+    srRenderList_();
+  }).catch(() => { if (msg) { msg.style.color = 'var(--error)'; msg.textContent = 'Network error.'; } });
+}
+
 function srDetailHtml_(r) {
   const photos = srPhotoUrls_(r);
   const illegible = srIllegible_(r);
   const id = escHtml(r.request_id);
   const input = (key, label) => {
     const warn = illegible.includes(key);
+    if (key === 'notes' || key === 'pool_gallons_notes') {
+      return `<div class="dfg" style="margin:0;grid-column:1/-1">
+        <label>${label}${warn ? ' ⚠' : ''}</label>
+        <textarea class="si" id="sr-f-${key}-${id}" rows="3" ${warn ? 'style="border-color:#d97706;background:#fffbeb"' : ''}>${escHtml(r[key] || '')}</textarea>
+      </div>`;
+    }
     return `<div class="dfg" style="margin:0">
       <label>${label}${warn ? ' ⚠' : ''}</label>
       <input class="si" id="sr-f-${key}-${id}" value="${escHtml(r[key] || '')}" ${warn ? 'style="border-color:#d97706;background:#fffbeb"' : ''}>
@@ -169,8 +240,6 @@ function srDetailHtml_(r) {
           </a>`).join('')}
         </div>` : '<div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">No sheet photo attached.</div>'}
       ${groups}
-      ${r.notes ? `<div style="font-size:.8rem;color:var(--muted);margin-top:.6rem"><b>Builder notes:</b> ${escHtml(r.notes)}</div>` : ''}
-
       <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:1rem 0 .4rem">Startup &amp; Pricing</div>
       <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center">
         <div class="dfg" style="margin:0">
@@ -226,7 +295,7 @@ function srRecalc(requestId) {
 function srCollectFields_(requestId) {
   const fields = {};
   SR_ALL_FIELDS.forEach(k => {
-    if (k === 'requested_start_date' || k === 'notes') return; // not editable in the admin card
+    if (k === 'requested_start_date') return; // handled by the approval date picker
     const el = document.getElementById(`sr-f-${k}-${requestId}`);
     if (el) fields[k] = el.value.trim();
   });

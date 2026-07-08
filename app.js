@@ -702,6 +702,7 @@ function _syncTechNav() {
   });
   let activeId;
   if (_curPage === 'home') activeId = 'tn-home';
+  else if (_curPage === 'jobs') activeId = 'tn-jobs';
   else if (_curPage === 'service_log') activeId = 'tn-service';
   else if (_curPage === 'live_map') {
     if (_activeHubTab === 'profile') activeId = 'tn-profile';
@@ -716,6 +717,7 @@ function _syncTechNav() {
 window.techNavTo = function(dest) {
   switch (dest) {
     case 'home':     navigateTo('home'); break;
+    case 'jobs':     navigateTo('jobs'); break;
     case 'schedule': navigateTo('live_map'); break;
     case 'service':  navigateTo('service_log'); break;
     case 'profile':  navigateTo('live_map/profile'); break;

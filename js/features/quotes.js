@@ -6,6 +6,10 @@
 // QUOTE CALCULATOR
 // ══════════════════════════════════════════════════════════════════════════════
 const Q_TAX = 0.0825;
+const STARTUP_PRICE_CHEM = 287.86;
+const STARTUP_PRICE_CHEM_COST = 162.86;
+const STARTUP_PRICE_PROG = 62.5;
+const STARTUP_PRICE_SCHOOL = 62.5;
 
 const _qDef = () => ({
   sales_flow:'proposal_first', signature_required:true, activation_method:'',
@@ -17,6 +21,8 @@ const _qDef = () => ({
   sponsored_by_mcp:false, startup_start_date:'',
   repair_type:'repair_replacement', repair_company:'', repair_address:'',
   repair_desc:'', repair_amount:0, repair_sku:'',
+  repair_job_name:'', repair_priority:'medium', repair_equipment:'',
+  repair_issue:'', repair_assigned_to:'', repair_parts:[],
   discount_type:'none', discount_value:0, custom_price:0,
   void_travel:false, travel:null, travel_loading:false, travel_error:'',
   first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'', area:'',
@@ -68,8 +74,61 @@ function qSetService(svc) {
     qStartupDateHint(ds);
   }
   if (isStartup) qLoadStartupCompanies();
+  if (isRepair) { qLoadRepairTechs(); qRepRenderParts(); }
 
   qRecalc();
+}
+
+// ── Repair work-order helpers ─────────────────────────────────────────────────
+let _qRepairTechsLoaded = false;
+function qLoadRepairTechs() {
+  if (_qRepairTechsLoaded) return;
+  api({ secret: SEC, action: 'list_users' }).then(res => {
+    if (!res || !res.ok) return;
+    const sel = document.getElementById('q-rep-tech');
+    if (!sel) return;
+    const techs = (res.users || []).filter(u => {
+      const roles = String(u.roles || '').toLowerCase();
+      const active = String(u.active).toUpperCase();
+      return (roles.includes('technician') || roles.includes('lead') || roles.includes('admin')) &&
+             active !== 'FALSE' && active !== 'NO';
+    });
+    sel.innerHTML = '<option value="">Unassigned</option>' +
+      techs.map(u => `<option value="${escHtml(u.username)}">${escHtml(u.name || u.username)}</option>`).join('');
+    if (_qS.repair_assigned_to) sel.value = _qS.repair_assigned_to;
+    _qRepairTechsLoaded = true;
+  }).catch(() => {});
+}
+
+function qRepRenderParts() {
+  const wrap = document.getElementById('q-rep-parts');
+  if (!wrap) return;
+  const parts = _qS.repair_parts || [];
+  wrap.innerHTML = parts.map((p, i) => `
+    <div class="q-2col" style="align-items:center;margin-bottom:.35rem">
+      <input class="q-inp" type="text" placeholder="Part name" value="${escHtml(p.name || '')}" oninput="qRepPartField(${i},'name',this.value)">
+      <div style="display:flex;gap:.4rem;align-items:center">
+        <input class="q-inp" type="number" min="1" step="1" style="max-width:90px" placeholder="Qty" value="${escHtml(String(p.qty || 1))}" oninput="qRepPartField(${i},'qty',this.value)">
+        <button type="button" class="q-btn-ghost" style="padding:.35rem .6rem" onclick="qRepRemovePart(${i})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function qRepAddPart() {
+  _qS.repair_parts = _qS.repair_parts || [];
+  _qS.repair_parts.push({ name: '', qty: 1 });
+  qRepRenderParts();
+}
+
+function qRepRemovePart(i) {
+  (_qS.repair_parts || []).splice(i, 1);
+  qRepRenderParts();
+}
+
+function qRepPartField(i, key, val) {
+  const p = (_qS.repair_parts || [])[i];
+  if (!p) return;
+  p[key] = key === 'qty' ? Math.max(1, parseInt(val, 10) || 1) : val;
 }
 
 function qPill(el, grp) {
@@ -279,9 +338,9 @@ function qCalcEngine(s) {
     qbNames = [svcLabel]; qbSkus = ['GTC-CLEAN'];
   } else if (service === 'pool_startup') {
     svcLabel = 'Pool Startup'; sizeLabel = 'startup';
-    if (startup_chemical)    { base += 287.86; chem += 162.86; qbNames.push('Startup Chemicals','Pool Startup Chemical Work'); qbSkus.push('START-CHEM','START-CHEM-LABOR'); }
-    if (startup_programming) { base += 62.5;   qbNames.push('Pool Startup Programming'); qbSkus.push('START-PROGRAM'); }
-    if (startup_pool_school) { base += 62.5;   qbNames.push('Pool School'); qbSkus.push('POOL-SCHOOL'); }
+    if (startup_chemical)    { base += STARTUP_PRICE_CHEM; chem += STARTUP_PRICE_CHEM_COST; qbNames.push('Startup Chemicals','Pool Startup Chemical Work'); qbSkus.push('START-CHEM','START-CHEM-LABOR'); }
+    if (startup_programming) { base += STARTUP_PRICE_PROG; qbNames.push('Pool Startup Programming'); qbSkus.push('START-PROGRAM'); }
+    if (startup_pool_school) { base += STARTUP_PRICE_SCHOOL; qbNames.push('Pool School'); qbSkus.push('POOL-SCHOOL'); }
   } else if (service === 'repair_job') {
     base = Math.max(parseFloat(repair_amount) || 0, 0);
     svcLabel = 'Repair / Replacement / Other Job'; sizeLabel = 'repair';
@@ -478,6 +537,12 @@ async function qSave() {
     repair_job_description: _qS.service==='repair_job' ? _qS.repair_desc     : '',
     repair_invoice_amount:  _qS.service==='repair_job' ? _qS.repair_amount   : 0,
     repair_sku:             _qS.service==='repair_job' ? _qS.repair_sku      : '',
+    repair_job_name:        _qS.service==='repair_job' ? _qS.repair_job_name : '',
+    repair_priority:        _qS.service==='repair_job' ? _qS.repair_priority : '',
+    repair_equipment:       _qS.service==='repair_job' ? _qS.repair_equipment : '',
+    repair_issue:           _qS.service==='repair_job' ? _qS.repair_issue    : '',
+    repair_assigned_to:     _qS.service==='repair_job' ? _qS.repair_assigned_to : '',
+    repair_parts:           _qS.service==='repair_job' ? JSON.stringify((_qS.repair_parts || []).filter(p => (p.name || '').trim())) : '[]',
     travel_fee:tFee,
     travel_one_way_miles:             (_qS.travel&&!_qS.void_travel)?_qS.travel.one_way_miles:0,
     travel_round_trip_miles:          (_qS.travel&&!_qS.void_travel)?_qS.travel.round_trip_miles:0,
@@ -530,7 +595,26 @@ async function qSave() {
   qRenderSummary();
 }
 
-function qInit() { if (!_qS._calc) qRecalc(); }
+function qMoneyLabel_(amount) {
+  return '$' + Number(amount || 0).toFixed(2);
+}
+
+function qSyncStartupPriceLabels_() {
+  const labels = {
+    'q-price-chem': STARTUP_PRICE_CHEM,
+    'q-price-prog': STARTUP_PRICE_PROG,
+    'q-price-school': STARTUP_PRICE_SCHOOL
+  };
+  Object.entries(labels).forEach(([id, amount]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = qMoneyLabel_(amount);
+  });
+}
+
+function qInit() {
+  qSyncStartupPriceLabels_();
+  if (!_qS._calc) qRecalc();
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SAVED QUOTE CARD

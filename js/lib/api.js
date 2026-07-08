@@ -28,10 +28,21 @@ function parseApiResponse_(res) {
  * @param {Object} payload - The data to send in the POST body.
  * @param {Object} options - Optional fetch overrides (e.g. signal).
  */
+function currentSessionToken_() {
+  if (typeof _s !== 'undefined' && _s && _s.token) return _s.token;
+  try {
+    const stored = JSON.parse(localStorage.getItem('mcps_s') || 'null');
+    return stored && stored.token ? stored.token : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 function withSessionToken_(payload) {
   const out = Object.assign({}, payload || {});
-  if (out.token === undefined && typeof _s !== 'undefined' && _s && _s.token) {
-    out.token = _s.token;
+  if (out.token === undefined) {
+    const token = currentSessionToken_();
+    if (token) out.token = token;
   }
   return out;
 }

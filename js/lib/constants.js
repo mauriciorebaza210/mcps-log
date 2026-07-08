@@ -7,14 +7,14 @@ const AS  = 'https://script.google.com/macros/s/AKfycbxFrdZRbkXuGuazfqf7q-rKp-T-
 const SEC = '220ed543794285b632c27dec0b1b6529';
 
 const PAGE_META = {
-  home:'Home', live_map:'Technician Hub', service_log:'Service Log',
+  home:'Home', jobs:'Jobs', live_map:'Technician Hub', service_log:'Service Log',
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
   onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
 const PAGE_ICONS = {
-  home:'🏠', live_map:'🛟', service_log:'📝', inventory:'📦',
+  home:'🏠', jobs:'🧰', live_map:'🛟', service_log:'📝', inventory:'📦',
   quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋', financial_hub:'💰'
 };
 
@@ -58,6 +58,7 @@ const SIDEBAR_GROUPS = [
     id: 'tech',
     label: 'Technician Hub',
     children: [
+      { page:'jobs',        label:'Jobs',                  icon:SVG_CLIP     },
       { page:'live_map',    label:'Schedule',              icon:SVG_CALENDAR },
       { page:'live_map',    label:'My Jobs',               icon:SVG_CHART, hubTab:'myjobs',              id:'sb-child-myjobs' },
       { page:'live_map',    label:'Training',              icon:SVG_PLAY,  hubTab:'training',            id:'sb-child-training' },
@@ -84,13 +85,13 @@ const SIDEBAR_GROUPS = [
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['home','live_map','service_log','alerts'],
-  lead:['home','live_map','service_log','alerts'],
+  technician:['home','jobs','live_map','service_log','alerts'],
+  lead:['home','jobs','live_map','service_log','alerts'],
   trainee:['home','live_map'],
   new_hire:['onboarding'],
   office:['home','inventory','alerts'],
-  manager:['home','crm','live_map','service_log','inventory','quotes','financial_hub','alerts'],
-  admin:['home','crm','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
+  manager:['home','crm','jobs','live_map','service_log','inventory','quotes','financial_hub','alerts'],
+  admin:['home','crm','jobs','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

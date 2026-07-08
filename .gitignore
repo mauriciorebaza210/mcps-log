@@ -6,5 +6,7 @@ Quote_Log/
 CLAUDE.md
 tasks/
 Chem Log/
-appscript/
+appscript/*
+!appscript/StartupRequests.js
+!appscript/Jobs.js
 MCPS_Proposal_Template.pdf

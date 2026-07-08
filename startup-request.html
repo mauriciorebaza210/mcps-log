@@ -154,6 +154,7 @@
   <script src="/js/lib/api.js"></script>
   <script>
     const T = new URLSearchParams(location.search).get('t') || '';
+    const R = new URLSearchParams(location.search).get('r') || '';
     const S = {
       company: null,
       photo: null,          // { base64, mimeType, name, dataUrl }
@@ -171,8 +172,28 @@
         ['address', 'Street address', 'full'], ['city', 'City'], ['zip_code', 'ZIP code']
       ]},
       { title: 'Pool', fields: [
-        ['pool_dimensions', 'Pool dimensions'], ['pool_depth', 'Pool depth'],
-        ['spa', 'Spa', '', 'yesno'], ['water_features', 'Water features']
+        ['pool_shape', 'Pool shape'], ['pool_dimensions', 'Pool dimensions'],
+        ['pool_length_ft', 'Length (ft)'], ['pool_width_ft', 'Width (ft)'],
+        ['pool_depth', 'Pool depth'], ['depth_min_ft', 'Min depth (ft)'], ['depth_max_ft', 'Max depth (ft)'],
+        ['spa', 'Spa', '', 'yesno'], ['water_features', 'Water features'], ['sheer_descents', 'Sheer descents']
+      ]},
+      { title: 'L-shape details', fields: [
+        ['l_leg_count', 'Leg count'], ['l_leg_length_ft', 'Leg length (ft)'],
+        ['l_leg_width_ft', 'Leg width (ft)'], ['l_overlap_assumption', 'Overlap assumption']
+      ]},
+      { title: 'Spa', fields: [
+        ['spa_shape', 'Spa shape'], ['spa_diameter_ft', 'Spa diameter (ft)'],
+        ['spa_length_ft', 'Spa length (ft)'], ['spa_width_ft', 'Spa width (ft)'],
+        ['spa_depth_ft', 'Spa depth (ft)'], ['spa_shared_circulation', 'Shared circulation']
+      ]},
+      { title: 'Gallons', fields: [
+        ['pool_area_sqft', 'Pool area sq ft'], ['pool_gallons_est', 'Pool gallons est'],
+        ['pool_gallons_low', 'Pool gallons low'], ['pool_gallons_high', 'Pool gallons high'],
+        ['pool_gallons_method', 'Pool gallons method'], ['pool_gallons_confidence', 'Pool gallons confidence'],
+        ['spa_gallons_est', 'Spa gallons est'], ['spa_gallons_low', 'Spa gallons low'],
+        ['spa_gallons_high', 'Spa gallons high'], ['total_gallons_est', 'Total gallons est'],
+        ['total_gallons_low', 'Total gallons low'], ['total_gallons_high', 'Total gallons high'],
+        ['pool_gallons_notes', 'Gallons notes', 'full', 'textarea']
       ]},
       { title: 'Surface', fields: [
         ['plaster_type', 'Plaster / finish'], ['plaster_date', 'Plaster date', '', 'date']
@@ -205,6 +226,7 @@
         if (!res.ok) { renderBadLink(res.error); return; }
         S.company = res;
         document.getElementById('hdr-company').textContent = res.company_name || '';
+        if (R) { renderStatusView(); return; }
         renderPhotoStep();
       } catch (e) {
         renderBadLink('We couldn\'t reach the server. Please check your connection and reload this page.');
@@ -218,6 +240,100 @@
         <p class="muted">${esc(message || 'This link is invalid or no longer active.')}</p>
         <p class="muted">Please contact Mission Custom Pool Solutions for a new link.</p>
       `;
+    }
+
+    // ── Status view: check status / request a date change ─────────────────
+    async function renderStatusView() {
+      app().innerHTML = `
+        <div class="eyebrow">Checking status</div>
+        <h2>Loading your request...</h2>
+        <div class="spinner"></div>
+      `;
+      try {
+        const res = await api({ action: 'startup_request_status', t: T, request_id: R });
+        if (!res.ok) { renderBadLink(res.error); return; }
+        renderStatusDetail(res);
+      } catch (e) {
+        renderBadLink('We couldn\'t reach the server. Please check your connection and reload this page.');
+      }
+    }
+
+    function renderStatusDetail(res) {
+      const statusLabel = {
+        pending_review: 'Pending review',
+        approved: 'Approved',
+        rejected: 'Not approved'
+      }[res.status] || res.status;
+
+      let body = '';
+      if (res.status === 'pending_review') {
+        body = `<p>Your request (<b>${esc(res.request_id)}</b>) is waiting for MCPS to review it.</p>
+          ${res.requested_start_date ? `<p class="muted">Requested startup date: ${esc(res.requested_start_date)}</p>` : ''}`;
+      } else if (res.status === 'approved') {
+        body = `<p>Your pool startup is confirmed.</p>
+          <p class="muted">Scheduled startup date: <b>${esc(res.requested_start_date)}</b></p>`;
+      } else if (res.status === 'rejected') {
+        body = `<p>We were unable to move forward with this request.</p>
+          ${res.admin_notes ? `<div class="notice">${esc(res.admin_notes)}</div>` : ''}`;
+      } else {
+        body = `<p class="muted">Status: ${esc(res.status)}</p>`;
+      }
+
+      const canRequestChange = res.status === 'pending_review' || res.status === 'approved';
+      const flagged = !!res.change_requested_at;
+
+      app().innerHTML = `
+        <div class="eyebrow">Request status</div>
+        <h2>${esc(statusLabel)}</h2>
+        ${body}
+        ${flagged ? `<div class="notice">You requested a date change to ${esc(res.change_requested_date)}${res.change_requested_note ? ': ' + esc(res.change_requested_note) : ''}. MCPS is reviewing it.</div>` : ''}
+        ${canRequestChange && !flagged ? `
+          <div class="fgroup">
+            <h3>Request a date change</h3>
+            <div class="fld">
+              <label>New requested date</label>
+              <input type="date" id="cr-date">
+            </div>
+            <div class="fld" style="margin-top:8px">
+              <label>Note (optional)</label>
+              <textarea id="cr-note"></textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="primary" onclick="submitChangeRequest()">Request date change</button>
+          </div>
+        ` : ''}
+        <div class="msg" id="cr-msg"></div>
+      `;
+    }
+
+    async function submitChangeRequest() {
+      const dateEl = document.getElementById('cr-date');
+      const noteEl = document.getElementById('cr-note');
+      const msg = document.getElementById('cr-msg');
+      if (!dateEl || !dateEl.value) {
+        msg.className = 'msg err'; msg.textContent = 'Please pick a date.'; msg.style.display = 'block';
+        return;
+      }
+      document.querySelectorAll('button').forEach(b => b.disabled = true);
+      msg.className = 'msg'; msg.textContent = 'Sending...'; msg.style.display = 'block';
+      try {
+        const res = await api({
+          action: 'startup_request_request_change', t: T, request_id: R,
+          requested_date: dateEl.value, note: (noteEl.value || '').trim()
+        });
+        if (!res.ok) {
+          msg.className = 'msg err';
+          msg.textContent = res.error || 'We couldn\'t send your request. Please try again.';
+          document.querySelectorAll('button').forEach(b => b.disabled = false);
+          return;
+        }
+        renderStatusView();
+      } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'We couldn\'t reach the server. Please check your connection and try again.';
+        document.querySelectorAll('button').forEach(b => b.disabled = false);
+      }
     }
 
     // ── Step 1: photo ──────────────────────────────────────────────────────
@@ -345,13 +461,13 @@
           S.extractFailed = false;
           renderReviewStep(true);
         } else if (res.ok && !res.fields) {
-          extractFallback();
+          extractFallback(res.error);
         } else {
           // rate limited or rejected — surface the reason, keep the photo
           extractFallback(res.error);
         }
       } catch (e) {
-        extractFallback();
+        extractFallback(e && e.message ? e.message : '');
       }
     }
 
