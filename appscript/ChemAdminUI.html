@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Google Sans", Arial, sans-serif; font-size: 13px; background: #f8f9fa; color: #202124; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; background: #fff; border-bottom: 2px solid #e8eaed; position: sticky; top: 0; z-index: 10; overflow-x: auto; }
+  .tab { flex-shrink: 0; padding: 9px 8px; text-align: center; cursor: pointer; font-size: 11px; font-weight: 500; color: #5f6368; border-bottom: 3px solid transparent; white-space: nowrap; }
+  .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
+  .tab:hover  { background: #f1f3f4; }
+  .panel { display: none; padding: 12px; }
+  .panel.active { display: block; }
+
+  /* ── Status bar ── */
+  #statusBar { position: sticky; top: 36px; z-index: 9; padding: 7px 12px; font-weight: 600; font-size: 12px; display: none; }
+  #statusBar.ok  { background: #e6f4ea; color: #137333; display: block; }
+  #statusBar.err { background: #fce8e6; color: #c5221f; display: block; }
+
+  /* ── Cards ── */
+  .chem-card { background: #fff; border: 1px solid #e8eaed; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: grab; transition: box-shadow .15s; }
+  .chem-card:active { cursor: grabbing; }
+  .chem-card.dragging { opacity: .4; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  .chem-card.drag-over { border: 2px dashed #1a73e8; }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .drag-handle { color: #bdc1c6; font-size: 16px; cursor: grab; user-select: none; flex-shrink: 0; }
+  .chem-name { font-weight: 600; flex: 1; font-size: 13px; }
+  .card-actions { display: flex; gap: 4px; }
+  .card-fields { display: none; margin-top: 10px; gap: 8px; grid-template-columns: 1fr 1fr; }
+  .card-fields.open { display: grid; }
+  .field-group { display: flex; flex-direction: column; gap: 3px; }
+  .field-group label { font-size: 11px; color: #5f6368; font-weight: 500; }
+  .field-group input { border: 1px solid #dadce0; border-radius: 4px; padding: 5px 8px; font-size: 13px; width: 100%; }
+  .field-group input:focus { outline: none; border-color: #1a73e8; }
+  .rename-row { display: none; margin-top: 8px; gap: 6px; align-items: center; }
+  .rename-row.open { display: flex; }
+  .rename-row input { flex: 1; border: 1px solid #dadce0; border-radius: 4px; padding: 5px 8px; font-size: 13px; }
+
+  /* ── Buttons ── */
+  .btn { padding: 5px 11px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; transition: opacity .15s; }
+  .btn:hover { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn-blue   { background: #1a73e8; color: #fff; }
+  .btn-red    { background: #d93025; color: #fff; }
+  .btn-green  { background: #34a853; color: #fff; }
+  .btn-grey   { background: #e8eaed; color: #3c4043; }
+  .btn-orange { background: #fa7b17; color: #fff; }
+  .btn-purple { background: #7c3aed; color: #fff; }
+  .btn-sm     { padding: 4px 8px; font-size: 11px; }
+
+  /* ── Add form ── */
+  .add-form { background: #fff; border: 1px solid #e8eaed; border-radius: 8px; padding: 14px; }
+  .add-form h4 { margin-bottom: 10px; color: #3c4043; }
+  .add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .add-grid .full { grid-column: 1 / -1; }
+  .add-grid label { font-size: 11px; color: #5f6368; font-weight: 500; display: block; margin-bottom: 3px; }
+  .add-grid input { width: 100%; border: 1px solid #dadce0; border-radius: 4px; padding: 6px 8px; font-size: 13px; }
+
+  /* ── Debug ── */
+  .debug-row { display: flex; align-items: center; padding: 6px 10px; border-radius: 6px; margin-bottom: 4px; font-size: 12px; gap: 8px; }
+  .debug-row.ok  { background: #e6f4ea; }
+  .debug-row.bad { background: #fce8e6; }
+  .debug-name { flex: 1; font-weight: 500; }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+  .badge.yes { background: #ceead6; color: #137333; }
+  .badge.no  { background: #f5c6c3; color: #c5221f; }
+  .alias-row { background: #fff; border: 1px solid #e8eaed; border-radius: 6px; padding: 6px 10px; margin-bottom: 4px; font-size: 12px; color: #5f6368; }
+  .alias-row b { color: #202124; }
+
+  /* ── Archive ── */
+  .archive-card { background: #fff; border: 1px solid #e8eaed; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .archive-meta { flex: 1; }
+  .archive-name { font-weight: 600; }
+  .archive-sub  { font-size: 11px; color: #5f6368; margin-top: 2px; }
+
+  /* ── Section title ── */
+  .section-title { font-size: 11px; font-weight: 700; color: #5f6368; text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 8px; }
+
+  /* ── KPI Cards ── */
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .kpi-card { background: #fff; border: 1px solid #e8eaed; border-radius: 10px; padding: 12px 14px; }
+  .kpi-card.wide { grid-column: 1 / -1; }
+  .kpi-label { font-size: 10px; font-weight: 700; color: #9aa0a6; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .kpi-value { font-size: 20px; font-weight: 700; color: #202124; line-height: 1; }
+  .kpi-sub   { font-size: 11px; color: #5f6368; margin-top: 4px; }
+  .kpi-accent-blue   { border-top: 3px solid #1a73e8; }
+  .kpi-accent-green  { border-top: 3px solid #34a853; }
+  .kpi-accent-orange { border-top: 3px solid #fa7b17; }
+  .kpi-accent-purple { border-top: 3px solid #7c3aed; }
+
+  /* ── Filter pills ── */
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .pill { padding: 4px 12px; border-radius: 20px; border: 1px solid #dadce0; font-size: 12px; font-weight: 500; cursor: pointer; background: #fff; color: #5f6368; transition: all .15s; }
+  .pill.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  .pill.startup { }
+  .pill.active.startup { background: #34a853; border-color: #34a853; }
+  .pill.active.service { background: #fa7b17; border-color: #fa7b17; }
+
+  /* ── Rank list ── */
+  .rank-list { display: flex; flex-direction: column; gap: 4px; }
+  .rank-row  { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: #f8f9fa; border-radius: 6px; font-size: 12px; }
+  .rank-num  { font-size: 14px; font-weight: 700; color: #dadce0; width: 18px; flex-shrink: 0; }
+  .rank-name { flex: 1; font-weight: 500; }
+  .rank-cost { font-weight: 700; color: #202124; }
+  .rank-bar  { height: 4px; background: #1a73e8; border-radius: 2px; margin-top: 4px; }
+
+  /* ── Service type breakdown ── */
+  .svc-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+  .svc-label { width: 60px; font-weight: 600; }
+  .svc-bar-wrap { flex: 1; height: 8px; background: #f1f3f4; border-radius: 4px; overflow: hidden; }
+  .svc-bar  { height: 100%; border-radius: 4px; }
+  .svc-cost { width: 70px; text-align: right; font-weight: 500; }
+  .svc-pct  { width: 36px; text-align: right; color: #5f6368; }
+
+  /* ── Void submission tab ── */
+  .sub-card { background: #fff; border: 1px solid #e8eaed; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  .sub-card:hover    { border-color: #1a73e8; box-shadow: 0 1px 6px rgba(26,115,232,.15); }
+  .sub-card.selected { border-color: #d93025; background: #fce8e6; }
+  .sub-card.voided   { opacity: .5; cursor: not-allowed; }
+  .sub-date { font-weight: 600; font-size: 13px; }
+  .sub-meta { font-size: 11px; color: #5f6368; margin-top: 2px; }
+  .sub-chems { font-size: 11px; color: #202124; margin-top: 4px; padding: 4px 8px; background: #f8f9fa; border-radius: 4px; }
+
+  /* ── Diff table ── */
+  .diff-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+  .diff-table th { background: #f1f3f4; padding: 6px 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e8eaed; }
+  .diff-table td { padding: 6px 8px; border-bottom: 1px solid #f1f3f4; }
+  .diff-table tr:last-child td { border-bottom: none; }
+  .up   { color: #c5221f; font-weight: 600; }
+  .down { color: #137333; font-weight: 600; }
+
+  /* ── Voided log rows ── */
+  .void-hist-row { background: #fff; border: 1px solid #fce8e6; border-left: 3px solid #d93025; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-size: 12px; }
+  .void-top  { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 3px; }
+  .void-meta { color: #5f6368; }
+
+  /* ── Misc ── */
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #dadce0; border-top-color: #1a73e8; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { color: #9aa0a6; font-size: 12px; padding: 16px 0; text-align: center; }
+  .label { font-size: 11px; color: #5f6368; font-weight: 500; margin-bottom: 3px; }
+  select, input[type=text], input[type=number] { width: 100%; border: 1px solid #dadce0; border-radius: 4px; padding: 5px 8px; font-size: 12px; background: #fff; color: #202124; }
+  select:focus, input:focus { outline: none; border-color: #1a73e8; }
+  .field { margin-bottom: 10px; }
+  .confirm-box { background: #fff; border: 1px solid #e8eaed; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .confirm-box h4 { margin-bottom: 10px; }
+  .action-row { display: flex; gap: 8px; margin-top: 12px; }
+  .no-data-banner { background: #fef7e0; border: 1px solid #fbbc04; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #b06000; text-align: center; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('manage')">⚗️ Chems</div>
+  <div class="tab" onclick="switchTab('add')">➕ Add</div>
+  <div class="tab" onclick="switchTab('archive')">🗄 Archive</div>
+  <div class="tab" onclick="switchTab('orders')">📦 Orders</div>
+  <div class="tab" onclick="switchTab('unmatched')">⚠️ Unmatched</div>
+  <div class="tab" onclick="switchTab('kpis')">📊 KPIs</div>
+  <div class="tab" onclick="switchTab('void')">🗑 Void</div>
+  <div class="tab" onclick="switchTab('debug')">🔍 Debug</div>
+</div>
+
+<div id="statusBar"></div>
+
+<!-- ══ MANAGE TAB ══ -->
+<div id="tab-manage" class="panel active">
+  <div class="section-title">Drag to reorder · Click to edit</div>
+  <div id="chemList"></div>
+</div>
+
+<!-- ══ ADD TAB ══ -->
+<div id="tab-add" class="panel">
+  <div class="section-title">In Inventory_Master but not in Chem_Costs</div>
+  <div id="invImportList"></div>
+  <div style="border-top:1px solid #e8eaed;margin:16px 0"></div>
+  <div class="add-form">
+    <h4>Add Manually</h4>
+    <div class="add-grid">
+      <div class="full"><label>Display Name *</label><input id="newName" placeholder="e.g. Muriatic Acid" style="width:100%" /></div>
+      <div><label>Units Bought</label><input id="newUnits" type="number" placeholder="4" style="width:100%" /></div>
+      <div><label>Unit Type</label><input id="newUnitType" placeholder="bottles" style="width:100%" /></div>
+      <div><label>Purchase Price ($)</label><input id="newPrice" type="number" step="0.01" placeholder="19.04" style="width:100%" /></div>
+      <div><label>Cost per Unit ($) *</label><input id="newCost" type="number" step="0.01" placeholder="4.76" style="width:100%" /></div>
+    </div>
+    <button class="btn btn-green" onclick="addChem()" style="width:100%;padding:9px">➕ Add &amp; Sync to Form</button>
+  </div>
+</div>
+
+<!-- ══ ARCHIVE TAB ══ -->
+<div id="tab-archive" class="panel">
+  <div class="section-title">Deleted chemicals — restore to bring back</div>
+  <div id="archiveList"></div>
+</div>
+
+<!-- ══ ORDERS TAB ══ -->
+<div id="tab-orders" class="panel">
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button class="btn btn-blue" style="flex:1" onclick="loadOrders()">🔄 Refresh</button>
+    <button class="btn btn-green" style="flex:1" onclick="manualApply()">✅ Apply Pending</button>
+  </div>
+  <div id="pendingSkuSection" style="display:none">
+    <div class="section-title" style="color:#c5221f">🤖 AI Categorized — Pending Review</div>
+    <div id="pendingSkuList"></div>
+    <div style="border-top:1px solid #e8eaed;margin:12px 0"></div>
+  </div>
+  <div id="unmappedSection" style="display:none">
+    <div class="section-title" style="color:#c5221f">⚠️ Unmapped SKUs</div>
+    <div id="unmappedList"></div>
+    <div style="border-top:1px solid #e8eaed;margin:12px 0"></div>
+  </div>
+  <div class="section-title">🔧 Non-Chemical Purchases</div>
+  <div id="nonChemList"></div>
+  <div style="border-top:1px solid #e8eaed;margin:12px 0"></div>
+  <div class="section-title">🧪 Chemical Purchase Log</div>
+  <div id="ordersList"></div>
+</div>
+
+<!-- ══ UNMATCHED TAB ══ -->
+<div id="tab-unmatched" class="panel">
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button class="btn btn-blue" style="flex:1" onclick="loadUnmatched()">🔄 Refresh</button>
+  </div>
+  <div id="unmatchedSubmList"><div class="empty"><span class="spinner"></span>Loading…</div></div>
+</div>
+
+<!-- ══ KPIs TAB ══ -->
+<div id="tab-kpis" class="panel">
+
+  <!-- Week picker -->
+  <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px">
+    <div style="flex:1">
+      <div class="label">Select Week</div>
+      <select id="kpiWeekSelect" onchange="loadKpiSnapshot()">
+        <option value="">Loading weeks…</option>
+      </select>
+    </div>
+    <button class="btn btn-blue btn-sm" onclick="loadKpiSnapshot()">Load</button>
+  </div>
+
+  <!-- Service type filter pills -->
+  <div class="pills">
+    <div class="pill active" id="pill-all"     onclick="setKpiFilter('all')">All</div>
+    <div class="pill startup" id="pill-Startup" onclick="setKpiFilter('Startup')">🆕 Startups</div>
+    <div class="pill service" id="pill-Service" onclick="setKpiFilter('Service')">🔁 Service</div>
+    <div class="pill" id="pill-Other"   onclick="setKpiFilter('Other')">Other</div>
+  </div>
+
+  <div id="kpiContent">
+    <div class="empty">Select a week above to load KPIs</div>
+  </div>
+</div>
+
+<!-- ══ VOID TAB ══ -->
+<div id="tab-void" class="panel">
+
+  <!-- Step 1 -->
+  <div id="voidStep1">
+    <div class="section-title">Step 1 — Select Pool</div>
+    <div class="field">
+      <div class="label">Pool</div>
+      <select id="voidPoolSelect" onchange="loadVoidSubmissions()">
+        <option value="">Loading pools…</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div id="voidStep2" style="display:none">
+    <div class="section-title">Step 2 — Select Submission to Void</div>
+    <div style="font-size:11px;color:#5f6368;margin-bottom:8px">⚠️ Voiding reverses inventory and removes the visit from analytics.</div>
+    <div id="voidSubList"></div>
+  </div>
+
+  <!-- Step 3 -->
+  <div id="voidStep3" style="display:none">
+    <div class="section-title">Step 3 — Review &amp; Confirm</div>
+    <div id="voidPreviewContent"></div>
+
+    <div class="field">
+      <div class="label">Your name (audit log)</div>
+      <input type="text" id="voidBy" placeholder="e.g. Mauricio" />
+    </div>
+    <div class="field">
+      <div class="label">Reason for voiding</div>
+      <input type="text" id="voidReason" placeholder="e.g. Test entry — email trigger test" />
+    </div>
+
+    <div class="action-row">
+      <button class="btn btn-grey" style="flex:1" onclick="backToVoidList()">← Back</button>
+      <button class="btn btn-red" style="flex:2" onclick="confirmVoid()">🗑 Void This Submission</button>
+    </div>
+  </div>
+
+  <!-- Voided log -->
+  <div style="border-top:1px solid #e8eaed;margin:20px 0 8px"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div class="section-title" style="margin:0">Recent Voided Submissions</div>
+    <button class="btn btn-grey btn-sm" onclick="loadVoidedLog()">🔄 Refresh</button>
+  </div>
+  <div id="voidedLogList" style="margin-top:8px">
+    <div class="empty">No voided submissions yet</div>
+  </div>
+</div>
+
+<!-- ══ DEBUG TAB ══ -->
+<div id="tab-debug" class="panel">
+  <button class="btn btn-blue" onclick="loadDebug()" style="width:100%;margin-bottom:12px">🔄 Run Debug Check</button>
+  <div id="debugOut"></div>
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════════
+var chems      = [];
+var dragSrcIdx = null;
+var _allPools  = [];
+var _kpiFilter = "all";
+var _voidSelectedRow = null;
+
+// ═══════════════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════════════
+load();
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════
+var TAB_NAMES = ["manage","add","archive","orders","unmatched","kpis","void","debug"];
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(function(t, i) {
+    t.classList.toggle("active", TAB_NAMES[i] === name);
+  });
+  document.querySelectorAll(".panel").forEach(function(p) { p.classList.remove("active"); });
+  document.getElementById("tab-" + name).classList.add("active");
+
+  if (name === "archive")   loadArchive();
+  if (name === "debug")     clearDebug();
+  if (name === "add")       loadInventoryImport();
+  if (name === "orders")    loadOrders();
+  if (name === "unmatched") loadUnmatched();
+  if (name === "kpis")      initKpisTab();
+  if (name === "void")      initVoidTab();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  STATUS BAR
+// ═══════════════════════════════════════════════════════════════════════
+var statusTimer;
+function status(msg, isErr) {
+  var bar = document.getElementById("statusBar");
+  bar.textContent = msg;
+  bar.className = isErr ? "err" : "ok";
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(function() { bar.className = ""; bar.textContent = ""; }, 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  MANAGE TAB
+// ═══════════════════════════════════════════════════════════════════════
+function load() {
+  google.script.run
+    .withSuccessHandler(function(data) { chems = data; renderChemList(); })
+    .withFailureHandler(function(e) { status("Load failed: " + e.message, true); })
+    .getChemicals();
+}
+
+function renderChemList() {
+  var el = document.getElementById("chemList");
+  if (!chems.length) { el.innerHTML = '<div class="empty">No chemicals in Chem_Costs</div>'; return; }
+  el.innerHTML = chems.map(function(c, i) {
+    return [
+      '<div class="chem-card" draggable="true"',
+      ' ondragstart="dragStart(event,' + i + ')" ondragover="dragOver(event,' + i + ')"',
+      ' ondrop="dragDrop(event,' + i + ')" ondragend="dragEnd()">',
+      '<div class="card-top">',
+      '<span class="drag-handle">⠿</span>',
+      '<span class="chem-name">' + esc(c.name) + '</span>',
+      '<div class="card-actions">',
+      '<button class="btn btn-grey btn-sm" onclick="toggleFields(' + i + ')">✏️ Edit</button>',
+      '<button class="btn btn-orange btn-sm" onclick="toggleRename(' + i + ')">🏷 Rename</button>',
+      '<button class="btn btn-red btn-sm" onclick="deleteChem(' + i + ')">🗑</button>',
+      '</div></div>',
+      '<div class="rename-row" id="rename-' + i + '">',
+      '<input id="renameInput-' + i + '" value="' + esc(c.name) + '" style="flex:1" />',
+      '<button class="btn btn-orange btn-sm" onclick="doRename(' + i + ')">Save &amp; Cascade</button>',
+      '<button class="btn btn-grey btn-sm" onclick="toggleRename(' + i + ')">Cancel</button>',
+      '</div>',
+      '<div class="card-fields" id="fields-' + i + '">',
+      '<div class="field-group"><label>Units Bought</label><input type="number" id="units-' + i + '" value="' + c.unitsBought + '" /></div>',
+      '<div class="field-group"><label>Unit Type</label><input id="unittype-' + i + '" value="' + esc(c.unitType) + '" /></div>',
+      '<div class="field-group"><label>Purchase Price ($)</label><input type="number" step="0.01" id="price-' + i + '" value="' + c.purchasePrice + '" /></div>',
+      '<div class="field-group"><label>Cost per Unit ($)</label><input type="number" step="0.01" id="cost-' + i + '" value="' + c.costPerUnit + '" /></div>',
+      '<div class="field-group" style="grid-column:1/-1"><button class="btn btn-blue" style="width:100%" onclick="saveFields(' + i + ')">💾 Save All Fields</button></div>',
+      '</div></div>'
+    ].join("");
+  }).join("");
+}
+
+function toggleFields(i) { document.getElementById("fields-" + i).classList.toggle("open"); }
+function toggleRename(i) { document.getElementById("rename-" + i).classList.toggle("open"); }
+
+function saveFields(i) {
+  var c = chems[i];
+  var newCost = document.getElementById("cost-" + i).value;
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Saved " + c.name); load(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .updateCostPerUnit(c.name, newCost);
+}
+
+function doRename(i) {
+  var oldName = chems[i].name;
+  var newName = document.getElementById("renameInput-" + i).value.trim();
+  if (!newName || newName === oldName) { status("Enter a different name", true); return; }
+  if (!confirm('Rename "' + oldName + '" → "' + newName + '"?\n\nUpdates Chem_Costs, form, and Inventory_Master.')) return;
+  status("⏳ Renaming and cascading…");
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Renamed to " + newName); load(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .renameChemical(oldName, newName);
+}
+
+function deleteChem(i) {
+  var name = chems[i].name;
+  if (!confirm('Remove "' + name + '" from Chem_Costs and the form?\n\nIt will be saved to Archive.')) return;
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Removed " + name + " (archived)"); load(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .removeChemical(name);
+}
+
+// Drag-to-reorder
+function dragStart(e, i) { dragSrcIdx = i; e.currentTarget.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; }
+function dragOver(e, i) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; document.querySelectorAll(".chem-card").forEach(function(c) { c.classList.remove("drag-over"); }); e.currentTarget.classList.add("drag-over"); }
+function dragDrop(e, i) {
+  e.preventDefault();
+  if (dragSrcIdx === null || dragSrcIdx === i) return;
+  var moved = chems.splice(dragSrcIdx, 1)[0];
+  chems.splice(i, 0, moved);
+  dragSrcIdx = null;
+  renderChemList();
+  status("⏳ Saving new order…");
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) status("✅ Order saved and form updated"); else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .reorderChemicals(chems.map(function(c) { return c.name; }));
+}
+function dragEnd() { document.querySelectorAll(".chem-card").forEach(function(c) { c.classList.remove("dragging"); c.classList.remove("drag-over"); }); }
+
+// ═══════════════════════════════════════════════════════════════════════
+//  ADD TAB
+// ═══════════════════════════════════════════════════════════════════════
+function addChem() {
+  var name  = document.getElementById("newName").value.trim();
+  var units = document.getElementById("newUnits").value;
+  var utype = document.getElementById("newUnitType").value.trim();
+  var price = document.getElementById("newPrice").value;
+  var cost  = document.getElementById("newCost").value;
+  if (!name || !cost) { status("Name and Cost per Unit are required.", true); return; }
+  status("⏳ Adding and syncing…");
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.ok) {
+        status("✅ Added " + name);
+        ["newName","newUnits","newUnitType","newPrice","newCost"].forEach(function(id) { document.getElementById(id).value = ""; });
+        load();
+        switchTab("manage");
+      } else status("❌ " + r.error, true);
+    })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .addChemical(name, units, utype, price, cost);
+}
+
+function loadInventoryImport() {
+  var el = document.getElementById("invImportList");
+  el.innerHTML = '<div class="empty"><span class="spinner"></span>Checking Inventory_Master…</div>';
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data.length) { el.innerHTML = '<div class="empty">✅ All Inventory_Master chemicals are already in Chem_Costs</div>'; return; }
+      window._invImportData = data;
+      el.innerHTML = data.map(function(c, i) {
+        return '<div class="chem-card" id="invcard-' + i + '"><div class="card-top"><span class="chem-name">' + esc(c.name) + '</span><span style="font-size:11px;color:#5f6368">' + esc(c.unitType) + ' · ' + c.qtyOnHand + ' on hand</span></div><div style="display:flex;gap:6px;margin-top:8px;align-items:center"><label style="font-size:11px;color:#5f6368;white-space:nowrap">$/Unit</label><input type="number" step="0.01" id="importcost-' + i + '" placeholder="0.00" style="width:75px" /><button class="btn btn-green btn-sm" style="flex:1" onclick="doImport(' + i + ')">➕ Add to Chem_Costs</button></div></div>';
+      }).join("");
+    })
+    .withFailureHandler(function(e) { el.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .getInventoryOnlyChemicals();
+}
+
+function doImport(i) {
+  var c = window._invImportData[i];
+  var cost = document.getElementById("importcost-" + i).value;
+  if (!cost) { status("Enter a cost per unit first", true); return; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.ok) { status("✅ Added " + c.name); document.getElementById("invcard-" + i).style.opacity = "0.35"; document.getElementById("invcard-" + i).style.pointerEvents = "none"; load(); }
+      else status("❌ " + r.error, true);
+    })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .importFromInventory(c.name, c.unitType, cost);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  ARCHIVE TAB
+// ═══════════════════════════════════════════════════════════════════════
+function loadArchive() {
+  var el = document.getElementById("archiveList");
+  el.innerHTML = '<div class="empty"><span class="spinner"></span>Loading…</div>';
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data.length) { el.innerHTML = '<div class="empty">Nothing archived yet</div>'; return; }
+      el.innerHTML = data.map(function(c) {
+        return '<div class="archive-card"><div class="archive-meta"><div class="archive-name">' + esc(c.name) + '</div><div class="archive-sub">$' + Number(c.costPerUnit).toFixed(2) + '/unit · ' + esc(c.unitType) + ' · Archived ' + c.archivedAt.split(" ")[0] + '</div></div><button class="btn btn-green btn-sm" onclick="restoreChem(\'' + esc(c.name) + '\')">↩ Restore</button></div>';
+      }).join("");
+    })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .getArchivedChemicals();
+}
+
+function restoreChem(name) {
+  if (!confirm('Restore "' + name + '" to Chem_Costs and the form?')) return;
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Restored " + name); loadArchive(); load(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .restoreChemical(name);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  ORDERS TAB (unchanged)
+// ═══════════════════════════════════════════════════════════════════════
+function loadOrders() {
+  var ordersEl   = document.getElementById("ordersList");
+  var unmappedEl = document.getElementById("unmappedList");
+  ordersEl.innerHTML = '<div class="empty"><span class="spinner"></span>Loading…</div>';
+
+  google.script.run
+    .withSuccessHandler(function(pending) {
+      var sec  = document.getElementById("pendingSkuSection");
+      var list = document.getElementById("pendingSkuList");
+      if (!pending.length) { sec.style.display = "none"; return; }
+      sec.style.display = "block";
+      list.innerHTML = pending.map(function(p) {
+        var cc = p.ai_confidence === "high" ? "#137333" : p.ai_confidence === "medium" ? "#b06000" : "#c5221f";
+        return ['<div class="chem-card" style="border-color:' + cc + ';cursor:default;margin-bottom:10px">','<div class="card-top"><span class="chem-name">' + esc(p.sku) + '</span><span style="font-size:11px;color:' + cc + ';font-weight:600">' + esc(p.ai_confidence) + ' confidence</span></div>','<div style="font-size:11px;color:#5f6368;margin:4px 0 8px">' + esc(p.description) + '</div>','<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">','<div><div class="label">Category</div><select id="pcat-' + p.rowIndex + '"><option value="chemical"' + (p.ai_category === "chemical" ? " selected" : "") + '>Chemical</option><option value="non-chemical"' + (p.ai_category !== "chemical" ? " selected" : "") + '>Non-Chemical</option></select></div>','<div><div class="label">Sub-Category</div><select id="psub-' + p.rowIndex + '"><option value="pool-chemical"' + (p.ai_sub_category === "pool-chemical" ? " selected" : "") + '>Pool Chemical</option><option value="equipment"' + (p.ai_sub_category === "equipment" ? " selected" : "") + '>Equipment</option><option value="parts"' + (p.ai_sub_category === "parts" ? " selected" : "") + '>Parts</option><option value="consumable"' + (p.ai_sub_category === "consumable" ? " selected" : "") + '>Consumable</option></select></div>','<div><div class="label">Display Name</div><input id="pname-' + p.rowIndex + '" value="' + esc(p.ai_display_name) + '" /></div>','<div><div class="label">Units per SKU</div><input type="number" id="pupu-' + p.rowIndex + '" value="' + (p.ai_units_per_sku || 1) + '" /></div>','</div>','<div style="font-size:11px;color:#5f6368;margin-bottom:8px">💡 ' + esc(p.ai_reason) + '</div>','<div style="display:flex;gap:6px"><button class="btn btn-green btn-sm" style="flex:2" onclick="approveSkuReview(' + p.rowIndex + ')">✅ Approve &amp; Route</button><button class="btn btn-red btn-sm" style="flex:1" onclick="rejectSkuReview(' + p.rowIndex + ')">🗑 Reject</button></div></div>'].join("");
+      }).join("");
+    })
+    .withFailureHandler(function(e) { console.log("getPendingSkus: " + e.message); })
+    .getPendingSkus();
+
+  google.script.run
+    .withSuccessHandler(function(unmapped) {
+      var sec = document.getElementById("unmappedSection");
+      if (!unmapped.length) { sec.style.display = "none"; return; }
+      sec.style.display = "block";
+      unmappedEl.innerHTML = unmapped.map(function(u, i) {
+        return '<div class="chem-card" style="border-color:#f5c6c3;cursor:default"><div class="card-top"><span class="chem-name" style="color:#c5221f">' + esc(u.sku) + '</span><span style="font-size:11px;color:#5f6368;flex:1;margin-left:8px">' + esc(u.description) + '</span></div><div style="display:flex;gap:6px;margin-top:8px"><input id="skumap-' + i + '" placeholder="Map to display_name…" /><button class="btn btn-orange btn-sm" onclick="saveSkuMap(\'' + esc(u.sku) + '\',' + i + ')">Map</button></div></div>';
+      }).join("");
+    })
+    .getUnmappedSkus();
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      var el = document.getElementById("nonChemList");
+      if (!rows.length) { el.innerHTML = '<div class="empty">No non-chemical purchases yet</div>'; return; }
+      var sc = { "equipment": "#1a73e8", "parts": "#fa7b17", "consumable": "#34a853" };
+      el.innerHTML = rows.map(function(r) {
+        var color = sc[r.sub_category] || "#5f6368";
+        return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><b>' + esc(r.display_name || r.description) + '</b><span style="color:' + color + ';font-weight:600;font-size:11px">' + esc(r.sub_category || r.category) + '</span></div><div style="color:#5f6368">' + esc(r.invoice_id) + ' · ' + esc(r.date) + ' · SKU ' + esc(r.sku) + ' · Qty ' + r.qty + ' ' + esc(r.uom) + ' · $' + Number(r.unit_price || 0).toFixed(2) + '/unit · $' + Number(r.extended_amount || 0).toFixed(2) + ' total</div></div>';
+      }).join("");
+    })
+    .withFailureHandler(function(e) { document.getElementById("nonChemList").innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .getNonChemicalLog(30);
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows.length) { ordersEl.innerHTML = '<div class="empty">No purchase log entries yet</div>'; return; }
+      var pending = rows.filter(function(r) { return r.applied !== "yes"; }).length;
+      ordersEl.innerHTML = pending ? '<div style="background:#fef7e0;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#b06000">⏳ ' + pending + ' row(s) pending — hit Apply Pending to update inventory</div>' : "";
+      ordersEl.innerHTML += rows.map(function(r) {
+        var applied = r.applied === "yes";
+        return '<div style="background:#fff;border:1px solid #e8eaed;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:12px;opacity:' + (applied ? "0.55" : "1") + '"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><b>' + esc(r.display_name || r.sku || "—") + '</b><span style="font-weight:600;color:' + (applied ? "#137333" : "#b06000") + '">' + (applied ? "✅ Applied" : "⏳ Pending") + '</span></div><div style="color:#5f6368">' + esc(r.invoice_id) + ' · ' + esc(r.invoice_date) + ' · SKU ' + esc(r.sku) + ' · Qty ' + r.qty_shipped + ' ' + esc(r.uom) + ' · $' + Number(r.price_per_uom || 0).toFixed(2) + '/unit</div></div>';
+      }).join("");
+    })
+    .withFailureHandler(function(e) { ordersEl.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .getPurchaseLog(50);
+}
+
+function manualApply() {
+  status("⏳ Applying pending purchases…");
+  google.script.run
+    .withSuccessHandler(function(r) { status("✅ Applied " + r.applied + " row(s)" + (r.unmapped && r.unmapped.length ? " · " + r.unmapped.length + " unmapped" : "")); loadOrders(); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .manualApplyPurchases();
+}
+
+function saveSkuMap(sku, i) {
+  var displayName = document.getElementById("skumap-" + i).value.trim();
+  if (!displayName) { status("Enter a display name to map to", true); return; }
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Mapped " + sku + " → " + displayName); loadOrders(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .saveSkuMapping(sku, displayName);
+}
+
+function approveSkuReview(rowIndex) {
+  var overrides = { category: document.getElementById("pcat-" + rowIndex).value, sub_category: document.getElementById("psub-" + rowIndex).value, display_name: document.getElementById("pname-" + rowIndex).value.trim(), units_per_sku: parseFloat(document.getElementById("pupu-" + rowIndex).value) || 1 };
+  if (!overrides.display_name) { status("Enter a display name before approving", true); return; }
+  status("⏳ Approving and routing…");
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Approved as " + r.category + " — " + r.displayName); loadOrders(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .approvePendingSku(rowIndex, overrides);
+}
+
+function rejectSkuReview(rowIndex) {
+  if (!confirm("Reject this SKU?")) return;
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("Rejected"); loadOrders(); } })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .rejectPendingSku(rowIndex);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  UNMATCHED TAB
+// ═══════════════════════════════════════════════════════════════════════
+function loadUnmatched() {
+  var el = document.getElementById("unmatchedSubmList");
+  el.innerHTML = '<div class="empty"><span class="spinner"></span>Loading…</div>';
+
+  google.script.run
+    .withSuccessHandler(function(pools) { _allPools = pools; })
+    .withFailureHandler(function(e) { console.log("getAllPools error: " + e.message); })
+    .getAllPoolsForMatching();
+
+  google.script.run
+    .withSuccessHandler(function(items) {
+      if (!items.length) { el.innerHTML = '<div class="empty">✅ No unmatched submissions</div>'; return; }
+      el.innerHTML = items.map(function(s) {
+        var poolOpts = '<option value="">— Select pool —</option>' + _allPools.map(function(p) { return '<option value="' + esc(p.label) + '">' + esc(p.label) + '</option>'; }).join("");
+        return ['<div class="chem-card" style="cursor:default;border-color:#fbbc04">','<div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>' + esc(s.technician || "Unknown tech") + '</b><span style="font-size:11px;color:#5f6368">' + esc(s.timestamp) + '</span></div>',s.pool_description ? '<div style="background:#fef7e0;border-radius:4px;padding:6px 8px;font-size:12px;margin-bottom:6px">📝 ' + esc(s.pool_description) + '</div>' : '',s.notes ? '<div style="font-size:11px;color:#5f6368;margin-bottom:4px">Notes: ' + esc(s.notes) + '</div>' : '','<div style="font-size:11px;color:#5f6368;margin-bottom:8px">🧪 ' + esc(s.chemicals_used || "none") + '</div>','<div class="label">Match to pool</div>','<select id="umpool-' + s.rowIndex + '" style="margin-bottom:8px">' + poolOpts + '</select>','<div class="label">Your name (for audit log)</div>','<input id="umby-' + s.rowIndex + '" placeholder="e.g. Mauricio" style="margin-bottom:8px" />','<button class="btn btn-green" style="width:100%" onclick="resolveUnmatched(' + s.rowIndex + ')">✅ Match &amp; Update Analytics</button>','</div>'].join("");
+      }).join("");
+    })
+    .withFailureHandler(function(e) { el.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .getUnmatchedSubmissions();
+}
+
+function resolveUnmatched(rowIndex) {
+  var poolLabel  = document.getElementById("umpool-" + rowIndex).value;
+  var resolvedBy = document.getElementById("umby-"   + rowIndex).value.trim();
+  if (!poolLabel)  { status("Select a pool to match", true); return; }
+  if (!resolvedBy) { status("Enter your name", true); return; }
+  var parts  = poolLabel.split(" - ");
+  var poolId = parts[parts.length - 1].trim();
+  status("⏳ Matching and rebuilding analytics…");
+  google.script.run
+    .withSuccessHandler(function(r) { if (r.ok) { status("✅ Matched to " + poolId); loadUnmatched(); } else status("❌ " + r.error, true); })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .resolveUnmatchedSubmission(rowIndex, poolId, resolvedBy);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  KPIs TAB
+// ═══════════════════════════════════════════════════════════════════════
+function initKpisTab() {
+  var sel = document.getElementById("kpiWeekSelect");
+  sel.innerHTML = '<option value="">Loading weeks…</option>';
+
+  google.script.run
+    .withSuccessHandler(function(weeks) {
+      if (!weeks.length) {
+        sel.innerHTML = '<option value="">No data yet</option>';
+        return;
+      }
+      // Populate with newest first
+      var reversed = weeks.slice().reverse();
+      sel.innerHTML = reversed.map(function(w) {
+        return '<option value="' + esc(w) + '">' + esc(w) + '</option>';
+      }).join("");
+
+      // Auto-load latest week
+      loadKpiSnapshot();
+    })
+    .withFailureHandler(function(e) {
+      sel.innerHTML = '<option value="">Error loading weeks</option>';
+    })
+    .getAvailableWeeks();
+}
+
+function setKpiFilter(filter) {
+  _kpiFilter = filter;
+  ["all","Startup","Service","Other"].forEach(function(f) {
+    var pill = document.getElementById("pill-" + f);
+    if (pill) pill.classList.toggle("active", f === filter);
+  });
+  loadKpiSnapshot();
+}
+
+function loadKpiSnapshot() {
+  var weekKey = document.getElementById("kpiWeekSelect").value;
+  if (!weekKey) return;
+
+  var el = document.getElementById("kpiContent");
+  el.innerHTML = '<div class="empty"><span class="spinner"></span>Loading KPIs for ' + esc(weekKey) + '…</div>';
+
+  google.script.run
+    .withSuccessHandler(function(snap) { renderKpiSnapshot(snap); })
+    .withFailureHandler(function(e) {
+      el.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>';
+    })
+    .getWeeklyKpiSnapshot(weekKey, _kpiFilter);
+}
+
+function renderKpiSnapshot(snap) {
+  var el = document.getElementById("kpiContent");
+
+  if (snap.noData) {
+    el.innerHTML = '<div class="no-data-banner">No data found for <b>' + esc(snap.weekKey) + '</b>' +
+      (snap.serviceFilter !== "all" ? ' with filter <b>' + esc(snap.serviceFilter) + '</b>' : '') + '.</div>';
+    return;
+  }
+
+  var filterLabel = snap.serviceFilter === "all" ? "All Service Types"
+    : snap.serviceFilter === "Startup" ? "🆕 Startups Only"
+    : snap.serviceFilter === "Service" ? "🔁 Service Visits Only"
+    : snap.serviceFilter;
+
+  var html = '';
+
+  // Week header
+  html += '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:12px">';
+  html += '<div style="font-size:16px;font-weight:700;color:#202124">' + esc(snap.weekKey) + '</div>';
+  html += '<div style="font-size:11px;color:#5f6368;margin-top:3px">' + esc(filterLabel) + '</div>';
+  html += '</div>';
+
+  // KPI cards
+  html += '<div class="kpi-grid">';
+  html += kpiCard("Total Chemical Cost", "$" + snap.grandTotal.toFixed(2), snap.poolCount + " pool" + (snap.poolCount !== 1 ? "s" : "") + " serviced", "kpi-accent-blue");
+  html += kpiCard("Cost per Pool", "$" + snap.costPerPool.toFixed(2), "avg across " + snap.poolCount + " pool" + (snap.poolCount !== 1 ? "s" : ""), "kpi-accent-green");
+
+  var topChem = snap.topChems.length ? snap.topChems[0] : null;
+  var topPool = snap.topPools.length ? snap.topPools[0] : null;
+  html += kpiCard("Top Chemical", topChem ? topChem.chem : "—", topChem ? "$" + topChem.cost.toFixed(2) + " · qty " + topChem.qty.toFixed(2) : "", "kpi-accent-orange");
+  html += kpiCard("Top Pool", topPool ? topPool.pool : "—", topPool ? "$" + topPool.cost.toFixed(2) + (topPool.client ? " · " + topPool.client : "") : "", "kpi-accent-purple");
+  html += '</div>';
+
+  // Service type breakdown (always show even when filtered)
+  if (snap.serviceBreakdown && snap.serviceBreakdown.length > 1) {
+    html += '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:700;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Startup vs Service Split</div>';
+
+    var typeColors = { "Startup": "#34a853", "Service": "#fa7b17", "Other": "#9aa0a6" };
+    snap.serviceBreakdown.forEach(function(b) {
+      var color = typeColors[b.type] || "#9aa0a6";
+      var pctPx = Math.round(b.pct * 120); // max 120px bar
+      html += '<div class="svc-row">';
+      html += '<div class="svc-label" style="color:' + color + '">' + esc(b.type) + '</div>';
+      html += '<div class="svc-bar-wrap"><div class="svc-bar" style="width:' + pctPx + 'px;background:' + color + '"></div></div>';
+      html += '<div class="svc-cost">$' + b.total.toFixed(2) + '</div>';
+      html += '<div class="svc-pct">' + Math.round(b.pct * 100) + '%</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Top pools
+  if (snap.topPools.length) {
+    html += '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:700;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Top ' + snap.topPools.length + ' Pools by Cost</div>';
+    var maxPoolCost = snap.topPools[0].cost;
+    html += '<div class="rank-list">';
+    snap.topPools.forEach(function(p, i) {
+      var barPct = maxPoolCost ? Math.round((p.cost / maxPoolCost) * 100) : 0;
+      html += '<div class="rank-row">';
+      html += '<div class="rank-num">' + (i + 1) + '</div>';
+      html += '<div style="flex:1"><div class="rank-name">' + esc(p.pool) + (p.client ? ' <span style="font-weight:400;color:#5f6368">· ' + esc(p.client) + '</span>' : '') + '</div>';
+      html += '<div class="rank-bar" style="width:' + barPct + '%"></div></div>';
+      html += '<div class="rank-cost">$' + p.cost.toFixed(2) + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // Top chemicals
+  if (snap.topChems.length) {
+    html += '<div style="background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:12px 14px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:700;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Chemicals Used</div>';
+    var maxChemCost = snap.allChems[0].cost;
+    html += '<div class="rank-list">';
+    snap.allChems.forEach(function(c, i) {
+      var barPct = maxChemCost ? Math.round((c.cost / maxChemCost) * 100) : 0;
+      html += '<div class="rank-row">';
+      html += '<div class="rank-num">' + (i + 1) + '</div>';
+      html += '<div style="flex:1"><div class="rank-name">' + esc(c.chem) + ' <span style="font-weight:400;color:#5f6368">· qty ' + c.qty.toFixed(2) + '</span></div>';
+      html += '<div class="rank-bar" style="width:' + barPct + '%;background:#fa7b17"></div></div>';
+      html += '<div class="rank-cost">$' + c.cost.toFixed(2) + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function kpiCard(label, value, sub, accentClass) {
+  return '<div class="kpi-card ' + (accentClass || "") + '">' +
+    '<div class="kpi-label">' + esc(label) + '</div>' +
+    '<div class="kpi-value">' + esc(value) + '</div>' +
+    (sub ? '<div class="kpi-sub">' + esc(sub) + '</div>' : '') +
+    '</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  VOID TAB
+// ═══════════════════════════════════════════════════════════════════════
+function initVoidTab() {
+  var sel = document.getElementById("voidPoolSelect");
+  sel.innerHTML = '<option value="">Loading pools…</option>';
+
+  google.script.run
+    .withSuccessHandler(function(pools) {
+      sel.innerHTML = '<option value="">— Select a pool —</option>' +
+        pools.map(function(p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join("");
+    })
+    .withFailureHandler(function(e) { sel.innerHTML = '<option value="">Error loading pools</option>'; })
+    .getPoolsForVoid();
+
+  loadVoidedLog();
+}
+
+function loadVoidSubmissions() {
+  var poolId = document.getElementById("voidPoolSelect").value;
+  var step2  = document.getElementById("voidStep2");
+  var step3  = document.getElementById("voidStep3");
+
+  step3.style.display = "none";
+  _voidSelectedRow = null;
+
+  if (!poolId) { step2.style.display = "none"; return; }
+
+  var list = document.getElementById("voidSubList");
+  list.innerHTML = '<div class="empty"><span class="spinner"></span>Loading submissions…</div>';
+  step2.style.display = "block";
+
+  google.script.run
+    .withSuccessHandler(function(subs) {
+      if (!subs.length) { list.innerHTML = '<div class="empty">No submissions found</div>'; return; }
+      list.innerHTML = subs.map(function(s, i) {
+        var d = new Date(s.timestamp);
+        var dateStr = isNaN(d) ? s.timestamp : d.toLocaleString();
+        var voidedBadge = s.isVoided ? ' <span style="background:#fce8e6;color:#d93025;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600">VOIDED</span>' : '';
+        return [
+          '<div class="sub-card' + (s.isVoided ? ' voided' : '') + '"',
+          s.isVoided ? '' : ' onclick="selectVoidSubmission(' + i + ',' + s.rowIndex + ')"',
+          ' id="vsub-' + i + '">',
+          '<div class="sub-date">' + esc(dateStr) + voidedBadge + '</div>',
+          s.technician ? '<div class="sub-meta">Tech: ' + esc(s.technician) + '</div>' : '',
+          '<div class="sub-chems">' + esc(s.chemicals) + '</div>',
+          '</div>'
+        ].join("");
+      }).join("");
+    })
+    .withFailureHandler(function(e) { list.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .getSubmissionsForVoid(poolId);
+}
+
+function selectVoidSubmission(i, rowIndex) {
+  document.querySelectorAll(".sub-card:not(.voided)").forEach(function(c) { c.classList.remove("selected"); });
+  var card = document.getElementById("vsub-" + i);
+  if (card) card.classList.add("selected");
+
+  _voidSelectedRow = rowIndex;
+  var step3  = document.getElementById("voidStep3");
+  var prev   = document.getElementById("voidPreviewContent");
+  step3.style.display = "block";
+  prev.innerHTML = '<div class="empty"><span class="spinner"></span>Loading preview…</div>';
+  step3.scrollIntoView({ behavior: "smooth" });
+
+  google.script.run
+    .withSuccessHandler(function(preview) { renderVoidPreview(preview); })
+    .withFailureHandler(function(e) { prev.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .previewVoid(rowIndex);
+}
+
+function renderVoidPreview(p) {
+  var el = document.getElementById("voidPreviewContent");
+
+  var d = new Date(p.timestamp);
+  var dateStr = isNaN(d) ? p.timestamp : d.toLocaleString();
+
+  var html = '<div class="confirm-box">';
+  html += '<h4 style="color:#d93025">⚠️ You are about to void this submission</h4>';
+  html += '<div style="font-size:12px;color:#5f6368;margin-bottom:10px">' + esc(p.poolId) + ' · ' + esc(dateStr);
+  if (p.technician) html += ' · Tech: ' + esc(p.technician);
+  html += '</div>';
+
+  if (p.chemicals.length) {
+    html += '<table class="diff-table"><thead><tr><th>Chemical</th><th>Qty Used</th><th>Inv Impact</th><th>After</th></tr></thead><tbody>';
+    p.chemicals.forEach(function(c) {
+      var invAfter = c.projectedInv !== null ? '$' + c.projectedInv.toFixed(2) : '—';
+      html += '<tr>';
+      html += '<td><b>' + esc(c.cleanName) + '</b></td>';
+      html += '<td class="up">-' + c.qty.toFixed(2) + ' usage</td>';
+      html += '<td class="down">+' + c.qty.toFixed(2) + ' returned</td>';
+      html += '<td>' + (c.currentInv !== null ? c.currentInv.toFixed(2) + ' → <b>' + c.projectedInv.toFixed(2) + '</b>' : '<span style="color:#9aa0a6">not tracked</span>') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="empty">No chemical quantities were logged in this submission</div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function backToVoidList() {
+  document.getElementById("voidStep3").style.display = "none";
+  document.querySelectorAll(".sub-card").forEach(function(c) { c.classList.remove("selected"); });
+  _voidSelectedRow = null;
+}
+
+function confirmVoid() {
+  if (!_voidSelectedRow) { status("No submission selected", true); return; }
+
+  var voidedBy  = document.getElementById("voidBy").value.trim();
+  var voidReason = document.getElementById("voidReason").value.trim();
+
+  if (!voidedBy)   { status("Enter your name for the audit log", true); return; }
+  if (!voidReason) { status("Enter a reason for voiding", true); return; }
+
+  if (!confirm("Void this submission?\n\nThis will:\n• Move the raw row to Voided_Log\n• Mark it in Chemical_Usage_Log and Usage_Priced\n• Add chemicals back to inventory\n• Rebuild all analytics\n\nReason: " + voidReason)) return;
+
+  status("⏳ Voiding submission and rebuilding analytics… this may take 10–20 seconds");
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r.ok) { status("❌ " + r.error, true); return; }
+
+      var invSummary = r.invResults
+        .filter(function(x) { return x.applied; })
+        .map(function(x) { return x.name + ": " + x.before.toFixed(2) + " → " + x.after.toFixed(2); })
+        .join(", ");
+
+      status("✅ Voided successfully" + (invSummary ? " · Inventory restored: " + invSummary : ""));
+
+      // Reset
+      setTimeout(function() {
+        document.getElementById("voidStep2").style.display = "none";
+        document.getElementById("voidStep3").style.display = "none";
+        document.getElementById("voidPoolSelect").value = "";
+        document.getElementById("voidBy").value = "";
+        document.getElementById("voidReason").value = "";
+        _voidSelectedRow = null;
+        loadVoidedLog();
+      }, 2500);
+    })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .applyVoid(_voidSelectedRow, voidedBy, voidReason);
+}
+
+function loadVoidedLog() {
+  var el = document.getElementById("voidedLogList");
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows.length) { el.innerHTML = '<div class="empty">No voided submissions yet</div>'; return; }
+      el.innerHTML = rows.map(function(r) {
+        var d  = new Date(r.timestamp);
+        var vd = new Date(r.voidedAt);
+        return [
+          '<div class="void-hist-row">',
+          '<div class="void-top"><span>' + esc(r.poolId) + '</span><span style="color:#d93025;font-size:11px">Voided by ' + esc(r.voidedBy) + '</span></div>',
+          '<div class="void-meta">Visit: ' + (isNaN(d) ? r.timestamp : d.toLocaleDateString()) + (r.technician ? ' · Tech: ' + esc(r.technician) : '') + '</div>',
+          '<div class="void-meta">Voided: ' + (isNaN(vd) ? r.voidedAt : vd.toLocaleString()) + '</div>',
+          r.voidReason ? '<div style="margin-top:4px;font-size:11px;color:#d93025">Reason: ' + esc(r.voidReason) + '</div>' : '',
+          '</div>'
+        ].join("");
+      }).join("");
+    })
+    .withFailureHandler(function(e) { el.innerHTML = '<div class="empty" style="color:#c5221f">Error loading void log</div>'; })
+    .getVoidedLog(30);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  DEBUG TAB
+// ═══════════════════════════════════════════════════════════════════════
+function clearDebug() { document.getElementById("debugOut").innerHTML = ""; }
+
+function loadDebug() {
+  var el = document.getElementById("debugOut");
+  el.innerHTML = '<div class="empty"><span class="spinner"></span>Running checks…</div>';
+  google.script.run
+    .withSuccessHandler(function(report) {
+      var html = "";
+      var mismatches = report.rows.filter(function(r) { return !r.ok; });
+      var ok = report.rows.filter(function(r) { return r.ok; });
+      if (mismatches.length) { html += '<div class="section-title">⚠️ Mismatches (' + mismatches.length + ')</div>'; html += mismatches.map(debugRow).join(""); }
+      html += '<div class="section-title">✅ Synced (' + ok.length + ')</div>';
+      html += ok.length ? ok.map(debugRow).join("") : '<div class="empty">None</div>';
+      if (report.aliases && report.aliases.length) { html += '<div class="section-title">🏷 Legacy Aliases (' + report.aliases.length + ')</div>'; html += report.aliases.map(function(a) { return '<div class="alias-row"><b>' + esc(a.oldName) + '</b> → ' + esc(a.newName) + '</div>'; }).join(""); }
+      el.innerHTML = html;
+    })
+    .withFailureHandler(function(e) { el.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>'; })
+    .getDebugReport();
+}
+
+function debugRow(r) {
+  return '<div class="debug-row ' + (r.ok ? "ok" : "bad") + '"><span class="debug-name">' + esc(r.name) + '</span><span class="badge ' + (r.inCosts ? "yes" : "no") + '">Costs</span><span class="badge ' + (r.inForm ? "yes" : "no") + '">Form</span><span class="badge ' + (r.inInventory ? "yes" : "no") + '">Inv</span></div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+</script>
+</body>
+</html>

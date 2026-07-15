@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Google Sans", Arial, sans-serif;
+    font-size: 13px;
+    background: #f8f9fa;
+    color: #202124;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 2px solid #e8eaed;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .tab {
+    flex: 1;
+    padding: 10px 4px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: #5f6368;
+    border-bottom: 3px solid transparent;
+  }
+  .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
+  .tab:hover  { background: #f1f3f4; }
+
+  .panel { display: none; padding: 12px; }
+  .panel.active { display: block; }
+
+  /* ── Status bar ── */
+  #statusBar {
+    position: sticky;
+    top: 38px;
+    z-index: 9;
+    padding: 7px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    display: none;
+  }
+  #statusBar.ok  { background: #e6f4ea; color: #137333; display: block; }
+  #statusBar.err { background: #fce8e6; color: #c5221f; display: block; }
+
+  /* ── Inputs ── */
+  select, input {
+    width: 100%;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 13px;
+    background: #fff;
+    color: #202124;
+  }
+  select:focus, input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26,115,232,.2);
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 7px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: opacity .15s;
+  }
+  .btn:hover    { opacity: .85; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn-blue   { background: #1a73e8; color: #fff; }
+  .btn-green  { background: #34a853; color: #fff; }
+  .btn-grey   { background: #e8eaed; color: #3c4043; }
+  .btn-red    { background: #d93025; color: #fff; }
+  .btn-sm     { padding: 4px 10px; font-size: 11px; }
+
+  /* ── Section title ── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #5f6368;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin: 14px 0 8px;
+  }
+
+  /* ── Submission cards ── */
+  .sub-card {
+    background: #fff;
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .sub-card:hover    { border-color: #1a73e8; box-shadow: 0 1px 6px rgba(26,115,232,.15); }
+  .sub-card.selected { border-color: #1a73e8; background: #e8f0fe; }
+  .sub-date  { font-weight: 600; font-size: 13px; }
+  .sub-meta  { font-size: 11px; color: #5f6368; margin-top: 2px; }
+
+  /* ── Chem edit rows ── */
+  .chem-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    background: #fff;
+    border: 1px solid #e8eaed;
+    border-radius: 6px;
+    margin-bottom: 5px;
+  }
+  .chem-row.changed { border-color: #fbbc04; background: #fef7e0; }
+  .chem-label { flex: 1; font-size: 12px; font-weight: 500; }
+  .chem-input {
+    width: 80px !important;
+    text-align: right;
+    padding: 4px 7px !important;
+    font-size: 13px;
+  }
+  .chem-unit  { font-size: 11px; color: #5f6368; width: 50px; }
+
+  /* ── Diff table ── */
+  .diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .diff-table th {
+    background: #f1f3f4;
+    padding: 6px 8px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid #e8eaed;
+  }
+  .diff-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f1f3f4;
+    vertical-align: middle;
+  }
+  .diff-table tr:last-child td { border-bottom: none; }
+  .up   { color: #c5221f; font-weight: 600; }
+  .down { color: #137333; font-weight: 600; }
+
+  /* ── History rows ── */
+  .hist-row {
+    background: #fff;
+    border: 1px solid #e8eaed;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    font-size: 12px;
+  }
+  .hist-top  { display: flex; justify-content: space-between; font-weight: 600; }
+  .hist-meta { color: #5f6368; margin-top: 3px; }
+
+  /* ── Misc ── */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid #dadce0;
+    border-top-color: #1a73e8;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { color: #9aa0a6; font-size: 12px; padding: 16px 0; text-align: center; }
+  .label { font-size: 11px; color: #5f6368; font-weight: 500; margin-bottom: 4px; }
+  .field { margin-bottom: 10px; }
+
+  .confirm-box {
+    background: #fff;
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .confirm-box h4 { margin-bottom: 10px; font-size: 13px; color: #202124; }
+
+  .action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ TABS ══════════════════ -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('correct')">✏️ Correct</div>
+  <div class="tab" onclick="switchTab('history')">📋 History</div>
+</div>
+
+<div id="statusBar"></div>
+
+<!-- ══════════════════ CORRECT TAB ══════════════════ -->
+<div id="tab-correct" class="panel active">
+
+  <!-- Step 1: Pool selector -->
+  <div id="step1">
+    <div class="section-title">Step 1 — Select Pool</div>
+    <div class="field">
+      <div class="label">Pool ID</div>
+      <select id="poolSelect" onchange="loadSubmissions()">
+        <option value="">Loading pools…</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Step 2: Submission list -->
+  <div id="step2" style="display:none">
+    <div class="section-title">Step 2 — Select Submission</div>
+    <div id="submissionList"></div>
+  </div>
+
+  <!-- Step 3: Edit chemicals -->
+  <div id="step3" style="display:none">
+    <div class="section-title">Step 3 — Edit Quantities</div>
+    <div id="selectedSubInfo" style="margin-bottom:10px"></div>
+    <div id="chemEditList"></div>
+    <div class="action-row">
+      <button class="btn btn-grey" style="flex:1" onclick="backToSubmissions()">← Back</button>
+      <button class="btn btn-blue" style="flex:1" onclick="previewChanges()">Preview Changes →</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Confirmation -->
+  <div id="step4" style="display:none">
+    <div class="section-title">Step 4 — Confirm Changes</div>
+
+    <div class="confirm-box">
+      <h4>Changes Summary</h4>
+      <table class="diff-table">
+        <thead>
+          <tr>
+            <th>Chemical</th>
+            <th>Old Qty</th>
+            <th>New Qty</th>
+            <th>Usage Δ</th>
+            <th>Inv Impact</th>
+          </tr>
+        </thead>
+        <tbody id="diffBody"></tbody>
+      </table>
+    </div>
+
+    <div class="field">
+      <div class="label">Your name (for audit log)</div>
+      <input id="correctedBy" placeholder="e.g. Mauricio" />
+    </div>
+
+    <div class="action-row">
+      <button class="btn btn-grey" style="flex:1" onclick="backToEdit()">← Back</button>
+      <button class="btn btn-green" style="flex:2" onclick="applyCorrection()">
+        ✅ Apply Correction
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════ HISTORY TAB ══════════════════ -->
+<div id="tab-history" class="panel">
+  <div class="field" style="margin-bottom:10px">
+    <div class="label">Filter by Pool (optional)</div>
+    <select id="histPoolSelect" onchange="loadHistory()">
+      <option value="">All pools</option>
+    </select>
+  </div>
+  <div id="historyList"></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+var state = {
+  pools        : [],
+  submissions  : [],
+  selectedSub  : null,   // { rowIndex, timestamp, poolId }
+  chemicals    : [],     // [{ name, colIndex, qty }]
+  pendingDiff  : []      // result of previewCorrection
+};
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+google.script.run
+  .withSuccessHandler(function(pools) {
+    state.pools = pools;
+    var sel  = document.getElementById("poolSelect");
+    var sel2 = document.getElementById("histPoolSelect");
+
+    sel.innerHTML  = '<option value="">— Select a pool —</option>';
+    sel2.innerHTML = '<option value="">All pools</option>';
+
+    pools.forEach(function(p) {
+      var opt  = '<option value="' + esc(p) + '">' + esc(p) + '</option>';
+      sel.innerHTML  += opt;
+      sel2.innerHTML += opt;
+    });
+  })
+  .withFailureHandler(function(e) { status("Failed to load pools: " + e.message, true); })
+  .getPoolList();
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  ["correct","history"].forEach(function(t, i) {
+    document.querySelectorAll(".tab")[i].classList.toggle("active", t === name);
+    document.getElementById("tab-" + t).classList.toggle("active", t === name);
+  });
+  if (name === "history") loadHistory();
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+var statusTimer;
+function status(msg, isErr) {
+  var bar = document.getElementById("statusBar");
+  bar.textContent = msg;
+  bar.className   = isErr ? "err" : "ok";
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(function() {
+    bar.className = ""; bar.textContent = "";
+  }, 5000);
+}
+
+// ── Step 1 → 2: Load submissions for pool ─────────────────────────────────────
+function loadSubmissions() {
+  var poolId = document.getElementById("poolSelect").value;
+  if (!poolId) {
+    document.getElementById("step2").style.display = "none";
+    hideSteps([3,4]);
+    return;
+  }
+
+  var list = document.getElementById("submissionList");
+  list.innerHTML = '<div class="empty"><span class="spinner"></span>Loading submissions…</div>';
+  document.getElementById("step2").style.display = "block";
+  hideSteps([3,4]);
+
+  google.script.run
+    .withSuccessHandler(function(subs) {
+      state.submissions = subs;
+      if (!subs.length) {
+        list.innerHTML = '<div class="empty">No submissions found for this pool</div>';
+        return;
+      }
+      list.innerHTML = subs.map(function(s, i) {
+        var d = new Date(s.timestamp);
+        var dateStr = isNaN(d) ? s.timestamp : d.toLocaleString();
+        return [
+          '<div class="sub-card" onclick="selectSubmission(' + i + ')" id="subcard-' + i + '">',
+          '  <div class="sub-date">' + esc(dateStr) + '</div>',
+          '  <div class="sub-meta">Row ' + s.rowIndex + '</div>',
+          '</div>'
+        ].join("\n");
+      }).join("");
+    })
+    .withFailureHandler(function(e) {
+      list.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>';
+    })
+    .getSubmissionsForPool(poolId);
+}
+
+// ── Step 2 → 3: Select submission ────────────────────────────────────────────
+function selectSubmission(i) {
+  // Highlight selected card
+  document.querySelectorAll(".sub-card").forEach(function(c) {
+    c.classList.remove("selected");
+  });
+  document.getElementById("subcard-" + i).classList.add("selected");
+
+  var sub = state.submissions[i];
+  state.selectedSub = sub;
+
+  var editList = document.getElementById("chemEditList");
+  editList.innerHTML = '<div class="empty"><span class="spinner"></span>Loading chemicals…</div>';
+
+  document.getElementById("step3").style.display = "block";
+  hideSteps([4]);
+
+  google.script.run
+    .withSuccessHandler(function(detail) {
+      state.chemicals = detail.chemicals;
+
+      var d = new Date(detail.timestamp);
+      var dateStr = isNaN(d) ? detail.timestamp : d.toLocaleString();
+
+      document.getElementById("selectedSubInfo").innerHTML =
+        '<div style="background:#e8f0fe;border-radius:6px;padding:8px 12px;font-size:12px">' +
+        '📋 <b>' + esc(detail.poolId) + '</b> · ' + esc(dateStr) + '</div>';
+
+      if (!detail.chemicals.length) {
+        editList.innerHTML = '<div class="empty">No chemical columns found in this row</div>';
+        return;
+      }
+
+      editList.innerHTML = detail.chemicals.map(function(c, i) {
+        return [
+          '<div class="chem-row" id="chemrow-' + i + '">',
+          '  <span class="chem-label">' + esc(c.name) + '</span>',
+          '  <input type="number" step="0.01" min="0"',
+          '    class="chem-input"',
+          '    id="chemval-' + i + '"',
+          '    value="' + c.qty + '"',
+          '    oninput="highlightChanged(' + i + ',' + c.qty + ')" />',
+          '</div>'
+        ].join("\n");
+      }).join("");
+    })
+    .withFailureHandler(function(e) {
+      editList.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>';
+    })
+    .getSubmissionDetail(sub.rowIndex);
+}
+
+function highlightChanged(i, originalQty) {
+  var val = parseFloat(document.getElementById("chemval-" + i).value);
+  var row = document.getElementById("chemrow-" + i);
+  row.classList.toggle("changed", isFinite(val) && val !== originalQty);
+}
+
+// ── Step 3 → 4: Preview changes ──────────────────────────────────────────────
+function previewChanges() {
+  var corrections = state.chemicals.map(function(c, i) {
+    var newVal = parseFloat(document.getElementById("chemval-" + i).value);
+    return {
+      name    : c.name,
+      colIndex: c.colIndex,
+      oldQty  : c.qty,
+      newQty  : isFinite(newVal) ? newVal : c.qty
+    };
+  });
+
+  var hasChanges = corrections.some(function(c) {
+    return Number(c.oldQty) !== Number(c.newQty);
+  });
+
+  if (!hasChanges) {
+    status("No quantities were changed", true);
+    return;
+  }
+
+  status("⏳ Building preview…");
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.hasChanges) {
+        status("No changes detected", true);
+        return;
+      }
+
+      state.pendingDiff  = result.diff;
+      state.corrections  = corrections;
+
+      // Build diff table
+      var tbody = document.getElementById("diffBody");
+      tbody.innerHTML = result.diff.map(function(d) {
+        var deltaSign = d.delta > 0 ? "+" : "";
+        var invSign   = d.invDelta > 0 ? "+" : "";
+        var deltaClass= d.delta > 0 ? "up" : "down";
+        var invClass  = d.invDelta > 0 ? "down" : "up";
+
+        var invCell;
+        if (d.currentInv !== null) {
+          invCell = '<span class="' + invClass + '">' +
+            invSign + d.invDelta.toFixed(2) + '</span>' +
+            '<br><small style="color:#5f6368">' +
+            d.currentInv.toFixed(2) + ' → ' + d.projectedInv.toFixed(2) +
+            '</small>';
+        } else {
+          invCell = '<span style="color:#9aa0a6">not in inventory</span>';
+        }
+
+        return [
+          '<tr>',
+          '  <td><b>' + esc(d.name) + '</b></td>',
+          '  <td>' + d.oldQty.toFixed(2) + '</td>',
+          '  <td>' + d.newQty.toFixed(2) + '</td>',
+          '  <td><span class="' + deltaClass + '">' + deltaSign + d.delta.toFixed(2) + '</span></td>',
+          '  <td>' + invCell + '</td>',
+          '</tr>'
+        ].join("\n");
+      }).join("");
+
+      document.getElementById("step4").style.display = "block";
+      document.getElementById("step4").scrollIntoView({ behavior: "smooth" });
+      status("✅ Preview ready — review and confirm below");
+    })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .previewCorrection(state.selectedSub.rowIndex, corrections);
+}
+
+// ── Step 4: Apply correction ──────────────────────────────────────────────────
+function applyCorrection() {
+  var correctedBy = document.getElementById("correctedBy").value.trim();
+  if (!correctedBy) {
+    status("Enter your name for the audit log", true);
+    return;
+  }
+
+  if (!confirm("Apply these corrections?\n\nThis will update Chemical_Usage_Log, Usage_Priced, " +
+    "Inventory_Master, and rebuild all analytics.\n\nThis cannot be undone automatically.")) return;
+
+  status("⏳ Applying correction and rebuilding analytics… this may take 10–20 seconds");
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r.ok) {
+        status("❌ " + r.error, true);
+        return;
+      }
+
+      var invSummary = r.invResults
+        .map(function(x) {
+          return x.applied
+            ? x.name + ": " + x.before.toFixed(2) + " → " + x.after.toFixed(2)
+            : x.name + ": not found in inventory";
+        })
+        .join(" · ");
+
+      status("✅ Correction applied — " + r.changes + " change(s). " + invSummary);
+
+      // Reset to step 1
+      setTimeout(function() {
+        hideSteps([2,3,4]);
+        document.getElementById("poolSelect").value = "";
+        document.getElementById("correctedBy").value = "";
+      }, 3000);
+    })
+    .withFailureHandler(function(e) { status("❌ " + e.message, true); })
+    .applyCorrection(state.selectedSub.rowIndex, state.corrections,  correctedBy);
+}
+
+// ── History tab ───────────────────────────────────────────────────────────────
+function loadHistory() {
+  var poolId = document.getElementById("histPoolSelect").value;
+  var el     = document.getElementById("historyList");
+  el.innerHTML = '<div class="empty"><span class="spinner"></span>Loading…</div>';
+
+  google.script.run
+    .withSuccessHandler(function(rows) {
+      if (!rows.length) {
+        el.innerHTML = '<div class="empty">No corrections logged yet</div>';
+        return;
+      }
+      el.innerHTML = rows.map(function(r) {
+        var d       = new Date(r.corrected_at);
+        var dateStr = isNaN(d) ? r.corrected_at : d.toLocaleString();
+        var delta   = Number(r.delta);
+        var sign    = delta > 0 ? "+" : "";
+        var cls     = delta > 0 ? "up" : "down";
+
+        return [
+          '<div class="hist-row">',
+          '  <div class="hist-top">',
+          '    <span>' + esc(r.chemical) + '</span>',
+          '    <span class="' + cls + '">' + sign + delta.toFixed(2) + ' usage</span>',
+          '  </div>',
+          '  <div class="hist-meta">',
+          '    ' + esc(r.pool_id) + ' · ' + esc(dateStr) +
+          '    · by <b>' + esc(r.corrected_by) + '</b>',
+          '  </div>',
+          '  <div class="hist-meta" style="margin-top:3px">',
+          '    ' + esc(r.old_qty) + ' → ' + esc(r.new_qty) +
+          '    · inv: ' + esc(r.inventory_change),
+          '  </div>',
+          '</div>'
+        ].join("\n");
+      }).join("");
+    })
+    .withFailureHandler(function(e) {
+      el.innerHTML = '<div class="empty" style="color:#c5221f">Error: ' + e.message + '</div>';
+    })
+    .getCorrectionsHistory(poolId);
+}
+
+// ── Navigation helpers ────────────────────────────────────────────────────────
+function backToSubmissions() {
+  hideSteps([3,4]);
+  document.querySelectorAll(".sub-card").forEach(function(c) {
+    c.classList.remove("selected");
+  });
+}
+
+function backToEdit() {
+  document.getElementById("step4").style.display = "none";
+}
+
+function hideSteps(nums) {
+  nums.forEach(function(n) {
+    var el = document.getElementById("step" + n);
+    if (el) el.style.display = "none";
+  });
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+</script>
+</body>
+</html>

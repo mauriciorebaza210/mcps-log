@@ -789,6 +789,9 @@ function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, c
     sheet.getRange(rowNum, updatedCol('completed_at') + 1).setValue(completedAt.toISOString());
     sheet.getRange(rowNum, updatedCol('completed_by') + 1).setValue(completedBy || '');
     sheet.getRange(rowNum, updatedCol('chem_log_ref') + 1).setValue(chemLogRef || '');
+    // Repair visit → auto-complete its work order; also refresh Jobs tab caches
+    try { completeRepairOrderByVisit_(scheduledVisitId, completedBy); } catch (roErr) { Logger.log('completeRepairOrderByVisit_: ' + roErr); }
+    try { jobsBustCache_([completedBy]); } catch (jbErr) {}
     return true;
   }
   return false;
@@ -1829,6 +1832,56 @@ function doPost(e) {
       ));
     }
 
+    // ── Jobs tab (Jobs.js) ──
+    const jobsHandlers = {
+      get_my_jobs: {
+        name: 'handleGetMyJobs',
+        fn: typeof handleGetMyJobs === 'function' ? handleGetMyJobs : null
+      },
+      get_startup_hub: {
+        name: 'handleGetStartupHub',
+        fn: typeof handleGetStartupHub === 'function' ? handleGetStartupHub : null
+      },
+      update_startup_task: {
+        name: 'handleUpdateStartupTask',
+        fn: typeof handleUpdateStartupTask === 'function' ? handleUpdateStartupTask : null
+      },
+      convert_startup_to_maintenance: {
+        name: 'handleConvertStartupToMaintenance',
+        fn: typeof handleConvertStartupToMaintenance === 'function' ? handleConvertStartupToMaintenance : null
+      },
+      update_repair_order: {
+        name: 'handleUpdateRepairOrder',
+        fn: typeof handleUpdateRepairOrder === 'function' ? handleUpdateRepairOrder : null
+      },
+      get_pool_profile: {
+        name: 'handleGetPoolProfile',
+        fn: typeof handleGetPoolProfile === 'function' ? handleGetPoolProfile : null
+      },
+      get_pool_photo: {
+        name: 'handleGetPoolPhoto',
+        fn: typeof handleGetPoolPhoto === 'function' ? handleGetPoolPhoto : null
+      },
+      add_pool_equipment: {
+        name: 'handleAddPoolEquipment',
+        fn: typeof handleAddPoolEquipment === 'function' ? handleAddPoolEquipment : null
+      },
+      debug_jobs: {
+        name: 'handleDebugJobs',
+        fn: typeof handleDebugJobs === 'function' ? handleDebugJobs : null
+      }
+    };
+    if (jobsHandlers[payload.action]) {
+      const handler = jobsHandlers[payload.action];
+      if (typeof handler.fn !== 'function') {
+        return jsonResponse_({
+          ok: false,
+          error: 'Jobs backend is not deployed in Apps Script: missing ' + handler.name
+        });
+      }
+      return jsonResponse_(handler.fn(payload));
+    }
+
     if (payload.action === 'mark_startup_pending') {
       return jsonResponse_(markStartupPending(payload.token || "", payload.pool_id || ""));
     }
@@ -2365,6 +2418,7 @@ function doPost(e) {
           }
           rawSheet.getRange(newRowNum, photoColIdx + 1).setValue(JSON.stringify(photoUrls));
         } catch (e) {}
+        try { CacheService.getScriptCache().remove('pool_photo:' + String(payload.data.pool_id || '')); } catch (e) {}
       }
 
       // Queue slow post-processing (inventory deduction, email, Scheduled_Visits)

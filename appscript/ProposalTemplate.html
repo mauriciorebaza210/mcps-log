@@ -1,0 +1,475 @@
+<!-- MCPS Proposal Template - placeholders are replaced by Apps Script -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MCPS Proposal {{proposal_number}}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #f4f2ea;
+      color: #17212b;
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 8.5in;
+      height: 11in;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d9e2e4;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-bar {
+      background: #083f45;
+      color: #ffffff;
+      text-align: center;
+      padding: 0.1in 0.25in;
+      font-size: 15.5pt;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .content {
+      padding: 0.22in 0.34in 0.12in;
+      flex: 1;
+    }
+
+    .masthead {
+      display: table;
+      width: 100%;
+      margin-bottom: 0.13in;
+    }
+
+    .brand,
+    .proposal-meta {
+      display: table-cell;
+      vertical-align: top;
+    }
+
+    .brand {
+      width: 58%;
+    }
+
+    .logo {
+      max-width: 1.15in;
+      max-height: 0.95in;
+      object-fit: contain;
+      display: block;
+    }
+
+    .proposal-meta {
+      text-align: right;
+      width: 42%;
+    }
+
+    .proposal-label {
+      color: #0b4d54;
+      font-size: 17pt;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1.05;
+    }
+
+    .proposal-number {
+      margin-top: 0.04in;
+      font-size: 10pt;
+      color: #303941;
+      font-weight: 700;
+    }
+
+    .prepared-row {
+      display: table;
+      width: 100%;
+      border-top: 1px solid #d6e0e2;
+      border-bottom: 1px solid #d6e0e2;
+      padding: 0.11in 0;
+      margin-bottom: 0.11in;
+    }
+
+    .prepared,
+    .dates {
+      display: table-cell;
+      vertical-align: top;
+    }
+
+    .prepared {
+      width: 58%;
+      font-size: 8.8pt;
+      line-height: 1.34;
+    }
+
+    .dates {
+      width: 42%;
+      text-align: right;
+      font-size: 8.6pt;
+    }
+
+    .eyebrow {
+      color: #687685;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+      font-size: 7.4pt;
+      margin-bottom: 0.03in;
+    }
+
+    .client-name {
+      font-size: 12.5pt;
+      color: #0e2433;
+      font-weight: 800;
+      margin-bottom: 0.02in;
+    }
+
+    .date-line {
+      margin-bottom: 0.06in;
+    }
+
+    .date-line span {
+      display: inline-block;
+      min-width: 0.88in;
+      color: #687685;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 7.3pt;
+      font-weight: 800;
+    }
+
+    .summary-grid {
+      display: table;
+      width: 100%;
+      margin-bottom: 0.1in;
+    }
+
+    .summary-card,
+    .spec-card {
+      display: table-cell;
+      vertical-align: top;
+      border: 1px solid #d6e0e2;
+      background: #fbfcfc;
+      padding: 0.1in 0.13in;
+    }
+
+    .summary-card {
+      width: 62%;
+      border-right: none;
+    }
+
+    .spec-card {
+      width: 38%;
+      background: #edf6f5;
+    }
+
+    .card-title {
+      color: #0b4d54;
+      font-size: 8.2pt;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 800;
+      margin-bottom: 0.045in;
+    }
+
+    .summary-card p,
+    .spec-card p {
+      margin: 0;
+      font-size: 8.5pt;
+      line-height: 1.34;
+    }
+
+    .section-title {
+      background: #083f45;
+      color: #ffffff;
+      padding: 0.062in 0.12in;
+      font-size: 8.5pt;
+      line-height: 1;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+    }
+
+    .scope {
+      display: table;
+      width: 100%;
+      border: 1px solid #d6e0e2;
+      border-top: none;
+      margin-bottom: 0.1in;
+    }
+
+    .scope-list,
+    .photo-cell {
+      display: table-cell;
+      vertical-align: top;
+    }
+
+    .scope-list {
+      width: 52%;
+      padding: 0.1in 0.14in;
+    }
+
+    .scope-list ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .scope-list li {
+      position: relative;
+      padding-left: 0.2in;
+      margin-bottom: 0.05in;
+      font-size: 8.7pt;
+      line-height: 1.18;
+    }
+
+    .scope-list li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: -1px;
+      color: #0b4d54;
+      font-weight: 900;
+    }
+
+    .photo-cell {
+      width: 48%;
+      padding: 0.1in 0.1in 0.1in 0;
+    }
+
+    .photo-frame {
+      width: 3.35in;
+      height: 1.45in;
+      background: #d7e8e8;
+      overflow: hidden;
+      margin-left: auto;
+      border: 1px solid #bed3d5;
+    }
+
+    .photo-frame img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .plan-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 0.08in;
+      border: 1px solid #d6e0e2;
+      font-size: 8.6pt;
+    }
+
+    .plan-table th {
+      background: #083f45;
+      color: #ffffff;
+      text-align: left;
+      padding: 0.062in 0.12in;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 7.8pt;
+    }
+
+    .plan-table th:nth-child(2),
+    .plan-table th:nth-child(3),
+    .plan-table td:nth-child(2),
+    .plan-table td:nth-child(3) {
+      text-align: center;
+    }
+
+    .plan-table td {
+      padding: 0.062in 0.12in;
+      border-top: 1px solid #e3eaeb;
+    }
+
+    .price-strip {
+      display: table;
+      width: 100%;
+      margin: 0 0 0.08in;
+      background: #083f45;
+      color: #ffffff;
+    }
+
+    .price-label,
+    .price-value {
+      display: table-cell;
+      vertical-align: middle;
+      padding: 0.08in 0.14in;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .price-label {
+      font-size: 9pt;
+    }
+
+    .price-value {
+      text-align: right;
+      font-size: 13pt;
+    }
+
+    .note-grid {
+      display: table;
+      width: 100%;
+      margin-top: 0.06in;
+    }
+
+    .note,
+    .next-step {
+      display: table-cell;
+      vertical-align: top;
+      padding: 0.09in 0.12in;
+      font-size: 7.9pt;
+      line-height: 1.3;
+      border: 1px solid #d6e0e2;
+    }
+
+    .note {
+      width: 58%;
+      border-right: none;
+      color: #4e5a64;
+    }
+
+    .next-step {
+      width: 42%;
+      background: #f3faf8;
+    }
+
+    .next-step strong {
+      color: #0b4d54;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 8pt;
+      display: block;
+      margin-bottom: 0.04in;
+    }
+
+    .footer {
+      background: #083f45;
+      color: #ffffff;
+      display: table;
+      width: 100%;
+      padding: 0.07in 0.32in;
+      font-size: 7.8pt;
+      font-weight: 700;
+      margin-top: auto;
+    }
+
+    .footer span {
+      display: table-cell;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .footer span:first-child { text-align: left; }
+    .footer span:last-child { text-align: right; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="top-bar">Pool Service Proposal</div>
+
+    <div class="content">
+      <header class="masthead">
+        <div class="brand">
+          <img class="logo" src="{{logo_url}}" alt="Mission Custom Pool Solutions">
+        </div>
+        <div class="proposal-meta">
+          <div class="proposal-label">Proposal</div>
+          <div class="proposal-number">{{proposal_number}}</div>
+        </div>
+      </header>
+
+      <section class="prepared-row">
+        <div class="prepared">
+          <div class="eyebrow">Prepared For</div>
+          <div class="client-name">{{client_name}}</div>
+          <div>{{service_address}}</div>
+          <div>{{city_state_zip}}</div>
+          <div>{{phone}}</div>
+          <div>{{email}}</div>
+        </div>
+        <div class="dates">
+          <div class="date-line"><span>Date:</span>{{proposal_date}}</div>
+          <div class="date-line"><span>Valid Until:</span>{{valid_until}}</div>
+        </div>
+      </section>
+
+      <section class="summary-grid">
+        <div class="summary-card">
+          <div class="card-title">Recommended Plan</div>
+          <p>{{project_summary}}</p>
+        </div>
+        <div class="spec-card">
+          <div class="card-title">Pool Profile</div>
+          <p>{{pool_specs}}</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-title">Scope Of Work</div>
+        <div class="scope">
+          <div class="scope-list">
+            <ul>
+              {{{scope_of_work}}}
+            </ul>
+          </div>
+          <div class="photo-cell">
+            <div class="photo-frame">
+              <img src="{{pool_image_url}}" alt="Pool or property photo">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <table class="plan-table">
+          <thead>
+            <tr>
+              <th>Included Service</th>
+              <th>Frequency</th>
+              <th>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{{service_plan_rows}}}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="price-strip">
+        <div class="price-label">Investment</div>
+        <div class="price-value">{{investment}}</div>
+      </section>
+
+      <section class="note-grid">
+        <div class="note">
+          Pricing does not include repairs or replacement parts unless specifically listed. Applicable sales tax is reflected in the proposal total where required.
+        </div>
+        <div class="next-step">
+          <strong>Next Step</strong>
+          Approve this proposal to receive the service agreement for signature.
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span>{{company_phone}}</span>
+      <span>{{company_email}}</span>
+      <span>{{company_website}}</span>
+    </footer>
+  </main>
+</body>
+</html>
