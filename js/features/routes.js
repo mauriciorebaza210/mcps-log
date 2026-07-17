@@ -476,6 +476,10 @@ function _mergeScheduledVisits_(days, visits) {
   });
 }
 
+// Display-only overrides for Scheduled_Visits visit_type badges.
+// Keys must match the raw sheet values written by upsertWeeklyOverrideScheduledVisit_().
+const _VISIT_TYPE_LABELS = { weekly_override: 'Weekly Service' };
+
 // Given a Scheduled_Visits scheduled_date and visit_type, compute startup_start_date
 // (the date of Day 1). Day 2 is Day1+1, Day 3 is Day1+2.
 function _startupDateFromVisit_(scheduledDate, visitType) {
@@ -1356,7 +1360,8 @@ function renderDayCard(dayData) {
       } else {
         let badgeText = 'Scheduled Visit';
         if (pool._visit_type) {
-          badgeText = pool._visit_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          badgeText = _VISIT_TYPE_LABELS[pool._visit_type]
+            || pool._visit_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
         }
         scheduledBadgeHtml = `<span class="ps-label svc-startup" style="background:rgba(147, 51, 234, 0.15);color:#7e22ce">${badgeText}</span>`;
       }
