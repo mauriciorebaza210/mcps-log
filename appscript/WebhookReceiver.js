@@ -2190,6 +2190,15 @@ function doPost(e) {
       return jsonResponse_(setPayrollApproval_(payload.payroll_uid, meta, !!payload.approved, by));
     }
 
+    if (payload.action === 'set_payroll_rate') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      const by = (auth.user && auth.user.name) ? auth.user.name : (auth.name || auth.username || '');
+      const meta = { username: payload.username, pool_id: payload.pool_id, visit_date: payload.visit_date };
+      return jsonResponse_(setPayrollRate_(payload.payroll_uid, meta, payload.rate, payload.rate_note, by));
+    }
+
     if (payload.action === 'add_manual_pool') {
       const auth = validateToken(payload.token || '');
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
@@ -2204,6 +2213,14 @@ function doPost(e) {
       if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
       const by = (auth.user && auth.user.name) ? auth.user.name : (auth.name || auth.username || '');
       return jsonResponse_(saveEmployeePaycheck_(payload.paycheck, by));
+    }
+
+    if (payload.action === 'update_employee_paycheck') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      const by = (auth.user && auth.user.name) ? auth.user.name : (auth.name || auth.username || '');
+      return jsonResponse_(updateEmployeePaycheck_(payload.paycheck_id, payload.paycheck, by));
     }
 
     if (payload.action === 'set_paycheck_qbo_ref') {

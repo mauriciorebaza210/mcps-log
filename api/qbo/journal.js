@@ -78,11 +78,27 @@ export default async function handler(req, res) {
     const txnDate = ymd(p.pay_date ? new Date(p.pay_date) : (p.period_end ? new Date(p.period_end) : new Date()));
     const privateNote = `MCPS payroll · ${p.name || p.username || ''} · ${p.period_start || ''} → ${p.period_end || ''} · paycheck_id=${paycheckId}`;
 
-    // Idempotency: if a JE with this DocNumber already exists, treat as success.
-    const existing = await qboFetch(`query?query=${encodeURIComponent(`select Id, DocNumber from JournalEntry where DocNumber = '${docNumber}'`)}`);
+    // DocNumber is deterministic per paycheck, so an existing JE means this paycheck was
+    // already posted. Rewrite it in full rather than skipping: a paycheck can be edited
+    // after posting, and returning early would leave QuickBooks holding stale amounts.
+    // Same-value retries simply rewrite identical lines, so this stays idempotent.
+    const existing = await qboFetch(`query?query=${encodeURIComponent(`select * from JournalEntry where DocNumber = '${docNumber}'`)}`);
     const found = existing.QueryResponse && existing.QueryResponse.JournalEntry && existing.QueryResponse.JournalEntry[0];
     if (found) {
-      return sendJson(res, 200, { ok: true, je_id: found.Id, doc_number: docNumber, deduped: true });
+      const updated = await qboFetch('journalentry', {
+        method: 'POST',
+        body: {
+          Id: found.Id,
+          SyncToken: found.SyncToken,
+          sparse: false, // full replace — dropped lines (e.g. a bonus removed) must disappear
+          DocNumber: docNumber,
+          TxnDate: txnDate,
+          PrivateNote: privateNote,
+          Line: rawLines
+        }
+      });
+      const je = updated.JournalEntry || {};
+      return sendJson(res, 200, { ok: true, je_id: je.Id || found.Id, doc_number: docNumber, updated: true });
     }
 
     const created = await qboFetch('journalentry', {

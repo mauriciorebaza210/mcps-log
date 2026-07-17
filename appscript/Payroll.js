@@ -231,14 +231,30 @@ function savePayrollEmployee_(emp) {
   }
 }
 
+// 'Rate Override' holds a one-off pay rate for a single submission. Blank = use the
+// employee's standard pay_rate. It is deliberately per-payroll_uid, so overriding a
+// visit never changes the pool's or the employee's ongoing rate.
+var PAYROLL_APPROVAL_HEADERS = [
+  'Payroll UID', 'Username', 'Pool ID', 'Visit Date', 'Approved', 'Approved By', 'Approved At',
+  'Rate Override', 'Rate Note', 'Rate Set By'
+];
+
 function ensurePayrollApprovalsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Payroll_Approvals');
   if (!sheet) {
     sheet = ss.insertSheet('Payroll_Approvals');
-    sheet.appendRow(['Payroll UID', 'Username', 'Pool ID', 'Visit Date', 'Approved', 'Approved By', 'Approved At']);
+    sheet.appendRow(PAYROLL_APPROVAL_HEADERS);
     sheet.setFrozenRows(1);
-    sheet.getRange(1, 1, 1, 7).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, PAYROLL_APPROVAL_HEADERS.length).setFontWeight('bold');
+    return sheet;
+  }
+  // Existing sheet: append any headers it's missing (no data loss, preserves order).
+  var map = headerMap_(sheet);
+  var missing = PAYROLL_APPROVAL_HEADERS.filter(function (h) { return map[h] === undefined; });
+  if (missing.length) {
+    var startCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, startCol, 1, missing.length).setValues([missing]).setFontWeight('bold');
   }
   return sheet;
 }
@@ -247,18 +263,69 @@ function getPayrollApprovals_(username) {
   try {
     var sheet = ensurePayrollApprovalsSheet_();
     var approved = {};
-    if (sheet.getLastRow() < 2) return { ok: true, approved: approved };
+    var rates = {};
+    if (sheet.getLastRow() < 2) return { ok: true, approved: approved, rates: rates };
+    var map = headerMap_(sheet);
     var data = sheet.getDataRange().getValues();
     var filterUser = String(username || '').trim();
+    var get = function (r, h) { return map[h] !== undefined ? r[map[h]] : ''; };
     for (var i = 1; i < data.length; i++) {
-      var uid = String(data[i][0] || '');
+      var uid = String(get(data[i], 'Payroll UID') || '');
       if (!uid) continue;
-      if (filterUser && String(data[i][1] || '') !== filterUser) continue;
-      if (String(data[i][4]).toUpperCase() === 'TRUE') approved[uid] = true;
+      if (filterUser && String(get(data[i], 'Username') || '') !== filterUser) continue;
+      if (String(get(data[i], 'Approved')).toUpperCase() === 'TRUE') approved[uid] = true;
+      var raw = get(data[i], 'Rate Override');
+      if (raw !== '' && raw !== null && raw !== undefined) {
+        var rate = parsePayrollNumber_(raw);
+        if (rate > 0) rates[uid] = { rate: rate, note: String(get(data[i], 'Rate Note') || '') };
+      }
     }
-    return { ok: true, approved: approved };
+    return { ok: true, approved: approved, rates: rates };
   } catch (e) {
     Logger.log('getPayrollApprovals_ error: ' + e);
+    return { ok: false, error: String(e) };
+  }
+}
+
+// Set (or clear, when rate is blank/0) a one-off rate for a single submission.
+// Creates the approval row if the submission has never been touched.
+function setPayrollRate_(payrollUid, meta, rate, note, by) {
+  try {
+    var uid = String(payrollUid || '').trim();
+    if (!uid) return { ok: false, error: 'payroll_uid is required' };
+    meta = meta || {};
+    var val = (rate === '' || rate === null || rate === undefined) ? 0 : parsePayrollNumber_(rate);
+    if (val < 0) return { ok: false, error: 'Rate cannot be negative' };
+    if (val > 10000) return { ok: false, error: 'Rate looks wrong (over $10,000)' };
+
+    var sheet = ensurePayrollApprovalsSheet_();
+    var map = headerMap_(sheet);
+    var lastRow = sheet.getLastRow();
+    var foundRow = -1;
+    if (lastRow >= 2) {
+      var keys = sheet.getRange(2, map['Payroll UID'] + 1, lastRow - 1, 1).getValues();
+      for (var i = 0; i < keys.length; i++) {
+        if (String(keys[i][0] || '') === uid) { foundRow = i + 2; break; }
+      }
+    }
+    if (foundRow === -1) {
+      var row = new Array(sheet.getLastColumn()).fill('');
+      var set = function (h, v) { if (map[h] !== undefined) row[map[h]] = v; };
+      set('Payroll UID', uid);
+      set('Username',    String(meta.username   || ''));
+      set('Pool ID',     String(meta.pool_id    || ''));
+      set('Visit Date',  String(meta.visit_date || ''));
+      set('Approved',    'FALSE');
+      sheet.appendRow(row);
+      foundRow = sheet.getLastRow();
+    }
+    var write = function (h, v) { if (map[h] !== undefined) sheet.getRange(foundRow, map[h] + 1).setValue(v); };
+    write('Rate Override', val > 0 ? val : '');   // blank clears the override
+    write('Rate Note',     val > 0 ? String(note || '') : '');
+    write('Rate Set By',   val > 0 ? String(by || '') : '');
+    return { ok: true, rate: val };
+  } catch (e) {
+    Logger.log('setPayrollRate_ error: ' + e);
     return { ok: false, error: String(e) };
   }
 }
@@ -674,7 +741,8 @@ var EMP_PAYCHECK_HEADERS = [
   'Pay Date', 'Pool Count', 'Gross', 'Federal', 'SS', 'Medicare', 'Net',
   'Pool UIDs', 'Note', 'Logged By', 'Logged At',
   'ER_SS', 'ER_Medicare', 'FUTA', 'SUTA',
-  'QBO_JE_ID', 'QBO_Status', 'QBO_Synced_At', 'QBO_Doc_Number', 'QBO_Error'
+  'QBO_JE_ID', 'QBO_Status', 'QBO_Synced_At', 'QBO_Doc_Number', 'QBO_Error',
+  'Bonus', 'Bonus Note'
 ];
 
 // Build { headerName: zeroBasedColumnIndex } from a sheet's first row.
@@ -753,10 +821,62 @@ function saveEmployeePaycheck_(rec, by) {
     set('ER_Medicare',   parsePayrollNumber_(rec.er_med));
     set('FUTA',          parsePayrollNumber_(rec.futa));
     set('SUTA',          parsePayrollNumber_(rec.suta));
+    // Bonus is already inside Gross; stored separately so the W-2 detail shows the split.
+    set('Bonus',         parsePayrollNumber_(rec.bonus));
+    set('Bonus Note',    String(rec.bonus_note || ''));
     sheet.appendRow(row);
     return { ok: true, paycheck_id: paycheckId };
   } catch (e) {
     Logger.log('saveEmployeePaycheck_ error: ' + e);
+    return { ok: false, error: String(e) };
+  }
+}
+
+// Edit an already-recorded paycheck in place (e.g. a pool was un-approved after the fact).
+// Matched by paycheck_id; the pay period and employee are immutable so the duplicate guard
+// in saveEmployeePaycheck_ can't be sidestepped by editing a check onto another period.
+function updateEmployeePaycheck_(paycheckId, rec, by) {
+  try {
+    paycheckId = String(paycheckId || '').trim();
+    if (!paycheckId) return { ok: false, error: 'paycheck_id is required' };
+    rec = rec || {};
+    var sheet = ensureEmployeePaychecksSheet_();
+    if (sheet.getLastRow() < 2) return { ok: false, error: 'paycheck not found' };
+    var map = headerMap_(sheet);
+    var ids = sheet.getRange(2, map['Paycheck ID'] + 1, sheet.getLastRow() - 1, 1).getValues();
+    var rowNum = -1;
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0] || '').trim() === paycheckId) { rowNum = i + 2; break; }
+    }
+    if (rowNum === -1) return { ok: false, error: 'paycheck not found' };
+
+    var gross = parsePayrollNumber_(rec.gross);
+    if (gross <= 0) return { ok: false, error: 'Gross must be greater than zero. Delete the paycheck instead.' };
+
+    var poolUids = Array.isArray(rec.pool_uids) ? rec.pool_uids.join(',') : String(rec.pool_uids || '');
+    var write = function (h, v) { if (map[h] !== undefined) sheet.getRange(rowNum, map[h] + 1).setValue(v); };
+    write('Verified Date', payrollToYmd_(rec.verified_date));
+    write('Pay Date',      payrollToYmd_(rec.pay_date));
+    write('Pool Count',    parseInt(rec.pool_count, 10) || 0);
+    write('Gross',         gross);
+    write('Federal',       parsePayrollNumber_(rec.fed));
+    write('SS',            parsePayrollNumber_(rec.ss));
+    write('Medicare',      parsePayrollNumber_(rec.med));
+    write('Net',           parsePayrollNumber_(rec.net));
+    write('Pool UIDs',     poolUids);
+    write('ER_SS',         parsePayrollNumber_(rec.er_ss));
+    write('ER_Medicare',   parsePayrollNumber_(rec.er_med));
+    write('FUTA',          parsePayrollNumber_(rec.futa));
+    write('SUTA',          parsePayrollNumber_(rec.suta));
+    write('Bonus',         parsePayrollNumber_(rec.bonus));
+    write('Bonus Note',    String(rec.bonus_note || ''));
+    write('Logged By',     String(by || ''));
+    write('Logged At',     new Date().toISOString());
+    // The posted QBO entry no longer matches; the caller re-posts and re-stamps the status.
+    write('QBO_Status',    'stale');
+    return { ok: true, paycheck_id: paycheckId };
+  } catch (e) {
+    Logger.log('updateEmployeePaycheck_ error: ' + e);
     return { ok: false, error: String(e) };
   }
 }
@@ -798,7 +918,9 @@ function getEmployeePaychecks_(username) {
         qbo_je_id:      String(get(r, 'QBO_JE_ID') || ''),
         qbo_status:     String(get(r, 'QBO_Status') || ''),
         qbo_doc_number: String(get(r, 'QBO_Doc_Number') || ''),
-        qbo_error:      String(get(r, 'QBO_Error') || '')
+        qbo_error:      String(get(r, 'QBO_Error') || ''),
+        bonus:          parsePayrollNumber_(get(r, 'Bonus')),
+        bonus_note:     String(get(r, 'Bonus Note') || '')
       });
     }
     out.reverse(); // newest first

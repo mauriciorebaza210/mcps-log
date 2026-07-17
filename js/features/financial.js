@@ -1539,6 +1539,7 @@ let _finEmpEmployees   = [];   // [{ username, name, pay_rate, w4 }]
 let _finEmpSelected    = '';   // username
 let _finEmpCompletions = [];   // rows from get_employee_completions (review range)
 let _finEmpApprovals   = {};   // { payroll_uid: true }
+let _finEmpRates       = {};   // { payroll_uid: { rate, note } } — one-off per-submission rate overrides
 let _finEmpPeriod      = 'this_month'; // review-range period (independent of _finPeriod)
 let _finEmpCustomFrom  = '';
 let _finEmpCustomTo     = '';
@@ -1547,6 +1548,10 @@ let _finEmpPayCompletions = []; // completions for the pay period (independent o
 let _finEmpPaychecks   = [];   // recorded paychecks for the selected employee (history)
 let _finEmpPayDate     = '';   // inline "Pay date" input ('' = default to today) — drives cumulative tax year
 let _finEmpVerifiedDate = '';  // inline "Date verified" input ('' = default to today)
+// Bonus inputs. null = untouched, so the panel shows the recorded paycheck's bonus for an
+// already-recorded period (and 0 otherwise) instead of silently proposing its removal.
+let _finEmpBonus       = null; // inline "Bonus" input — supplemental wages added to gross for this period
+let _finEmpBonusNote    = null; // reason for the bonus (saved on the paycheck row)
 let _finDetailPhotos   = [];   // high-res photo URLs for the open submission-detail modal
 let _finEmpLoading     = false;
 let _finEmpPayLoading  = false;
@@ -2301,6 +2306,7 @@ async function _loadEmpCompletions() {
     ]);
     _finEmpCompletions = (compRes && compRes.rows) || [];
     _finEmpApprovals   = (apprRes && apprRes.approved) || {};
+    _finEmpRates       = (apprRes && apprRes.rates) || {};
   } catch (e) {
     _finEmpCompletions = [];
   }
@@ -2335,6 +2341,17 @@ async function _loadEmpPaychecks() {
     _finEmpPaychecks = [];
   }
   _renderEmpSection();
+}
+
+// Pay for one submission: its one-off override if set, else the employee's standard rate.
+function _finEmpRateFor(uid, defaultRate) {
+  const o = _finEmpRates[uid];
+  return (o && parseFloat(o.rate) > 0) ? parseFloat(o.rate) : defaultRate;
+}
+
+// Sum of per-submission pay across rows — the override-aware replacement for count × rate.
+function _finEmpPayForRows(rows, defaultRate) {
+  return rows.reduce((s, r) => s + _finEmpRateFor(r.payroll_uid, defaultRate), 0);
 }
 
 function _renderEmpSection() {
@@ -2392,6 +2409,16 @@ function _renderEmpSection() {
     const uid = r.payroll_uid || '';
     const approved = !!_finEmpApprovals[uid];
     const manualTag = r.manual ? ` <span style="background:#fef3c7;color:#92400e;padding:.05rem .35rem;border-radius:99px;font-size:.68rem;font-weight:600">manual</span>` : '';
+    const ov = _finEmpRates[uid];
+    const rowRate = _finEmpRateFor(uid, rate);
+    // An overridden rate is called out so a one-off never hides inside a column of identical numbers.
+    const rateCell = ov
+      ? `<span style="font-weight:700;color:var(--teal)" title="${escHtml(ov.note || 'One-off rate')} · standard ${_finFmtCurrency(rate)}">${_finFmtCurrency(rowRate)}</span>
+         <span style="background:#e0f2f1;color:#0d4d44;padding:.05rem .35rem;border-radius:99px;font-size:.68rem;font-weight:600">1×</span>`
+      : `<span style="color:var(--muted)">${_finFmtCurrency(rowRate)}</span>`;
+    const rateBtn = (isAdmin() && uid)
+      ? ` <button class="mvt-btn" style="font-size:.7rem;padding:.05rem .4rem" onclick="event.stopPropagation();_finEmpRateModal('${uid}')">edit</button>`
+      : '';
     return `<tr style="cursor:pointer" onclick="_finEmpShowDetail('${uid}')">
       <td onclick="event.stopPropagation()" style="text-align:center">
         <input type="checkbox" ${approved ? 'checked' : ''} ${uid ? '' : 'disabled'} onchange="_finEmpToggleApproval('${uid}', this)">
@@ -2399,6 +2426,7 @@ function _renderEmpSection() {
       <td style="color:var(--muted);font-size:.85rem">${escHtml(r.date || '—')}</td>
       <td style="font-weight:600">${escHtml(r.pool_id || '—')}${manualTag}</td>
       <td>${escHtml(r.client_name || '')}</td>
+      <td onclick="event.stopPropagation()" style="text-align:right;white-space:nowrap">${rateCell}${rateBtn}</td>
     </tr>`;
   }).join('');
 
@@ -2408,7 +2436,7 @@ function _renderEmpSection() {
         ? `<div style="padding:1.25rem;text-align:center;color:var(--muted)">No pools serviced in this range.</div>`
         : `<div style="overflow-x:auto">
             <table class="adm-table" style="width:100%">
-              <thead><tr><th style="width:2.5rem">✓</th><th>Date</th><th>Pool</th><th>Client</th></tr></thead>
+              <thead><tr><th style="width:2.5rem">✓</th><th>Date</th><th>Pool</th><th>Client</th><th style="text-align:right">Pay</th></tr></thead>
               <tbody>${tableRows}</tbody>
             </table>
           </div>`);
@@ -2417,20 +2445,34 @@ function _renderEmpSection() {
   const periodStart = _finEmpPeriodStart;
   const periodEnd   = _finPeriodEnd(periodStart);
   const periodYear  = periodStart.slice(0, 4);
+  // The already-recorded check for this period seeds the editable fields, so navigating
+  // back to a recorded period shows what was actually paid rather than fresh defaults.
+  const recordedThisPeriod = _finEmpPaychecks.find(p => p.period_start === periodStart);
+
   const payApproved = _finEmpPayCompletions.filter(r => _finEmpApprovals[r.payroll_uid]);
   const payVisits = payApproved.length;
-  const gross = payVisits * rate;
+  // Bonus is supplemental wages: it joins gross, so withholding, employer taxes,
+  // YTD and the QBO journal all pick it up without special-casing.
+  const poolPay = _finEmpPayForRows(payApproved, rate);
+  const bonus = _finEmpBonus === null
+    ? (recordedThisPeriod ? (recordedThisPeriod.bonus || 0) : 0)
+    : (parseFloat(_finEmpBonus) || 0);
+  const bonusNote = _finEmpBonusNote === null
+    ? (recordedThisPeriod ? (recordedThisPeriod.bonus_note || '') : '')
+    : _finEmpBonusNote;
+  const gross = poolPay + bonus;
+  // Any one-off override makes "N × rate" a lie, so show the plain sum instead.
+  const mixedRates = payApproved.some(r => _finEmpRates[r.payroll_uid]);
   const todayYmd     = _finFmtYmd(new Date());
-  const payDateVal   = _finEmpPayDate || todayYmd;       // drives cumulative tax year — kept in sync with the input
-  const verifiedVal  = _finEmpVerifiedDate || todayYmd;
+  const payDateVal   = _finEmpPayDate      || (recordedThisPeriod && recordedThisPeriod.pay_date)      || todayYmd; // drives cumulative tax year — kept in sync with the input
+  const verifiedVal  = _finEmpVerifiedDate || (recordedThisPeriod && recordedThisPeriod.verified_date) || todayYmd;
   // Compute with the entered pay date so the displayed federal/net match what Record Paycheck saves.
   const wh = _finEmpComputeWithholding(emp, gross, periodStart, payDateVal);
   const methodLabel = (emp && emp.withholding_method === 'cumulative') ? 'Cumulative YTD' : 'Standard per-paycheck';
 
-  // YTD + already-recorded check come from recorded paychecks (Employee_Paychecks).
+  // YTD comes from recorded paychecks (Employee_Paychecks).
   const ytdChecks = _finEmpPaychecks.filter(p => (p.period_start || '').startsWith(periodYear));
   const ytdGross = ytdChecks.reduce((s, p) => s + (p.gross || 0), 0);
-  const recordedThisPeriod = _finEmpPaychecks.find(p => p.period_start === periodStart);
   // Employer taxes (employer FICA + FUTA/SUTA). FUTA/SUTA wage bases follow the
   // PAY-DATE year so they agree with federal withholding (wages count when paid).
   // Same helper is used by _finEmpRecordPaycheck, so shown and saved values match.
@@ -2438,21 +2480,66 @@ function _renderEmpSection() {
 
   const atAnchorFloor = emp && emp.pay_anchor && periodStart <= emp.pay_anchor;
 
-  const recordControls = recordedThisPeriod
-    ? `<div style="background:#dcfce7;color:#166534;padding:.5rem .75rem;border-radius:8px;font-size:.85rem;font-weight:600">
-         Recorded ${_finFmtCurrency(recordedThisPeriod.net)} net${recordedThisPeriod.pay_date ? ` · paid ${recordedThisPeriod.pay_date}` : ''} ·
-         <a href="#" onclick="_finEmpShowPaycheck('${recordedThisPeriod.paycheck_id}');return false" style="color:#166534;text-decoration:underline">view</a>
-       </div>
-       <div style="margin-top:.5rem">${_finQboStatusHtml(recordedThisPeriod)}</div>`
-    : (isAdmin()
-        ? `<div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
-             <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Date verified</label>
-               <input id="emp-verified-date" type="date" class="si" value="${verifiedVal}" onchange="_finEmpSetVerifiedDate(this.value)" style="max-width:160px"></div>
-             <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Pay date</label>
-               <input id="emp-pay-date" type="date" class="si" value="${payDateVal}" onchange="_finEmpSetPayDate(this.value)" style="max-width:160px"></div>
-             <button class="adm-new-btn" style="background:var(--teal)${gross > 0 ? '' : ';opacity:.5'}" ${gross > 0 ? '' : 'disabled'} onclick="_finEmpRecordPaycheck()">Record Paycheck</button>
-           </div>`
-        : '');
+  // Field drift is local and undoable; approval/rate drift is already saved to the sheet
+  // and can only be undone by re-checking the pool — so only the former offers a reset.
+  const fieldDrift = !!recordedThisPeriod && (
+       Math.abs((recordedThisPeriod.bonus || 0) - bonus) > 0.005
+    || (recordedThisPeriod.bonus_note || '') !== bonusNote
+    || (recordedThisPeriod.pay_date || '') !== payDateVal
+    || (recordedThisPeriod.verified_date || '') !== verifiedVal
+  );
+  // Does the live calculation still match the recorded check? Un-approving a pool, editing
+  // a rate, or changing the bonus/dates makes it drift — that's what enables Update.
+  const drift = !!recordedThisPeriod && (
+       fieldDrift
+    || (recordedThisPeriod.pool_count || 0) !== payVisits
+    || Math.abs((recordedThisPeriod.gross || 0) - gross) > 0.005
+  );
+
+  const editFields = `
+    <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Date verified</label>
+      <input id="emp-verified-date" type="date" class="si" value="${verifiedVal}" onchange="_finEmpSetVerifiedDate(this.value)" style="max-width:160px"></div>
+    <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Pay date</label>
+      <input id="emp-pay-date" type="date" class="si" value="${payDateVal}" onchange="_finEmpSetPayDate(this.value)" style="max-width:160px"></div>
+    <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Bonus ($)</label>
+      <input id="emp-bonus" type="number" min="0" step="0.01" class="si" value="${bonus ? bonus.toFixed(2) : ''}" placeholder="0.00" onchange="_finEmpSetBonus(this.value)" style="max-width:110px"></div>
+    <div><label style="display:block;font-size:.78rem;color:var(--muted);margin-bottom:.2rem">Bonus reason</label>
+      <input id="emp-bonus-note" type="text" class="si" value="${escHtml(bonusNote)}" placeholder="e.g. rained-out day" onchange="_finEmpSetBonusNote(this.value)" style="max-width:200px"></div>`;
+
+  let recordControls;
+  if (recordedThisPeriod) {
+    const rec = recordedThisPeriod;
+    recordControls = `
+      <div style="background:${drift ? '#fef3c7' : '#dcfce7'};color:${drift ? '#92400e' : '#166534'};padding:.5rem .75rem;border-radius:8px;font-size:.85rem;font-weight:600">
+        Recorded ${_finFmtCurrency(rec.net)} net · ${rec.pool_count} pool${rec.pool_count === 1 ? '' : 's'}${rec.pay_date ? ` · paid ${rec.pay_date}` : ''} ·
+        <a href="#" onclick="_finEmpShowPaycheck('${rec.paycheck_id}');return false" style="color:inherit;text-decoration:underline">view</a>
+      </div>
+      ${drift ? `
+        <div style="background:rgba(0,0,0,.03);border:1px solid #fcd34d;border-radius:8px;padding:.75rem;margin-top:.5rem">
+          <div style="font-weight:600;font-size:.85rem;margin-bottom:.4rem">Unsaved changes to this paycheck</div>
+          <div style="font-size:.82rem;color:var(--muted);margin-bottom:.6rem">
+            Recorded: ${rec.pool_count} pool${rec.pool_count === 1 ? '' : 's'} · gross ${_finFmtCurrency(rec.gross)} · net ${_finFmtCurrency(rec.net)}<br>
+            Now: ${payVisits} pool${payVisits === 1 ? '' : 's'} · gross ${_finFmtCurrency(gross)} · net ${_finFmtCurrency(wh.net)}
+          </div>
+          ${isAdmin() ? `
+            <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end">
+              ${editFields}
+              <button class="adm-new-btn" style="background:#b45309${gross > 0 ? '' : ';opacity:.5'}" ${gross > 0 ? '' : 'disabled'} onclick="_finEmpUpdatePaycheck('${rec.paycheck_id}')">Update Paycheck</button>
+              ${fieldDrift ? `<button class="mvt-btn" title="Restore the bonus and dates from the recorded paycheck. Re-check a pool to undo an approval change." onclick="_finEmpDiscardEdits()">Reset fields</button>` : ''}
+            </div>
+            ${gross > 0 ? '' : `<div style="font-size:.8rem;color:var(--error);margin-top:.5rem">Gross is $0 — a paycheck can't be updated to nothing. Delete it instead.</div>`}`
+          : ''}
+        </div>`
+        : `${isAdmin() ? `<div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-top:.6rem">${editFields}</div>` : ''}`}
+      <div style="margin-top:.5rem">${_finQboStatusHtml(rec)}</div>`;
+  } else {
+    recordControls = isAdmin()
+      ? `<div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-bottom:.5rem">
+           ${editFields}
+           <button class="adm-new-btn" style="background:var(--teal)${gross > 0 ? '' : ';opacity:.5'}" ${gross > 0 ? '' : 'disabled'} onclick="_finEmpRecordPaycheck()">Record Paycheck</button>
+         </div>`
+      : '';
+  }
 
   el.innerHTML = `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1rem">
@@ -2494,7 +2581,8 @@ function _renderEmpSection() {
       </div>
       <div style="font-size:.78rem;color:var(--muted);margin-bottom:.75rem">Pay period: Thu ${periodStart} → Wed ${periodEnd}${_finEmpPayLoading ? ' · loading…' : ''}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem 2rem;font-size:.9rem;margin-bottom:1rem">
-        <span style="color:var(--muted)">Approved pools this period</span><span style="font-weight:600">${payVisits} × ${_finFmtCurrency(rate)}</span>
+        <span style="color:var(--muted)">Approved pools this period</span><span style="font-weight:600">${mixedRates ? `${payVisits} pools = ${_finFmtCurrency(poolPay)} <span style="font-size:.78rem;color:var(--muted)">(incl. adjusted rates)</span>` : `${payVisits} × ${_finFmtCurrency(rate)} = ${_finFmtCurrency(poolPay)}`}</span>
+        ${bonus ? `<span style="color:var(--muted)">Bonus${bonusNote ? ` <span style="font-size:.8rem">(${escHtml(bonusNote)})</span>` : ''}</span><span style="font-weight:600">+${_finFmtCurrency(bonus)}</span>` : ''}
         <span style="color:var(--muted)">Gross wages</span><span style="font-weight:700">${_finFmtCurrency(gross)}</span>
         <span style="color:var(--muted)">Federal income tax</span><span style="color:#dc2626">−${_finFmtCurrency(wh.fed)}</span>
         <span style="color:var(--muted)">Social Security (6.2%)</span><span style="color:#dc2626">−${_finFmtCurrency(wh.ss)}</span>
@@ -2537,7 +2625,33 @@ function _finEmpPaychecksHistoryHtml() {
     </div>`;
 }
 
-function _finEmpChangeSelected(username) { _finEmpSelected = username; _finEmpPayDate = ''; _finEmpVerifiedDate = ''; _loadEmpCompletions(); _loadEmpPayCompletions(); _loadEmpPaychecks(); }
+function _finEmpChangeSelected(username) { _finEmpSelected = username; _finEmpResetEdits(); _loadEmpCompletions(); _loadEmpPayCompletions(); _loadEmpPaychecks(); }
+
+// Clear the inline edit fields back to "untouched" so they re-derive from the recorded
+// paycheck (or today's defaults) for whatever employee/period is shown next.
+function _finEmpResetEdits() {
+  _finEmpPayDate = ''; _finEmpVerifiedDate = '';
+  _finEmpBonus = null; _finEmpBonusNote = null;
+}
+
+function _finEmpDiscardEdits() { _finEmpResetEdits(); _renderEmpSection(); }
+
+// Jump the Paycheck panel to a given pay period — the entry point for editing a check
+// from history, since the panel is where approvals, rates and the bonus live.
+function _finEmpGoToPeriod(periodStart) {
+  if (!periodStart) return;
+  _prlCloseModal();
+  _finEmpPeriodStart = periodStart;
+  _finEmpResetEdits();
+  // Point the review range at exactly this pay week too — its checkboxes are the only way
+  // to un-approve a pool, and they'd be missing if the range sat on a different month.
+  _finEmpPeriod = 'custom';
+  _finEmpCustomFrom = periodStart;
+  _finEmpCustomTo   = _finPeriodEnd(periodStart);
+  _loadEmpCompletions();
+  _loadEmpPayCompletions();
+  document.getElementById('emp-payroll-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 function _finEmpChangeReviewPeriod(v) {
   _finEmpPeriod = v;
@@ -2555,7 +2669,7 @@ function _finEmpShiftPeriod(deltaWeeks) {
   const emp = _finEmpSelectedObj();
   if (emp && emp.pay_anchor && next < emp.pay_anchor) next = emp.pay_anchor; // don't go before first counted week
   _finEmpPeriodStart = next;
-  _finEmpPayDate = ''; _finEmpVerifiedDate = ''; // reset dates to today for the new period
+  _finEmpResetEdits(); // fields re-derive from the new period's recorded check, or today's defaults
   _loadEmpPayCompletions();
 }
 
@@ -2564,6 +2678,9 @@ function _finEmpShiftPeriod(deltaWeeks) {
 function _finEmpSetPayDate(v) { _finEmpPayDate = v || ''; _renderEmpSection(); }
 // Verified date doesn't affect withholding — just persist it so a re-render won't lose it.
 function _finEmpSetVerifiedDate(v) { _finEmpVerifiedDate = v || ''; }
+// Bonus is part of gross, so re-render to refresh withholding, net, and employer taxes.
+function _finEmpSetBonus(v) { _finEmpBonus = Math.max(0, parseFloat(v) || 0); _renderEmpSection(); }
+function _finEmpSetBonusNote(v) { _finEmpBonusNote = v || ''; _renderEmpSection(); }
 
 async function _finEmpToggleApproval(uid, cb) {
   if (!uid) return;
@@ -2579,6 +2696,67 @@ async function _finEmpToggleApproval(uid, cb) {
     if (approved) delete _finEmpApprovals[uid]; else _finEmpApprovals[uid] = true; // revert
     _renderEmpSection();
     alert('Could not save approval: ' + e.message);
+  }
+}
+
+// One-off rate for a single submission. Scoped to this payroll_uid only — it never
+// touches the employee's standard rate or that pool's future visits.
+function _finEmpRateModal(uid) {
+  if (!isAdmin() || !uid) return;
+  const emp = _finEmpSelectedObj();
+  if (!emp) return;
+  const stdRate = parseFloat(emp.pay_rate) || 0;
+  const row = _finEmpCompletions.find(r => r.payroll_uid === uid)
+           || _finEmpPayCompletions.find(r => r.payroll_uid === uid) || {};
+  const ov  = _finEmpRates[uid];
+  const cur = ov ? parseFloat(ov.rate) : stdRate;
+  _prlOpenModal('Pay for this visit', `
+    <div style="font-size:.9rem;margin-bottom:1rem">
+      <div style="margin-bottom:.3rem"><strong>${escHtml(row.pool_id || '—')}</strong>${row.client_name ? ` · ${escHtml(row.client_name)}` : ''}</div>
+      <div style="color:var(--muted);font-size:.85rem">Visit date ${escHtml(row.date || '—')} · standard rate ${_finFmtCurrency(stdRate)}</div>
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Pay for this visit ($)</label>
+      <input id="emp-rate-input" class="si" type="number" min="0" step="0.01" value="${cur.toFixed(2)}" style="width:100%">
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Reason (optional)</label>
+      <input id="emp-rate-note" class="si" type="text" value="${escHtml(ov ? (ov.note || '') : '')}" placeholder="e.g. extra-heavy cleanup" style="width:100%">
+    </div>
+    <div style="background:rgba(0,0,0,.03);border-radius:8px;padding:.6rem;font-size:.8rem;color:var(--muted);margin-bottom:1rem">
+      Applies to this submission only. ${escHtml(emp.name)}'s standard rate stays ${_finFmtCurrency(stdRate)} for every other visit, including future visits to this pool.
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end">
+      ${ov ? `<button class="mvt-btn" onclick="_finEmpSaveRate('${uid}', true)">Reset to standard</button>` : ''}
+      <button class="mvt-btn" onclick="_prlCloseModal()">Cancel</button>
+      <button class="adm-new-btn" style="background:var(--teal)" onclick="_finEmpSaveRate('${uid}', false)">Save</button>
+    </div>`);
+}
+
+async function _finEmpSaveRate(uid, reset) {
+  const emp = _finEmpSelectedObj();
+  if (!emp) return;
+  const stdRate = parseFloat(emp.pay_rate) || 0;
+  const input = parseFloat(document.getElementById('emp-rate-input')?.value);
+  const note  = document.getElementById('emp-rate-note')?.value || '';
+  // Reset, or a value equal to the standard rate, means "no override" — clear it.
+  const rate = reset ? 0 : (isNaN(input) || input === stdRate ? 0 : input);
+  if (!reset && !isNaN(input) && input < 0) { alert('Rate cannot be negative.'); return; }
+  const row = _finEmpCompletions.find(r => r.payroll_uid === uid)
+           || _finEmpPayCompletions.find(r => r.payroll_uid === uid) || {};
+  const prev = _finEmpRates[uid];
+  if (rate > 0) _finEmpRates[uid] = { rate, note }; else delete _finEmpRates[uid];
+  _prlCloseModal();
+  _renderEmpSection();
+  try {
+    const res = await api({ action: 'set_payroll_rate', token: _s.token, payroll_uid: uid,
+                            username: _finEmpSelected, pool_id: row.pool_id, visit_date: row.date,
+                            rate, rate_note: note });
+    if (!res.ok) throw new Error(res.error || 'failed');
+  } catch (e) {
+    if (prev) _finEmpRates[uid] = prev; else delete _finEmpRates[uid]; // revert
+    _renderEmpSection();
+    alert('Could not save rate: ' + e.message);
   }
 }
 
@@ -2735,29 +2913,43 @@ function _finPhotoLightbox(url) {
   document.body.appendChild(el);
 }
 
-async function _finEmpRecordPaycheck() {
+// Builds the paycheck payload from the live panel state. Shared by Record and Update so
+// the two can never compute a period differently. Returns null if there's nothing to pay.
+function _finEmpBuildPaycheck() {
   const emp = _finEmpSelectedObj();
-  if (!emp) return;
+  if (!emp) return null;
   const rate = parseFloat(emp.pay_rate) || 0;
   const start = _finEmpPeriodStart, end = _finPeriodEnd(start);
   const approved = _finEmpPayCompletions.filter(r => _finEmpApprovals[r.payroll_uid]);
-  if (!approved.length) { alert('No approved pools in this pay period. Approve submissions first.'); return; }
-  const gross = approved.length * rate;
+  const bonus = parseFloat(_finEmpBonus) || 0;
+  const gross = _finEmpPayForRows(approved, rate) + bonus;
   const verified = document.getElementById('emp-verified-date')?.value || '';
   const payDate  = document.getElementById('emp-pay-date')?.value || '';
   // Compute withholding with the actual pay date so cumulative YTD lands in the right tax year.
   const wh = _finEmpComputeWithholding(emp, gross, start, payDate);
   const et = _finEmpComputeEmployerTaxes(gross, start, payDate);
-  if (!confirm(`Record paycheck for ${emp.name}\n${_finPeriodLabel(start)}\n${approved.length} pools · gross ${_finFmtCurrency(gross)} · net ${_finFmtCurrency(wh.net)}`)) return;
-
-  const paycheck = {
-    username: _finEmpSelected, name: emp.name,
-    period_start: start, period_end: end,
-    verified_date: verified, pay_date: payDate,
-    pool_count: approved.length, gross, fed: wh.fed, ss: wh.ss, med: wh.med, net: wh.net,
-    er_ss: et.er_ss, er_med: et.er_med, futa: et.futa, suta: et.suta,
-    pool_uids: approved.map(r => r.payroll_uid), note: ''
+  return {
+    emp, approved, bonus, gross, wh,
+    paycheck: {
+      username: _finEmpSelected, name: emp.name,
+      period_start: start, period_end: end,
+      verified_date: verified, pay_date: payDate,
+      pool_count: approved.length, gross, fed: wh.fed, ss: wh.ss, med: wh.med, net: wh.net,
+      er_ss: et.er_ss, er_med: et.er_med, futa: et.futa, suta: et.suta,
+      bonus, bonus_note: _finEmpBonusNote || '',
+      pool_uids: approved.map(r => r.payroll_uid), note: ''
+    }
   };
+}
+
+async function _finEmpRecordPaycheck() {
+  const built = _finEmpBuildPaycheck();
+  if (!built) return;
+  const { emp, approved, bonus, gross, wh, paycheck } = built;
+  if (!approved.length && !bonus) { alert('No approved pools in this pay period. Approve submissions first, or enter a bonus.'); return; }
+  const bonusLine = bonus ? ` · bonus ${_finFmtCurrency(bonus)}` : '';
+  if (!confirm(`Record paycheck for ${emp.name}\n${_finPeriodLabel(paycheck.period_start)}\n${approved.length} pools${bonusLine} · gross ${_finFmtCurrency(gross)} · net ${_finFmtCurrency(wh.net)}`)) return;
+
   let saved;
   try {
     saved = await api({ action: 'save_employee_paycheck', token: _s.token, paycheck });
@@ -2766,11 +2958,47 @@ async function _finEmpRecordPaycheck() {
     alert('Could not record paycheck: ' + e.message);
     return;
   }
+  _finEmpResetEdits(); // consumed by the saved check; fields now re-derive from it
   // Paycheck is saved (source of truth). Posting to QuickBooks is a best-effort
   // side effect — failure here never undoes the save; the row shows a Retry chip.
   const qb = await _finEmpPostToQbo(saved.paycheck_id, Object.assign({ paycheck_id: saved.paycheck_id }, paycheck));
   await _loadEmpPaychecks();
   if (qb && !qb.ok) alert('Paycheck saved. QuickBooks sync failed — you can retry from the history.\n\n' + qb.error);
+}
+
+// Rewrite an already-recorded paycheck to match the current approvals/rates/bonus.
+// The pay period and employee are fixed — only the figures move.
+async function _finEmpUpdatePaycheck(paycheckId) {
+  if (!isAdmin() || !paycheckId) return;
+  const prior = (_finEmpPaychecks || []).find(p => p.paycheck_id === paycheckId);
+  if (!prior) return;
+  const built = _finEmpBuildPaycheck();
+  if (!built) return;
+  const { emp, approved, bonus, gross, wh, paycheck } = built;
+  if (gross <= 0) { alert("Gross is $0 — a paycheck can't be updated to nothing. Delete it instead."); return; }
+
+  const wasSynced = String(prior.qbo_status || '').toLowerCase() === 'synced';
+  const bonusLine = bonus ? ` · bonus ${_finFmtCurrency(bonus)}` : '';
+  const msg = `Update paycheck for ${emp.name}\n${_finPeriodLabel(paycheck.period_start)}\n\n` +
+              `Was: ${prior.pool_count} pools · gross ${_finFmtCurrency(prior.gross)} · net ${_finFmtCurrency(prior.net)}\n` +
+              `Now: ${approved.length} pools${bonusLine} · gross ${_finFmtCurrency(gross)} · net ${_finFmtCurrency(wh.net)}` +
+              (wasSynced ? '\n\nThe QuickBooks journal entry for this paycheck will be rewritten to match.' : '');
+  if (!confirm(msg)) return;
+
+  let saved;
+  try {
+    saved = await api({ action: 'update_employee_paycheck', token: _s.token, paycheck_id: paycheckId, paycheck });
+    if (!saved.ok) throw new Error(saved.error || 'failed');
+  } catch (e) {
+    alert('Could not update paycheck: ' + e.message);
+    return;
+  }
+  _finEmpResetEdits();
+  // Re-post so QuickBooks matches the edited figures. The journal endpoint rewrites the
+  // existing entry in place (same DocNumber), so this corrects rather than duplicates.
+  const qb = await _finEmpPostToQbo(paycheckId, Object.assign({ paycheck_id: paycheckId }, paycheck));
+  await _loadEmpPaychecks();
+  if (qb && !qb.ok) alert('Paycheck updated. QuickBooks sync failed — the entry there is now out of date. Retry from the history.\n\n' + qb.error);
 }
 
 // ── QuickBooks Online sync ────────────────────────────────────────────────────
@@ -2844,11 +3072,15 @@ function _finQboStatusHtml(p) {
   if (st === 'synced') {
     return `<span style="background:#dcfce7;color:#166534;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700">✓ Synced</span>`;
   }
+  // 'stale' = the paycheck was edited after posting, so QBO still holds the old figures.
   const label = st === 'failed'
     ? `<span style="background:#fee2e2;color:#b91c1c;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700" title="${escHtml(p.qbo_error || '')}">Failed</span>`
-    : `<span style="background:#f1f5f9;color:#64748b;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700">Not synced</span>`;
+    : st === 'stale'
+      ? `<span style="background:#fef3c7;color:#92400e;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700" title="This paycheck changed after it was posted — QuickBooks still has the old amounts.">Out of date</span>`
+      : `<span style="background:#f1f5f9;color:#64748b;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700">Not synced</span>`;
+  const btnLabel = st === 'failed' ? 'Retry' : (st === 'stale' ? 'Update in QuickBooks' : 'Post to QuickBooks');
   const btn = isAdmin()
-    ? ` <button class="mvt-btn" style="font-size:.72rem;padding:.1rem .45rem" onclick="event.stopPropagation();_finEmpSyncPaycheckToQbo('${p.paycheck_id}')">${st === 'failed' ? 'Retry' : 'Post to QuickBooks'}</button>`
+    ? ` <button class="mvt-btn" style="font-size:.72rem;padding:.1rem .45rem" onclick="event.stopPropagation();_finEmpSyncPaycheckToQbo('${p.paycheck_id}')">${btnLabel}</button>`
     : '';
   return label + btn;
 }
@@ -2864,6 +3096,7 @@ function _finEmpShowPaycheck(paycheckId) {
       ${line('Date verified', escHtml(p.verified_date || '—'))}
       ${line('Pay date', escHtml(p.pay_date || '—'))}
       ${line('Pools paid', String(p.pool_count))}
+      ${p.bonus ? line('Bonus' + (p.bonus_note ? ` (${escHtml(p.bonus_note)})` : ''), _finFmtCurrency(p.bonus)) : ''}
       ${line('Gross wages', _finFmtCurrency(p.gross))}
       ${line('Federal income tax', '−' + _finFmtCurrency(p.fed))}
       ${line('Social Security', '−' + _finFmtCurrency(p.ss))}
@@ -2875,6 +3108,9 @@ function _finEmpShowPaycheck(paycheckId) {
       ${p.note ? line('Note', escHtml(p.note)) : ''}
       ${line('Recorded by', escHtml(p.logged_by || '—'))}
       ${line('QuickBooks', _finQboStatusHtml(p) + (p.qbo_je_id ? ` <span style="color:var(--muted);font-size:.78rem">JE #${escHtml(p.qbo_je_id)}</span>` : ''))}
+      ${isAdmin() ? `<div style="display:flex;justify-content:flex-end;margin-top:1rem">
+        <button class="adm-new-btn" style="background:var(--teal)" onclick="_finEmpGoToPeriod('${p.period_start}')">Edit this pay period</button>
+      </div>` : ''}
     </div>`);
 }
 
