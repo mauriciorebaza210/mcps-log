@@ -1565,6 +1565,29 @@ function doPost(e) {
       return jsonResponse_(handleGetStartupRequestLink_(payload, srGate.auth));
     }
 
+    // ── BUILDER PORTAL: admin-initiated invite (mirrors employee invites,
+    //    but fully isolated — see appscript/BuilderAuth.js) ────────────────────
+    if (payload.action === 'admin_create_builder_invite') {
+      return jsonResponse_(handleCreateBuilderInvite_(payload));
+    }
+
+    // ── BUILDER PORTAL: public claim + returning-builder login ─────────────────
+    if (payload.action === 'builder_invite_lookup') {
+      return jsonResponse_(handleBuilderInviteLookup_(payload));
+    }
+
+    if (payload.action === 'builder_invite_register') {
+      return jsonResponse_(handleBuilderInviteRegister_(payload));
+    }
+
+    if (payload.action === 'builder_login') {
+      return jsonResponse_(handleBuilderLogin_(payload));
+    }
+
+    if (payload.action === 'builder_logout') {
+      return jsonResponse_(handleBuilderLogout_(payload));
+    }
+
     if (payload.action === 'save_sensitive_info') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || "Unauthorized" });

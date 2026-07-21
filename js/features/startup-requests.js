@@ -85,9 +85,99 @@ function srLoadCompanies_() {
       </select>
       <button class="adm-new-btn" style="background:#0891b2" onclick="srCopyLink(false)">Copy request link</button>
       <button class="adm-new-btn" style="background:#475569" onclick="srCopyLink(true)" title="Generates a new link and disables the old one">Rotate link</button>
+      <button class="adm-new-btn" style="background:#0d4d44" onclick="openSrInviteModal()" title="Send a builder a Builder Portal account invite">Invite to Builder Portal</button>
       <span id="sr-link-msg" style="font-size:.78rem;color:var(--success)"></span>
     `;
   }).catch(() => {});
+}
+
+// ─── Invite to Builder Portal modal ────────────────────────────────────────
+
+let _srInviteMode = 'existing';
+
+function openSrInviteModal() {
+  const errEl = document.getElementById('sr-inv-error');
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  document.getElementById('sr-inv-email').value = '';
+  document.getElementById('sr-inv-name').value = '';
+  document.getElementById('sr-inv-contact').value = '';
+  document.getElementById('sr-inv-phone').value = '';
+
+  const sel = document.getElementById('sr-inv-company-select');
+  sel.innerHTML = _srCompanies.map(c => `<option value="${escHtml(c.pool_company_id)}">${escHtml(c.company_name)}</option>`).join('');
+  sel.onchange = srInvitePrefillEmail_;
+
+  srInviteSetMode('existing');
+  srInvitePrefillEmail_();
+  document.getElementById('sr-invite-modal-backdrop').classList.add('open');
+}
+
+function srInvitePrefillEmail_() {
+  const sel = document.getElementById('sr-inv-company-select');
+  const company = _srCompanies.find(c => c.pool_company_id === sel.value);
+  const emailEl = document.getElementById('sr-inv-email');
+  if (company && company.report_bcc_email && !emailEl.value) emailEl.value = company.report_bcc_email;
+}
+
+function srInviteSetMode(mode) {
+  _srInviteMode = mode;
+  const existingBtn = document.getElementById('sr-inv-mode-existing');
+  const newBtn = document.getElementById('sr-inv-mode-new');
+  const activeStyle = { background: 'var(--teal)', color: '#fff', border: 'none' };
+  const inactiveStyle = { background: 'var(--surface)', color: 'var(--text)', border: '1.5px solid var(--border)' };
+  Object.assign(existingBtn.style, mode === 'existing' ? activeStyle : inactiveStyle);
+  Object.assign(newBtn.style, mode === 'new' ? activeStyle : inactiveStyle);
+  document.getElementById('sr-inv-existing-fields').style.display = mode === 'existing' ? '' : 'none';
+  document.getElementById('sr-inv-new-fields').style.display = mode === 'new' ? 'flex' : 'none';
+}
+
+function closeSrInviteModal(event) {
+  if (event && event.target !== document.getElementById('sr-invite-modal-backdrop')) return;
+  document.getElementById('sr-invite-modal-backdrop').classList.remove('open');
+}
+
+function srSendBuilderInvite() {
+  const errEl = document.getElementById('sr-inv-error');
+  const btn = document.getElementById('sr-inv-send-btn');
+  const email = document.getElementById('sr-inv-email').value.trim();
+  errEl.style.display = 'none';
+
+  if (!email) { errEl.textContent = 'Enter an email address.'; errEl.style.display = 'block'; return; }
+
+  const payload = { action: 'admin_create_builder_invite', token: _s.token, email };
+  if (_srInviteMode === 'existing') {
+    const sel = document.getElementById('sr-inv-company-select');
+    if (!sel.value) { errEl.textContent = 'Pick a company.'; errEl.style.display = 'block'; return; }
+    payload.pool_company_id = sel.value;
+  } else {
+    const name = document.getElementById('sr-inv-name').value.trim();
+    if (!name) { errEl.textContent = 'Company name is required.'; errEl.style.display = 'block'; return; }
+    payload.company_name = name;
+    payload.contact_name = document.getElementById('sr-inv-contact').value.trim();
+    payload.phone = document.getElementById('sr-inv-phone').value.trim();
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  api(payload).then(res => {
+    btn.disabled = false;
+    btn.textContent = 'Send Invite';
+    if (!res.ok) { errEl.textContent = res.error || 'Could not send the invite.'; errEl.style.display = 'block'; return; }
+    closeSrInviteModal();
+    const msg = document.getElementById('sr-link-msg');
+    if (msg) {
+      msg.style.color = 'var(--success)';
+      msg.textContent = 'Invite sent to ' + email + (res.company_name ? ' for ' + res.company_name : '');
+      setTimeout(() => { msg.textContent = ''; }, 5000);
+    }
+    if (_srInviteMode === 'new') { _srCompanies = []; srLoadCompanies_(); }
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Send Invite';
+    errEl.textContent = 'Network error.';
+    errEl.style.display = 'block';
+  });
 }
 
 function srCopyLink(rotate) {

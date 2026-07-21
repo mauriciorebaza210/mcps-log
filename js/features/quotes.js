@@ -19,10 +19,12 @@ const _qDef = () => ({
   startup_chemical:true, startup_programming:true, startup_pool_school:false,
   startup_company:'', startup_company_email:'', startup_companies:[], startup_company_saving:false,
   sponsored_by_mcp:false, startup_start_date:'',
-  repair_type:'repair_replacement', repair_company:'', repair_address:'',
-  repair_desc:'', repair_amount:0, repair_sku:'',
+  repair_type:'repair_replacement', repair_company:'',
+  repair_amount:0,
   repair_job_name:'', repair_priority:'medium', repair_equipment:'',
   repair_issue:'', repair_assigned_to:'', repair_parts:[],
+  repair_clients:[], repair_client_id:'',
+  repair_locations:[], repair_location_id:'', repair_pool_id:'',
   discount_type:'none', discount_value:0, custom_price:0,
   void_travel:false, travel:null, travel_loading:false, travel_error:'',
   first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'', area:'',
@@ -63,6 +65,8 @@ function qSetService(svc) {
   document.getElementById('q-pool-sec').style.display    = (!isRepair && !isStartup) ? '' : 'none';
   document.getElementById('q-startup-sec').style.display = isStartup ? '' : 'none';
   document.getElementById('q-repair-sec').style.display  = isRepair  ? '' : 'none';
+  const contactSearchWrap = document.getElementById('q-contact-rep-search-wrap');
+  if (contactSearchWrap) contactSearchWrap.style.display = isRepair ? '' : 'none';
 
   if (isStartup && !_qS.startup_start_date) {
     const d = new Date(), diff = (8 - d.getDay()) % 7 || 7;
@@ -74,7 +78,7 @@ function qSetService(svc) {
     qStartupDateHint(ds);
   }
   if (isStartup) qLoadStartupCompanies();
-  if (isRepair) { qLoadRepairTechs(); qRepRenderParts(); }
+  if (isRepair) { qLoadRepairTechs(); qRepRenderParts(); qLoadStartupCompanies(); }
 
   qRecalc();
 }
@@ -98,6 +102,110 @@ function qLoadRepairTechs() {
     if (_qS.repair_assigned_to) sel.value = _qS.repair_assigned_to;
     _qRepairTechsLoaded = true;
   }).catch(() => {});
+}
+
+let _qRepClientSearchTimer = null;
+function qRepSearchClients(term) {
+  _qS.repair_client_search = term;
+  clearTimeout(_qRepClientSearchTimer);
+  const q = (term || '').trim();
+  const selWrap = document.getElementById('q-rep-client-select-wrap');
+  if (q.length < 2) {
+    if (selWrap) selWrap.style.display = 'none';
+    return;
+  }
+  _qRepClientSearchTimer = setTimeout(() => {
+    apiGet({ action: 'get_clients', token: _s ? _s.token : '', q: q }).then(res => {
+      _qS.repair_clients = res && res.ok && Array.isArray(res.clients) ? res.clients : [];
+      qRenderRepairClientOptions();
+    }).catch(() => {});
+  }, 300);
+}
+
+function qRenderRepairClientOptions() {
+  const sel = document.getElementById('q-rep-client-select');
+  const wrap = document.getElementById('q-rep-client-select-wrap');
+  if (!sel || !wrap) return;
+  const clients = _qS.repair_clients || [];
+  wrap.style.display = clients.length ? '' : 'none';
+  sel.innerHTML = '<option value="">— Select —</option>' + clients.map(c =>
+    `<option value="${esc(c.client_id)}">${esc(c.display_name || [c.first_name, c.last_name].filter(Boolean).join(' '))} — ${esc(c.email || c.phone || '')}</option>`
+  ).join('');
+}
+
+function qRepClientSelect(clientId) {
+  const msg = document.getElementById('q-rep-existing-msg');
+  if (msg) msg.textContent = '';
+  const locWrap = document.getElementById('q-rep-location-wrap');
+  if (locWrap) locWrap.style.display = 'none';
+  _qS.repair_location_id = '';
+  _qS.repair_pool_id = '';
+  if (!clientId) { _qS.repair_client_id = ''; return; }
+  const client = (_qS.repair_clients || []).find(c => String(c.client_id) === String(clientId));
+  if (!client) return;
+  _qS.repair_client_id = clientId;
+  _qS.first_name = client.first_name || '';
+  _qS.last_name = client.last_name || '';
+  _qS.email = client.email || '';
+  _qS.phone = client.phone || '';
+  ['q-fname','q-lname','q-email','q-phone'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === 'q-fname') el.value = _qS.first_name;
+    if (id === 'q-lname') el.value = _qS.last_name;
+    if (id === 'q-email') el.value = _qS.email;
+    if (id === 'q-phone') el.value = _qS.phone;
+  });
+  qRepLoadLocations(clientId);
+  qRecalc();
+}
+
+function qRepLoadLocations(clientId) {
+  const msg = document.getElementById('q-rep-existing-msg');
+  apiGet({ action: 'get_client_locations', token: _s ? _s.token : '', client_id: clientId }).then(res => {
+    const all = res && res.ok && Array.isArray(res.locations) ? res.locations : [];
+    _qS.repair_locations = all.filter(l => (l.pool_id || '').toString().trim());
+    const locWrap = document.getElementById('q-rep-location-wrap');
+    if (_qS.repair_locations.length === 0) {
+      if (locWrap) locWrap.style.display = 'none';
+      if (msg) msg.textContent = 'No active service location on file for this client.';
+    } else if (_qS.repair_locations.length === 1) {
+      if (locWrap) locWrap.style.display = 'none';
+      qRepLocationSelect(_qS.repair_locations[0].location_id);
+    } else {
+      qRenderRepairLocationOptions();
+      if (locWrap) locWrap.style.display = '';
+    }
+  }).catch(() => {});
+}
+
+function qRenderRepairLocationOptions() {
+  const sel = document.getElementById('q-rep-location-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select —</option>' + (_qS.repair_locations || []).map(l =>
+    `<option value="${esc(l.location_id)}">${esc(l.service_address || '')}${l.city ? ', ' + esc(l.city) : ''}</option>`
+  ).join('');
+}
+
+function qRepLocationSelect(locationId) {
+  if (!locationId) { _qS.repair_location_id = ''; _qS.repair_pool_id = ''; return; }
+  const loc = (_qS.repair_locations || []).find(l => String(l.location_id) === String(locationId));
+  if (!loc) return;
+  _qS.repair_location_id = locationId;
+  _qS.repair_pool_id = loc.pool_id || '';
+  _qS.address = loc.service_address || _qS.address;
+  _qS.city = loc.city || _qS.city;
+  _qS.repair_company = _qS.repair_company || [_qS.first_name, _qS.last_name].filter(Boolean).join(' ');
+  const sel = document.getElementById('q-rep-location-select');
+  if (sel) sel.value = locationId;
+  ['q-address','q-city','q-rep-co'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === 'q-address') el.value = _qS.address;
+    if (id === 'q-city') el.value = _qS.city;
+    if (id === 'q-rep-co') el.value = _qS.repair_company;
+  });
+  qRecalc();
 }
 
 function qRepRenderParts() {
@@ -205,6 +313,7 @@ function qRenderStartupCompanyOptions() {
   ).join('');
   sel.value = current;
   qSyncStartupCompanySelection();
+  qRenderRepairCompanyOptions();
 }
 
 function qSyncStartupCompanySelection() {
@@ -281,6 +390,163 @@ async function qSaveStartupCompany() {
   if (btn) { btn.disabled = false; btn.textContent = 'Save Company'; }
 }
 
+// ── Repair: billing company picker (reuses the same saved Pool_Companies list) ─
+function qRenderRepairCompanyOptions() {
+  const sel = document.getElementById('q-rep-company-select');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">No billing company — bill customer directly</option>' +
+    (_qS.startup_companies || []).map(c =>
+      `<option value="${esc(c.pool_company_id || c.company_name)}">${esc(c.company_name || '')}</option>`
+    ).join('');
+  sel.value = current;
+}
+
+function qRepCompanySelect(value) {
+  const nameEl = document.getElementById('q-rep-co');
+  if (!value) return;
+  const company = (_qS.startup_companies || []).find(c =>
+    String(c.pool_company_id || c.company_name || '') === String(value || '')
+  );
+  if (!company) return;
+  _qS.repair_company = company.company_name || '';
+  if (nameEl) nameEl.value = _qS.repair_company;
+  qRecalc();
+}
+
+// ── Repair: inline "+ Add New" modals (QuickBooks-style create-on-the-spot) ────
+function qRepOpenAddCompanyModal() {
+  _prlOpenModal('Add New Company', `
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Company Name</label>
+      <input id="q-rep-newco-name" class="si" type="text" placeholder="ABC Pool Builders" style="width:100%">
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Contact Name <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <input id="q-rep-newco-contact" class="si" type="text" style="width:100%">
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Phone <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <input id="q-rep-newco-phone" class="si" type="tel" style="width:100%">
+    </div>
+    <div id="q-rep-newco-msg" style="font-size:.82rem;color:var(--error);margin-bottom:.75rem"></div>
+    <button type="button" class="adm-new-btn" style="width:100%" onclick="qRepSaveNewCompany()">Save Company</button>
+  `);
+}
+
+async function qRepSaveNewCompany() {
+  const name = (document.getElementById('q-rep-newco-name')?.value || '').trim();
+  const contact = (document.getElementById('q-rep-newco-contact')?.value || '').trim();
+  const phone = (document.getElementById('q-rep-newco-phone')?.value || '').trim();
+  const msg = document.getElementById('q-rep-newco-msg');
+  if (!name) { if (msg) msg.textContent = 'Company name required.'; return; }
+  const btn = document.querySelector('#prl-modal-backdrop .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const res = await api({
+      action: 'upsert_startup_company', token: _s ? _s.token : '',
+      company: { company_name: name, contact_name: contact, phone: phone, active: 'TRUE' }
+    });
+    if (res.ok) {
+      _qS.startup_companies = [];
+      await qLoadStartupCompanies();
+      _qS.repair_company = name;
+      const nameEl = document.getElementById('q-rep-co');
+      if (nameEl) nameEl.value = name;
+      const sel = document.getElementById('q-rep-company-select');
+      if (sel) sel.value = res.pool_company_id || (_qS.startup_companies.find(c => c.company_name === name) || {}).pool_company_id || '';
+      qRecalc();
+      _prlCloseModal();
+    } else if (msg) {
+      msg.textContent = res.error || 'Could not save company.';
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Company'; }
+    }
+  } catch (e) {
+    if (msg) msg.textContent = 'Network error saving company.';
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Company'; }
+  }
+}
+
+function qRepOpenAddCustomerModal() {
+  _prlOpenModal('Add New Customer', `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">First Name</label>
+        <input id="q-rep-newcx-fname" class="si" type="text" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Last Name</label>
+        <input id="q-rep-newcx-lname" class="si" type="text" style="width:100%"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Email <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input id="q-rep-newcx-email" class="si" type="email" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Phone <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input id="q-rep-newcx-phone" class="si" type="tel" style="width:100%"></div>
+    </div>
+    <div style="margin-bottom:.75rem">
+      <label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">Property Address</label>
+      <input id="q-rep-newcx-addr" class="si" type="text" placeholder="123 Pool Lane" style="width:100%">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.75rem">
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">City</label>
+        <input id="q-rep-newcx-city" class="si" type="text" style="width:100%"></div>
+      <div><label style="display:block;font-weight:600;font-size:.875rem;margin-bottom:.4rem">ZIP Code</label>
+        <input id="q-rep-newcx-zip" class="si" type="text" style="width:100%"></div>
+    </div>
+    <div id="q-rep-newcx-msg" style="font-size:.82rem;color:var(--error);margin-bottom:.75rem"></div>
+    <button type="button" class="adm-new-btn" style="width:100%" onclick="qRepSaveNewCustomer()">Save Customer</button>
+  `);
+}
+
+async function qRepSaveNewCustomer() {
+  const first = (document.getElementById('q-rep-newcx-fname')?.value || '').trim();
+  const last = (document.getElementById('q-rep-newcx-lname')?.value || '').trim();
+  const address = (document.getElementById('q-rep-newcx-addr')?.value || '').trim();
+  const msg = document.getElementById('q-rep-newcx-msg');
+  if (!first && !last) { if (msg) msg.textContent = 'Customer name required.'; return; }
+  if (!address) { if (msg) msg.textContent = 'Property address required.'; return; }
+  const email = (document.getElementById('q-rep-newcx-email')?.value || '').trim();
+  const phone = (document.getElementById('q-rep-newcx-phone')?.value || '').trim();
+  const city = (document.getElementById('q-rep-newcx-city')?.value || '').trim();
+  const zip = (document.getElementById('q-rep-newcx-zip')?.value || '').trim();
+  const btn = document.querySelector('#prl-modal-backdrop .adm-new-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const clientRes = await api({
+      action: 'upsert_client', token: _s ? _s.token : '',
+      client: { first_name: first, last_name: last, email: email, phone: phone, status: 'active' }
+    });
+    if (!clientRes.ok) { if (msg) msg.textContent = clientRes.error || 'Could not save customer.'; if (btn) { btn.disabled = false; btn.textContent = 'Save Customer'; } return; }
+    const locRes = await api({
+      action: 'upsert_client_location', token: _s ? _s.token : '',
+      location: { client_id: clientRes.client_id, service_address: address, city: city, zip_code: zip, active: 'TRUE' }
+    });
+    if (!locRes.ok) { if (msg) msg.textContent = locRes.error || 'Could not save property.'; if (btn) { btn.disabled = false; btn.textContent = 'Save Customer'; } return; }
+
+    _qS.first_name = first; _qS.last_name = last; _qS.email = email; _qS.phone = phone;
+    _qS.address = address; _qS.city = city; _qS.zip_code = zip;
+    _qS.repair_client_id = clientRes.client_id;
+    _qS.repair_location_id = locRes.location_id;
+    _qS.repair_pool_id = ''; // brand-new property has no assigned pool_id yet
+    _qS.repair_company = _qS.repair_company || [first, last].filter(Boolean).join(' ');
+    ['q-fname','q-lname','q-email','q-phone','q-address','q-city','q-zip','q-rep-co'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const map = { 'q-fname':first, 'q-lname':last, 'q-email':email, 'q-phone':phone, 'q-address':address, 'q-city':city, 'q-zip':zip, 'q-rep-co':_qS.repair_company };
+      el.value = map[id];
+    });
+    const searchEl = document.getElementById('q-rep-client-search');
+    if (searchEl) searchEl.value = [first, last].filter(Boolean).join(' ');
+    const selWrap = document.getElementById('q-rep-client-select-wrap');
+    if (selWrap) selWrap.style.display = 'none';
+    const locWrap = document.getElementById('q-rep-location-wrap');
+    if (locWrap) locWrap.style.display = 'none';
+    qRecalc();
+    _prlCloseModal();
+  } catch (e) {
+    if (msg) msg.textContent = 'Network error saving customer.';
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Customer'; }
+  }
+}
+
 function qDiscTypeChange(val) {
   _qS.discount_type = val; _qS.discount_value = 0; _qS.custom_price = 0;
   const wrap = document.getElementById('q-disc-val-wrap');
@@ -326,7 +592,7 @@ function qCalcEngine(s) {
   const { service, size, pool_type, material, spa, finish, debris, has_robot,
           high_sun_exposure, has_pets, startup_chemical, startup_programming,
           startup_pool_school, startup_company, repair_type, repair_company,
-          repair_address, repair_desc, repair_amount, repair_sku, first_name, last_name } = s;
+          repair_amount, address, first_name, last_name } = s;
 
   let base = 0, chem = 0, pr = true, pw = '';
   let svcLabel = '', sizeLabel = size, qbNames = [], qbSkus = [];
@@ -344,8 +610,8 @@ function qCalcEngine(s) {
   } else if (service === 'repair_job') {
     base = Math.max(parseFloat(repair_amount) || 0, 0);
     svcLabel = 'Repair / Replacement / Other Job'; sizeLabel = 'repair';
-    const sku = (repair_sku || '').trim() || (repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB');
-    qbNames = [(repair_desc || '').trim() || svcLabel]; qbSkus = [sku];
+    const sku = repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB';
+    qbNames = [svcLabel]; qbSkus = [sku];
   } else {
     svcLabel = service === 'weekly_full' ? 'Weekly Full Service' : 'Bi-Weekly Maintenance';
     if (service === 'weekly_full') {
@@ -382,13 +648,12 @@ function qCalcEngine(s) {
       specs.push(`Startup Services: ${si.join(', ') || 'None Selected'}`);
       if ((startup_company || '').trim()) specs.push(`Startup Coming From: ${startup_company.trim()}`);
     } else if (service === 'repair_job') {
-      const sku = (repair_sku || '').trim() || (repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB');
+      const sku = repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB';
       const cn = ((first_name||'')+' '+(last_name||'')).trim() || (repair_company||'').trim();
       specs = [
         `Job Type: ${repair_type === 'repair_replacement' ? 'Repair / Replacement' : 'Other Job'}`,
         `Company: ${(repair_company||'').trim() || cn || 'N/A'}`,
-        `Address: ${(repair_address||'').trim() || 'Not provided'}`,
-        `Job Description: ${(repair_desc||'').trim() || 'Not provided'}`,
+        `Address: ${(address||'').trim() || 'Not provided'}`,
         `QuickBooks SKU: ${sku}`
       ];
     }
@@ -493,7 +758,7 @@ function qReset() {
   document.getElementById('qchk-chem')?.classList.add('active');
   document.getElementById('qchk-prog')?.classList.add('active');
   ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
-   'q-startup-co','q-startup-company-email','q-startup-date','q-rep-co','q-rep-sku','q-rep-addr','q-rep-desc','q-rep-amt'
+   'q-startup-co','q-startup-company-email','q-startup-date','q-rep-amt'
   ].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   const startupCompanyMsg = document.getElementById('q-startup-company-msg');
   if (startupCompanyMsg) startupCompanyMsg.textContent = '';
@@ -533,16 +798,16 @@ async function qSave() {
     startup_total_days:_qS.sponsored_by_mcp ? 3 : 0,
     repair_job_type:        _qS.service==='repair_job' ? _qS.repair_type    : '',
     repair_company_name:    _qS.service==='repair_job' ? _qS.repair_company  : '',
-    repair_company_address: _qS.service==='repair_job' ? _qS.repair_address  : '',
-    repair_job_description: _qS.service==='repair_job' ? _qS.repair_desc     : '',
     repair_invoice_amount:  _qS.service==='repair_job' ? _qS.repair_amount   : 0,
-    repair_sku:             _qS.service==='repair_job' ? _qS.repair_sku      : '',
     repair_job_name:        _qS.service==='repair_job' ? _qS.repair_job_name : '',
     repair_priority:        _qS.service==='repair_job' ? _qS.repair_priority : '',
     repair_equipment:       _qS.service==='repair_job' ? _qS.repair_equipment : '',
     repair_issue:           _qS.service==='repair_job' ? _qS.repair_issue    : '',
     repair_assigned_to:     _qS.service==='repair_job' ? _qS.repair_assigned_to : '',
     repair_parts:           _qS.service==='repair_job' ? JSON.stringify((_qS.repair_parts || []).filter(p => (p.name || '').trim())) : '[]',
+    client_id:   _qS.service==='repair_job' ? (_qS.repair_client_id   || '') : '',
+    location_id: _qS.service==='repair_job' ? (_qS.repair_location_id || '') : '',
+    pool_id:     _qS.service==='repair_job' ? (_qS.repair_pool_id     || '') : '',
     travel_fee:tFee,
     travel_one_way_miles:             (_qS.travel&&!_qS.void_travel)?_qS.travel.one_way_miles:0,
     travel_round_trip_miles:          (_qS.travel&&!_qS.void_travel)?_qS.travel.round_trip_miles:0,
