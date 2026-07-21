@@ -1544,6 +1544,14 @@ function doPost(e) {
       return jsonResponse_(handleStartupRequestSubmit_(payload));
     }
 
+    if (payload.action === 'startup_request_status') {
+      return jsonResponse_(handleStartupRequestStatus_(payload));
+    }
+
+    if (payload.action === 'startup_request_request_change') {
+      return jsonResponse_(handleStartupRequestRequestChange_(payload));
+    }
+
     // ── STARTUP REQUESTS: admin queue (token + admin/manager role, validated
     //    inside each handler via srRequireAdmin_) ─────────────────────────────
     if (payload.action === 'startup_request_update') {
@@ -1562,6 +1570,29 @@ function doPost(e) {
       const srGate = srRequireAdmin_(payload.token);
       if (!srGate.ok) return jsonResponse_(srGate);
       return jsonResponse_(handleGetStartupRequestLink_(payload, srGate.auth));
+    }
+
+    // ── BUILDER PORTAL: admin-initiated invite (mirrors employee invites,
+    //    but fully isolated — see appscript/BuilderAuth.js) ────────────────────
+    if (payload.action === 'admin_create_builder_invite') {
+      return jsonResponse_(handleCreateBuilderInvite_(payload));
+    }
+
+    // ── BUILDER PORTAL: public claim + returning-builder login ─────────────────
+    if (payload.action === 'builder_invite_lookup') {
+      return jsonResponse_(handleBuilderInviteLookup_(payload));
+    }
+
+    if (payload.action === 'builder_invite_register') {
+      return jsonResponse_(handleBuilderInviteRegister_(payload));
+    }
+
+    if (payload.action === 'builder_login') {
+      return jsonResponse_(handleBuilderLogin_(payload));
+    }
+
+    if (payload.action === 'builder_logout') {
+      return jsonResponse_(handleBuilderLogout_(payload));
     }
 
     if (payload.action === 'save_sensitive_info') {

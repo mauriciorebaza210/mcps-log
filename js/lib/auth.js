@@ -43,7 +43,7 @@ function doLogin() {
 
 function showLErr(m){const el=document.getElementById('lerr');el.textContent=m;el.style.display='block';}
 
-function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch(()=>{});_s=null;localStorage.removeItem('mcps_s');location.hash='';location.reload();}
+function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch(()=>{});_s=null;localStorage.removeItem('mcps_s');localStorage.removeItem('mcps_home_view_as');location.hash='';location.reload();}
 
 function unionPages_(roles) {
   const set = new Set();

@@ -45,10 +45,14 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .invite-summary strong{text-align:right;color:var(--text);font-weight:700;overflow-wrap:anywhere}
 
 /* ── APP SHELL ───────────────────────────────────────────────────────────── */
-#app{display:none;flex-direction:row;min-height:100vh}
+/* Height (not min-height) + overflow:hidden locks #app to the viewport so
+   .main-content's own overflow-y:auto is what scrolls — not the document.
+   Without this, tall pages grow #app past 100vh and the whole page scrolls,
+   carrying the sticky topbar/logo off-screen with it instead of staying put. */
+#app{display:none;flex-direction:row;height:100vh;height:100dvh;overflow:hidden}
 
 /* ── SIDEBAR ─────────────────────────────────────────────────────────────── */
-.sidebar{width:var(--sb-w);height:100vh;position:sticky;top:0;flex-shrink:0;background:var(--teal);display:flex;flex-direction:column;overflow-y:auto;z-index:300}
+.sidebar{width:var(--sb-w);height:100vh;height:100dvh;position:sticky;top:0;flex-shrink:0;background:var(--teal);display:flex;flex-direction:column;overflow-y:auto;z-index:300}
 .sb-logo{display:flex;align-items:center;gap:.65rem;padding:1.1rem 1rem .9rem;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0}
 .sb-logo img{height:34px;width:34px;object-fit:contain;border-radius:var(--r-sm)}
 .sb-logo-text{font-family:'Oswald',sans-serif;color:#fff;font-size:var(--text-md);font-weight:700;letter-spacing:.06em;white-space:nowrap}
@@ -89,7 +93,7 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 .sb-overlay.visible{display:block}
 
 /* ── MAIN CONTENT ────────────────────────────────────────────────────────── */
-.main-content{flex:1;overflow-y:auto;background-color:var(--bg);min-height:100vh;display:flex;flex-direction:column}
+.main-content{flex:1;overflow-y:auto;background-color:var(--bg);min-height:0;display:flex;flex-direction:column}
 .page-wrap{flex:1;padding:1.25rem 1rem 2rem;max-width:960px;width:100%;margin:0 auto}
 .pf{display:none;animation:fadeUp .3s ease}.pf.active{display:block}
 
@@ -112,10 +116,10 @@ body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--text);min-
 /* ── MOBILE RESPONSIVE ───────────────────────────────────────────────────── */
 @media(max-width:767px){
   #app{flex-direction:column}
-  .topbar{display:flex;align-items:center;gap:.75rem;height:var(--top-h);padding:0 1rem;background:var(--teal);position:sticky;top:0;z-index:250;box-shadow:var(--shadow-sm)}
-  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(calc(-1 * var(--sb-w)));transition:transform .3s ease;z-index:400}
+  .topbar{display:flex;align-items:center;gap:.75rem;height:var(--top-h);padding:0 1rem;background:var(--teal);position:sticky;top:0;z-index:250;box-shadow:var(--shadow-sm);flex-shrink:0}
+  .sidebar{position:fixed;top:0;left:0;height:100vh;height:100dvh;transform:translateX(calc(-1 * var(--sb-w)));transition:transform .3s ease;z-index:400}
   .sidebar.open{transform:translateX(0)}
-  .main-content{min-height:calc(100vh - var(--top-h))}
+  .main-content{min-height:0}
   .sb-overlay.visible{display:block}
 }
 @media(min-width:768px){
@@ -3193,7 +3197,7 @@ input:disabled,textarea:disabled,select:disabled{
 
 body.is-tech-nav .sidebar      { display: none !important; }
 body.is-tech-nav .sb-overlay   { display: none !important; }
-body.is-tech-nav .topbar       { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; position: sticky; top: 0; height: var(--top-h); }
+body.is-tech-nav .topbar       { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; position: sticky; top: 0; height: var(--top-h); flex-shrink: 0; }
 body.is-tech-nav .tb-brand     { display: none; }
 body.is-tech-nav .hamburger    { visibility: hidden; }
 #tech-topbar-logo              { display: none; }
@@ -3214,7 +3218,7 @@ body.is-tech-nav #tech-topbar-logo img { height: 50px; width: auto; object-fit: 
 body.is-tech-nav .hub-tabs-bar { display: none; }
 body.is-tech-nav .dash-header  { display: none; }
 body.is-tech-nav #app          { flex-direction: column; }
-body.is-tech-nav .main-content { min-height: calc(100vh - var(--top-h)); background: #fff; }
+body.is-tech-nav .main-content { min-height: calc(100vh - var(--top-h)); min-height: calc(100dvh - var(--top-h)); background: #fff; }
 body.is-tech-nav .page-wrap    { padding-bottom: calc(68px + env(safe-area-inset-bottom)); background: #fff; }
 body.is-tech-nav               { background: #fff; }
 /* Tech view is white — the cream (--bg) bars must follow suit */
@@ -3226,7 +3230,7 @@ body.is-tech-nav .day-tabs-bar { background: #fff; }
    background — but no bottom nav (new hires only have the onboarding page). */
 body.is-onboarding-nav .sidebar    { display: none !important; }
 body.is-onboarding-nav .sb-overlay { display: none !important; }
-body.is-onboarding-nav .topbar     { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; position: sticky; top: 0; height: var(--top-h); }
+body.is-onboarding-nav .topbar     { display: flex !important; background: #fff !important; border-bottom: 2px solid var(--teal); box-shadow: none; position: sticky; top: 0; height: var(--top-h); flex-shrink: 0; }
 body.is-onboarding-nav .tb-brand   { display: none; }
 body.is-onboarding-nav .hamburger  { visibility: hidden; }
 body.is-onboarding-nav #tech-topbar-logo {
@@ -3242,7 +3246,7 @@ body.is-onboarding-nav #tech-topbar-logo {
 }
 body.is-onboarding-nav #tech-topbar-logo img { height: 40px; width: auto; object-fit: contain; }
 body.is-onboarding-nav #app          { flex-direction: column; }
-body.is-onboarding-nav .main-content { min-height: calc(100vh - var(--top-h)); background: #fff; }
+body.is-onboarding-nav .main-content { min-height: calc(100vh - var(--top-h)); min-height: calc(100dvh - var(--top-h)); background: #fff; }
 body.is-onboarding-nav .page-wrap    { background: #fff; }
 body.is-onboarding-nav               { background: #fff; }
 
@@ -3534,6 +3538,20 @@ body.is-tech-nav .tech-nav { display: flex; }
 .jobs-hdr-sub { font-size: var(--text-sm); opacity: .8; }
 .jobs-hdr-spacer { width: 38px; flex-shrink: 0; }
 
+/* Maintenance sort-by dropdown */
+.jobs-sort-wrap { position: relative; flex-shrink: 0; }
+.jobs-sort-btn { display: flex; align-items: center; gap: .35rem; background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px; padding: .48rem .8rem; font-family: inherit; font-size: var(--text-sm); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.jobs-sort-btn:hover { background: rgba(255,255,255,.22); }
+.jobs-sort-menu { position: absolute; top: calc(100% + .5rem); right: 0; background: #fff; border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-lg); min-width: 220px; padding: .4rem; z-index: 20; text-align: left; }
+.jobs-sort-opt { display: flex; align-items: center; gap: .6rem; width: 100%; background: none; border: none; text-align: left; padding: .55rem .6rem; border-radius: var(--r-sm); cursor: pointer; font-family: inherit; }
+.jobs-sort-opt:hover { background: var(--surface); }
+.jobs-sort-opt-icon { font-size: 1.05rem; flex-shrink: 0; }
+.jobs-sort-opt-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.jobs-sort-opt-lbl { font-size: var(--text-base); font-weight: 700; color: var(--text); }
+.jobs-sort-opt-sub { font-size: var(--text-xs); color: var(--muted); margin-top: .05rem; }
+.jobs-sort-opt.active .jobs-sort-opt-lbl { color: var(--teal); }
+.jobs-sort-check { color: var(--teal); font-weight: 700; flex-shrink: 0; }
+
 .jobs-list-body { max-width: 720px; margin: 0 auto; padding: 1rem 1rem 2rem; }
 
 /* Generic list/item cards */
@@ -3588,6 +3606,8 @@ body.is-tech-nav .tech-nav { display: flex; }
 .jobs-pool-photo { width: 58px; height: 58px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: var(--surface); }
 .jobs-photo-missing { display: flex; align-items: center; justify-content: center; color: var(--border); border: 1px solid var(--border); }
 .jobs-photo-missing svg { width: 22px; height: 22px; }
+.jobs-pool-photo-spinner { width: 20px; height: 20px; border-width: 2px; }
+.jobs-pool-photo-clickable { cursor: zoom-in; }
 
 /* Startup hub */
 .jobs-hub-pool-card { display: flex; gap: .7rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: var(--r-md); padding: .85rem; margin: -0.6rem 1rem 0; position: relative; box-shadow: var(--shadow-sm); max-width: 688px; }

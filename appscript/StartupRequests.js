@@ -20,6 +20,7 @@ const MCPS_STARTUP_REQUEST_HEADERS = [
   'requested_start_date', 'notes',
   'raw_extraction', 'photo_urls', 'reviewed_by_builder',
   'submitted_at', 'approved_at', 'approved_by', 'admin_notes',
+  'change_requested_date', 'change_requested_note', 'change_requested_at',
   'quote_id', 'pool_id', 'created_at', 'updated_at'
 ];
 
@@ -45,8 +46,26 @@ const SR_GAL_PER_CUFT = 7.48;
 const SR_OVAL_GALLON_FACTOR = 5.9;
 const SR_FREEFORM_FACTOR = 0.85;
 
+const SR_SITE_ORIGIN = 'https://mcps-log.vercel.app';
+
 function getStartupRequestsSheet_() {
   return ensureSheet_('Startup_Requests', MCPS_STARTUP_REQUEST_HEADERS);
+}
+
+// ─── Builder notification emails (best-effort, never blocks the mutation) ─────
+
+function srSendBuilderEmail_(toEmail, subject, body) {
+  const to = String(toEmail || '').trim();
+  if (!to) return; // email is optional on the intake form — silent no-op
+  try {
+    MailApp.sendEmail({ to: to, subject: subject, body: body });
+  } catch (e) {
+    Logger.log('srSendBuilderEmail_: failed to send to ' + to + ': ' + e);
+  }
+}
+
+function srStatusLink_(companyToken, requestId) {
+  return SR_SITE_ORIGIN + '/startup-request?t=' + encodeURIComponent(companyToken) + '&r=' + encodeURIComponent(requestId);
 }
 
 // ─── Company token ────────────────────────────────────────────────────────────
@@ -712,6 +731,18 @@ function handleStartupRequestSubmit_(payload) {
   });
 
   appendObject_(sheet, obj, MCPS_STARTUP_REQUEST_HEADERS);
+
+  const link = srStatusLink_(payload.t, requestId);
+  srSendBuilderEmail_(
+    fields.email,
+    'MCPS Startup Request Received — ' + requestId,
+    'Hi' + (fields.first_name ? ' ' + fields.first_name : '') + ',\n\n' +
+    'We received your pool startup request. Reference number: ' + requestId + '\n\n' +
+    'Mission Custom Pool Solutions will review the details and confirm your startup date soon.' +
+    '\n\nCheck your status any time: ' + link +
+    '\n\n— Mission Custom Pool Solutions'
+  );
+
   return { ok: true, request_id: requestId };
 }
 
@@ -749,7 +780,10 @@ function handleStartupRequestsList_(tokenStr, scope) {
   const sheet = getStartupRequestsSheet_();
   let rows = sheetToObjects_(sheet).rows;
   if (String(scope || 'pending') === 'pending') {
-    rows = rows.filter(function(r) { return String(r.status || '') === 'pending_review'; });
+    rows = rows.filter(function(r) {
+      return String(r.status || '') === 'pending_review' ||
+        (String(r.status || '') === 'approved' && String(r.change_requested_at || '').trim());
+    });
   }
   rows.reverse(); // newest first
   if (rows.length > 100) rows = rows.slice(0, 100);
@@ -771,6 +805,11 @@ function handleStartupRequestUpdate_(payload) {
   SR_EDITABLE_FIELDS.forEach(function(f) {
     if (fields[f] !== undefined) updates[f] = String(fields[f] === null ? '' : fields[f]).slice(0, 500);
   });
+  if (payload.clear_change_request === true) {
+    updates.change_requested_date = '';
+    updates.change_requested_note = '';
+    updates.change_requested_at = '';
+  }
   srSetRowValues_(found.sheet, found.headers, found.row._rowNum, updates);
   return { ok: true };
 }
@@ -918,6 +957,14 @@ function handleStartupRequestApprove_(payload) {
       c.remove('weekly_goal');
     } catch (e) {}
 
+    srSendBuilderEmail_(
+      req.email,
+      'Your MCPS Pool Startup is Confirmed — ' + found.row.request_id,
+      'Hi' + (req.first_name ? ' ' + req.first_name : '') + ',\n\n' +
+      'Your pool startup has been approved and is scheduled to begin on ' + startDate + '.\n\n' +
+      '— Mission Custom Pool Solutions'
+    );
+
     return { ok: true, quote_id: result.quote_id, pool_id: result.pool_id, warning: result.warning };
   } finally {
     lock.releaseLock();
@@ -944,5 +991,86 @@ function handleStartupRequestReject_(payload) {
     approved_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   });
+
+  srSendBuilderEmail_(
+    found.row.email,
+    'Update on Your MCPS Pool Startup Request — ' + found.row.request_id,
+    'Hi' + (found.row.first_name ? ' ' + found.row.first_name : '') + ',\n\n' +
+    'We were unable to move forward with your pool startup request at this time.' +
+    (payload.note ? '\n\nNote from MCPS: ' + String(payload.note).slice(0, 1000) : '') +
+    '\n\n— Mission Custom Pool Solutions'
+  );
+
   return { ok: true };
+}
+
+// ─── Public: builder self-service status + date-change request ───────────────
+
+function handleStartupRequestStatus_(payload) {
+  const company = findPoolCompanyByToken_(payload.t);
+  if (!company) return { ok: false, error: 'Invalid or inactive link' };
+  if (srRateLimitExceeded_('st', payload.t, 30)) {
+    return { ok: false, error: 'Too many attempts — please try again in a few minutes.' };
+  }
+  const found = srFindRequestRow_(payload.request_id);
+  if (!found.row || String(found.row.pool_company_id || '').trim() !== String(company.pool_company_id || '').trim()) {
+    return { ok: false, error: 'Request not found' };
+  }
+  const row = found.row;
+  const out = {
+    ok: true,
+    request_id: row.request_id,
+    status: row.status,
+    requested_start_date: row.requested_start_date || ''
+  };
+  if (row.status === 'rejected') out.admin_notes = row.admin_notes || '';
+  if (String(row.change_requested_at || '').trim()) {
+    out.change_requested_date = row.change_requested_date || '';
+    out.change_requested_note = row.change_requested_note || '';
+    out.change_requested_at = row.change_requested_at;
+  }
+  return out;
+}
+
+function handleStartupRequestRequestChange_(payload) {
+  const company = findPoolCompanyByToken_(payload.t);
+  if (!company) return { ok: false, error: 'Invalid or inactive link' };
+  if (srRateLimitExceeded_('rc', payload.t, 8)) {
+    return { ok: false, error: 'Too many requests — please try again in a few minutes.' };
+  }
+  const found = srFindRequestRow_(payload.request_id);
+  if (!found.row || String(found.row.pool_company_id || '').trim() !== String(company.pool_company_id || '').trim()) {
+    return { ok: false, error: 'Request not found' };
+  }
+  const row = found.row;
+  if (row.status !== 'pending_review' && row.status !== 'approved') {
+    return { ok: false, error: 'This request can no longer be changed.' };
+  }
+  const requestedDate = String(payload.requested_date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+    return { ok: false, error: 'A valid date (yyyy-mm-dd) is required.' };
+  }
+  const note = String(payload.note || '').slice(0, 500);
+  const now = new Date().toISOString();
+
+  if (row.status === 'pending_review') {
+    // Nothing scheduled yet — low risk, safe to update directly.
+    srSetRowValues_(found.sheet, found.headers, found.row._rowNum, {
+      requested_start_date: requestedDate,
+      notes: (String(row.notes || '').trim() ? row.notes + ' | ' : '') +
+        'Builder requested date change to ' + requestedDate + (note ? ': ' + note : ''),
+      updated_at: now
+    });
+    return { ok: true, applied: true };
+  }
+
+  // Approved — touches live Scheduled_Visits/Routes data. Flag for admin instead
+  // of mutating; admin acts via the existing reschedule_startup tooling.
+  srSetRowValues_(found.sheet, found.headers, found.row._rowNum, {
+    change_requested_date: requestedDate,
+    change_requested_note: note,
+    change_requested_at: now,
+    updated_at: now
+  });
+  return { ok: true, applied: false };
 }

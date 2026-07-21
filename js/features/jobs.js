@@ -10,6 +10,7 @@ let _jobsFetchInFlight = null;
 let _jobsStartupFilter = 'all';
 let _jobsRepairFilter = 'new';
 let _jobsStartupSearch = '';
+let _jobsMaintSort = 'day';    // 'day' | 'az'
 let _jobsHubCache = {};        // pool_id → get_startup_hub response
 
 const JOBS_CACHE_TTL = 5 * 60 * 1000;
@@ -32,6 +33,7 @@ const JOBS_ICON_DROP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const JOBS_ICON_LIST = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
 const JOBS_ICON_CHEV = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
 const JOBS_ICON_BACK = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>`;
+const JOBS_ICON_CHEV_DOWN = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 
 // ── Entry point (called by router) ───────────────────────────────────────────
 function loadJobsPage(sub) {
@@ -112,7 +114,7 @@ function _renderJobsView(parts) {
   if (view === 'repairs') {
     return parts[1] ? _renderRepairDetail(decodeURIComponent(parts[1])) : _renderRepairHub();
   }
-  if (view === 'pool') return renderPoolProfile(decodeURIComponent(parts[1] || ''));
+  if (view === 'pool') return renderPoolProfile(decodeURIComponent(parts[1] || ''), parts[2] || '');
   if (view === 'all') return _renderAllJobs();
   if (view === 'mine') return _renderJobsLanding();
   return _renderJobsLanding();
@@ -129,21 +131,50 @@ function _jobsAvatar(name, size) {
   return `<span class="jobs-avatar" style="width:${px}px;height:${px}px;background:${bg};font-size:${Math.round(px * 0.4)}px">${escHtml(initials)}</span>`;
 }
 
-function _jobsHeader(title, subtitle, backSub) {
+function _jobsHeader(title, subtitle, backSub, rightHtml) {
   return `<div class="jobs-hdr">
     <button class="jobs-hdr-back" aria-label="Back" onclick="jobsNav('${backSub || ''}')">${JOBS_ICON_BACK}</button>
     <div class="jobs-hdr-titles">
       <div class="jobs-hdr-title">${escHtml(title)}</div>
       ${subtitle ? `<div class="jobs-hdr-sub">${escHtml(subtitle)}</div>` : ''}
     </div>
-    <div class="jobs-hdr-spacer"></div>
+    ${rightHtml || '<div class="jobs-hdr-spacer"></div>'}
   </div>`;
 }
 
 function _jobsPoolPhoto(url, alt) {
   return url
-    ? `<img class="jobs-pool-photo" src="${escHtml(url)}" alt="${escHtml(alt || 'Pool')}" loading="lazy" onerror="this.classList.add('jobs-photo-missing');this.removeAttribute('src')">`
+    ? `<img class="jobs-pool-photo jobs-pool-photo-clickable" src="${escHtml(url)}" alt="${escHtml(alt || 'Pool')}" loading="lazy" onclick="if(typeof _finPhotoLightbox==='function')_finPhotoLightbox('${escHtml(url)}')" onerror="this.classList.add('jobs-photo-missing');this.removeAttribute('src')">`
     : `<div class="jobs-pool-photo jobs-photo-missing">${JOBS_ICON_DROP}</div>`;
+}
+
+function _jobsPoolPhotoSpinner_() {
+  return `<div class="jobs-pool-photo jobs-photo-missing"><div class="spinner jobs-pool-photo-spinner"></div></div>`;
+}
+
+const POOL_PHOTO_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// Renders the pool-photo slot: a cached URL (possibly '') shows immediately,
+// otherwise a spinner shows while _fetchPoolPhoto_ resolves in the background.
+function _jobsPoolPhotoSlotHtml_(poolId) {
+  const cached = _appCacheGet('pool_photo_' + poolId, POOL_PHOTO_CACHE_TTL_MS);
+  const inner = cached !== null ? _jobsPoolPhoto(cached, '') : _jobsPoolPhotoSpinner_();
+  return `<div id="jobs-pool-photo-slot" data-pool-id="${escHtml(poolId)}">${inner}</div>`;
+}
+
+function _fetchPoolPhoto_(poolId) {
+  api({ action: 'get_pool_photo', token: currentSessionToken_(), pool_id: poolId })
+    .then(res => {
+      if (!res || !res.ok) return;
+      const url = res.photo_url || '';
+      _appCacheSet('pool_photo_' + poolId, url);
+      const slot = document.getElementById('jobs-pool-photo-slot');
+      if (!slot || slot.dataset.poolId !== poolId) return;
+      const cachedProfile = _poolProfileCache[poolId];
+      const altName = cachedProfile && cachedProfile.info ? cachedProfile.info.customer_name : '';
+      slot.innerHTML = _jobsPoolPhoto(url, altName);
+    })
+    .catch(() => {});
 }
 
 function _jobsFmtDate(raw) {
@@ -212,52 +243,106 @@ function _renderJobsLanding() {
   </div>`;
 }
 
-// ── Maintenance: full client book grouped by day ─────────────────────────────
+// ── Maintenance: full client book grouped by day (or A–Z by last name) ──────
+let _jobsSortMenuOpen = false;
+const JOBS_MAINT_SORT_OPTS = [
+  { k: 'day', label: 'Schedule', sub: 'Grouped by service day', icon: '📅' },
+  { k: 'az',  label: 'Alphabetical', sub: 'By customer last name', icon: '🔤' }
+];
+
+function jobsToggleSortMenu(e) {
+  if (e) e.stopPropagation();
+  if (_jobsSortMenuOpen) { _jobsCloseSortMenu(); return; }
+  _jobsSortMenuOpen = true;
+  const menu = document.getElementById('jobs-sort-menu');
+  if (menu) menu.style.display = 'block';
+  setTimeout(() => document.addEventListener('click', _jobsCloseSortMenu), 0);
+}
+
+function _jobsCloseSortMenu() {
+  _jobsSortMenuOpen = false;
+  const menu = document.getElementById('jobs-sort-menu');
+  if (menu) menu.style.display = 'none';
+  document.removeEventListener('click', _jobsCloseSortMenu);
+}
+
+function _jobsSortBtnHtml() {
+  const current = JOBS_MAINT_SORT_OPTS.find(o => o.k === _jobsMaintSort) || JOBS_MAINT_SORT_OPTS[0];
+  return `<div class="jobs-sort-wrap">
+    <button class="jobs-sort-btn" onclick="jobsToggleSortMenu(event)">Sort by: ${escHtml(current.label)} ${JOBS_ICON_CHEV_DOWN}</button>
+    <div class="jobs-sort-menu" id="jobs-sort-menu" style="display:none" onclick="event.stopPropagation()">
+      ${JOBS_MAINT_SORT_OPTS.map(o => `<button class="jobs-sort-opt${_jobsMaintSort === o.k ? ' active' : ''}" onclick="jobsMaintSort('${o.k}')">
+        <span class="jobs-sort-opt-icon">${o.icon}</span>
+        <span class="jobs-sort-opt-txt"><span class="jobs-sort-opt-lbl">${escHtml(o.label)}</span><span class="jobs-sort-opt-sub">${escHtml(o.sub)}</span></span>
+        ${_jobsMaintSort === o.k ? '<span class="jobs-sort-check">✓</span>' : ''}
+      </button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function jobsMaintSort(mode) {
+  _jobsCloseSortMenu();
+  if (_jobsMaintSort === mode) return;
+  _jobsMaintSort = mode;
+  _renderMaintenanceList();
+}
+
+function _jobsLastName(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : '';
+}
+
+function _maintItemCardHtml(p, showOp) {
+  const pid = encodeURIComponent(p.pool_id || '');
+  return `<div class="jobs-item-card" onclick="jobsNav('pool/${pid}/maintenance')">
+    <div class="jobs-item-main">
+      <div class="jobs-item-title">${escHtml(p.customer_name || '—')}</div>
+      <div class="jobs-item-addr">${escHtml(p.address || '')}${p.city ? ', ' + escHtml(p.city) : ''}</div>
+      <div class="jobs-item-badges">
+        <span class="ps-label ${typeof getSvcClass_ === 'function' ? getSvcClass_(p.service) : 'svc-other'}">${escHtml(typeof getSvcLabel_ === 'function' ? getSvcLabel_(p.service) : (p.service || 'Service'))}</span>
+        ${showOp && p.op_name ? `<span class="jobs-assignee-chip">${_jobsAvatar(p.op_name, 18)} ${escHtml(p.op_name)}</span>` : ''}
+      </div>
+    </div>
+    <div class="jobs-item-actions" onclick="event.stopPropagation()">
+      <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(p.pool_id || '')}','${escHtml(p.customer_name || '')}','','')">📝 Log</button>
+    </div>
+    <span class="jobs-item-chev">${JOBS_ICON_CHEV}</span>
+  </div>`;
+}
+
 function _renderMaintenanceList() {
   const root = document.getElementById('jobs-root');
   const pools = (_jobsData && _jobsData.maintenance) || [];
   const showOp = _jobsScope === 'all';
 
-  const byDay = {};
-  pools.forEach(p => {
-    const day = p.day_of_week && p.day_of_week !== 'UNSCHEDULED' ? p.day_of_week : 'Unscheduled';
-    (byDay[day] = byDay[day] || []).push(p);
-  });
-  const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','Unscheduled'];
-
   let listHtml = '';
-  dayOrder.forEach(day => {
-    const list = byDay[day];
-    if (!list || !list.length) return;
-    listHtml += `<div class="jobs-day-group-hdr">${escHtml(day)} <span class="jobs-day-group-ct">${list.length}</span></div>`;
-    list.forEach(p => {
-      const pid = encodeURIComponent(p.pool_id || '');
-      listHtml += `<div class="jobs-item-card" onclick="jobsNav('pool/${pid}')">
-        <div class="jobs-item-main">
-          <div class="jobs-item-title">${escHtml(p.customer_name || '—')}</div>
-          <div class="jobs-item-addr">${escHtml(p.address || '')}${p.city ? ', ' + escHtml(p.city) : ''}</div>
-          <div class="jobs-item-badges">
-            <span class="ps-label ${typeof getSvcClass_ === 'function' ? getSvcClass_(p.service) : 'svc-other'}">${escHtml(typeof getSvcLabel_ === 'function' ? getSvcLabel_(p.service) : (p.service || 'Service'))}</span>
-            ${showOp && p.op_name ? `<span class="jobs-assignee-chip">${_jobsAvatar(p.op_name, 18)} ${escHtml(p.op_name)}</span>` : ''}
-          </div>
-        </div>
-        <div class="jobs-item-actions" onclick="event.stopPropagation()">
-          <button class="ps-btn ps-log" onclick="goToSvcLog('${escHtml(p.pool_id || '')}','${escHtml(p.customer_name || '')}','','')">📝 Log</button>
-        </div>
-        <span class="jobs-item-chev">${JOBS_ICON_CHEV}</span>
-      </div>`;
-    });
-  });
-
   if (!pools.length) {
     listHtml = `<div class="route-empty" style="padding:3rem 1rem">
       <div class="route-empty-icon">🏊</div>
       <div class="route-empty-text">No maintenance pools assigned${_jobsScope === 'all' ? '' : ' to you'} yet.</div>
     </div>`;
+  } else if (_jobsMaintSort === 'az') {
+    const sorted = pools.slice().sort((a, b) =>
+      _jobsLastName(a.customer_name).localeCompare(_jobsLastName(b.customer_name)) ||
+      String(a.customer_name || '').localeCompare(String(b.customer_name || '')));
+    listHtml = sorted.map(p => _maintItemCardHtml(p, showOp)).join('');
+  } else {
+    const byDay = {};
+    pools.forEach(p => {
+      const day = p.day_of_week && p.day_of_week !== 'UNSCHEDULED' ? p.day_of_week : 'Unscheduled';
+      (byDay[day] = byDay[day] || []).push(p);
+    });
+    const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','Unscheduled'];
+    dayOrder.forEach(day => {
+      const list = byDay[day];
+      if (!list || !list.length) return;
+      listHtml += `<div class="jobs-day-group-hdr">${escHtml(day)} <span class="jobs-day-group-ct">${list.length}</span></div>`;
+      list.forEach(p => { listHtml += _maintItemCardHtml(p, showOp); });
+    });
   }
 
   root.innerHTML = `<div class="jobs-wrap jobs-wrap-flush">
-    ${_jobsHeader('Maintenance', pools.length + ' active pool' + (pools.length !== 1 ? 's' : ''), '')}
+    ${_jobsHeader('Maintenance', pools.length + ' active pool' + (pools.length !== 1 ? 's' : ''), '', pools.length ? _jobsSortBtnHtml() : '')}
     <div class="jobs-list-body">${listHtml}</div>
   </div>`;
 }
@@ -586,7 +671,7 @@ function jobsRescheduleStartupGo(pidEnc) {
   const msg = document.getElementById('jobs-sheet-msg');
   if (!date) { if (msg) msg.textContent = 'Pick a date.'; return; }
   if (btn) { btn.disabled = true; btn.textContent = 'Rescheduling…'; }
-  api({ action: 'reschedule_startup', pool_id: poolId, day_1_date: date })
+  api({ action: 'reschedule_startup', token: currentSessionToken_(), pool_id: poolId, day_1_date: date })
     .then(res => {
       if (!res || !res.ok) throw new Error(res && res.error || 'Reschedule failed');
       _jobsCloseSheet();
@@ -696,7 +781,7 @@ function _renderRepairDetail(orderId) {
   } else if (isMine && st !== 'completed') {
     actions += `<button class="jobs-cta" onclick="jobsRepairSetStatus('${oid}','completed')">Mark Completed</button>`;
   }
-  if (r.pool_id) actions += `<button class="jobs-ghost-btn" onclick="jobsNav('pool/${pidEnc}')">View Pool Profile</button>`;
+  if (r.pool_id) actions += `<button class="jobs-ghost-btn" onclick="jobsNav('pool/${pidEnc}/repairs')">View Pool Profile</button>`;
 
   root.innerHTML = `<div class="jobs-wrap jobs-wrap-flush">
     ${_jobsHeader(r.job_name || 'Work Order', r.order_id || '', 'repairs')}
@@ -843,33 +928,38 @@ function _renderAllJobs() {
 
 // ── Pool Profile ──────────────────────────────────────────────────────────────
 let _poolProfileCache = {};
+let _jobsPoolOrigin = ''; // which jobs list ('maintenance'|'repairs'|...) the pool profile's back button returns to
 
-function renderPoolProfile(poolId) {
+function renderPoolProfile(poolId, origin) {
   const root = document.getElementById('jobs-root');
   if (!poolId) { jobsNav(''); return; }
+  _jobsPoolOrigin = origin || '';
 
   const cached = _poolProfileCache[poolId];
   if (cached) _renderPoolProfileBody(poolId, cached);
-  else root.innerHTML = `<div class="jobs-wrap jobs-wrap-flush">${_jobsHeader('Pool Profile', '', '')}<div class="route-loading"><div class="spinner"></div></div></div>`;
+  else root.innerHTML = `<div class="jobs-wrap jobs-wrap-flush">${_jobsHeader('Pool Profile', '', _jobsPoolOrigin)}<div class="route-loading"><div class="spinner"></div></div></div>`;
 
   api({ action: 'get_pool_profile', token: currentSessionToken_(), pool_id: poolId })
     .then(res => {
       if (!res || !res.ok) { if (!cached) _renderPoolProfileError(poolId); return; }
       _poolProfileCache[poolId] = res;
       const hash = location.hash.replace('#', '');
-      if (hash === 'jobs/pool/' + encodeURIComponent(poolId)) _renderPoolProfileBody(poolId, res);
+      const expectedHash = 'jobs/pool/' + encodeURIComponent(poolId) + (_jobsPoolOrigin ? '/' + _jobsPoolOrigin : '');
+      if (hash === expectedHash) _renderPoolProfileBody(poolId, res);
     })
     .catch(() => { if (!cached) _renderPoolProfileError(poolId); });
+
+  _fetchPoolPhoto_(poolId);
 }
 
 function _renderPoolProfileError(poolId) {
   const root = document.getElementById('jobs-root');
   root.innerHTML = `<div class="jobs-wrap jobs-wrap-flush">
-    ${_jobsHeader('Pool Profile', '', '')}
+    ${_jobsHeader('Pool Profile', '', _jobsPoolOrigin)}
     <div class="route-empty" style="padding:3rem 1rem">
       <div class="route-empty-icon">⚠️</div>
       <div class="route-empty-text">Could not load this pool. Please try again.</div>
-      <button class="jobs-retry-btn" onclick="renderPoolProfile('${escHtml(poolId)}')">Retry</button>
+      <button class="jobs-retry-btn" onclick="renderPoolProfile('${escHtml(poolId)}','${escHtml(_jobsPoolOrigin)}')">Retry</button>
     </div></div>`;
 }
 
@@ -887,10 +977,10 @@ function _renderPoolProfileBody(poolId, p) {
     : statusRaw ? `<span class="jobs-badge jb-waiting">${escHtml(info.status)}</span>` : '';
 
   root.innerHTML = `<div class="jobs-wrap jobs-wrap-flush">
-    ${_jobsHeader('Pool Profile', '', '')}
+    ${_jobsHeader('Pool Profile', '', _jobsPoolOrigin)}
     <div class="jobs-list-body">
       <div class="jobs-profile-head">
-        ${_jobsPoolPhoto(info.photo_url, info.customer_name)}
+        ${_jobsPoolPhotoSlotHtml_(poolId)}
         <div class="jobs-profile-head-mid">
           <div class="jobs-item-title" style="font-size:1.05rem">${escHtml(info.customer_name || '—')}</div>
           <div class="jobs-item-addr">${escHtml(info.address || '')}${info.city ? ', ' + escHtml(info.city) : ''}</div>
@@ -969,7 +1059,7 @@ function jobsAddEquipmentGo(pidEnc) {
       if (!res || !res.ok) throw new Error(res && res.error || 'Add failed');
       _jobsCloseSheet();
       delete _poolProfileCache[poolId];
-      renderPoolProfile(poolId);
+      renderPoolProfile(poolId, _jobsPoolOrigin);
     })
     .catch(err => {
       if (btn) btn.disabled = false;

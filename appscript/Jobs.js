@@ -123,8 +123,8 @@ function jobsIsStartupRoute_(service, status) {
 function jobsBustCache_(ops) {
   try {
     const cache = CacheService.getScriptCache();
-    const keys = ['my_jobs:all'];
-    (ops || []).forEach(function(o) { if (o) keys.push('my_jobs:' + String(o).toLowerCase()); });
+    const keys = ['my_jobs:v5:all'];
+    (ops || []).forEach(function(o) { if (o) keys.push('my_jobs:v5:' + String(o).toLowerCase()); });
     cache.removeAll(keys);
   } catch (e) {}
 }

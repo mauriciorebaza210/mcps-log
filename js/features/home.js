@@ -6,6 +6,9 @@ let _activeClientsView = 'signed'; // 'signed' | 'mcp'
 let _crmDataCache = null;
 let _homeProgressTimer = null;
 
+// Persist the technician/admin "view as" toggle so it survives a page refresh
+window._homeViewOverride = localStorage.getItem('mcps_home_view_as') || null;
+
 function _parseClientDate_(str) {
   if (!str) return null;
   const s = String(str).trim();
@@ -1243,6 +1246,7 @@ window.techCheckOut = function() {
 
 window.toggleHomeView = function() {
   window._homeViewOverride = window._homeViewOverride === 'technician' ? 'admin' : 'technician';
+  localStorage.setItem('mcps_home_view_as', window._homeViewOverride);
   if (typeof syncPortalNavigationMode === 'function') syncPortalNavigationMode();
   loadHomeStats();
 };
