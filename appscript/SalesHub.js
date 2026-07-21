@@ -984,9 +984,20 @@ function findClientForQuote_(q) {
 
 function findOrCreateClientFromQuote_(q) {
   const clients = ensureSheet_('Clients', MCPS_CLIENT_HEADERS);
-  const existing = findClientForQuote_(q);
   const quoteId = String(value_(q, 'quote_id')).trim();
   const now = nowIso_();
+
+  const explicitId = String(value_(q, 'client_id')).trim();
+  if (explicitId) {
+    const explicit = findRowByValue_(clients, 'client_id', explicitId);
+    if (explicit) {
+      softSetCell_(clients, explicit._rowNum, 'updated_at', now);
+      softSetCell_(clients, explicit._rowNum, 'legacy_quote_ids', uniqueJsonPush_(explicit.legacy_quote_ids, quoteId));
+      return String(explicit.client_id);
+    }
+  }
+
+  const existing = findClientForQuote_(q);
   if (existing) {
     softSetCell_(clients, existing._rowNum, 'updated_at', now);
     softSetCell_(clients, existing._rowNum, 'legacy_quote_ids', uniqueJsonPush_(existing.legacy_quote_ids, quoteId));
@@ -1043,8 +1054,18 @@ function findLocationForQuote_(clientId, q) {
 
 function findOrCreateLocationFromQuote_(clientId, q) {
   const locations = ensureSheet_('Client_Locations', MCPS_LOCATION_HEADERS);
-  const existing = findLocationForQuote_(clientId, q);
   const now = nowIso_();
+
+  const explicitId = String(value_(q, 'location_id')).trim();
+  if (explicitId) {
+    const explicit = findRowByValue_(locations, 'location_id', explicitId);
+    if (explicit && String(explicit.client_id) === String(clientId)) {
+      softSetCell_(locations, explicit._rowNum, 'updated_at', now);
+      return String(explicit.location_id);
+    }
+  }
+
+  const existing = findLocationForQuote_(clientId, q);
   if (existing) {
     if (!existing.pool_id && value_(q, 'pool_id')) softSetCell_(locations, existing._rowNum, 'pool_id', value_(q, 'pool_id'));
     softSetCell_(locations, existing._rowNum, 'updated_at', now);
@@ -1209,7 +1230,8 @@ function shouldCreateServiceAccountFromQuote_(q) {
   const poolId = String(value_(q, 'pool_id')).trim();
   if (!poolId) return false;
   return status === 'ACTIVE_CUSTOMER' || status === 'SIGNED' ||
-    service.indexOf('startup') !== -1 || service.indexOf('green') !== -1;
+    service.indexOf('startup') !== -1 || service.indexOf('green') !== -1 ||
+    service.indexOf('repair') !== -1;
 }
 
 function findOrCreateServiceAccountFromQuote_(clientId, locationId, proposalId, q, agreementId) {
@@ -2099,6 +2121,8 @@ function handleSaveQuote_(payload) {
     set('repair_job_description',      payload.repair_job_description);
     set('repair_invoice_amount',       payload.repair_invoice_amount);
     set('repair_sku',                  payload.repair_sku);
+    set('client_id',                   payload.client_id || '');
+    set('location_id',                 payload.location_id || '');
     set('travel_fee',                  payload.travel_fee);
     set('travel_one_way_miles',        payload.travel_one_way_miles);
     set('travel_round_trip_miles',     payload.travel_round_trip_miles);
@@ -2160,6 +2184,15 @@ function handleSaveQuote_(payload) {
         set('pool_id', _autoPoolId);
       } catch (pidErr) {
         Logger.log('handleSaveQuote_: override pool_id auto-generate failed: ' + pidErr);
+      }
+    } else if (String(payload.service || '').toLowerCase() === 'repair_job' && payload.pool_id) {
+      // Existing-customer repair: attach to their real pool_id for legacy lookups
+      // (getQuoteByPoolId_, Pool Profile, etc.) without minting a new one or
+      // triggering syncQuoteOperationalSchedule_ (the pool already has a schedule).
+      try {
+        set('pool_id', payload.pool_id);
+      } catch (pidErr) {
+        Logger.log('handleSaveQuote_: repair existing pool_id set failed: ' + pidErr);
       }
     }
 
