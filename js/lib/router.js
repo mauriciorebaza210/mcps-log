@@ -31,7 +31,8 @@ function navigateTo(pageWithSub){
   }
   const parts = pageWithSub.split('/');
   const page = parts[0];
-  const sub  = parts[1] || null;
+  // Jobs supports two-level deep links (jobs/startups/<pool_id>) — keep the full subpath
+  const sub  = page === 'jobs' ? (parts.slice(1).join('/') || null) : (parts[1] || null);
 
   // Training lives inside the hub — redirect for all hub users
   if(page==='training' && (_s&&(_s.pages||[]).includes('live_map'))){
@@ -54,6 +55,7 @@ function navigateTo(pageWithSub){
   if (mc) mc.scrollTop = 0;
 
   if(page==='home') loadHomeStats();
+  if(page==='jobs') loadJobsPage(sub);
   if(page==='live_map'){
     loadRoutes();
     switchHubTab(sub || 'schedule');
@@ -62,6 +64,7 @@ function navigateTo(pageWithSub){
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
   if(page==='crm') loadCRM();
+  if(page==='comms') loadCommsPage(sub);
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
   if(page==='admin') { loadStartupRequests(); loadPendingHires(); loadInternalNotes(); if (typeof loadEmployeeInvites === 'function') loadEmployeeInvites(); }
@@ -88,8 +91,8 @@ function _setSidebarActive(page, hubTab) {
   const target = document.getElementById(targetId);
   if (target) target.classList.add('active');
   // Auto-expand parent accordion
-  if (page === 'crm' || page === 'quotes') _setAccordionOpen('sales', true);
-  if (['live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
+  if (page === 'crm' || page === 'quotes' || page === 'comms') _setAccordionOpen('sales', true);
+  if (['jobs','live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
   if (page === 'financial_hub') _setAccordionOpen('finance', true);
   if (page === 'alerts') _setAccordionOpen('alerts', true);
 }

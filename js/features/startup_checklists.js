@@ -78,7 +78,7 @@ const SCL_POOL_SCHOOL = [
   {
     section: 'Chemical Levels', type: 'chemical',
     chemicals: [
-      { key: 'Chlorine',          range: '2.0–4.0',   id: 'scl-chem-chlorine' },
+      { key: 'Chlorine',          range: '3.0–5.0',   id: 'scl-chem-chlorine' },
       { key: 'PH',                range: '7.2–7.6',   id: 'scl-chem-ph' },
       { key: 'Total Alkalinity',  range: '80–120',    id: 'scl-chem-alkalinity' },
       { key: 'Calcium Hardness',  range: '200–400',   id: 'scl-chem-calcium' },

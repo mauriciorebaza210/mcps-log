@@ -7,15 +7,17 @@ const AS  = 'https://script.google.com/macros/s/AKfycbxFrdZRbkXuGuazfqf7q-rKp-T-
 const SEC = '220ed543794285b632c27dec0b1b6529';
 
 const PAGE_META = {
-  home:'Home', live_map:'Technician Hub', service_log:'Service Log',
+  home:'Home', jobs:'Jobs', live_map:'Technician Hub', service_log:'Service Log',
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
-  onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues'
+  onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues',
+  comms:'Communications'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
 const PAGE_ICONS = {
-  home:'🏠', live_map:'🛟', service_log:'📝', inventory:'📦',
-  quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋', financial_hub:'💰'
+  home:'🏠', jobs:'🧰', live_map:'🛟', service_log:'📝', inventory:'📦',
+  quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋', financial_hub:'💰',
+  comms:'📣'
 };
 
 // ── Sidebar SVG icon strings (16×16, stroke-based Heroicons) ─────────────────
@@ -31,10 +33,49 @@ const SVG_LOCK     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const SVG_STAR     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
 const SVG_PEOPLE   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 const SVG_BELL     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+const SVG_MAIL     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>`;
 
 // ── Shared utilities ─────────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Chemical registry (CHEM-XX) — presentation only ───────────────────────────
+// Canonical Chem ID + brand-bucket color for each chemical, from the MCPS Chem ID
+// style guide. Names remain the payload/sheet keys; this map only drives display
+// (number badge + color) in the service log and, later, admin surfaces.
+// `dark:true` = light background, so the number is drawn in dark ink.
+const CHEM_REGISTRY = [
+  { id:'CHEM-01', num:'01', label:'Soda Ash',                color:'#2E9E4A', dark:false, aliases:['soda ash'] },
+  { id:'CHEM-02', num:'02', label:'Sodium Bicarbonate',      color:'#1B6B34', dark:false, aliases:['alkalinity increaser','alkalinity increaser (sodium bicarb)','sodium bicarbonate','sodium bicarb'] },
+  { id:'CHEM-03', num:'03', label:'Calcium Chloride',        color:'#16324F', dark:false, aliases:['calcium hardness increaser','calcium chloride'] },
+  { id:'CHEM-04', num:'04', label:'Cyanuric Acid',           color:'#FFFFFF', dark:true,  aliases:['cyanuric acid (stabilizer)','cyanuric acid','stabilizer'] },
+  { id:'CHEM-05', num:'05', label:'D.E.',                    color:'#111111', dark:false, aliases:['diatomaceous earth (de)','diatomaceous earth','d.e.','de'] },
+  { id:'CHEM-06', num:'06', label:'Liquid Chlorine',         color:'#F4C400', dark:true,  aliases:['liquid chlorine','sodium hypochlorite'] },
+  { id:'CHEM-07', num:'07', label:'Calcium Hypochlorite',    color:'#F4C400', dark:true,  aliases:['cal hypo','calcium hypochlorite'] },
+  { id:'CHEM-08', num:'08', label:'Tabs',                    color:'#F4C400', dark:true,  aliases:['chlorine tablets (3")','chlorine tablets','tabs','trichlor'] },
+  { id:'CHEM-09', num:'09', label:'Salt',                    color:'#5BC2E7', dark:true,  aliases:['salt','sodium chloride'] },
+  { id:'CHEM-10', num:'10', label:'Muriatic Acid',           color:'#E8751A', dark:false, aliases:['muriatic acid','hydrochloric acid'] },
+  { id:'CHEM-11', num:'11', label:'Dry Acid',                color:'#E8751A', dark:false, aliases:['dry acid','sodium bisulfate'] },
+  { id:'CHEM-12', num:'12', label:'Enzymes',                 color:'#7B4EA8', dark:false, aliases:['enzymes','water clarifier'] },
+  { id:'CHEM-13', num:'13', label:'Phosphate Remover',       color:'#7B4EA8', dark:false, aliases:['phosphate remover'] },
+  { id:'CHEM-14', num:'14', label:'Emergency Kit',           color:'#D0342C', dark:false, aliases:['emergency kit'] }
+];
+const _CHEM_INDEX = (function(){
+  const m = {};
+  CHEM_REGISTRY.forEach(e => e.aliases.forEach(a => { m[a] = e; }));
+  return m;
+})();
+// Look up a registry entry by any known chemical name/alias (case-insensitive).
+function chemLookup(name){
+  if(!name) return null;
+  return _CHEM_INDEX[String(name).trim().toLowerCase()] || null;
+}
+// Render a CHEM-XX number badge for a chemical name; grey dash if unlisted.
+function chemBadge(name){
+  const e = chemLookup(name);
+  if(!e) return '<span class="chem-badge chem-badge-none" title="'+escHtml(name||'Not assigned')+'" aria-label="No chem ID">–</span>';
+  return '<span class="chem-badge'+(e.dark?' on-light':'')+'" style="background:'+e.color+'" title="'+escHtml(e.id+' · '+e.label)+'" aria-label="'+escHtml(e.id)+'">'+e.num+'</span>';
 }
 
 // ── Sidebar accordion group definitions ──────────────────────────────────────
@@ -50,14 +91,16 @@ const SIDEBAR_GROUPS = [
     id: 'sales',
     label: 'Sales Hub',
     children: [
-      { page:'crm',    label:'Leads CRM',  icon:SVG_CHART },
-      { page:'quotes', label:'Quote Tool',  icon:SVG_DOC   }
+      { page:'crm',    label:'Leads CRM',       icon:SVG_CHART },
+      { page:'quotes', label:'Quote Tool',      icon:SVG_DOC   },
+      { page:'comms',  label:'Communications',  icon:SVG_MAIL }
     ]
   },
   {
     id: 'tech',
     label: 'Technician Hub',
     children: [
+      { page:'jobs',        label:'Jobs',                  icon:SVG_CLIP     },
       { page:'live_map',    label:'Schedule',              icon:SVG_CALENDAR },
       { page:'live_map',    label:'My Jobs',               icon:SVG_CHART, hubTab:'myjobs',              id:'sb-child-myjobs' },
       { page:'live_map',    label:'Training',              icon:SVG_PLAY,  hubTab:'training',            id:'sb-child-training' },
@@ -84,13 +127,13 @@ const SIDEBAR_GROUPS = [
 
 // Pages per role — additive
 const ROLE_PAGES = {
-  technician:['home','live_map','service_log','alerts'],
-  lead:['home','live_map','service_log','alerts'],
+  technician:['home','jobs','live_map','service_log','alerts'],
+  lead:['home','jobs','live_map','service_log','alerts'],
   trainee:['home','live_map'],
   new_hire:['onboarding'],
   office:['home','inventory','alerts'],
-  manager:['home','crm','live_map','service_log','inventory','quotes','financial_hub','alerts'],
-  admin:['home','crm','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
+  manager:['home','crm','comms','jobs','live_map','service_log','inventory','quotes','financial_hub','alerts'],
+  admin:['home','crm','comms','jobs','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

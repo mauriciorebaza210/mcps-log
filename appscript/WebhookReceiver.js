@@ -1120,6 +1120,7 @@ function buildDryRunServicePayload_(chemNames) {
 
 function getStaticChemicalFieldsForDryRun_(chemNames) {
   const staticFields = [
+    'Soda Ash',
     'Liquid Chlorine',
     'Muriatic Acid',
     'Alkalinity Increaser',
@@ -1438,6 +1439,12 @@ function dryRunSvcPostProcess_() {
 
 function doPost(e) {
   try {
+    // Public unsubscribe form POST arrives as x-www-form-urlencoded (not JSON),
+    // so handle it BEFORE JSON.parse. Self-authenticates via the opaque token.
+    if (e && e.parameter && e.parameter.action === 'comms_unsubscribe_confirm') {
+      return handleCommsUnsubConfirm_(e);
+    }
+
     const raw = e && e.postData && e.postData.contents ? e.postData.contents : "{}";
     const payload = JSON.parse(raw);
 
@@ -2239,6 +2246,17 @@ function doPost(e) {
       return handleSaveStartupChecklist_(payload);
     }
 
+    // ─── Communications (mass email) — admin/manager only ──────────────────
+    // Public comms endpoints (comms_unsubscribe*, comms_provider_event) are
+    // handled by an earlier param-branch, so anything reaching here is an
+    // admin action routed through handleCommsAction_ in Comms.js.
+    if (payload.action && payload.action.indexOf('comms_') === 0) {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(handleCommsAction_(payload.action, auth, payload));
+    }
+
     if (payload.secret !== WEBHOOK_SECRET) {
       return jsonResponse_({ ok: false, error: "Unauthorized" });
     }
@@ -2692,6 +2710,12 @@ function doPost(e) {
 
 function doGet(e) {
   try {
+    // Public unsubscribe landing page (read-only; opaque token). Returns an
+    // HtmlService confirm page — browser navigation, so no CORS concern.
+    if (e && e.parameter && e.parameter.action === 'comms_unsubscribe') {
+      return handleCommsUnsubscribePage_(e);
+    }
+
     if (e && e.parameter && e.parameter.action === 'onboarding_get_status') {
       const auth = validateToken(e.parameter.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });
@@ -3700,18 +3724,18 @@ function getPoolContext_(poolId) {
     let visitCount = 0;
     const recentRows = [];
 
-    // Loop backwards through your logs to find the most recent info for this pool
+    // Loop backwards through your logs to find the most recent info for this pool.
+    // Notes are special: only show notes from the actual latest visit, never an
+    // older non-empty note when the latest visit's note fields were blank.
     for (let i = data.length - 1; i >= 1; i--) {
       const rowPool = String(data[i][poolColIdx] || '').trim();
       if (rowPool === requestedPool || extractPoolId_(rowPool) === requestedId) {
         visitCount++;
         if (recentRows.length < 5) recentRows.push(data[i]);
 
-        if (!lastInternalNote && notesColIdx !== -1 && data[i][notesColIdx]) {
-          lastInternalNote = data[i][notesColIdx];
-        }
-        if (!lastPublicNote && publicNotesColIdx !== -1 && data[i][publicNotesColIdx]) {
-          lastPublicNote = data[i][publicNotesColIdx];
+        if (visitCount === 1) {
+          if (notesColIdx !== -1) lastInternalNote = data[i][notesColIdx] || '';
+          if (publicNotesColIdx !== -1) lastPublicNote = data[i][publicNotesColIdx] || '';
         }
 
         // Grab the latest size/material settings

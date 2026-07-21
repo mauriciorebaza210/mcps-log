@@ -21,7 +21,7 @@ const CRM_SS_ID_VR = "1fw2qMdWnNbYlb3F6wM3A69CMDIymYVd2uhOF_iPoB6E";
 // Water chemistry target ranges.
 // `optional: true` readings are only shown in the email when the tech entered a value.
 const WATER_RANGES = {
-  "Free Chlorine (FC)":    { min: 5,   max: Infinity },
+  "Free Chlorine (FC)":    { min: 3,   max: 5 },
   "pH":                    { min: 7.2, max: 7.6 },
   "Total Alkalinity (TA)": { min: 90,  max: Infinity },
   "Calcium Hardness (CH)": { min: 200, max: Infinity },
@@ -44,6 +44,7 @@ const VR_NON_CHEM = new Set([
 // Unit fallbacks for chemicals not present in the Chem_Costs unit map.
 // Ensures the customer email always shows a sensible unit.
 const VR_UNIT_FALLBACK = {
+  "Soda Ash"                  : "lbs",
   "Diatomaceous Earth (DE)"   : "lbs",
   "Salt"                      : "lbs",
   "Cal Hypo"                  : "lbs",

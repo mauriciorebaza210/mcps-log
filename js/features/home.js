@@ -1091,8 +1091,8 @@ function _injectChem_(elId, row) {
   el.innerHTML = `
     <div class="th-chem-ts">Last visit: ${ts}</div>
     <div class="th-chem-row">
-      ${_chemBub_('pH', d['pH'], 6.8, 7.6)}
-      ${_chemBub_('Cl', d['Free Chlorine (FC)'] ?? d['Chlorine (Cl)'], 1.0, 3.0)}
+      ${_chemBub_('pH', d['pH'], 7.2, 7.6)}
+      ${_chemBub_('Cl', d['Free Chlorine (FC)'] ?? d['Chlorine (Cl)'], 3.0, 5.0)}
       ${_chemBub_('TA', d['Total Alkalinity (TA)'], 80, 120)}
       ${_chemBub_('CH', d['Calcium Hardness (CH)'], 200, 400)}
     </div>`;

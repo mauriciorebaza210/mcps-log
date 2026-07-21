@@ -171,8 +171,28 @@
         ['address', 'Street address', 'full'], ['city', 'City'], ['zip_code', 'ZIP code']
       ]},
       { title: 'Pool', fields: [
-        ['pool_dimensions', 'Pool dimensions'], ['pool_depth', 'Pool depth'],
-        ['spa', 'Spa', '', 'yesno'], ['water_features', 'Water features']
+        ['pool_shape', 'Pool shape'], ['pool_dimensions', 'Pool dimensions'],
+        ['pool_length_ft', 'Length (ft)'], ['pool_width_ft', 'Width (ft)'],
+        ['pool_depth', 'Pool depth'], ['depth_min_ft', 'Min depth (ft)'], ['depth_max_ft', 'Max depth (ft)'],
+        ['spa', 'Spa', '', 'yesno'], ['water_features', 'Water features'], ['sheer_descents', 'Sheer descents']
+      ]},
+      { title: 'L-shape details', fields: [
+        ['l_leg_count', 'Leg count'], ['l_leg_length_ft', 'Leg length (ft)'],
+        ['l_leg_width_ft', 'Leg width (ft)'], ['l_overlap_assumption', 'Overlap assumption']
+      ]},
+      { title: 'Spa', fields: [
+        ['spa_shape', 'Spa shape'], ['spa_diameter_ft', 'Spa diameter (ft)'],
+        ['spa_length_ft', 'Spa length (ft)'], ['spa_width_ft', 'Spa width (ft)'],
+        ['spa_depth_ft', 'Spa depth (ft)'], ['spa_shared_circulation', 'Shared circulation']
+      ]},
+      { title: 'Gallons', fields: [
+        ['pool_area_sqft', 'Pool area sq ft'], ['pool_gallons_est', 'Pool gallons est'],
+        ['pool_gallons_low', 'Pool gallons low'], ['pool_gallons_high', 'Pool gallons high'],
+        ['pool_gallons_method', 'Pool gallons method'], ['pool_gallons_confidence', 'Pool gallons confidence'],
+        ['spa_gallons_est', 'Spa gallons est'], ['spa_gallons_low', 'Spa gallons low'],
+        ['spa_gallons_high', 'Spa gallons high'], ['total_gallons_est', 'Total gallons est'],
+        ['total_gallons_low', 'Total gallons low'], ['total_gallons_high', 'Total gallons high'],
+        ['pool_gallons_notes', 'Gallons notes', 'full', 'textarea']
       ]},
       { title: 'Surface', fields: [
         ['plaster_type', 'Plaster / finish'], ['plaster_date', 'Plaster date', '', 'date']
@@ -345,13 +365,13 @@
           S.extractFailed = false;
           renderReviewStep(true);
         } else if (res.ok && !res.fields) {
-          extractFallback();
+          extractFallback(res.error);
         } else {
           // rate limited or rejected — surface the reason, keep the photo
           extractFallback(res.error);
         }
       } catch (e) {
-        extractFallback();
+        extractFallback(e && e.message ? e.message : '');
       }
     }
 
