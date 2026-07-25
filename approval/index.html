@@ -4,16 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MCPS Approval Previews</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: light;
-      --ink: #17212b;
-      --muted: #5c6977;
-      --line: #d9e1e8;
-      --blue: #0d5d8f;
-      --blue-dark: #0a4265;
-      --paper: #f7fafc;
+      --teal: #0d3d3e;
+      --teal-dark: #082a2b;
+      --aqua: #1fa7a8;
+      --gold: #bd8a36;
+      --ink: #172126;
+      --muted: #657174;
+      --line: #dce6e6;
+      --paper: #f4f8f8;
       --white: #ffffff;
+      --fh: "Montserrat", Arial, sans-serif;
+      --fb: "Open Sans", Arial, sans-serif;
     }
 
     * {
@@ -23,88 +28,221 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: var(--fb);
       color: var(--ink);
-      background: var(--paper);
+      background:
+        linear-gradient(180deg, rgba(13, 61, 62, 0.12) 0, rgba(13, 61, 62, 0) 310px),
+        var(--paper);
     }
 
     main {
-      width: min(680px, calc(100% - 32px));
+      width: min(860px, calc(100% - 32px));
       margin: 0 auto;
-      padding: 42px 0;
+      padding: 36px 0 54px;
     }
 
     .panel {
       background: var(--white);
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 28px;
-      box-shadow: 0 12px 30px rgba(23, 33, 43, 0.08);
+      overflow: hidden;
+      box-shadow: 0 18px 48px rgba(13, 61, 62, 0.12);
+    }
+
+    .hero {
+      padding: 34px 36px 30px;
+      color: var(--white);
+      background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+    }
+
+    .brand {
+      display: block;
+      width: 186px;
+      max-width: 68%;
+      height: auto;
+      margin-bottom: 34px;
+      filter: brightness(0) invert(1);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      font-family: var(--fh);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--aqua);
     }
 
     h1 {
       margin: 0;
-      font-size: clamp(28px, 6vw, 42px);
+      font-family: var(--fh);
+      font-size: clamp(32px, 6vw, 52px);
+      font-weight: 800;
       line-height: 1.05;
       letter-spacing: 0;
     }
 
     p {
       margin: 12px 0 0;
-      color: var(--muted);
+      color: rgba(255, 255, 255, 0.74);
       font-size: 16px;
       line-height: 1.5;
+      max-width: 540px;
     }
 
     .links {
       display: grid;
-      gap: 12px;
-      margin-top: 28px;
+      gap: 0;
+      padding: 12px 18px 18px;
+      background: var(--white);
     }
 
     a {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 16px;
-      min-height: 58px;
-      padding: 15px 18px;
-      border-radius: 8px;
-      color: var(--white);
-      background: var(--blue);
+      min-height: 74px;
+      padding: 16px 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
       text-decoration: none;
-      font-weight: 700;
       line-height: 1.2;
+    }
+
+    a:last-child {
+      border-bottom: 0;
     }
 
     a:hover,
     a:focus {
-      background: var(--blue-dark);
+      color: var(--teal);
+      outline: none;
+    }
+
+    .num {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--white);
+      background: var(--teal);
+      font-family: var(--fh);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .primary .num {
+      background: var(--gold);
+    }
+
+    .copy {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .title {
+      display: block;
+      font-family: var(--fh);
+      font-size: 18px;
+      font-weight: 800;
+      color: inherit;
+    }
+
+    .desc {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
     }
 
     .arrow {
       flex: 0 0 auto;
-      font-size: 22px;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--teal);
+      font-size: 24px;
       line-height: 1;
     }
 
     .note {
-      margin-top: 18px;
+      margin: 0;
+      padding: 0 28px 28px;
+      color: var(--muted);
       font-size: 14px;
+    }
+
+    @media (max-width: 560px) {
+      main {
+        width: min(100% - 24px, 860px);
+        padding: 18px 0 34px;
+      }
+
+      .hero {
+        padding: 28px 22px 24px;
+      }
+
+      .brand {
+        width: 160px;
+        margin-bottom: 28px;
+      }
+
+      .links {
+        padding: 8px 14px 12px;
+      }
+
+      a {
+        min-height: 70px;
+      }
+
+      .title {
+        font-size: 16px;
+      }
+
+      .note {
+        padding: 0 24px 24px;
+      }
     }
   </style>
 </head>
 <body>
   <main>
     <section class="panel" aria-labelledby="page-title">
-      <h1 id="page-title">MCPS Approval Previews</h1>
-      <p>Please review these four approval previews on desktop or mobile.</p>
+      <header class="hero">
+        <img class="brand" src="assets/mcps-lockup.png" alt="Mission Custom Pool Solutions">
+        <div class="eyebrow">Approval Review</div>
+        <h1 id="page-title">MCPS Previews</h1>
+        <p>Please review these four approval previews on desktop or mobile.</p>
+      </header>
 
       <nav class="links" aria-label="Approval previews">
-        <a href="previews/agreement-a.html">Agreement A <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
-        <a href="previews/agreement-c.html">Agreement C <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
-        <a href="previews/email-agreement-link.html">Email: Agreement Link <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
-        <a href="previews/email-welcome.html">Email: Welcome <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
+        <a class="primary" href="previews/email-agreement-link.html">
+          <span class="num">01</span>
+          <span class="copy"><span class="title">Agreement Link</span><span class="desc">Customer signing email</span></span>
+          <span class="arrow" aria-hidden="true">&rsaquo;</span>
+        </a>
+        <a href="previews/agreement-a.html">
+          <span class="num">02</span>
+          <span class="copy"><span class="title">Agreement A</span><span class="desc">Service agreement direction A</span></span>
+          <span class="arrow" aria-hidden="true">&rsaquo;</span>
+        </a>
+        <a href="previews/agreement-b.html">
+          <span class="num">03</span>
+          <span class="copy"><span class="title">Agreement B</span><span class="desc">Service agreement direction B</span></span>
+          <span class="arrow" aria-hidden="true">&rsaquo;</span>
+        </a>
+        <a href="previews/email-welcome.html">
+          <span class="num">04</span>
+          <span class="copy"><span class="title">Welcome Emails</span><span class="desc">Post-signature welcome email</span></span>
+          <span class="arrow" aria-hidden="true">&rsaquo;</span>
+        </a>
       </nav>
 
       <p class="note">Shared for approval only.</p>
