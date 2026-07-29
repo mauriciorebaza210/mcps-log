@@ -1368,68 +1368,109 @@ function toggleQuizPreview() {
   }
 }
 
-// ── Heads-up SMS ──────────────────────────────────────────────────────────────
+// ── On My Way — customer email ────────────────────────────────────────────────
 function headsUp(e, btn) {
   e.stopPropagation();
   if (btn.classList.contains('sending') || btn.classList.contains('sent')) return;
   const poolId   = btn.dataset.poolId;
   const custName = btn.dataset.custName;
-  btn.classList.add('sending');
 
-  // Admins open the native SMS app (phone number visible to them).
-  // Technicians/employees use the server-side path so the phone number never reaches the browser.
-  if (isAdmin()) {
-    api({ action: 'get_pool_phone', token: _s.token, pool_id: poolId, customer_name: custName })
-      .then(function(res) {
-        btn.classList.remove('sending');
-        if (!res.ok) {
-          huToast('\u26a0\ufe0f ' + (res.error || 'Could not find phone number'), true);
-          return;
-        }
-        const hour     = new Date().getHours();
-        const greeting = hour < 12 ? 'Good morning' : 'Good afternoon';
-        const techName = (_s && _s.name) ? _s.name : 'your technician';
-        const msg = greeting + '. This is ' + techName + ' with Mission Custom Pool Solutions. '
-          + 'We just wanted to let you know we are on the way to your property and will be servicing your pool shortly.';
+  huConfirm(custName).then(function(confirmed) {
+    if (!confirmed) return;
+    btn.classList.add('sending');
 
-        navigator.clipboard.writeText(msg).catch(function() {});
-
-        const digits = res.phone.replace(/[^0-9]/g, '');
-        window.open('sms:' + digits + '&body=' + encodeURIComponent(msg), '_self');
-
-        btn.classList.add('sent');
-        btn.title = 'Message ready!';
-        huToast('\u2705 Opening Messages to ' + res.firstName + '...');
-        setTimeout(function() {
-          btn.classList.remove('sent');
-          btn.title = 'Send heads up SMS';
-        }, 5000);
-      })
-      .catch(function() {
-        btn.classList.remove('sending');
-        huToast('\u26a0\ufe0f Network error — could not load phone number', true);
-      });
-  } else {
     api({ action: 'send_heads_up', token: _s.token, pool_id: poolId, customer_name: custName })
       .then(function(res) {
         btn.classList.remove('sending');
         if (!res.ok) {
-          huToast('\u26a0\ufe0f Failed', true);
+          huToast('⚠️ ' + (res.error || 'Could not send email'), true);
           return;
         }
         btn.classList.add('sent');
         btn.title = 'Sent!';
-        huToast('\u2705 Sent');
+        huToast('✅ Email sent to ' + res.firstName);
         setTimeout(function() {
           btn.classList.remove('sent');
-          btn.title = 'Send heads up SMS';
+          btn.title = 'Send on-my-way email';
         }, 5000);
       })
       .catch(function() {
         btn.classList.remove('sending');
-        huToast('\u26a0\ufe0f Failed', true);
+        huToast('⚠️ Failed to send', true);
       });
-  }
+  });
+}
+
+// Branded bottom-sheet confirmation, styled to match .pool-action-sheet.
+// Self-creating like huToast so it needs no markup in index.html.
+function huConfirm(custName) {
+  return new Promise(function(resolve) {
+    let back  = document.getElementById('hu-confirm-backdrop');
+    let sheet = document.getElementById('hu-confirm-sheet');
+
+    if (!back) {
+      back = document.createElement('div');
+      back.id = 'hu-confirm-backdrop';
+      back.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;'
+        + 'opacity:0;transition:opacity .2s;display:none';
+      document.body.appendChild(back);
+
+      sheet = document.createElement('div');
+      sheet.id = 'hu-confirm-sheet';
+      // z-index clears .tech-nav (500). Safe-area padding keeps the buttons
+      // above the home indicator on phones.
+      sheet.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:901;background:#fff;'
+        + 'border-radius:18px 18px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.15);'
+        + 'padding:1.25rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom,0px));'
+        + 'max-width:560px;margin:0 auto;'
+        + 'transform:translateY(100%);transition:transform .3s cubic-bezier(.16,1,.3,1);'
+        + 'font-family:Barlow,sans-serif';
+      sheet.innerHTML =
+          '<div style="width:36px;height:4px;border-radius:2px;background:#d1d5db;margin:0 auto .95rem"></div>'
+        // 79px canvas = ~52px circle + transparent halo margin; negative margins absorb it.
+        + '<img src="/assets/mcps-pin-badge.png" alt="" width="79" height="79" '
+        + 'style="display:block;width:79px;height:79px;margin:-.55rem auto .1rem">'
+        + '<div id="hu-confirm-title" style="font-family:Oswald,sans-serif;font-size:1.2rem;font-weight:700;'
+        + 'letter-spacing:.03em;color:#0d4d44;text-align:center;margin-bottom:.4rem"></div>'
+        + '<div id="hu-confirm-sub" style="font-size:.85rem;line-height:1.5;color:#64748b;text-align:center;'
+        + 'margin:0 auto 1.25rem;max-width:330px"></div>'
+        + '<button id="hu-confirm-yes" style="width:100%;padding:.85rem;border:none;border-radius:12px;'
+        + 'background:#0d4d44;color:#fff;font-family:Oswald,sans-serif;font-size:.95rem;font-weight:600;'
+        + 'letter-spacing:.04em;cursor:pointer;margin-bottom:.55rem">Send email</button>'
+        + '<button id="hu-confirm-no" style="width:100%;padding:.8rem;border:1.5px solid #e2e8f0;'
+        + 'border-radius:12px;background:#fff;color:#64748b;font-family:Barlow,sans-serif;font-size:.9rem;'
+        + 'font-weight:600;cursor:pointer">Cancel</button>';
+      document.body.appendChild(sheet);
+    }
+
+    const first = String(custName || '').trim().split(' ')[0] || 'this customer';
+    document.getElementById('hu-confirm-title').textContent = 'Let ' + first + ' know?';
+    document.getElementById('hu-confirm-sub').textContent =
+      'We’ll email ' + first + ' that you’re on the way and will be arriving soon.';
+
+    const yes = document.getElementById('hu-confirm-yes');
+    const no  = document.getElementById('hu-confirm-no');
+
+    function close(result) {
+      back.style.opacity = '0';
+      sheet.style.transform = 'translateY(100%)';
+      setTimeout(function() { back.style.display = 'none'; }, 250);
+      back.onclick = null;
+      yes.onclick  = null;
+      no.onclick   = null;
+      resolve(result);
+    }
+
+    back.onclick = function() { close(false); };
+    no.onclick   = function() { close(false); };
+    yes.onclick  = function() { close(true); };
+
+    back.style.display = 'block';
+    requestAnimationFrame(function() {
+      back.style.opacity = '1';
+      sheet.style.transform = 'translateY(0)';
+    });
+  });
 }
 
 function huToast(msg, isErr) {
