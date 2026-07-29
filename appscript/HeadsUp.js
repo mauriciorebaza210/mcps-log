@@ -1,11 +1,11 @@
 // HeadsUp.gs
-// Notifies the owner via email (sent by Zapier) when a technician taps "On My Way".
-// The email contains a pre-filled sms: link — owner taps it to send the text to the customer.
+// Emails the customer directly when a technician confirms "On My Way" in the portal.
 
 var HU_CRM_SS_ID = "1fw2qMdWnNbYlb3F6wM3A69CMDIymYVd2uhOF_iPoB6E";
-var HEADS_UP_TO_EMAIL = "mauriciorebazaf@gmail.com";
 var HU_ROUTES_SS_ID = "1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM";
 var HU_TZ = "America/Chicago";
+var HU_LOGO_URL = "https://mcps-log.vercel.app/assets/mission-icon-transparent.png";
+var HU_PIN_URL  = "https://mcps-log.vercel.app/assets/mcps-pin-badge.png";
 
 function huHeader_(h) {
   return String(h || "").trim().toLowerCase().replace(/ /g, "_");
@@ -227,67 +227,132 @@ function getPoolPhone_(pool_id, customer_name) {
   return result;
 }
 
+// Sends the customer-facing "on our way" email. Called by the send_heads_up
+// action once the technician confirms in the portal.
+// Return shape is consumed by WebhookReceiver doPost — keep { ok, customer } / { ok, error }.
 function sendHeadsUp(pool_id, customer_name, tech_name) {
-  var result = getPoolPhone_(pool_id, customer_name);
-  if (!result.ok) return result;
-
-  var hour = new Date().getHours();
-  var greeting = hour < 12 ? 'Good morning' : 'Good afternoon';
-  var from = tech_name || 'your technician';
-  var message = greeting + '. This is ' + from + ' with Mission Custom Pool Solutions. '
-    + 'We just wanted to let you know we are on the way to your property and will be servicing your pool shortly.';
-
-  var zapierUrl = PropertiesService.getScriptProperties().getProperty("ZAPIER_HEADS_UP_WEBHOOK");
-  if (!zapierUrl) return { ok: false, error: "Zapier webhook not configured (add ZAPIER_HEADS_UP_WEBHOOK script property)" };
-
-  var digits  = result.phone.replace(/[^0-9]/g, '');
-  // Gmail blocks sms: links — use an HTTPS redirect page instead so the button is clickable.
-  var smsLink = 'https://mcps-log.vercel.app/sms?ph=' + digits + '&b=' + encodeURIComponent(message);
-
-  try {
-    UrlFetchApp.fetch(zapierUrl, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({
-        email_type: "heads_up",
-        to_email: HEADS_UP_TO_EMAIL,
-        first_name: result.firstName,
-        tech_name:  from,
-        message:    message,
-        sms_link:   smsLink
-      }),
-      muteHttpExceptions: true
-    });
-  } catch (err) {
-    return { ok: false, error: "Failed to reach Zapier: " + String(err) };
+  var client = lookupClientByPoolId_(pool_id);
+  if (!client || !client.email) {
+    return { ok: false, error: "No email on file for this customer" };
   }
 
-  return { ok: true, customer: result.firstName };
+  var firstName = client.firstName || String(customer_name || "").split(" ")[0] || "there";
+  var techName  = tech_name || "Your technician";
+  var address   = client.address || "";
+
+  var send = commsSendViaGmail_({
+    to: client.email,
+    subject: "We're on our way, " + firstName,
+    htmlBody: buildOnMyWayHtml_({ firstName: firstName, address: address, techName: techName }),
+    plainBody: buildOnMyWayText_({ firstName: firstName, address: address, techName: techName })
+  });
+
+  if (!send.ok) return { ok: false, error: send.error || "Email failed to send" };
+  return { ok: true, customer: firstName };
+}
+
+// ─── Email builders ───────────────────────────────────────────────────────────
+// Table-based with fully inline styles: <style> support is inconsistent and flexbox
+// unreliable across clients, so nothing structural depends on either. Mirrors
+// buildCommsEmailHtml_ in Comms.js.
+function buildOnMyWayHtml_(d) {
+  // Font stacks fall back device-by-device toward the mockup rather than to Arial:
+  //   Montserrat is geometric  -> Avenir Next / Avenir (every Mac + iPhone), then Segoe UI / Roboto.
+  //   Open Sans is humanist    -> Segoe UI (Windows), Roboto (Android), Helvetica Neue (Apple).
+  // Apple Mail, Outlook for Mac and Thunderbird also honour the webfont <link> below and
+  // render true Montserrat/Open Sans; Gmail ignores it and lands on the stack.
+  var fh = "'Montserrat','Avenir Next','Avenir','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+  var fb = "'Open Sans','Segoe UI',Roboto,'Helvetica Neue',Helvetica,Arial,sans-serif";
+  var teal = "#0D3D3E", aqua = "#1FA7A8";
+  var esc = function (s) { return huEscapeHtml_(s); };
+
+  var heroLede = esc(d.techName) + " is heading to "
+    + (d.address ? esc(d.address) : "your property") + " and will be arriving soon.";
+
+  return '' +
+'<!DOCTYPE html><html><head><meta charset="utf-8">' +
+'<meta name="viewport" content="width=device-width,initial-scale=1">' +
+'<meta name="color-scheme" content="light only">' +
+// Real Montserrat/Open Sans in clients that load webfonts (Apple Mail, iOS Mail,
+// Outlook for Mac, Thunderbird). Ignored elsewhere — the inline stacks take over.
+'<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">' +
+'<style>@import url(https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600&display=swap);</style>' +
+'</head>' +
+'<body style="margin:0;padding:0;background:#F3F5F6;">' +
+'<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Our technician will be arriving soon.</div>' +
+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F6;">' +
+'<tr><td align="center" style="padding:24px 12px;">' +
+'<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">' +
+
+// Hero — teal with the aqua glow at the top. bgcolor is the universal fallback;
+// the radial-gradient renders in Gmail/Apple Mail and degrades to flat teal in Outlook.
+'<tr><td align="center" bgcolor="' + teal + '" style="background-color:' + teal + ';' +
+'background-image:radial-gradient(ellipse at 50% -20%, rgba(94,214,211,0.24), rgba(13,61,62,0) 60%);' +
+'padding:42px 32px 38px;">' +
+'<img src="' + HU_LOGO_URL + '" alt="Mission Custom Pool Solutions" width="84" style="display:block;width:84px;max-width:84px;height:auto;border:0;margin:0 auto 7px;">' +
+// Pin badge shipped as a PNG so the circle, pin and halo render identically everywhere.
+// The 88px canvas holds a 58px circle plus 15px of transparent halo margin, so the
+// surrounding margins are reduced by that 15px to keep the mockup's spacing.
+'<img src="' + HU_PIN_URL + '" alt="" width="88" height="88" style="display:block;width:88px;height:88px;border:0;margin:0 auto 7px;">' +
+'<div style="font-family:' + fh + ';font-weight:800;font-size:32px;line-height:1.06;letter-spacing:-.3px;color:#FFFFFF;margin:0 0 10px;">We&rsquo;re on our way.</div>' +
+'<div style="font-family:' + fb + ';font-size:14px;line-height:1.6;color:#BFD4D4;max-width:380px;margin:0 auto;">' + heroLede + '</div>' +
+'</td></tr>' +
+
+// Aqua status strip
+'<tr><td align="center" bgcolor="' + aqua + '" style="background:' + aqua + ';padding:16px 32px;font-family:' + fh + ';font-weight:700;font-size:14.5px;letter-spacing:.1px;color:#FFFFFF;">' +
+'Our technician will be arriving soon' +
+'</td></tr>' +
+
+// Body — technician identity + closing line
+'<tr><td align="center" style="padding:32px 32px 34px;">' +
+'<div style="font-family:' + fb + ';font-size:13px;color:#6B7777;margin:0 0 3px;">Your technician</div>' +
+'<div style="font-family:' + fh + ';font-weight:700;font-size:15px;letter-spacing:-.1px;color:#222222;margin:0 0 26px;">' + esc(d.techName) + '</div>' +
+'<div style="font-family:' + fb + ';font-size:14px;line-height:1.6;color:#3A4645;max-width:400px;margin:0 auto;">' +
+'Please let us know if you need anything before they arrive &mdash; otherwise, we&rsquo;ll take it from here.' +
+'</div>' +
+'</td></tr>' +
+
+// Footer
+'<tr><td align="center" style="padding:24px 32px 30px;border-top:1px solid #E4EAEA;">' +
+'<div style="font-family:' + fh + ';font-weight:bold;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:' + aqua + ';margin-bottom:8px;">Every pool matters.</div>' +
+'<div style="font-family:' + fb + ';font-size:12px;line-height:1.6;color:#8A9494;">' +
+'Mission Custom Pool Solutions LLC &middot; San Antonio, TX<br>' +
+'<a href="https://missioncustompools.com" style="color:' + teal + ';text-decoration:none;">missioncustompools.com</a>' +
+'</div>' +
+'</td></tr>' +
+
+'</table></td></tr></table></body></html>';
+}
+
+function buildOnMyWayText_(d) {
+  return [
+    "WE'RE ON OUR WAY.",
+    "",
+    d.techName + " is heading to " + (d.address || "your property") + " and will be arriving soon.",
+    "",
+    "Your technician: " + d.techName,
+    "",
+    "Please let us know if you need anything before they arrive — otherwise, we'll take it from here.",
+    "",
+    "Every pool matters.",
+    "Mission Custom Pool Solutions LLC · San Antonio, TX",
+    "missioncustompools.com"
+  ].join("\n");
+}
+
+function huEscapeHtml_(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 // ── Test function — run this directly from the GAS script editor ──────────────
-function TEST_sendHeadsUp() {
-  var zapierUrl = PropertiesService.getScriptProperties().getProperty("ZAPIER_HEADS_UP_WEBHOOK");
-  if (!zapierUrl) {
-    Logger.log("ERROR: ZAPIER_HEADS_UP_WEBHOOK script property not set");
-    return;
-  }
-  var testPhone   = "2105592073";
-  var message     = "Good morning. This is Carlos with Mission Custom Pool Solutions. We just wanted to let you know we are on the way to your property and will be servicing your pool shortly.";
-  var smsLink     = "https://mcps-log.vercel.app/sms?ph=" + testPhone + "&b=" + encodeURIComponent(message);
-  var response = UrlFetchApp.fetch(zapierUrl, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify({
-      email_type: "heads_up",
-      to_email: HEADS_UP_TO_EMAIL,
-      first_name: "Mauricio",
-      tech_name:  "Carlos",
-      message:    message,
-      sms_link:   smsLink
-    }),
-    muteHttpExceptions: true
+function TEST_sendOnMyWayEmail() {
+  var send = commsSendViaGmail_({
+    to: "mauriciorebazaf@gmail.com",
+    subject: "We're on our way, Jordan",
+    htmlBody: buildOnMyWayHtml_({ firstName: "Jordan", address: "123 Mission Creek Dr", techName: "Carlos M." }),
+    plainBody: buildOnMyWayText_({ firstName: "Jordan", address: "123 Mission Creek Dr", techName: "Carlos M." })
   });
-  Logger.log("Status: " + response.getResponseCode());
-  Logger.log("Response: " + response.getContentText());
+  Logger.log(JSON.stringify(send, null, 2));
 }
