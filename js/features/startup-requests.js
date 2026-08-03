@@ -139,7 +139,7 @@ function closeSrInviteModal(event) {
   document.getElementById('sr-invite-modal-backdrop').classList.remove('open');
 }
 
-function srSendBuilderInvite() {
+function srSendBuilderInvite(replaceOpenInvite) {
   const errEl = document.getElementById('sr-inv-error');
   const btn = document.getElementById('sr-inv-send-btn');
   const email = document.getElementById('sr-inv-email').value.trim();
@@ -148,6 +148,7 @@ function srSendBuilderInvite() {
   if (!email) { errEl.textContent = 'Enter an email address.'; errEl.style.display = 'block'; return; }
 
   const payload = { action: 'admin_create_builder_invite', token: _s.token, email };
+  if (replaceOpenInvite) payload.replace_open_invite = true;
   if (_srInviteMode === 'existing') {
     const sel = document.getElementById('sr-inv-company-select');
     if (!sel.value) { errEl.textContent = 'Pick a company.'; errEl.style.display = 'block'; return; }
@@ -165,13 +166,28 @@ function srSendBuilderInvite() {
   api(payload).then(res => {
     btn.disabled = false;
     btn.textContent = 'Send Invite';
+    if (!res.ok && res.code === 'open_invite_exists' && !replaceOpenInvite) {
+      if (confirm('An unclaimed invite already exists for this company. Generate a new link and disable the old one?')) {
+        srSendBuilderInvite(true);
+      } else {
+        errEl.textContent = res.error || 'An unclaimed invite already exists.';
+        errEl.style.display = 'block';
+      }
+      return;
+    }
     if (!res.ok) { errEl.textContent = res.error || 'Could not send the invite.'; errEl.style.display = 'block'; return; }
     closeSrInviteModal();
     const msg = document.getElementById('sr-link-msg');
     if (msg) {
-      msg.style.color = 'var(--success)';
-      msg.textContent = 'Invite sent to ' + email + (res.company_name ? ' for ' + res.company_name : '');
-      setTimeout(() => { msg.textContent = ''; }, 5000);
+      if (res.email_sent === false) {
+        msg.style.color = '#b45309';
+        msg.innerHTML = 'Invite link created, but email did not send. <button type="button" class="adm-new-btn" style="background:#b45309;margin-left:.35rem" onclick="srCopyBuilderInviteLink()">Copy invite link</button>';
+        window._srLastBuilderInviteLink = res.invite_link || '';
+      } else {
+        msg.style.color = 'var(--success)';
+        msg.textContent = 'Invite sent to ' + email + (res.company_name ? ' for ' + res.company_name : '');
+        setTimeout(() => { msg.textContent = ''; }, 5000);
+      }
     }
     if (_srInviteMode === 'new') { _srCompanies = []; srLoadCompanies_(); }
   }).catch(() => {
@@ -180,6 +196,17 @@ function srSendBuilderInvite() {
     errEl.textContent = 'Network error.';
     errEl.style.display = 'block';
   });
+}
+
+function srCopyBuilderInviteLink() {
+  if (!window._srLastBuilderInviteLink) return;
+  navigator.clipboard.writeText(window._srLastBuilderInviteLink);
+  const msg = document.getElementById('sr-link-msg');
+  if (msg) {
+    msg.style.color = 'var(--success)';
+    msg.textContent = 'Builder Portal invite link copied.';
+    setTimeout(() => { msg.textContent = ''; }, 5000);
+  }
 }
 
 function srCopyLink(rotate) {
