@@ -1799,6 +1799,22 @@
         </div>
       </div>
 
+      <!-- Assign technician — writes Scheduled_Visits.assigned_technician for the
+           startup_day_1/2/3 rows. The operator select above drives move_pool, which
+           writes Routes.operator — not what the schedule reads for a startup. -->
+      <div id="pas-startup-tech-section">
+        <button id="pas-startup-tech-btn" onclick="openStartupTechPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#fef3c7;color:#92400e;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">👷 Assign technician</button>
+        <div id="pas-startup-tech-picker" style="display:none;flex-direction:column;gap:.45rem;margin-top:.4rem;padding:.55rem .65rem;border-radius:7px;background:rgba(146,64,14,.07);border:1px solid rgba(146,64,14,.22)">
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Technician for all startup days</div>
+          <select id="pas-startup-tech-select" style="padding:.32rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.8rem;background:var(--card);color:var(--text)"><option value="">Unassigned</option></select>
+          <div id="pas-startup-tech-msg" style="font-size:.74rem;color:var(--text-muted);line-height:1.7"></div>
+          <div style="display:flex;gap:.4rem;margin-top:.1rem">
+            <button onclick="confirmStartupTech()" id="pas-startup-tech-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:#92400e;color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Assign</button>
+            <button onclick="cancelStartupTech()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Path A: Sponsor first month — schedule 4 one-time Scheduled_Visits -->
       <div id="pas-fm-section">
         <button id="pas-fm-btn" onclick="openFirstMonthPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#eff6ff;color:#1d4ed8;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📅 Sponsor first month — schedule 4 visits</button>

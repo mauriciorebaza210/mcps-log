@@ -7,6 +7,7 @@ let _srPending = [];
 let _srHistory = null;
 let _srCompanies = [];
 let _srExpanded = null;
+let _srOperators = [];   // active technician names, from startup_requests_list
 
 const SR_FIELD_GROUPS = [
   ['Customer', [
@@ -62,6 +63,7 @@ function loadStartupRequests() {
       return;
     }
     _srPending = res.requests || [];
+    if (Array.isArray(res.operators)) _srOperators = res.operators;
     const title = document.getElementById('sr-card-title');
     if (title) title.textContent = 'Pool Startup Requests' + (_srPending.length ? ` (${_srPending.length})` : '');
     srRenderList_();
@@ -336,6 +338,13 @@ function srDetailHtml_(r) {
           <label>Startup start date *</label>
           <input class="si" type="date" id="sr-date-${id}" value="${escHtml(startVal)}" onchange="srRecalc('${id}')">
         </div>
+        <div class="dfg" style="margin:0">
+          <label>Technician</label>
+          <select class="si" id="sr-tech-${id}">
+            <option value="">Unassigned</option>
+            ${_srOperators.map(op => `<option value="${escHtml(op)}">${escHtml(op)}</option>`).join('')}
+          </select>
+        </div>
         <label style="font-size:.8rem;display:flex;gap:.3rem;align-items:center"><input type="checkbox" id="sr-chem-${id}" checked onchange="srRecalc('${id}')"> Chemical work</label>
         <label style="font-size:.8rem;display:flex;gap:.3rem;align-items:center"><input type="checkbox" id="sr-prog-${id}" checked onchange="srRecalc('${id}')"> Programming</label>
         <label style="font-size:.8rem;display:flex;gap:.3rem;align-items:center"><input type="checkbox" id="sr-school-${id}" onchange="srRecalc('${id}')"> Pool school</label>
@@ -406,6 +415,7 @@ function srApprove(requestId) {
     token: _s.token,
     request_id: requestId,
     startup_start_date: dateEl.value,
+    assigned_technician: (document.getElementById(`sr-tech-${requestId}`) || {}).value || '',
     fields: srCollectFields_(requestId),
     startup_chemical_work: !!document.getElementById(`sr-chem-${requestId}`)?.checked,
     startup_programming: !!document.getElementById(`sr-prog-${requestId}`)?.checked,
@@ -435,9 +445,16 @@ function srApprove(requestId) {
 
     const card = document.getElementById('sr-card-' + requestId);
     if (card) {
+      // Never claim an assignment that didn't happen — assignment is non-blocking,
+      // so an approved pool can still come back with nobody on the visits.
+      const who = res.assigned_technician
+        ? ` for ${escHtml(res.assigned_technician)}`
+        : (res.assignment_warning ? '' : ' (unassigned)');
+      const warn = w => `<div style="color:#b45309;font-weight:400;font-size:.8rem;margin-top:.3rem">⚠ ${escHtml(w)}</div>`;
       card.innerHTML = `<div style="padding:.5rem 0;color:var(--success);font-weight:600">
-        ✓ Approved — pool ${escHtml(res.pool_id || '')} created, startup visits scheduled.
-        ${res.warning ? `<div style="color:#b45309;font-weight:400;font-size:.8rem;margin-top:.3rem">⚠ ${escHtml(res.warning)}</div>` : ''}
+        ✓ Approved — pool ${escHtml(res.pool_id || '')} created, startup visits scheduled${who}.
+        ${res.warning ? warn(res.warning) : ''}
+        ${res.assignment_warning ? warn(res.assignment_warning + ' Assign from the schedule.') : ''}
       </div>`;
     }
     _srPending = _srPending.filter(r => r.request_id !== requestId);

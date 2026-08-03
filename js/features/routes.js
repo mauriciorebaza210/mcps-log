@@ -1969,6 +1969,11 @@ function closePoolAction() {
   const reschedulePicker = document.getElementById('pas-reschedule-picker');
   if (rescheduleBtn) rescheduleBtn.style.display = '';
   if (reschedulePicker) reschedulePicker.style.display = 'none';
+  // Reset startup technician picker
+  const stBtn    = document.getElementById('pas-startup-tech-btn');
+  const stPicker = document.getElementById('pas-startup-tech-picker');
+  if (stBtn) stBtn.style.display = '';
+  if (stPicker) stPicker.style.display = 'none';
   // Reset first-month picker
   const fmBtn = document.getElementById('pas-fm-btn');
   const fmPicker = document.getElementById('pas-fm-picker');
@@ -2264,6 +2269,72 @@ function confirmRescheduleStartup() {
     .catch(e => {
       if (btn) { btn.disabled = false; btn.textContent = 'Confirm'; }
       alert('Network error: ' + e.message);
+    });
+}
+
+// ── Startup technician assignment ─────────────────────────────────────────────
+//
+// Writes Scheduled_Visits.assigned_technician for the pool's startup_day_1/2/3
+// rows. Startups have no Routes row, so the action sheet's main operator select
+// (which drives move_pool → Routes.operator) does not put a startup on anyone's
+// schedule or Jobs tab — this does.
+
+function openStartupTechPanel() {
+  if (!_pasState) return;
+  const btn    = document.getElementById('pas-startup-tech-btn');
+  const picker = document.getElementById('pas-startup-tech-picker');
+  const sel    = document.getElementById('pas-startup-tech-select');
+  const msg    = document.getElementById('pas-startup-tech-msg');
+  if (!picker || !sel) return;
+
+  const ops = _routeData && _routeData.all_operators ? _routeData.all_operators : [];
+  const current = _pasState.operator || '';
+  sel.innerHTML = '<option value="">Unassigned</option>' +
+    ops.map(op => {
+      const un = op.username || op, nm = op.name || op;
+      return `<option value="${escHtml(un)}"${un === current ? ' selected' : ''}>${escHtml(nm)}</option>`;
+    }).join('');
+
+  if (msg) { msg.textContent = 'Applies to all three startup days.'; msg.style.color = ''; }
+  if (btn) btn.style.display = 'none';
+  picker.style.display = 'flex';
+}
+
+function cancelStartupTech() {
+  const btn    = document.getElementById('pas-startup-tech-btn');
+  const picker = document.getElementById('pas-startup-tech-picker');
+  if (picker) picker.style.display = 'none';
+  if (btn) btn.style.display = '';
+}
+
+function confirmStartupTech() {
+  if (!_pasState) return;
+  const sel = document.getElementById('pas-startup-tech-select');
+  const msg = document.getElementById('pas-startup-tech-msg');
+  const btn = document.getElementById('pas-startup-tech-confirm-btn');
+  if (!sel) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Assigning…'; }
+
+  api({ action: 'assign_startup_tech', token: _s.token,
+        pool_id: _pasState.pool_id, assigned_technician: sel.value })
+    .then(res => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Assign'; }
+      if (!res.ok) {
+        if (msg) { msg.textContent = res.error || 'Could not assign.'; msg.style.color = 'var(--error, #dc2626)'; }
+        return;
+      }
+      if (!res.updated) {
+        if (msg) { msg.textContent = 'No scheduled startup days found for this pool.'; msg.style.color = '#b45309'; }
+        return;
+      }
+      closePoolAction();
+      _routeData = null;
+      _clearRouteCache();
+      loadRoutes();
+    })
+    .catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Assign'; }
+      if (msg) { msg.textContent = 'Network error — check connection.'; msg.style.color = 'var(--error, #dc2626)'; }
     });
 }
 

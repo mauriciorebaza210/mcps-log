@@ -1566,6 +1566,12 @@ function doPost(e) {
       return jsonResponse_(handleStartupRequestReject_(payload));
     }
 
+    // Reassign (or clear) the technician on an already-approved startup — the
+    // schedule reads startups off Scheduled_Visits, not Routes.operator.
+    if (payload.action === 'assign_startup_tech') {
+      return jsonResponse_(handleAssignStartupTechnician_(payload));
+    }
+
     if (payload.action === 'get_startup_request_link') {
       const srGate = srRequireAdmin_(payload.token);
       if (!srGate.ok) return jsonResponse_(srGate);

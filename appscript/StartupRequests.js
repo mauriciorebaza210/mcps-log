@@ -788,7 +788,104 @@ function handleStartupRequestsList_(tokenStr, scope) {
   rows.reverse(); // newest first
   if (rows.length > 100) rows = rows.slice(0, 100);
   rows.forEach(function(r) { delete r._rowNum; });
-  return { ok: true, requests: rows };
+
+  // Technician list for the approve card's assignment dropdown. Sourced here
+  // rather than from list_users because that action requires the admin role,
+  // while this queue also admits managers via srRequireAdmin_.
+  let operators = [];
+  try { operators = getAllowedRouteOperatorNames_(); } catch (e) {
+    Logger.log('handleStartupRequestsList_: operator list unavailable: ' + e);
+  }
+  return { ok: true, requests: rows, operators: operators };
+}
+
+// ─── Startup technician assignment ────────────────────────────────────────────
+//
+// Startups live only in Scheduled_Visits — they never get a Routes row (see
+// addStartupPoolToRoutes_). So the technician must be stamped on the visit rows
+// themselves: Routes.operator is not read for these stops, and both the route
+// filter (getScheduledVisitsForWeek) and the Jobs tab (handleGetMyJobs) drop
+// visits whose assigned_technician doesn't match the viewer.
+//
+// The single place that writes it, so no caller can half-apply the cache busts.
+function srAssignStartupTechnician_(poolId, techName) {
+  const pid = String(poolId || '').trim();
+  if (!pid) return { ok: false, error: 'pool_id required' };
+
+  // Canonicalize against the active technician list. Route filtering compares
+  // lowercased but jobsBustCache_ keys off the name, so a casing or whitespace
+  // variant would produce a live row nobody's cache is ever invalidated for.
+  const requested = String(techName || '').trim();
+  let canonical = '';
+  if (requested) {
+    let allowed = [];
+    try { allowed = getAllowedRouteOperatorNames_(); } catch (e) {
+      return { ok: false, error: 'Could not load the technician list.' };
+    }
+    const target = requested.toLowerCase().replace(/\s+/g, ' ');
+    canonical = allowed.find(function(n) {
+      return String(n).trim().toLowerCase().replace(/\s+/g, ' ') === target;
+    }) || '';
+    if (!canonical) return { ok: false, error: requested + ' is not an active technician.' };
+  }
+
+  const sheet = ensureScheduledVisitsSheet_();
+  if (sheet.getLastRow() < 2) return { ok: true, updated: 0, assigned_technician: canonical };
+
+  const data = sheet.getDataRange().getValues();
+  const h = data[0].map(function(x) { return String(x || '').trim().toLowerCase().replace(/ /g, '_'); });
+  const pidCol  = h.indexOf('pool_id');
+  const vtCol   = h.indexOf('visit_type');
+  const techCol = h.indexOf('assigned_technician');
+  const dateCol = h.indexOf('scheduled_date');
+  const statCol = h.indexOf('status');
+  if (pidCol === -1 || vtCol === -1 || techCol === -1) {
+    return { ok: false, error: 'Scheduled_Visits is missing a required column.' };
+  }
+
+  const affectedTechs = [canonical];
+  const affectedWeeks = {};
+  let updated = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][pidCol] || '').trim() !== pid) continue;
+    if (!/^startup_day_[123]$/.test(String(data[i][vtCol] || '').trim())) continue;
+    const stat = statCol !== -1 ? String(data[i][statCol] || '').trim().toLowerCase() : 'scheduled';
+    if (stat && stat !== 'scheduled') continue;
+
+    // Every tech this pool is moving OFF also needs their my_jobs cache dropped,
+    // or the job lingers on their list for the full TTL. Day 1/2/3 can differ.
+    const prev = String(data[i][techCol] || '').trim();
+    if (prev && affectedTechs.indexOf(prev) === -1) affectedTechs.push(prev);
+
+    sheet.getRange(i + 1, techCol + 1).setValue(canonical);
+    updated++;
+
+    // A 3-day startup can straddle two weeks — bust each one it touches.
+    if (dateCol !== -1) {
+      let d = data[i][dateCol];
+      d = (d instanceof Date) ? Utilities.formatDate(d, RD_TZ, 'yyyy-MM-dd') : String(d || '').trim();
+      if (d) {
+        try { affectedWeeks[getWeekStartForDate_(d)] = true; } catch (e) {}
+      }
+    }
+  }
+
+  try {
+    const cache = CacheService.getScriptCache();
+    Object.keys(affectedWeeks).forEach(function(ws) { if (ws) cache.remove('rd:' + ws); });
+  } catch (e) {}
+  try { jobsBustCache_(affectedTechs); } catch (e) {}
+
+  Logger.log('srAssignStartupTechnician_: ' + pid + ' → "' + canonical + '" (' + updated + ' visits)');
+  return { ok: true, updated: updated, assigned_technician: canonical };
+}
+
+// Admin/manager: reassign (or clear) the technician on an existing startup.
+function handleAssignStartupTechnician_(payload) {
+  const gate = srRequireAdmin_(payload.token);
+  if (!gate.ok) return gate;
+  return srAssignStartupTechnician_(payload.pool_id, payload.assigned_technician);
 }
 
 // ─── Admin: update fields ─────────────────────────────────────────────────────
@@ -935,6 +1032,31 @@ function handleStartupRequestApprove_(payload) {
     const result = JSON.parse(handleSaveQuote_(quotePayload).getContent());
     if (!result.ok) return { ok: false, error: result.error || 'Quote creation failed' };
 
+    // Stamp the technician onto the startup visits handleSaveQuote_ just created.
+    // Deliberately non-blocking: the pool exists now, so a bad name or a missing
+    // visit row must surface as a warning, never as a failed approval that the
+    // idempotency guard would then refuse to retry.
+    let assignedTech = '';
+    let assignmentWarning = '';
+    const requestedTech = String(payload.assigned_technician || '').trim();
+    if (requestedTech) {
+      try {
+        const assign = srAssignStartupTechnician_(result.pool_id, requestedTech);
+        if (!assign.ok) {
+          assignmentWarning = assign.error || 'Could not assign the technician.';
+        } else if (!assign.updated) {
+          // Quote creation reported success but no startup visits exist to assign —
+          // the startup pipeline is broken and must not hide behind a green check.
+          assignmentWarning = 'No startup visits found to assign.';
+        } else {
+          assignedTech = assign.assigned_technician;
+        }
+      } catch (assignErr) {
+        Logger.log('handleStartupRequestApprove_: assignment failed: ' + assignErr);
+        assignmentWarning = 'Could not assign the technician.';
+      }
+    }
+
     srSetRowValues_(found.sheet, found.headers, found.row._rowNum, Object.assign({
       status: 'approved',
       approved_at: new Date().toISOString(),
@@ -965,7 +1087,14 @@ function handleStartupRequestApprove_(payload) {
       '— Mission Custom Pool Solutions'
     );
 
-    return { ok: true, quote_id: result.quote_id, pool_id: result.pool_id, warning: result.warning };
+    return {
+      ok: true,
+      quote_id: result.quote_id,
+      pool_id: result.pool_id,
+      warning: result.warning,
+      assigned_technician: assignedTech,
+      assignment_warning: assignmentWarning
+    };
   } finally {
     lock.releaseLock();
   }
