@@ -56,11 +56,14 @@ function getStartupRequestsSheet_() {
 
 function srSendBuilderEmail_(toEmail, subject, body) {
   const to = String(toEmail || '').trim();
-  if (!to) return; // email is optional on the intake form — silent no-op
+  if (!to) return { ok: true, to: '', sent_at: '', error: '' }; // email is optional on the intake form
+  const sentAt = new Date().toISOString();
   try {
     MailApp.sendEmail({ to: to, subject: subject, body: body });
+    return { ok: true, to: to, sent_at: sentAt, error: '' };
   } catch (e) {
     Logger.log('srSendBuilderEmail_: failed to send to ' + to + ': ' + e);
+    return { ok: false, to: to, sent_at: '', error: String(e) };
   }
 }
 

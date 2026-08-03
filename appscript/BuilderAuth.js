@@ -178,7 +178,20 @@ function handleCreateBuilderInvite_(payload) {
   if (existingAccount.row) return { ok: false, error: 'This company already has an active Builder Portal account.' };
 
   const openInvite = baFindOpenInviteByCompany_(poolCompanyId);
-  if (openInvite.row) return { ok: false, error: 'An unclaimed invite already exists for this company.' };
+  if (openInvite.row) {
+    const replaceOpenInvite = payload.replace_open_invite === true || String(payload.replace_open_invite).toLowerCase() === 'true';
+    if (!replaceOpenInvite) {
+      return {
+        ok: false,
+        code: 'open_invite_exists',
+        error: 'An unclaimed invite already exists for this company.'
+      };
+    }
+    srSetRowValues_(openInvite.sheet, openInvite.headers, openInvite.row._rowNum, {
+      status: 'replaced',
+      email_error: 'Replaced by a newer invite on ' + new Date().toISOString()
+    });
+  }
 
   const email = String(payload.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: 'Enter a valid email.' };
@@ -190,7 +203,7 @@ function handleCreateBuilderInvite_(payload) {
   const inviteId = 'BIN-' + Utilities.getUuid().substring(0, 8).toUpperCase();
 
   const sheet = getBuilderInvitesSheet_();
-  appendObject_(sheet, {
+  const appendedRow = appendObject_(sheet, {
     invite_id: inviteId,
     pool_company_id: poolCompanyId,
     company_name: companyName,
@@ -204,7 +217,7 @@ function handleCreateBuilderInvite_(payload) {
   }, BUILDER_INVITE_HEADERS);
 
   const link = getPortalBaseUrl_() + '/builder-portal?invite=' + encodeURIComponent(token);
-  srSendBuilderEmail_(
+  const emailResult = srSendBuilderEmail_(
     email,
     'You\'re invited to the MCPS Builder Portal',
     'Hi,\n\n' +
@@ -214,7 +227,24 @@ function handleCreateBuilderInvite_(payload) {
     '— Mission Custom Pool Solutions'
   );
 
-  return { ok: true, invite_id: inviteId, pool_company_id: poolCompanyId, company_name: companyName, email: email, expires_at: expiresAt.toISOString() };
+  const updatedHeaders = sheetToObjects_(sheet).headers;
+  srSetRowValues_(sheet, updatedHeaders, appendedRow, {
+    email_sent_to: emailResult.to || '',
+    email_sent_at: emailResult.sent_at || '',
+    email_error: emailResult.error || ''
+  });
+
+  return {
+    ok: true,
+    invite_id: inviteId,
+    pool_company_id: poolCompanyId,
+    company_name: companyName,
+    email: email,
+    expires_at: expiresAt.toISOString(),
+    email_sent: !!emailResult.ok,
+    email_error: emailResult.error || '',
+    invite_link: link
+  };
 }
 
 // ─── Public: claim the invite ─────────────────────────────────────────────────
