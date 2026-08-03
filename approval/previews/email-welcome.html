@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS — Welcome Email · 2 mockups</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+      --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+      --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+    *{box-sizing:border-box;}
+    body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 80px;}
+    .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+    .page-sub{max-width:640px;margin:0 auto 40px;text-align:center;color:#4a5656;font-size:14px;}
+    .variant{max-width:640px;margin:0 auto 56px;}
+    .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;}
+    .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+    .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+    .vlabel .desc{color:#5a6666;font-size:13px;}
+    .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+    .subject b{color:var(--teal);font-family:var(--fh);}
+    .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+    .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:15px;color:#fff;background:var(--aqua);padding:15px 34px;border-radius:11px;box-shadow:0 8px 20px rgba(31,167,168,.3);}
+    .btn.ghost{background:#fff;color:var(--teal);border:1.5px solid var(--aqua);box-shadow:none;}
+    .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+    .foot{padding:24px 32px 30px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+    .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+    .foot a{color:var(--teal);text-decoration:none;}
+    .checkbadge{width:66px;height:66px;border-radius:50%;background:var(--aqua);color:#fff;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 20px;box-shadow:0 8px 22px rgba(31,167,168,.32);}
+    .checkbadge svg{display:block;}
+    /* icon option picker */
+    .icons-demo{max-width:640px;margin:0 auto 46px;background:#fff;border-radius:16px;padding:24px 26px;box-shadow:0 10px 30px rgba(13,61,62,.10);}
+    .icons-demo .h{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin-bottom:4px;text-align:center;}
+    .icons-demo .sub{font-size:13px;color:#5a6666;text-align:center;margin-bottom:20px;}
+    .icons-demo .row{display:flex;justify-content:center;gap:30px;flex-wrap:wrap;}
+    .icons-demo .opt{text-align:center;}
+    .icons-demo .badge{width:60px;height:60px;border-radius:50%;background:var(--aqua);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;box-shadow:0 6px 18px rgba(31,167,168,.30);}
+    .icons-demo .badge svg{display:block;}
+    .icons-demo .lbl{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.04em;color:var(--teal);}
+
+    /* steps list (shared) */
+    .steps{margin:22px 0;padding:0;list-style:none;}
+    .steps li{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
+    .steps li:last-child{border-bottom:0;}
+    .steps .n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;font-family:var(--fh);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;}
+    .steps .t{font-size:14px;line-height:1.5;color:#3a4645;}
+    .steps .t b{color:var(--teal);}
+
+    /* V1 Editorial */
+    .v1{padding:46px 44px 0;text-align:center;}
+    .v1 img{height:48px;margin-bottom:20px;}
+    .v1 .mantra{color:var(--aqua);margin-bottom:26px;font-size:10px;letter-spacing:.3em;font-weight:600;}
+    .v1 h1{font-family:var(--fh);font-weight:700;font-size:26px;color:var(--teal);margin:0 0 14px;}
+    .v1 p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 auto 18px;max-width:450px;}
+    .v1 .steps{text-align:left;max-width:430px;margin:26px auto;}
+    .v1 .cta{padding:6px 0 40px;}
+    .v1 .cta .btn{margin:5px;}
+
+    /* V2 Concierge */
+    .v2 .top{background:linear-gradient(160deg,var(--teal),var(--teal-2));padding:44px 36px 42px;text-align:center;color:#fff;}
+    .v2 .top img{height:48px;margin-bottom:16px;}
+    .v2 .top .mantra{color:var(--aqua-light);margin-bottom:20px;}
+    .v2 .top .checkbadge{background:#fff;color:var(--teal);}
+    .v2 .top h1{font-family:var(--fh);font-weight:700;font-size:29px;margin:6px 0 8px;}
+    .v2 .top .sub{color:rgba(255,255,255,.74);font-size:15px;}
+    .v2 .body{padding:30px 36px 8px;}
+    .v2 .body p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 0 16px;}
+    .v2 .card{background:var(--gray);border-radius:12px;padding:20px 22px;margin:22px 0;}
+    .v2 .card .h{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--aqua);margin-bottom:10px;}
+    .v2 .cta{text-align:center;padding:8px 0 32px;}
+    .v2 .cta .btn{margin:5px;}
+
+    /* V3 Statement */
+    .v3 .hero{background:var(--teal);color:#fff;padding:48px 40px 42px;text-align:center;position:relative;overflow:hidden;}
+    .v3 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% -20%,rgba(94,214,211,.24),transparent 60%);}
+    .v3 .hero>*{position:relative;}
+    .v3 .hero img{height:46px;margin-bottom:20px;}
+    .v3 .hero .checkbadge{background:var(--aqua);}
+    .v3 .hero .mantra{color:var(--aqua-light);margin:0 0 12px;}
+    .v3 .hero h1{font-family:var(--fh);font-weight:800;font-size:34px;line-height:1.06;margin:0 0 10px;letter-spacing:-.01em;}
+    .v3 .hero .lede{color:rgba(255,255,255,.8);font-size:15px;max-width:400px;margin:0 auto;}
+    .v3 .body{padding:34px 40px 8px;}
+    .v3 .body p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 0 16px;}
+    .v3 .whatsnext{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:26px 0 6px;}
+    .v3 .cta{text-align:center;padding:10px 0 34px;}
+    .v3 .cta .btn{margin:5px;}
+
+    @media(max-width:560px){
+      .v1{padding:34px 22px 0;}
+      .v2 .top,.v2 .body{padding-left:22px;padding-right:22px;}
+      .v3 .hero,.v3 .body{padding-left:24px;padding-right:24px;}
+      .v3 .hero h1{font-size:28px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="page-title">Welcome Email — 2 directions</div>
+  <div class="page-sub">Sent right after the customer signs. Confirms the agreement, sets expectations, links the signed PDF.</div>
+
+  <!-- V1 Editorial -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">A</span><span class="name">Editorial</span><span class="desc">Warm, understated, personal.</span></div>
+    <div class="subject">Subject: <b>Welcome to Mission Custom Pool Solutions, Jordan</b></div>
+    <div class="email">
+      <div class="v1">
+        <img src="../assets/mcps-lockup.png" alt="MCPS">
+        <div class="mantra">Every Pool Matters</div>
+        <h1>Welcome to the family, Jordan</h1>
+        <p>Your agreement is signed and you're officially a Mission Custom Pool Solutions customer. Here's what happens next.</p>
+        <ul class="steps">
+          <li><span class="n">1</span><span class="t"><b>We schedule your first visit.</b> Your service coordinator will be in touch to let you know your service day.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Your tech arrives.</b> Weekly Full Service, with a service report after every visit.</span></li>
+          <li><span class="n">3</span><span class="t"><b>You relax.</b> Consistent care, transparent pricing, no surprises.</span></li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="#">Download Signed Agreement</a>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- V2 Statement -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">B</span><span class="name">Statement</span><span class="desc">Bold welcome moment, confident.</span></div>
+    <div class="subject">Subject: <b>Welcome aboard, Jordan</b></div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Welcome to<br>the family.</h1>
+        <div class="lede">Your agreement is signed, Jordan. Your pool is officially handled.</div>
+      </div>
+      <div class="body">
+        <p>Thank you for trusting Mission Custom Pool Solutions with your pool. You've chosen <strong>Weekly Full Service</strong> at $285.00 / month — consistent care, transparent pricing, and a service report after every single visit.</p>
+        <div class="whatsnext">What Happens Next</div>
+        <ul class="steps">
+          <li><span class="n">1</span><span class="t"><b>We'll be in touch</b> to let you know your service day.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Your tech starts caring for your pool</b> on schedule, every week.</span></li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="#">Download Signed Agreement</a>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+</body>
+</html>

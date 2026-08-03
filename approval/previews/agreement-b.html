@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Service Agreement — B · Statement Luxury</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+      --gray:#F3F5F6; --charcoal:#222222; --white:#FFFFFF;
+      --muted:rgba(34,34,34,.58); --line:#E4EAEA;
+      --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--white);color:var(--charcoal);font-family:var(--fb);
+      padding:0 0 70px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+    .wrap{max-width:780px;margin:0 auto;padding:0 26px;}
+
+    /* Full-bleed band */
+    .band{background:var(--teal);color:#fff;padding:34px 0 46px;position:relative;overflow:hidden;}
+    .band::before{content:"";position:absolute;inset:0;
+      background:radial-gradient(ellipse at 78% -10%,rgba(94,214,211,.20),transparent 55%);}
+    .band .wrap{position:relative;}
+    .band-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px;}
+    .band-top img{height:42px;}
+    .band-top .num{font-size:12px;color:rgba(255,255,255,.6);letter-spacing:.06em;}
+    .mantra{font-family:var(--fh);font-weight:700;font-size:13px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua-light);margin:0 0 14px;}
+    .band h1{font-family:var(--fh);font-weight:800;font-size:44px;line-height:1.02;margin:0 0 10px;
+      letter-spacing:-.02em;}
+    .band .who{color:rgba(255,255,255,.75);font-size:16px;}
+    .band .who b{color:#fff;font-weight:600;}
+
+    /* Hero investment strip overlapping band */
+    .hero-invest{max-width:780px;margin:-30px auto 0;padding:0 26px;position:relative;z-index:3;}
+    .hero-invest .inner{background:#fff;border-radius:16px;box-shadow:0 18px 44px rgba(13,61,62,.16);
+      padding:24px 30px;display:flex;align-items:center;justify-content:space-between;gap:20px;
+      border:1px solid var(--line);}
+    .hero-invest .lab{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua);}
+    .hero-invest .sub{font-size:13px;color:var(--muted);margin-top:3px;}
+    .hero-invest .val{font-family:var(--fh);font-weight:800;font-size:40px;color:var(--teal);
+      letter-spacing:-.02em;text-align:right;}
+
+    section{padding-top:44px;}
+    .sec-label{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.2em;
+      text-transform:uppercase;color:var(--aqua);margin:0 0 4px;}
+    .sec-title{font-family:var(--fh);font-weight:700;font-size:22px;color:var(--teal);margin:0 0 22px;
+      letter-spacing:-.01em;}
+
+    /* Two-column spec sheet */
+    .spec{display:grid;grid-template-columns:170px 1fr;gap:0;border-top:2px solid var(--teal);}
+    .spec .row{display:contents;}
+    .spec .k{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--muted);padding:16px 0;border-bottom:1px solid var(--line);}
+    .spec .v{font-size:16px;color:var(--charcoal);padding:16px 0;border-bottom:1px solid var(--line);}
+
+    /* scope two cols */
+    .scope{list-style:none;margin:0;padding:0;columns:2;column-gap:40px;}
+    .scope li{position:relative;padding-left:28px;margin-bottom:14px;font-size:16px;break-inside:avoid;}
+    .scope li::before{content:"✓";position:absolute;left:0;top:5px;width:16px;height:16px;border-radius:50%;
+      background:var(--aqua-light);color:var(--teal);font-weight:800;font-size:10px;text-align:center;line-height:16px;}
+
+    table.plan{width:100%;border-collapse:collapse;font-size:16px;}
+    table.plan thead th{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--muted);text-align:left;padding:0 0 14px;border-bottom:2px solid var(--teal);}
+    table.plan th:last-child,table.plan td:last-child{text-align:right;}
+    table.plan td{padding:16px 0;border-bottom:1px solid var(--line);}
+    table.plan td:first-child{font-weight:600;color:var(--teal);}
+    .totals{margin:22px 0 0;margin-left:auto;max-width:340px;}
+    .totals .row{display:flex;justify-content:space-between;padding:8px 0;font-size:15px;}
+    .totals .row .lab{color:var(--muted);}
+    .totals .grand{border-top:2px solid var(--teal);margin-top:6px;padding-top:14px;
+      font-family:var(--fh);font-weight:800;font-size:19px;color:var(--teal);}
+
+    /* Contract scroll w/ progress */
+    .contract-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;}
+    .progress{flex:1;height:4px;background:var(--gray);border-radius:20px;overflow:hidden;max-width:220px;}
+    .progress i{display:block;height:100%;width:0;background:var(--aqua);border-radius:20px;transition:width .1s;}
+    .terms-box{max-height:56vh;min-height:300px;overflow-y:auto;overscroll-behavior:contain;
+      border:1px solid var(--line);border-radius:14px;background:#FBFCFC;padding:8px 28px;}
+    .term{padding:22px 0;border-bottom:1px solid var(--gray);}
+    .term:last-child{border-bottom:0;}
+    .term h4{font-family:var(--fh);font-weight:700;font-size:13px;letter-spacing:.05em;
+      text-transform:uppercase;color:var(--teal);margin:0 0 10px;}
+    .term p{margin:0 0 8px;font-size:15px;color:#33403f;}
+    .term p:last-child{margin-bottom:0;}
+    .term ul{margin:6px 0 0;padding-left:22px;}
+    .term li{font-size:15px;color:#33403f;margin-bottom:6px;}
+
+    /* Sign — full-bleed teal footer */
+    .sign{background:var(--teal);color:#fff;margin-top:50px;padding:44px 0 50px;position:relative;overflow:hidden;}
+    .sign::before{content:"";position:absolute;inset:0;
+      background:radial-gradient(ellipse at 15% 120%,rgba(94,214,211,.16),transparent 55%);}
+    .sign .wrap{position:relative;}
+    .sign .sec-label{color:var(--aqua-light);}
+    .sign .sec-title{color:#fff;}
+    .consent{display:flex;gap:12px;align-items:flex-start;margin:0 0 24px;font-size:14px;
+      color:rgba(255,255,255,.86);}
+    .consent input{margin-top:2px;width:20px;height:20px;flex:0 0 auto;accent-color:var(--aqua);}
+    label.fld{display:block;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--aqua-light);margin:0 0 8px;}
+    input.name{width:100%;border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:15px 18px;
+      font:inherit;font-size:16px;background:rgba(255,255,255,.06);color:#fff;margin-bottom:26px;}
+    input.name::placeholder{color:rgba(255,255,255,.4);}
+    input.name:focus{outline:none;border-color:var(--aqua-light);box-shadow:0 0 0 3px rgba(94,214,211,.18);}
+    .sigtabs{display:inline-flex;background:rgba(255,255,255,.08);border-radius:12px;padding:4px;gap:3px;margin-bottom:12px;}
+    .sigtab{border:0;background:transparent;color:rgba(255,255,255,.7);border-radius:8px;padding:10px 24px;
+      font-family:var(--fh);font-weight:600;font-size:13px;cursor:pointer;}
+    .sigtab.active{background:var(--aqua);color:#fff;}
+    canvas#pad{width:100%;height:190px;border:1.5px dashed var(--aqua-light);border-radius:14px;
+      background:rgba(255,255,255,.97);touch-action:none;display:block;}
+    .padtools{display:flex;justify-content:space-between;align-items:center;margin-top:8px;}
+    .padtools .hint{font-size:12px;color:rgba(255,255,255,.6);}
+    .clearlink{background:none;border:0;color:rgba(255,255,255,.7);cursor:pointer;font-size:12px;text-decoration:underline;}
+    .typewrap{display:none;}
+    input.typed{width:100%;border:1.5px solid rgba(255,255,255,.2);border-radius:14px;padding:16px 18px;
+      font-family:'Brush Script MT',cursive;font-size:36px;color:#fff;background:rgba(255,255,255,.06);}
+    .cta{margin-top:30px;}
+    button.sign-btn{width:100%;border:0;background:var(--aqua);color:#fff;border-radius:14px;padding:19px;
+      font-family:var(--fh);font-weight:800;font-size:17px;letter-spacing:.04em;cursor:pointer;
+      box-shadow:0 12px 30px rgba(31,167,168,.34);}
+    button.sign-btn:disabled{opacity:.5;box-shadow:none;}
+    .linkbtn{display:block;width:100%;text-align:center;margin-top:16px;background:none;border:0;
+      color:var(--aqua-light);text-decoration:underline;cursor:pointer;font-size:14px;font-family:var(--fb);}
+    .msg{margin-top:16px;border-radius:10px;padding:12px 14px;background:rgba(255,255,255,.1);font-size:14px;display:none;}
+    .msg.err{background:rgba(255,120,120,.16);color:#ffd9d9;}
+    .changes{display:none;margin-top:18px;}
+    textarea{width:100%;min-height:90px;border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:14px;
+      font:inherit;background:rgba(255,255,255,.06);color:#fff;resize:vertical;}
+    textarea::placeholder{color:rgba(255,255,255,.4);}
+    .sign-foot{text-align:center;margin-top:34px;color:rgba(255,255,255,.55);font-size:12px;}
+    .sign-foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+      color:var(--aqua-light);font-size:11px;margin-bottom:6px;}
+
+    .done{text-align:center;padding:80px 26px;}
+    .done .ok{width:78px;height:78px;border-radius:50%;background:var(--aqua);color:#fff;display:flex;
+      align-items:center;justify-content:center;font-size:40px;margin:0 auto 24px;box-shadow:0 12px 34px rgba(31,167,168,.35);}
+    .done h2{font-family:var(--fh);font-weight:800;color:var(--teal);font-size:28px;margin:0 0 12px;}
+    .done p{color:var(--muted);max-width:440px;margin:0 auto;}
+
+    @media(max-width:640px){
+      .wrap,.hero-invest{padding-left:18px;padding-right:18px;}
+      .band h1{font-size:32px;}
+      .hero-invest .inner{flex-direction:column;align-items:flex-start;gap:8px;}
+      .hero-invest .val{font-size:34px;text-align:left;}
+      .spec{grid-template-columns:120px 1fr;}
+      .scope{columns:1;}
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+  const P={proposal_number:"PROP-DEMO-001",customer_name:"Jordan Rivera",service:"Weekly Full Service",
+    service_address:"123 Mission Creek Dr",city_state_zip:"San Antonio, 78258",valid_until:"08/21/2026",
+    investment:"$285.00 / month",subtotal:285,travel_fee:15,sales_tax:24.75,total:324.75,
+    scope:["Pool and spa cleaning and brushing","Chemical testing and treatment","Filter cleaning and inspection","Skimmer and pump basket cleaning","Service report after each visit"],
+    plan:[["Weekly Full Service","Weekly","$285.00"],["Spa Service","Weekly","Included"],["Chemical Treatment","Weekly","Included"]]};
+  const money=v=>'$'+Number(v||0).toFixed(2);
+  const CONTRACT=`
+    <div class="term"><h4>1. Property &amp; Service Details</h4><p><strong>Service Address:</strong> ${P.service_address}, ${P.city_state_zip}<br><strong>Service Type:</strong> ${P.service}</p></div>
+    <div class="term"><h4>2. Scope of Services</h4><ul><li>Skimming surface debris</li><li>Brushing pool walls, steps, and tile as needed</li><li>Vacuuming pool (manual or automated, as applicable)</li><li>Cleaning skimmer and pump baskets</li><li>Testing and balancing water chemistry</li><li>Adding standard maintenance chemicals as required</li><li>Visual inspection of accessible pool equipment</li></ul></div>
+    <div class="term"><h4>3. Exclusions &amp; Additional Services</h4><p>Unless expressly stated in writing, this Agreement does not include equipment repairs or replacements, plumbing or electrical repairs, filter replacement or full tear-downs, acid washes or green-to-clean treatments, storm cleanups beyond normal scope, or services requiring a licensed repair technician. Any excluded or additional services may be quoted separately and performed only upon Client approval.</p></div>
+    <div class="term"><h4>4. Access &amp; Safety</h4><p>Client agrees to provide clear and safe access to the pool area on scheduled service days. All pets must be secured prior to service. MCPS is not responsible for service delays or incomplete service due to restricted access, unsafe conditions, or environmental hazards.</p></div>
+    <div class="term"><h4>5. Chemical Usage &amp; Water Conditions</h4><p>Service pricing assumes standard chemical usage under normal conditions. Excessive chemical demand from weather events, heavy bather load, algae growth, water features, or other abnormal conditions may result in additional charges, communicated to the Client when identified. MCPS is not responsible for chemical imbalances caused by factors outside scheduled service visits.</p></div>
+    <div class="term"><h4>6. Pricing &amp; Payment Terms</h4><p><strong>Monthly Service Rate:</strong> ${money(P.subtotal)}<br><strong>Texas Sales Tax (8.25%):</strong> ${money(P.sales_tax)}<br><strong>Total Monthly Investment:</strong> ${money(P.total)}</p><p>All payments are due within 7 days of the initial start date. Accounts past due more than 7 days may result in suspension of service until payment is received.</p></div>
+    <div class="term"><h4>7. Term &amp; Cancellation</h4><p>This Agreement operates on a month-to-month basis. Either party may terminate with 30 days written or emailed notice. Services performed prior to the termination date remain billable.</p></div>
+    <div class="term"><h4>8. Liability &amp; Limitations</h4><p>MCPS is not responsible for pre-existing equipment or structural conditions; damage caused by acts of God, weather, vandalism, or misuse; or delays caused by utility outages or restricted access. Service Provider makes no guarantee against algae growth, staining, or equipment failure beyond routine maintenance efforts.</p></div>
+    <div class="term"><h4>9. Independent Contractor</h4><p>MCPS operates as an independent contractor. Nothing in this Agreement shall be construed as creating a partnership, joint venture, or employment relationship.</p></div>
+    <div class="term"><h4>10. Entire Agreement</h4><p>This Agreement constitutes the entire understanding between the parties and supersedes all prior discussions or agreements. Any modifications must be made in writing and agreed upon by both parties.</p></div>
+    <div class="term"><h4>11. Acceptance</h4><p>By signing below, Client acknowledges understanding and acceptance of the terms outlined in this Agreement.</p></div>`;
+
+  function render(){
+    const scope=P.scope.map(s=>`<li>${s}</li>`).join('');
+    const plan=P.plan.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+    document.getElementById('app').innerHTML=`
+      <div class="band"><div class="wrap">
+        <div class="band-top"><img src="../assets/mission-icon-transparent.png" alt="MCPS"><span class="num">${P.proposal_number}</span></div>
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Your Service<br>Agreement</h1>
+        <div class="who">Prepared for <b>${P.customer_name}</b> · ${P.service_address}</div>
+      </div></div>
+
+      <div class="hero-invest"><div class="inner">
+        <div><div class="lab">Your Monthly Investment</div><div class="sub">${P.service} · Valid until ${P.valid_until}</div></div>
+        <div class="val">${P.investment}</div>
+      </div></div>
+
+      <div class="wrap">
+        <section>
+          <div class="sec-label">Overview</div>
+          <div class="sec-title">Agreement Details</div>
+          <div class="spec">
+            <div class="row"><div class="k">Service</div><div class="v">${P.service}</div></div>
+            <div class="row"><div class="k">Property</div><div class="v">${P.service_address}, ${P.city_state_zip}</div></div>
+            <div class="row"><div class="k">Investment</div><div class="v">${P.investment}</div></div>
+            <div class="row"><div class="k">Valid Until</div><div class="v">${P.valid_until}</div></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="sec-label">Included</div>
+          <div class="sec-title">Scope of Work</div>
+          <ul class="scope">${scope}</ul>
+        </section>
+
+        <section>
+          <div class="sec-label">Pricing</div>
+          <div class="sec-title">Your Service Plan</div>
+          <table class="plan"><thead><tr><th>Included Service</th><th>Frequency</th><th>Price</th></tr></thead><tbody>${plan}</tbody></table>
+          <div class="totals">
+            <div class="row"><span class="lab">Service Subtotal</span><span>${money(P.subtotal)}</span></div>
+            <div class="row"><span class="lab">Travel Fee</span><span>${money(P.travel_fee)}</span></div>
+            <div class="row"><span class="lab">Sales Tax</span><span>${money(P.sales_tax)}</span></div>
+            <div class="row grand"><span>Total</span><span>${money(P.total)}</span></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="contract-head">
+            <div><div class="sec-label" style="margin:0">Terms</div><div class="sec-title" style="margin:2px 0 0">The Service Agreement</div></div>
+            <div class="progress"><i id="prog"></i></div>
+          </div>
+          <div class="terms-box" id="terms">${CONTRACT}</div>
+        </section>
+      </div>
+
+      <div class="sign" id="sign"><div class="wrap">
+        <div class="sec-label">Accept</div>
+        <div class="sec-title">Accept &amp; Sign</div>
+        <label class="consent"><input type="checkbox" id="consent">
+          <span>I have read and agree to this Service Agreement. I consent to sign electronically and understand my electronic signature is legally binding under the U.S. ESIGN Act and applicable state law (UETA).</span></label>
+        <label class="fld" for="signer-name">Your full legal name</label>
+        <input class="name" id="signer-name" type="text" placeholder="e.g. Jane A. Smith" autocomplete="name">
+        <label class="fld">Signature</label>
+        <div class="sigtabs">
+          <button type="button" class="sigtab active" id="tab-draw" onclick="setSigMode('draw')">Draw</button>
+          <button type="button" class="sigtab" id="tab-type" onclick="setSigMode('type')">Type</button>
+        </div>
+        <div id="draw-wrap"><canvas id="pad"></canvas>
+          <div class="padtools"><span class="hint">Sign with your finger or mouse</span><button type="button" class="clearlink" onclick="clearPad()">Clear</button></div></div>
+        <div class="typewrap" id="type-wrap"><input class="typed" id="typed-sig" type="text" placeholder="Type your name"></div>
+        <div class="cta">
+          <button type="button" class="sign-btn" onclick="doSign()">Accept &amp; Sign Agreement</button>
+          <button type="button" class="linkbtn" onclick="showChanges()">Request changes instead</button>
+        </div>
+        <div class="msg" id="msg"></div>
+        <div class="changes" id="changes"><textarea id="changes-note" placeholder="Tell us what needs to be adjusted."></textarea>
+          <div class="cta"><button type="button" class="sign-btn" onclick="doChanges()">Send Changes</button></div></div>
+        <div class="sign-foot"><div class="m">Every Pool Matters</div>Mission Custom Pool Solutions LLC</div>
+      </div></div>`;
+    initPad();
+    const tb=document.getElementById('terms'),pr=document.getElementById('prog');
+    tb.addEventListener('scroll',()=>{const p=tb.scrollTop/(tb.scrollHeight-tb.clientHeight||1);pr.style.width=Math.min(100,p*100)+'%';});
+  }
+  let ctx,pad,ink=false,sigMode='draw';
+  function initPad(){pad=document.getElementById('pad');const r=pad.getBoundingClientRect(),ra=window.devicePixelRatio||1;pad.width=r.width*ra;pad.height=r.height*ra;ctx=pad.getContext('2d');ctx.scale(ra,ra);ctx.lineWidth=2.4;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#0D3D3E';let d=false,last=null;const pos=e=>{const b=pad.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:t.clientX-b.left,y:t.clientY-b.top};};const s=e=>{d=true;last=pos(e);e.preventDefault();};const m=e=>{if(!d)return;const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;ink=true;e.preventDefault();};const en=()=>d=false;pad.addEventListener('mousedown',s);pad.addEventListener('mousemove',m);window.addEventListener('mouseup',en);pad.addEventListener('touchstart',s,{passive:false});pad.addEventListener('touchmove',m,{passive:false});pad.addEventListener('touchend',en);}
+  function clearPad(){if(ctx)ctx.clearRect(0,0,pad.width,pad.height);ink=false;}
+  function setSigMode(mode){sigMode=mode;document.getElementById('tab-draw').classList.toggle('active',mode==='draw');document.getElementById('tab-type').classList.toggle('active',mode==='type');document.getElementById('draw-wrap').style.display=mode==='draw'?'block':'none';document.getElementById('type-wrap').style.display=mode==='type'?'block':'none';if(mode==='type'){const n=document.getElementById('signer-name').value;if(n)document.getElementById('typed-sig').value=n;}}
+  function setMsg(t,err){const m=document.getElementById('msg');m.className='msg'+(err?' err':'');m.textContent=t;m.style.display=t?'block':'none';}
+  function showChanges(){const c=document.getElementById('changes');c.style.display=c.style.display==='block'?'none':'block';}
+  function doChanges(){const n=document.getElementById('changes-note').value.trim();if(!n){setMsg('Please add a short note describing the changes you’d like.',true);return;}done('Thanks — your changes have been sent.','MCPS will review and follow up with an updated agreement.');}
+  function doSign(){if(!document.getElementById('consent').checked){setMsg('Please check the box to consent to electronic signature.',true);return;}const name=document.getElementById('signer-name').value.trim();if(!name){setMsg('Please enter your full legal name.',true);return;}if(sigMode==='draw'&&!ink){setMsg('Please draw your signature (or switch to Type).',true);return;}if(sigMode==='type'&&!document.getElementById('typed-sig').value.trim()){setMsg('Please type your signature.',true);return;}done('Thank you — your agreement is signed!','Welcome to Mission Custom Pool Solutions. We sent a welcome email with your service details and signed agreement.');}
+  function done(title,sub){document.getElementById('app').innerHTML=`<div class="band"><div class="wrap"><div class="band-top"><img src="../assets/mission-icon-transparent.png" alt="MCPS"></div><div class="mantra">Mission Custom Pool Solutions</div></div></div><div class="wrap"><div class="done"><div class="ok">✓</div><h2>${title}</h2><p>${sub}</p></div></div>`;window.scrollTo(0,0);}
+  render();
+  </script>
+</body>
+</html>
