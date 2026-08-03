@@ -126,14 +126,17 @@ const SIDEBAR_GROUPS = [
 ];
 
 // Pages per role — additive
+// 'jobs' is intentionally granted to no role: the Jobs tab and its GAS backend
+// are both deployed, but it hasn't been launched yet. Add it back here (and only
+// here) when it's ready — js/features/jobs.js and appscript/Jobs.js are live.
 const ROLE_PAGES = {
-  technician:['home','jobs','live_map','service_log','alerts'],
-  lead:['home','jobs','live_map','service_log','alerts'],
+  technician:['home','live_map','service_log','alerts'],
+  lead:['home','live_map','service_log','alerts'],
   trainee:['home','live_map'],
   new_hire:['onboarding'],
   office:['home','inventory','alerts'],
-  manager:['home','crm','comms','jobs','live_map','service_log','inventory','quotes','financial_hub','alerts'],
-  admin:['home','crm','comms','jobs','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
+  manager:['home','crm','comms','live_map','service_log','inventory','quotes','financial_hub','alerts'],
+  admin:['home','crm','comms','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

@@ -693,9 +693,26 @@ function syncPortalNavigationMode() {
   _syncTechNav();
 }
 
+// Which page each bottom-nav tab needs. The tabs are static markup, so without
+// this a page revoked in ROLE_PAGES leaves a visible button that navigateTo
+// silently refuses — worse than not showing it at all. Tabs are flex:1, so the
+// row re-spaces itself when one is hidden.
+const TN_TAB_PAGE = {
+  'tn-home':     'home',
+  'tn-jobs':     'jobs',
+  'tn-schedule': 'live_map',
+  'tn-service':  'service_log',
+  'tn-profile':  'live_map'
+};
+
 function _syncTechNav() {
   const nav = document.getElementById('tech-bottom-nav');
   if (!nav) return;
+  const pages = (_s && _s.pages) || [];
+  Object.keys(TN_TAB_PAGE).forEach(id => {
+    const tab = document.getElementById(id);
+    if (tab) tab.style.display = pages.includes(TN_TAB_PAGE[id]) ? '' : 'none';
+  });
   nav.querySelectorAll('.tn-tab').forEach(t => {
     t.classList.remove('tn-active');
     t.setAttribute('aria-selected', 'false');
