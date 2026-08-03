@@ -1601,6 +1601,17 @@ function doPost(e) {
       return jsonResponse_(handleBuilderLogout_(payload));
     }
 
+    // ── BUILDER PORTAL: authenticated tenant data. These take the session as
+    //    `builder_token` (see baRequireBuilder_) and scope every read/write to
+    //    that session's pool_company_id — never to a client-supplied one. ──────
+    if (payload.action === 'builder_dashboard_data') {
+      return jsonResponse_(handleBuilderDashboardData_(payload));
+    }
+
+    if (payload.action === 'builder_account_update') {
+      return jsonResponse_(handleBuilderAccountUpdate_(payload));
+    }
+
     if (payload.action === 'save_sensitive_info') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || "Unauthorized" });

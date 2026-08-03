@@ -127,8 +127,14 @@ function baValidateBuilderToken_(token) {
 }
 
 // Builder analogue of srRequireAdmin_ — used to gate every builder-session action.
+//
+// The portal sends the session as `builder_token`, deliberately NOT `token`:
+// js/lib/api.js auto-injects a STAFF token from localStorage into any payload
+// that omits `token`, and the portal shares an origin with the staff SPA. Keeping
+// the two in separate keys means neither side can ever be mistaken for the other.
+// `token` stays accepted as a back-compat fallback for anything already deployed.
 function baRequireBuilder_(payload) {
-  return baValidateBuilderToken_(payload.token || '');
+  return baValidateBuilderToken_(payload.builder_token || payload.token || '');
 }
 
 function baRevokeSession_(token) {
@@ -307,7 +313,137 @@ function handleBuilderLogin_(payload) {
   return { ok: true, token: token, company_name: found.row.company_name, pool_company_id: found.row.pool_company_id };
 }
 
+// Must read the same key baRequireBuilder_ does. If it only looked at `token`,
+// logout would return ok:true, the portal would clear its local session, and the
+// row would stay live in Builder_Sessions for its full 7-day TTL — a silent no-op
+// that looks exactly like success.
 function handleBuilderLogout_(payload) {
-  baRevokeSession_(payload.token || '');
+  baRevokeSession_(payload.builder_token || payload.token || '');
   return { ok: true };
+}
+
+// ─── Portal: dashboard + session restore ─────────────────────────────────────
+//
+// Doubles as the session-restore call: the portal fires this on load and treats
+// `expired` as "clear mcps_builder_s and show the login card" rather than an error.
+function handleBuilderDashboardData_(payload) {
+  const gate = baRequireBuilder_(payload);
+  if (!gate.ok) return { ok: false, expired: true, error: gate.error };
+
+  const companyId = String(gate.account.pool_company_id || '').trim();
+  const company = baFindCompanyById_(companyId);
+  if (!company) return { ok: false, error: 'Company not found.' };
+
+  const account = baFindAccountByEmail_(gate.account.email);
+  const rows = sheetToObjects_(getStartupRequestsSheet_()).rows.filter(function(r) {
+    return String(r.pool_company_id || '').trim() === companyId;
+  });
+
+  // Only what the builder submitted or needs to see — raw_extraction is internal
+  // AI noise, and approved_by is staff detail that doesn't belong to the tenant.
+  const BA_REQUEST_FIELDS = [
+    'request_id', 'status', 'first_name', 'last_name', 'email', 'phone',
+    'address', 'city', 'zip_code', 'pool_shape', 'pool_dimensions', 'pool_depth',
+    'spa', 'water_features', 'plaster_type', 'plaster_date',
+    'equip_filter', 'equip_pump', 'equip_heater', 'equip_chlorinator',
+    'equip_salt_system', 'equip_booster', 'total_gallons_est',
+    'requested_start_date', 'notes', 'photo_urls', 'admin_notes',
+    'change_requested_date', 'change_requested_note', 'change_requested_at',
+    'submitted_at', 'approved_at', 'pool_id'
+  ];
+  const requests = rows.map(function(r) {
+    const out = {};
+    BA_REQUEST_FIELDS.forEach(function(f) { out[f] = String(r[f] === undefined || r[f] === null ? '' : r[f]); });
+    // Rejection reasons are shown to the builder; other admin notes are not.
+    if (String(r.status || '') !== 'rejected') out.admin_notes = '';
+    return out;
+  }).reverse(); // newest first
+
+  const counts = { pending: 0, approved: 0, rejected: 0 };
+  requests.forEach(function(r) {
+    if (r.status === 'pending_review') counts.pending++;
+    else if (r.status === 'approved') counts.approved++;
+    else if (r.status === 'rejected') counts.rejected++;
+  });
+
+  return {
+    ok: true,
+    company: {
+      pool_company_id: companyId,
+      company_name: company.company_name || '',
+      contact_name: company.contact_name || '',
+      phone: company.phone || '',
+      report_bcc_email: company.report_bcc_email || '',
+      // Lets "Submit a new pool" hand off to the existing wizard pre-identified.
+      request_token: String(company.request_token || '')
+    },
+    account: {
+      email: gate.account.email,
+      contact_name: account.row ? String(account.row.contact_name || '') : ''
+    },
+    counts: counts,
+    requests: requests
+  };
+}
+
+// ─── Portal: update the company profile / password ───────────────────────────
+function handleBuilderAccountUpdate_(payload) {
+  const gate = baRequireBuilder_(payload);
+  if (!gate.ok) return { ok: false, expired: true, error: gate.error };
+
+  // Tenant scoping is derived from the session, never from the request. A
+  // pool_company_id in the payload is ignored outright — not read, not compared.
+  const companyId = String(gate.account.pool_company_id || '').trim();
+  const company = baFindCompanyById_(companyId);
+  if (!company) return { ok: false, error: 'Company not found.' };
+
+  const contactName = String(payload.contact_name || '').trim().slice(0, 120);
+  const phone = String(payload.phone || '').trim().slice(0, 40);
+  const reportEmail = String(payload.report_bcc_email || '').trim().toLowerCase().slice(0, 160);
+  if (reportEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reportEmail)) {
+    return { ok: false, error: 'Enter a valid report email.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    // Pool_Companies is the profile of record — it is what the intake resolves and
+    // what report emails BCC. Builder_Accounts gets the same values mirrored back so
+    // the login record can't drift out of sync with it.
+    const companySheet = ensureSheet_('Pool_Companies', MCPS_POOL_COMPANY_HEADERS);
+    const companyParsed = sheetToObjects_(companySheet);
+    const companyRow = companyParsed.rows.find(function(r) {
+      return String(r.pool_company_id || '').trim() === companyId;
+    });
+    if (!companyRow) return { ok: false, error: 'Company not found.' };
+    srSetRowValues_(companySheet, companyParsed.headers, companyRow._rowNum, {
+      contact_name: contactName,
+      phone: phone,
+      report_bcc_email: reportEmail,
+      updated_at: new Date().toISOString()
+    });
+
+    const found = baFindAccountByEmail_(gate.account.email);
+    if (found.row) {
+      const updates = {
+        contact_name: contactName,
+        phone: phone,
+        updated_at: new Date().toISOString()
+      };
+      const newPassword = String(payload.new_password || '').trim();
+      if (newPassword) {
+        if (newPassword.length < 8) return { ok: false, error: 'Password must be at least 8 characters.' };
+        const currentPassword = String(payload.current_password || '').trim();
+        if (hashPassword_(currentPassword) !== found.row.password_hash) {
+          return { ok: false, error: 'Current password is incorrect.' };
+        }
+        updates.password_hash = hashPassword_(newPassword);
+      }
+      srSetRowValues_(found.sheet, found.headers, found.row._rowNum, updates);
+    }
+
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
 }

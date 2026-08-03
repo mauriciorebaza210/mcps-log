@@ -4,6 +4,7 @@
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/margins", "destination": "/margins.html" },
     { "source": "/sms", "destination": "/sms.html" },
-    { "source": "/startup-request", "destination": "/startup-request.html" }
+    { "source": "/startup-request", "destination": "/startup-request.html" },
+    { "source": "/builder-portal", "destination": "/builder-portal.html" }
   ]
 }
