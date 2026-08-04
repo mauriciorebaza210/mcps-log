@@ -1,0 +1,63 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   SERVICE LOG — LEGACY FORMAT STYLES
+
+   This is the styling for the service log format that shipped publicly up to
+   2026-07-28 (commit ef5c64a) and is once again the public format.
+
+   Why this file exists: the service log rewrite (commit c22d432, published by
+   accident on 2026-08-03 via merge ee7f5bf) edited these selectors in place
+   inside style.css and deleted others outright. Reverting js/features/service-log.js
+   alone would leave the legacy UI unstyled — most visibly the dosing
+   recommendation panel (.ri*), which had no rules left at all.
+
+   Rather than unpick the rewrite out of style.css (where its 574 lines are
+   interleaved with unrelated builder-portal / bottom-nav work), this file is
+   loaded AFTER style.css and wins on cascade order.
+
+   When the v2 format is enabled (?svc=v2), the loader in index.html disables
+   this stylesheet so the rewrite's rules in style.css apply again.
+
+   Load order dependency: MUST come after /style.css. Do not reorder.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Recommendation box shell ─────────────────────────────────────────────
+   Same property set as the v2 rule, so no neutralizing needed here. */
+.rec-box{background:#e8f5f3;border:1px dashed var(--teal-mid);border-radius:var(--r-md);padding:.9rem 1rem;margin-bottom:1.25rem;display:none}
+
+/* v2 adds `gap` and a later `align-items:flex-start` override — both reset. */
+.rb-hdr{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:var(--text-sm);letter-spacing:.12em;text-transform:uppercase;color:var(--teal);display:flex;justify-content:space-between;align-items:center;gap:0;margin-bottom:.5rem}
+
+/* v2 adds border / white-space / order — reset so the pill sits inline again. */
+.rb-vol{font-size:var(--text-xs);background:rgba(255,255,255,.8);padding:1px 8px;border:0;border-radius:var(--r-sm);color:var(--teal-mid);white-space:normal;order:0}
+
+/* v2 right-aligns and reorders the flag row — legacy is left-aligned, first. */
+.rb-flags{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-start;order:0;margin-bottom:.55rem}
+
+/* v2 adds white-space:nowrap and pill radius — reset to the square legacy tag. */
+.rf{font-size:var(--text-xs);font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;border-radius:4px;white-space:normal}
+.rf.summer{background:rgba(217,119,6,.15);color:var(--warn)}
+.rf.green{background:rgba(239,68,68,.12);color:var(--error)}
+.rf.fiber{background:rgba(26,122,110,.12);color:var(--teal-mid)}
+.rf.plstr{background:rgba(200,168,75,.15);color:var(--gold)}
+
+/* ── Recommendation items ─────────────────────────────────────────────────
+   Deleted outright by the rewrite. Without these the dosing list renders as
+   unstyled stacked text with no severity colour. */
+.ri{background:#fff;padding:.65rem .8rem;border-radius:var(--r-sm);display:flex;flex-direction:column;gap:.15rem}
+.ri.bad{border-left:4px solid var(--error)}
+.ri.warning{border-left:4px solid var(--warn)}
+.ri.good{border-left:4px solid var(--success)}
+.ri-top{display:flex;justify-content:space-between;align-items:center}
+.ri-name{font-weight:600;font-size:var(--text-base)}
+.ri-amt{font-family:'Oswald',sans-serif;font-size:var(--text-md);font-weight:600;color:var(--teal)}
+.ri-why{font-size:var(--text-xs);color:var(--muted)}
+
+/* ── Tab pills ────────────────────────────────────────────────────────────
+   Active-state rule was deleted by the rewrite; without it the selected tab
+   is indistinguishable from the unselected ones. */
+.tbpill.tactive{border-color:var(--teal-mid);background:var(--teal-mid);color:#fff}
+
+/* ── Photo upload tiles ───────────────────────────────────────────────────
+   v2 turned .pu-icon into a fixed-size flex box for inline SVGs; the legacy
+   format puts a text glyph here, so the box model is reset. */
+.pu-icon{display:block;width:auto;height:auto;color:inherit;font-size:var(--text-2xl);margin-bottom:.4rem}

@@ -13,6 +13,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <link rel="stylesheet" href="/style.css?v=jobs-ui-v2">
+<!-- Restores the legacy service log styling over the v2 rules left in style.css.
+     Must stay after style.css. Disabled by the ?svc=v2 loader below. -->
+<link rel="stylesheet" href="/service-log-legacy.css?v=1" id="svc-legacy-css">
 <link rel="stylesheet" href="/js/lib/vendor/driver.min.css">
 </head>
 <body>
@@ -2049,7 +2052,28 @@
 <script src="/js/lib/auth.js"></script>
 <script src="/js/lib/router.js"></script>
 <script src="/js/features/routes.js"></script>
-<script src="/js/features/service-log.js"></script>
+<!-- Service log format switch.
+     Public default is the legacy format (service-log.js). The v2 rewrite is kept
+     in the repo but only loads for whoever opts in with ?svc=v2 (sticky), and is
+     turned back off with ?svc=v1. The two files declare the same top-level consts
+     (TF, FORM_SCHEMA, ...) so exactly ONE may ever be loaded -- loading both is a
+     SyntaxError. document.write keeps the load synchronous and in order. -->
+<script>
+(function(){
+  var v2 = false;
+  try {
+    if (/[?&]svc=v1(&|$)/.test(location.search)) { localStorage.removeItem('mcps_svc_v2'); }
+    else if (/[?&]svc=v2(&|$)/.test(location.search)) { localStorage.setItem('mcps_svc_v2','1'); }
+    v2 = localStorage.getItem('mcps_svc_v2') === '1';
+  } catch(e) { v2 = /[?&]svc=v2(&|$)/.test(location.search); }
+  if (v2) {
+    var lnk = document.getElementById('svc-legacy-css');
+    if (lnk) lnk.disabled = true;
+  }
+  // ?v= busts any copy of the v2 file cached by a tech's phone yesterday.
+  document.write('<scr' + 'ipt src="/js/features/service-log' + (v2 ? '-v2' : '') + '.js?v=legacy-restore"><\/scr' + 'ipt>');
+})();
+</script>
 <script src="/js/features/admin.js"></script>
 <script src="/js/features/inventory.js"></script>
 <script src="/js/features/quotes.js"></script>
