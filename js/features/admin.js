@@ -211,6 +211,27 @@ function openUserDrawer(username) {
   document.querySelector('input[name="d-active"][value="true"]').checked = true;
  
   document.getElementById('usr-pay-rate').value = '';
+
+  // ⚠️ Reset the scheduling/profile fields too. The drawer is a single reused
+  // element, so anything not cleared here leaks from the previously-opened
+  // technician — open someone with a bio, then someone without, and you'd see
+  // (and save) the wrong person's bio.
+  const _resetSched = {
+    'usr-max-per-day': '', 'usr-staff-bio': ''
+  };
+  Object.keys(_resetSched).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = _resetSched[id];
+  });
+  const _elig = document.getElementById('usr-auto-assign');
+  if (_elig) _elig.checked = false;                 // eligibility defaults OFF
+  const _showPhoto = document.getElementById('usr-show-photo');
+  if (_showPhoto) _showPhoto.checked = true;        // visibility defaults ON
+  const _showBio = document.getElementById('usr-show-bio');
+  if (_showBio) _showBio.checked = true;
+  const _schedWrapReset = document.getElementById('usr-scheduling-wrap');
+  if (_schedWrapReset) _schedWrapReset.style.display = 'none';
+
   const nhWarn = document.getElementById('new-hire-role-warning');
   const updateNewHireWarn = () => {
     if (!nhWarn || _editingUsername !== null) return;
@@ -221,6 +242,9 @@ function openUserDrawer(username) {
   if (!window._newHireRoleWarnBound) {
     document.querySelectorAll('#role-checkboxes input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', updateNewHireWarn);
+      // Scheduling/profile fields only make sense for someone who services pools,
+      // so follow the technician role live rather than only on drawer open.
+      cb.addEventListener('change', syncSchedulingSectionVisibility_);
     });
     window._newHireRoleWarnBound = true;
   }
@@ -286,12 +310,39 @@ function openUserDrawer(username) {
     // Set active status
     const active = user.active === true || String(user.active).toUpperCase() === 'TRUE';
     document.querySelector(`input[name="d-active"][value="${active}"]`).checked = true;
+
+    // ── Auto-assignment + customer-facing profile ──────────────────────────
+    // Defaults chosen deliberately: eligibility OFF (nobody is opted into
+    // automated routing silently), but photo/bio visibility ON (a technician who
+    // has never been configured still gets a normal introduction).
+    const eligEl  = document.getElementById('usr-auto-assign');
+    const maxEl   = document.getElementById('usr-max-per-day');
+    const bioEl   = document.getElementById('usr-staff-bio');
+    const photoEl = document.getElementById('usr-show-photo');
+    const showBioEl = document.getElementById('usr-show-bio');
+    if (eligEl)  eligEl.checked = String(user.auto_assign_eligible || '').toUpperCase() === 'TRUE';
+    if (maxEl)   maxEl.value = user.max_per_day || '';
+    if (bioEl)   bioEl.value = user.staff_bio || '';
+    if (photoEl) photoEl.checked = String(user.show_photo_to_customers || 'TRUE').toUpperCase() !== 'FALSE';
+    if (showBioEl) showBioEl.checked = String(user.show_bio_to_customers || 'TRUE').toUpperCase() !== 'FALSE';
+
+    syncSchedulingSectionVisibility_();
   }
  
   document.getElementById('user-backdrop').classList.add('open');
   document.getElementById('user-drawer').classList.add('open');
 }
  
+// Scheduling + customer-facing profile apply only to technicians. Driven off the
+// live role checkboxes rather than the saved value, so ticking "technician"
+// reveals the section immediately instead of after a reopen.
+function syncSchedulingSectionVisibility_() {
+  const wrap = document.getElementById('usr-scheduling-wrap');
+  if (!wrap) return;
+  const techBox = document.querySelector('#role-checkboxes input[value="technician"]');
+  wrap.style.display = (techBox && techBox.checked) ? '' : 'none';
+}
+
 function closeUserDrawer() {
   document.getElementById('user-backdrop').classList.remove('open');
   document.getElementById('user-drawer').classList.remove('open');
@@ -369,6 +420,20 @@ function saveUser() {
       fields.worker_type = workerType;
     }
     if (password) fields.password = password;
+
+    // ── Auto-assignment + customer-facing profile ──────────────────────────
+    // Only sent when the controls are present, so this stays harmless if the
+    // markup hasn't loaded (e.g. a non-technician drawer).
+    const eligEl  = document.getElementById('usr-auto-assign');
+    const maxEl   = document.getElementById('usr-max-per-day');
+    const bioEl   = document.getElementById('usr-staff-bio');
+    const photoEl = document.getElementById('usr-show-photo');
+    const showBioEl = document.getElementById('usr-show-bio');
+    if (eligEl)  fields.auto_assign_eligible = eligEl.checked;
+    if (maxEl)   fields.max_per_day = maxEl.value.trim();
+    if (bioEl)   fields.staff_bio = bioEl.value.trim();
+    if (photoEl) fields.show_photo_to_customers = photoEl.checked;
+    if (showBioEl) fields.show_bio_to_customers = showBioEl.checked;
  
     api({
       secret  : SEC,

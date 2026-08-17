@@ -47,7 +47,11 @@ function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch
 
 function unionPages_(roles) {
   const set = new Set();
-  const order = ['home','onboarding','jobs','live_map','service_log','crm','comms','inventory','quotes','training','admin','financial_hub','alerts'];
+  // ⚠️ This array is a WHITELIST, not just an ordering. A page granted in
+  // ROLE_PAGES but missing here is silently dropped from the session, so the
+  // sidebar never renders it and navigateTo() refuses it. Add every new page
+  // here as well as in ROLE_PAGES.
+  const order = ['home','action_queue','onboarding','jobs','live_map','service_log','crm','comms','contracts','inventory','quotes','training','admin','financial_hub','alerts'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }

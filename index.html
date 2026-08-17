@@ -359,6 +359,37 @@
       <div id="comms-root"></div>
     </div>
 
+    <!-- Action Queue — one inbox for everything needing a human decision -->
+    <!-- Contracts — executed service agreements + audit trail -->
+    <div class="pf" id="page-contracts">
+      <div class="aq-head">
+        <div>
+          <h2 class="aq-title">Contracts</h2>
+          <p class="aq-sub">Executed service agreements, their signature audit trail, and signed PDFs.</p>
+        </div>
+      </div>
+      <div class="ct-stats" id="ct-stats"></div>
+      <div class="ct-tools">
+        <input class="ct-search" type="search" placeholder="Search name, agreement number, service…"
+               oninput="ctSetSearch(this.value)">
+        <button class="ct-btn" onclick="loadContracts(true)">↻ Refresh</button>
+      </div>
+      <div class="ct-filters" id="ct-filters"></div>
+      <div class="ct-list" id="ct-list"></div>
+    </div>
+
+    <div class="pf" id="page-action_queue">
+      <div class="aq-head">
+        <div>
+          <h2 class="aq-title">Action Queue</h2>
+          <p class="aq-sub">Start-date requests, change requests and expiring quotes — everything waiting on a person.</p>
+        </div>
+        <button class="aq-btn ghost" onclick="loadActionQueue(true)">Refresh</button>
+      </div>
+      <div class="aq-filters" id="aq-filters"></div>
+      <div class="aq-list" id="aq-list"></div>
+    </div>
+
 <!-- ── REPLACE the entire id="page-admin" div with this ── -->
  
   <!-- Admin -->
@@ -480,6 +511,56 @@
   <!-- Internal Notes -->
   <!-- Tutorial Controls — admin only, rendered by admin.js -->
   <div id="adm-tutorial-controls" style="display:none"></div>
+
+  <!-- Scope of Work Library — the reusable items the quote tool offers -->
+  <div class="adm-card" id="adm-scope-library-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+      <span>Scope of Work Library</span>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="adm-new-btn" style="background:#475569" onclick="slToggleArchived()" id="sl-archived-btn">Show Archived</button>
+        <button class="adm-new-btn" onclick="slNewItem()">+ New Item</button>
+      </div>
+    </div>
+    <div style="padding:.85rem 1.1rem">
+      <p style="margin:0 0 .8rem;color:var(--muted);font-size:.82rem;line-height:1.45">
+        These are the scope items the quote tool offers. <strong>Default</strong> ones are pre-ticked for the
+        service types you choose; anything else is opt-in per quote. Order controls how they appear on the
+        proposal and the signed agreement.
+      </p>
+      <div id="sl-editor" style="display:none"></div>
+      <div id="sl-list">
+        <div style="color:var(--muted);text-align:center;padding:1.5rem;font-size:.85rem">Loading scope library…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Areas — the ZIP→day map behind route-locked start dates -->
+  <div class="adm-card" id="adm-service-areas-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+      <span>Service Areas</span>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="adm-new-btn" style="background:#475569" onclick="saToggleArchived()" id="sa-archived-btn">Show Archived</button>
+        <button class="adm-new-btn" style="background:#475569" onclick="saRefresh()">↻ Refresh</button>
+        <button class="adm-new-btn" onclick="saNewZone()">+ New Zone</button>
+      </div>
+    </div>
+    <div style="padding:.85rem 1.1rem">
+      <p style="margin:0 0 .8rem;color:var(--muted);font-size:.82rem;line-height:1.45">
+        Each area is a group of ZIP codes serviced on one day. Several areas can share a day with
+        different technicians. When a customer signs, their address decides their service day — so
+        <strong>a ZIP with no area gets no service day offered</strong>, and they pick a preferred week instead.
+      </p>
+      <div class="sa-tabs">
+        <button class="sa-tab active" id="sa-tab-zones" onclick="saSwitchTab('zones')">Zones</button>
+        <button class="sa-tab" id="sa-tab-coverage" onclick="saSwitchTab('coverage')">Coverage</button>
+        <button class="sa-tab" id="sa-tab-suggest" onclick="saSwitchTab('suggest')">Suggestions</button>
+      </div>
+      <div id="sa-editor" style="display:none"></div>
+      <div id="sa-body">
+        <div class="sa-empty">Loading service areas…</div>
+      </div>
+    </div>
+  </div>
 
   <div class="adm-card" id="adm-internal-notes-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -783,6 +864,37 @@
         <span class="dfg-hint">Contractor pay rate — shown in their onboarding contract.</span>
       </div>
 
+      <!-- Scheduling + customer-facing profile. Technicians only; hidden for
+           everyone else by openUserDrawer(). -->
+      <div id="usr-scheduling-wrap" style="display:none">
+        <div class="dfg" style="border-top:1px solid var(--border);padding-top:.9rem;margin-top:.2rem">
+          <label>Automatic Scheduling</label>
+          <label class="rcb"><input type="checkbox" id="usr-auto-assign"> Can be auto-assigned new customers</label>
+          <span class="dfg-hint">Off by default. Only eligible technicians are given new signups automatically.</span>
+        </div>
+
+        <div class="dfg">
+          <label for="usr-max-per-day">Max Pools Per Day <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+          <input class="si" type="number" min="1" id="usr-max-per-day" placeholder="10">
+          <span class="dfg-hint">Their daily capacity. Leave blank to use the default of 10.</span>
+        </div>
+
+        <div class="dfg">
+          <label for="usr-staff-bio">Bio For Customers <span style="font-weight:400;color:var(--muted);font-size:.72rem">(optional)</span></label>
+          <textarea class="si" id="usr-staff-bio" rows="2" maxlength="160"
+            placeholder="e.g. Nine years keeping San Antonio pools swim-ready."
+            style="resize:vertical;font-family:inherit"></textarea>
+          <span class="dfg-hint">Appears in the welcome email when a customer is introduced to them.</span>
+        </div>
+
+        <div class="dfg">
+          <label>What Customers See</label>
+          <label class="rcb"><input type="checkbox" id="usr-show-photo" checked> Show their photo</label>
+          <label class="rcb"><input type="checkbox" id="usr-show-bio" checked> Show their bio</label>
+          <span class="dfg-hint">Their name is always shown — that's the point of the introduction.</span>
+        </div>
+      </div>
+
       <div class="dfg" id="d-worker-type-wrap">
         <label>Worker Type</label>
         <div class="status-toggle">
@@ -818,48 +930,72 @@
         <button class="q-newbtn" onclick="qReset()">+ New Quote</button>
       </div>
 
-      <!-- Sales Path -->
-      <div class="q-sec">
-        <div class="q-sec-lbl">Sales Path</div>
-        <div class="q-svc-grid">
-          <div class="q-svc-card q-flow-card active" data-flow="proposal_first" onclick="qSetSalesFlow('proposal_first')">
-            <div class="q-svc-name">Proposal First</div>
-            <div class="q-svc-desc">Send pricing for approval before the agreement</div>
+      <!-- Quote Setup -->
+      <div class="q-sec q-options-sec">
+        <div class="q-options-row">
+          <div class="q-options-label">
+            <div class="q-sec-lbl">Sales Path</div>
+            <div class="q-choice-sub">Customer signature or internal activation.</div>
           </div>
-          <div class="q-svc-card q-flow-card" data-flow="agreement_direct" onclick="qSetSalesFlow('agreement_direct')">
-            <div class="q-svc-name">Agreement Direct</div>
-            <div class="q-svc-desc">Price is agreed; generate the service agreement</div>
-          </div>
-          <div class="q-svc-card q-flow-card" data-flow="operational_override" onclick="qSetSalesFlow('operational_override')">
-            <div class="q-svc-name">Activate Now</div>
-            <div class="q-svc-desc">Admin override for immediate scheduling</div>
+          <div class="q-svc-grid q-flow-grid">
+            <button type="button" class="q-svc-card q-flow-card active" data-flow="proposal_first" aria-pressed="true" onclick="qSetSalesFlow('proposal_first')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Quote + Agreement</span>
+                <span class="q-svc-desc">One customer signing link</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="q-svc-card q-flow-card" data-flow="operational_override" aria-pressed="false" onclick="qSetSalesFlow('operational_override')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Activate Now</span>
+                <span class="q-svc-desc">Admin scheduling override</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
-      </div>
 
-      <!-- Service Type -->
-      <div class="q-sec">
-        <div class="q-sec-lbl">Service Type</div>
-        <div class="q-svc-grid">
-          <div class="q-svc-card active" data-svc="weekly_full" onclick="qSetService('weekly_full')">
-            <div class="q-svc-name">Weekly Full Service</div>
-            <div class="q-svc-desc">Weekly maintenance + chemicals</div>
+        <div class="q-options-row">
+          <div class="q-options-label">
+            <div class="q-sec-lbl">Service Type</div>
+            <div class="q-choice-sub">Changes the form fields below.</div>
           </div>
-          <div class="q-svc-card" data-svc="biweekly_maint" onclick="qSetService('biweekly_maint')">
-            <div class="q-svc-name">Bi-Weekly Maintenance</div>
-            <div class="q-svc-desc">Every two weeks, no chemicals</div>
-          </div>
-          <div class="q-svc-card" data-svc="green_to_clean" onclick="qSetService('green_to_clean')">
-            <div class="q-svc-name">Green-to-Clean</div>
-            <div class="q-svc-desc">One-time cleaning service</div>
-          </div>
-          <div class="q-svc-card" data-svc="pool_startup" onclick="qSetService('pool_startup')">
-            <div class="q-svc-name">Pool Startup</div>
-            <div class="q-svc-desc">New plaster / builder handoff</div>
-          </div>
-          <div class="q-svc-card" data-svc="repair_job" onclick="qSetService('repair_job')">
-            <div class="q-svc-name">Repair / Other Job</div>
-            <div class="q-svc-desc">Repairs, replacements, invoices</div>
+          <div class="q-svc-grid q-service-grid">
+            <button type="button" class="q-svc-card active" data-svc="weekly_full" aria-pressed="true" onclick="qSetService('weekly_full')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Weekly Full</span>
+                <span class="q-svc-desc">Maintenance + chemicals</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="q-svc-card" data-svc="biweekly_maint" aria-pressed="false" onclick="qSetService('biweekly_maint')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Bi-Weekly</span>
+                <span class="q-svc-desc">No chemicals</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="q-svc-card" data-svc="green_to_clean" aria-pressed="false" onclick="qSetService('green_to_clean')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Green-to-Clean</span>
+                <span class="q-svc-desc">One-time recovery</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="q-svc-card" data-svc="pool_startup" aria-pressed="false" onclick="qSetService('pool_startup')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Pool Startup</span>
+                <span class="q-svc-desc">Builder handoff</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="q-svc-card" data-svc="repair_job" aria-pressed="false" onclick="qSetService('repair_job')">
+              <span class="q-choice-body">
+                <span class="q-svc-name">Repair / Other</span>
+                <span class="q-svc-desc">Work order</span>
+              </span>
+              <span class="q-choice-check" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -998,43 +1134,6 @@
           <input class="q-inp" id="q-rep-amt" type="number" min="0" step="0.01" placeholder="0.00" oninput="qField('repair_amount',parseFloat(this.value)||0)">
         </div>
 
-        <div class="q-sec-lbl" style="margin-top:1.1rem">Work Order</div>
-        <div class="q-1col">
-          <label class="q-flabel">Job Name</label>
-          <input class="q-inp" id="q-rep-name" type="text" placeholder="Pool Light Replacement" oninput="qField('repair_job_name',this.value)">
-        </div>
-        <div class="q-sub-lbl">Priority</div>
-        <div class="q-pills">
-          <button class="q-pill" data-grp="repair_priority" data-val="low" onclick="qPill(this,'repair_priority')">Low</button>
-          <button class="q-pill active" data-grp="repair_priority" data-val="medium" onclick="qPill(this,'repair_priority')">Medium</button>
-          <button class="q-pill" data-grp="repair_priority" data-val="high" onclick="qPill(this,'repair_priority')">High</button>
-        </div>
-        <div class="q-2col">
-          <div>
-            <label class="q-flabel">Equipment</label>
-            <select class="q-inp" id="q-rep-equip" onchange="qField('repair_equipment',this.value)">
-              <option value="">Select...</option>
-              <option>Pump</option><option>Filter</option><option>Heater</option>
-              <option>Chlorinator</option><option>Automation</option><option>Lighting</option>
-              <option>Plumbing</option><option>Cleaner</option><option>Other</option>
-            </select>
-          </div>
-          <div>
-            <label class="q-flabel">Assigned Technician</label>
-            <select class="q-inp" id="q-rep-tech" onchange="qField('repair_assigned_to',this.value)">
-              <option value="">Unassigned</option>
-            </select>
-          </div>
-        </div>
-        <div class="q-1col">
-          <label class="q-flabel">Specific Issue</label>
-          <textarea class="q-inp" id="q-rep-issue" rows="2" placeholder="Light flickers, likely failed niche seal..." oninput="qField('repair_issue',this.value)"></textarea>
-        </div>
-        <div class="q-1col" style="margin-bottom:0">
-          <label class="q-flabel">Parts</label>
-          <div id="q-rep-parts"></div>
-          <button type="button" class="q-btn-ghost" style="margin-top:.4rem" onclick="qRepAddPart()">+ Add Part</button>
-        </div>
       </div>
 
       <!-- Contact Info -->
@@ -1774,6 +1873,15 @@
       <span class="pas-pin-text" id="pas-pin-text">Pinned — won't be moved by auto-placement</span>
     </div>
   </div>
+  <!-- Only shown for permanent moves. Customers who were told a service day get
+       an email when it changes; untick for a correction they needn't hear about. -->
+  <div class="pas-section" id="pas-notify-section">
+    <div class="pas-section-label">✉️ Customer</div>
+    <div class="pas-pin-toggle" id="pas-notify-toggle" onclick="togglePasNotify()">
+      <span class="pas-pin-icon" id="pas-notify-icon">✅</span>
+      <span class="pas-pin-text" id="pas-notify-text">Tell the customer their service day changed</span>
+    </div>
+  </div>
   <div class="pas-section" id="pas-gate-code-section">
     <div class="pas-section-label">🔑 Gate / access code</div>
     <div style="display:flex;gap:.5rem;align-items:center">
@@ -1926,6 +2034,33 @@
 </div>
 
 <!-- ── Lead Detail Drawer ── -->
+<!-- Create plan change (amendment) — staff only, from the contract detail drawer -->
+<div id="amd-modal-backdrop" class="conf-modal-backdrop" onclick="closeAmendModal(event)">
+  <div class="conf-modal" style="max-width:520px" onclick="event.stopPropagation()">
+    <div class="conf-modal-hdr">
+      <span class="conf-modal-title">Create plan change</span>
+      <button class="drawer-close" onclick="closeAmendModal()">✕</button>
+    </div>
+    <div class="conf-modal-body" id="amd-modal-body"></div>
+    <div class="conf-modal-foot" id="amd-modal-foot"></div>
+  </div>
+</div>
+
+<!-- Contract detail drawer (audit trail) -->
+<div class="drawer-backdrop" id="ct-backdrop" onclick="ctCloseDetail()"></div>
+<div class="drawer" id="ct-drawer" style="width:min(520px,100vw)">
+  <div class="drawer-inner">
+    <div class="drawer-hdr">
+      <div>
+        <div class="drawer-title" id="ct-drawer-title">Contract</div>
+        <div class="drawer-sub" id="ct-drawer-sub"></div>
+      </div>
+      <button class="drawer-close" onclick="ctCloseDetail()">✕</button>
+    </div>
+    <div class="drawer-body" id="ct-drawer-body" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
 <div class="drawer-backdrop" id="lead-backdrop" onclick="closeLeadDrawer()"></div>
 <div class="drawer" id="lead-drawer" style="width:min(520px,100vw)">
   <div class="drawer-inner">
@@ -2089,6 +2224,10 @@
 <script src="/js/features/startup_checklists.js"></script>
 <script src="/js/features/jobs.js?v=jobs-v10"></script>
 <script src="/js/features/comms.js"></script>
+<script src="/js/features/action-queue.js"></script>
+<script src="/js/features/scope-library.js"></script>
+<script src="/js/features/service-areas.js"></script>
+<script src="/js/features/contracts.js"></script>
 <script src="/js/lib/vendor/driver.iife.min.js"></script>
 <script src="/js/features/tour.js"></script>
 <script src="/app.js"></script>

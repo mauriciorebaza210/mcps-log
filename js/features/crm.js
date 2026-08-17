@@ -43,9 +43,12 @@ async function loadCRM() {
     renderCRMStats();
     populateYearFilter();
     _applyPendingCrmFilter_();
-    if (window._pendingAlertQuoteId) {
-      const pending = window._pendingAlertQuoteId;
-      window._pendingAlertQuoteId = null;
+    // Deep-link: open a specific lead's drawer on arrival. Set by the Action
+    // Queue's "Open Quote" (js/features/action-queue.js). Consumed once, then
+    // cleared, so a later manual visit to this page doesn't re-open it.
+    if (window._pendingCrmQuoteId) {
+      const pending = window._pendingCrmQuoteId;
+      window._pendingCrmQuoteId = null;
       viewCRMDetail(pending);
     }
   } else {
@@ -69,9 +72,9 @@ async function loadCRM() {
         renderCRMStats();
         populateYearFilter();
         if (!cachedCrm) _applyPendingCrmFilter_();
-        if (!cachedCrm && window._pendingAlertQuoteId) {
-          const pending = window._pendingAlertQuoteId;
-          window._pendingAlertQuoteId = null;
+        if (!cachedCrm && window._pendingCrmQuoteId) {
+          const pending = window._pendingCrmQuoteId;
+          window._pendingCrmQuoteId = null;
           viewCRMDetail(pending);
         }
       }
@@ -364,6 +367,11 @@ function buildLeadDrawerHTML(item) {
               style="padding:.45rem .9rem;border:1px solid var(--border);background:#fff;color:var(--teal);border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer">
               ${item.proposal_pdf_url ? 'Regenerate Proposal' : 'Generate Proposal'}
             </button>
+            ${item.proposal_pdf_url ? `
+              <a href="/agreement.html?preview=1&quote=${encodeURIComponent(item.quote_id)}" target="_blank" rel="noopener"
+                 style="padding:.45rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--teal);text-decoration:none;font-weight:600">
+                Preview Agreement
+              </a>` : ''}
             ${item.proposal_pdf_url ? `
               <button id="drawer-send-proposal-btn" onclick="sendProposalApproval('${item.quote_id}')"
                 style="padding:.45rem .9rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer">

@@ -8,7 +8,7 @@
 function visitReportZapierWebhook_() {
   return PropertiesService.getScriptProperties().getProperty("VISIT_REPORT_ZAPIER_WEBHOOK") || "";
 }
-const VISIT_REPORT_BCC            = "mauricio@mcpoolsolutions.org,antonio@mcpoolsolutions.org";
+const VISIT_REPORT_BCC            = "mauricio@mcpoolsolutions.org";
 const VISIT_REPORT_MCP_RECIPIENT  = "rosy@missioncustompools.com";
 const VISIT_REPORT_FROM           = "antonio@mcpoolsolutions.org";
 const VISIT_REPORT_FROM_NAME      = "Mission Custom Pool Solutions";

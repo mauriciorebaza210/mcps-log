@@ -706,34 +706,45 @@ function processPendingSvcJobs_() {
               }
             });
           }
-          let alreadyRecorded = false;
           let jcHeaders = jcSheet.getRange(1, 1, 1, jcSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
-          if (jcSheet.getLastRow() >= 2) {
-            const jcValues = jcSheet.getRange(1, 1, jcSheet.getLastRow(), jcSheet.getLastColumn()).getValues();
-            const visitIdCol = jcHeaders.indexOf('visit_id');
-            if (visitIdCol >= 0) {
-              alreadyRecorded = jcValues.slice(1).some(function(r) { return String(r[visitIdCol] || '') === visitId; });
+          const jcWriteLock = LockService.getScriptLock();
+          jcWriteLock.waitLock(10000);
+          try {
+            let alreadyRecorded = false;
+            if (jcSheet.getLastRow() >= 2) {
+              const jcValues = jcSheet.getRange(1, 1, jcSheet.getLastRow(), jcSheet.getLastColumn()).getValues();
+              const visitIdCol = jcHeaders.indexOf('visit_id');
+              const rowCol = jcHeaders.indexOf('service_log_row');
+              const logUidCol = jcHeaders.indexOf('service_log_uid');
+              alreadyRecorded = jcValues.slice(1).some(function(r) {
+                if (visitIdCol >= 0 && visitId && String(r[visitIdCol] || '') === visitId) return true;
+                if (rowCol >= 0 && rowNum && String(r[rowCol] || '') === String(rowNum)) return true;
+                if (logUidCol >= 0 && job.logUid && String(r[logUidCol] || '') === String(job.logUid)) return true;
+                return false;
+              });
             }
-          }
-          if (!alreadyRecorded) {
-            const row = new Array(jcHeaders.length).fill('');
-            const setJc = function(name, value) {
-              const idx = jcHeaders.indexOf(name);
-              if (idx >= 0) row[idx] = value;
-            };
-            setJc('visit_id', visitId);
-            setJc('pool_id', svPoolId);
-            setJc('technician', portalUser);
-            setJc('completed_at', safeCompletedAt.toISOString());
-            setJc('week_start', weekStart);
-            setJc('day_of_week', dayNames[dayNum]);
-            setJc('service_log_row', rowNum);
-            setJc('date', completedDateStr);
-            setJc('scheduled_visit_id', scheduledVisitId);
-            setJc('service_key', serviceKey);
-            setJc('payroll_uid', Utilities.getUuid()); // payroll-only immutable id (additive)
-            setJc('service_log_uid', job.logUid || ''); // links back to Chemical_Usage_Log row for rollback
-            jcSheet.appendRow(row);
+            if (!alreadyRecorded) {
+              const row = new Array(jcHeaders.length).fill('');
+              const setJc = function(name, value) {
+                const idx = jcHeaders.indexOf(name);
+                if (idx >= 0) row[idx] = value;
+              };
+              setJc('visit_id', visitId);
+              setJc('pool_id', svPoolId);
+              setJc('technician', portalUser);
+              setJc('completed_at', safeCompletedAt.toISOString());
+              setJc('week_start', weekStart);
+              setJc('day_of_week', dayNames[dayNum]);
+              setJc('service_log_row', rowNum);
+              setJc('date', completedDateStr);
+              setJc('scheduled_visit_id', scheduledVisitId);
+              setJc('service_key', serviceKey);
+              setJc('payroll_uid', Utilities.getUuid()); // payroll-only immutable id (additive)
+              setJc('service_log_uid', job.logUid || ''); // links back to Chemical_Usage_Log row for rollback
+              jcSheet.appendRow(row);
+            }
+          } finally {
+            jcWriteLock.releaseLock();
           }
 
           if (scheduledVisitId) {
@@ -1524,10 +1535,67 @@ function doPost(e) {
       return jsonResponse_(handleGetProposalApproval_(payload));
     }
 
+    // Staff-only: build an addendum against a signed agreement. Creates its own
+    // proposal, agreement row, approval and token — the parent is never touched.
+    if (payload.action === 'create_amendment') {
+      const amAuth = validateToken(payload.token || '');
+      if (!amAuth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(amAuth, 'admin') && !hasRole(amAuth, 'manager')) {
+        return jsonResponse_({ ok: false, error: 'Not authorized.' });
+      }
+      const amPayload = Object.assign({}, payload, {
+        created_by: String(amAuth.name || amAuth.username || '').trim()
+      });
+      const amRes = handleCreateAmendment_(amPayload);
+      invalidateCrmCache_();
+      return jsonResponse_(amRes);
+    }
+
+    // Public customer signature on an amendment. Auth is the Proposal_Approvals
+    // token, exactly like sign_agreement.
+    // ⚠️ The target is resolved server-side from the token's target_agreement_id.
+    // A browser-supplied agreement_id is ignored — parent and amendments share a
+    // source_quote_id, so trusting the client could sign the executed parent.
+    if (payload.action === 'sign_amendment') {
+      const signAmRes = handleSignAmendment_(payload);
+      invalidateCrmCache_();
+      return jsonResponse_(signAmRes);
+    }
+
+    // Sales funnel for the Contracts stats band. Same admin/manager gate as the
+    // agreement reads — it exposes pipeline volume and close rates.
+    if (payload.action === 'get_sales_funnel') {
+      const sfAuth = validateToken(payload.token || '');
+      if (!sfAuth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(sfAuth, 'admin') && !hasRole(sfAuth, 'manager')) {
+        return jsonResponse_({ ok: false, error: 'Not authorized.' });
+      }
+      return jsonResponse_(handleGetSalesFunnel_(payload));
+    }
+
+    // Staff-only: render the real signing page for a quote that hasn't been sent.
+    // Unlike the routes around it this is NOT public — it takes a quote_id rather
+    // than an approval token, so it must require a portal session or anyone could
+    // read any customer's pricing by guessing quote IDs.
+    if (payload.action === 'get_agreement_preview') {
+      const prevAuth = validateToken(payload.token || '');
+      if (!prevAuth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return jsonResponse_(handleGetAgreementPreview_(payload));
+    }
+
     if (payload.action === 'respond_to_proposal') {
       const proposalResponse = handleRespondToProposal_(payload);
       invalidateCrmCache_();
       return jsonResponse_(proposalResponse);
+    }
+
+    // Public customer in-portal e-signature (merged proposal + contract). Auth is
+    // the Proposal_Approvals token inside the handler — no portal session needed,
+    // same as get_proposal_approval / respond_to_proposal above.
+    if (payload.action === 'sign_agreement') {
+      const signResponse = handleSignAgreement_(payload);
+      invalidateCrmCache_();
+      return jsonResponse_(signResponse);
     }
 
     // ── STARTUP REQUESTS: public builder intake (each handler validates the
@@ -1842,7 +1910,9 @@ function doPost(e) {
     }
 
     if (payload.action === 'move_pool') {
-      const data = movePool(payload.token || "", payload.pool_id || "", payload.new_day || "", payload.new_operator || "", payload.pinned, payload.monthly_week);
+      // notify_customer defaults to true — omitting it notifies, so silence is
+      // always a deliberate choice by the person making the move.
+      const data = movePool(payload.token || "", payload.pool_id || "", payload.new_day || "", payload.new_operator || "", payload.pinned, payload.monthly_week, payload.notify_customer !== false);
       // For startup pools: persist the start date so GAS can filter by week
       if (data.ok && payload.startup_start_date) {
         setStartupDate_(payload.pool_id || "", payload.startup_start_date);
@@ -2010,6 +2080,42 @@ function doPost(e) {
       }
     }
 
+    // Read-only geography report behind Service Areas. Routed through doPost
+    // (not doGet) per the CORS rule in CLAUDE.md, and admin-gated because it
+    // exposes the full customer-to-ZIP distribution.
+    if (payload.action === 'analyze_route_geography') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Not authorized' });
+      return jsonResponse_(handleAnalyzeRouteGeography_(payload));
+    }
+
+    // Service Areas — the zone map behind route-locked start dates.
+    // Reads are admin/manager (they expose the full customer ZIP distribution);
+    // writes are admin/manager too. All via doPost per the CORS rule.
+    if (payload.action === 'get_service_areas' || payload.action === 'save_service_area' ||
+        payload.action === 'archive_service_area' || payload.action === 'get_zone_coverage' ||
+        payload.action === 'propose_service_areas') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Not authorized' });
+      if (payload.action === 'get_service_areas')     return jsonResponse_(handleGetServiceAreas_(payload));
+      if (payload.action === 'save_service_area')     return jsonResponse_(handleSaveServiceArea_(payload));
+      if (payload.action === 'archive_service_area')  return jsonResponse_(handleArchiveServiceArea_(payload));
+      if (payload.action === 'propose_service_areas') return jsonResponse_(handleProposeServiceAreas_(payload));
+      return jsonResponse_(handleGetZoneCoverage_(payload));
+    }
+
+    // Read-only: does every quote resolve to a Clients row? Decides whether the
+    // person backfill is needed at all. Exposes customer contact details, so
+    // admin/manager only.
+    if (payload.action === 'analyze_migration_coverage') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Not authorized' });
+      return jsonResponse_(handleAnalyzeMigrationCoverage_(payload));
+    }
+
     const trActions = { get_modules: true, create_module: true, update_module: true, delete_module: true, create_video: true, update_video: true, delete_video: true, create_content: true, update_content: true, delete_content: true, get_training_progress: true, upsert_training_progress: true, submit_quiz: true, get_quiz_results: true };
     if (trActions[payload.action]) {
       const auth = validateToken(payload.token || "");
@@ -2073,6 +2179,7 @@ function doPost(e) {
       get_client_service_agreements: true,
       get_location_service_agreements: true,
       get_service_agreement: true,
+      update_contract_followups: true,
       create_service_agreement_from_proposal: true,
       create_direct_service_agreement: true,
       update_service_agreement: true,
@@ -2092,6 +2199,18 @@ function doPost(e) {
            payload.action === 'activate_service_account_from_agreement') &&
           !hasRole(auth, 'admin') && !hasRole(auth, 'manager')) {
         return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      }
+      // Executed agreements carry contract pricing and the signer's IP, user agent
+      // and signature image. Any valid session could read all of that — including a
+      // technician's. Nothing called these routes before the Contracts page, so
+      // tightening them now breaks nothing.
+      if ((payload.action === 'get_service_agreements' ||
+           payload.action === 'get_service_agreement' ||
+           payload.action === 'get_client_service_agreements' ||
+           payload.action === 'get_location_service_agreements' ||
+           payload.action === 'update_contract_followups') &&
+          !hasRole(auth, 'admin') && !hasRole(auth, 'manager')) {
+        return jsonResponse_({ ok: false, error: 'Not authorized.' });
       }
       const nsRes = handleNormalizedSalesAction_(payload);
       if (payload.action === 'send_proposal_for_approval' ||
@@ -2114,6 +2233,94 @@ function doPost(e) {
         c.remove('weekly_goal');
       } catch(e) {}
       return sqRes;
+    }
+
+    // Selectable start dates for the signing page's "Starts" calendar.
+    //
+    // Two paths, kept strictly apart INSIDE the handler (savResolveQuote_):
+    //   • public — a Proposal_Approvals token, same as get_proposal_approval.
+    //   • staff  — quote_id + a valid portal session, for previewing before send.
+    //
+    // ⚠️ Deliberately not gated here. A blanket validateToken() would break the
+    // public path, and quietly accepting quote_id without a session would turn
+    // this into a quote enumerator — so the handler refuses that combination
+    // itself rather than downgrading it.
+    if (payload.action === 'get_start_availability') {
+      return jsonResponse_(handleGetStartAvailability_(payload));
+    }
+
+    // Assignment exceptions — what the scheduler could not do cleanly. These are
+    // now persisted (Assignment_Exceptions) instead of only being emailed, so
+    // the Action Queue has something to read.
+    if (payload.action === 'get_assignment_exceptions' ||
+        payload.action === 'resolve_assignment_exception') {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Not authorized' });
+      if (payload.action === 'get_assignment_exceptions') {
+        return jsonResponse_(handleGetAssignmentExceptions_(payload));
+      }
+      // validateToken returns username/name at the TOP level, not under `user`.
+      payload.resolved_by = payload.resolved_by || auth.name || auth.username || '';
+      return jsonResponse_(handleResolveAssignmentException_(payload));
+    }
+
+    // NOTE: there is deliberately no 'request_start_date' route. An earlier draft
+    // had one, but the preferred start date is now recorded atomically with the
+    // signature inside handleSignAgreement_. A standalone public endpoint would
+    // let a date be written for a customer who never signs — the exact orphan
+    // write that atomic design exists to prevent.
+
+    // Public: a customer whose signing link has expired asking for a fresh quote.
+    // Auth is the Proposal_Approvals token, re-resolved inside the handler — the
+    // quote is never taken from the client. Lands as a card in the Action Queue.
+    if (payload.action === 'request_quote_update') {
+      return jsonResponse_(handleRequestQuoteUpdate_(payload));
+    }
+
+    // ── Action Queue ─────────────────────────────────────────────────────────
+    // One inbox for everything needing a human: start-date requests, change
+    // requests (previously surfaced nowhere), and expiring/expired quotes.
+    if (payload.action === 'get_action_queue') {
+      const aqAuth = validateToken(payload.token || '');
+      if (!aqAuth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return jsonResponse_(handleGetActionQueue_(payload));
+    }
+
+    // Confirming a customer's requested start date. This — not the customer's
+    // click — is what sets service_start.
+    if (payload.action === 'confirm_start_date') {
+      const csAuth = validateToken(payload.token || '');
+      if (!csAuth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(csAuth, 'admin') && !hasRole(csAuth, 'manager') && !hasRole(csAuth, 'office')) {
+        return jsonResponse_({ ok: false, error: 'Not authorized.' });
+      }
+      const csRes = handleConfirmStartDate_(payload);
+      invalidateCrmCache_();
+      return jsonResponse_(csRes);
+    }
+
+    // ── Scope Library ────────────────────────────────────────────────────────
+    // Reusable Scope of Work items. Read is available to any signed-in user (the
+    // quote tool needs it); writing is admin/manager only.
+    if (payload.action === 'get_scope_library') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      // Archived items are only for the admin management view; the quote tool
+      // must never be able to offer an item that was deliberately retired.
+      if (payload.include_inactive && !hasRole(auth, 'admin') && !hasRole(auth, 'manager')) {
+        payload.include_inactive = false;
+      }
+      return jsonResponse_(handleGetScopeLibrary_(payload));
+    }
+
+    if (payload.action === 'save_scope_library_item') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) {
+        return jsonResponse_({ ok: false, error: 'Admins only.' });
+      }
+      return jsonResponse_(handleSaveScopeLibraryItem_(payload));
     }
 
     if (payload.action === 'generate_contract') {

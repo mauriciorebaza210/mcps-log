@@ -54,7 +54,10 @@ function navigateTo(pageWithSub){
   const mc = document.querySelector('.main-content');
   if (mc) mc.scrollTop = 0;
 
-  if(page==='home') loadHomeStats();
+  if(page==='home') {
+    loadHomeStats();
+    loadHomeIssues();
+  }
   if(page==='jobs') loadJobsPage(sub);
   if(page==='live_map'){
     loadRoutes();
@@ -67,7 +70,7 @@ function navigateTo(pageWithSub){
   if(page==='comms') loadCommsPage(sub);
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
-  if(page==='admin') { loadStartupRequests(); loadPendingHires(); loadInternalNotes(); if (typeof loadEmployeeInvites === 'function') loadEmployeeInvites(); }
+  if(page==='admin') { loadUsers(); loadStartupRequests(); loadPendingHires(); loadInternalNotes(); if (typeof loadEmployeeInvites === 'function') loadEmployeeInvites(); if (typeof loadScopeLibrary === 'function') loadScopeLibrary(); if (typeof loadServiceAreas === 'function') loadServiceAreas(); }
   if(page==='financial_hub') {
     // If we have a sub-path, notify the hub logic
     if (typeof switchFinTab === 'function' && sub) {
@@ -77,6 +80,8 @@ function navigateTo(pageWithSub){
     }
   }
   if(page==='alerts') loadAlertsPage();
+  if(page==='action_queue') loadActionQueue();
+  if(page==='contracts') loadContracts();
   if (typeof syncPortalNavigationMode === 'function') syncPortalNavigationMode();
 }
 
@@ -91,7 +96,8 @@ function _setSidebarActive(page, hubTab) {
   const target = document.getElementById(targetId);
   if (target) target.classList.add('active');
   // Auto-expand parent accordion
-  if (page === 'crm' || page === 'quotes' || page === 'comms') _setAccordionOpen('sales', true);
+  if (page === 'crm' || page === 'quotes' || page === 'comms' || page === 'contracts' ||
+      page === 'action_queue') _setAccordionOpen('sales', true);
   if (['jobs','live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
   if (page === 'financial_hub') _setAccordionOpen('finance', true);
   if (page === 'alerts') _setAccordionOpen('alerts', true);

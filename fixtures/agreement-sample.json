@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "expired": false,
+  "approval": {
+    "status": "SENT",
+    "customer_note": "",
+    "responded_at": ""
+  },
+  "proposal": {
+    "proposal_number": "PROP-DEMO-001",
+    "status": "SENT",
+    "proposal_pdf_url": "#",
+    "service": "Weekly Full Service",
+    "pool_specs": "Inground plaster pool, medium size, attached spa, light debris, high sun exposure.",
+    "subtotal": 285,
+    "discount_amount": 0,
+    "travel_fee": 15,
+    "total": 324.75,
+    "sales_tax": 24.75,
+    "investment": "$285.00 / month",
+    "valid_until": "08/21/2026",
+    "customer_name": "Jordan Rivera",
+    "service_address": "123 Mission Creek Dr",
+    "city_state_zip": "San Antonio, 78258",
+    "scope_html": "<li>Pool and spa cleaning and brushing</li><li>Chemical testing and treatment</li><li>Filter cleaning and inspection</li><li>Skimmer and pump basket cleaning</li><li>Service report after each visit</li>",
+    "service_plan_html": "<tr><td>Weekly Full Service</td><td>Weekly</td><td>$285.00</td></tr><tr><td>Spa Service</td><td>Weekly</td><td>Included</td></tr><tr><td>Chemical Treatment</td><td>Weekly</td><td>Included</td></tr>"
+  },
+  "agreement_terms_html": "<div class=\"term\"><h4>1. Property &amp; Service Details</h4><p>This Service Agreement (\"Agreement\") is entered into between Mission Custom Pool Solutions LLC (\"Service Provider\") and <b>Jordan Rivera</b> (\"Client\") for pool-related services at the property listed below.<br><br><b>Service Address:</b> 123 Mission Creek Dr, San Antonio, 78258<br><b>Service Type:</b> Weekly Full Service</p></div><div class=\"term\"><h4>2. Scope of Services</h4><p>Mission Custom Pool Solutions LLC will provide the services set out in the <b>Scope of Work</b> and <b>Service Plan</b> shown above, which form part of this Agreement. Services not listed there are not included unless expressly agreed in writing.</p></div><div class=\"term\"><h4>3. Exclusions &amp; Additional Services</h4><p>Unless expressly stated in writing, this Agreement does not include:</p><ul><li>Equipment repairs or replacements</li><li>Plumbing or electrical repairs</li><li>Filter replacement or full filter tear-downs</li><li>Acid washes or green-to-clean treatments</li><li>Storm cleanups beyond normal service scope</li><li>Services requiring a licensed repair technician</li></ul><p>Any excluded or additional services may be quoted separately and performed only upon Client approval.</p></div><div class=\"term\"><h4>4. Access &amp; Safety</h4><p>Client agrees to provide clear and safe access to the pool area on scheduled service days. All pets must be secured prior to service. Mission Custom Pool Solutions LLC is not responsible for service delays or incomplete service due to restricted access, unsafe conditions, or environmental hazards.</p></div><div class=\"term\"><h4>5. Chemical Usage &amp; Water Conditions</h4><p>Service pricing assumes standard chemical usage under normal conditions.</p><p>Excessive chemical demand resulting from weather events, heavy bather load, algae growth, water features, or other abnormal conditions may result in additional charges. Any such charges will be communicated to the Client when identified.</p><p>Mission Custom Pool Solutions LLC is not responsible for chemical imbalances caused by factors outside scheduled service visits.</p></div><div class=\"term\"><h4>6. Pricing &amp; Payment Terms</h4><ul><li>Monthly Service Rate: <b>$285.00</b></li><li>Sales Tax (8.25%): <b>$24.75</b></li><li>Total Monthly Investment: <b>$324.75</b></li></ul><p>Invoices are due upon receipt unless otherwise agreed in writing. Accounts past due may result in suspension of service until payment is received. Prices may be adjusted with reasonable advance notice.</p></div><div class=\"term\"><h4>7. Term &amp; Cancellation</h4><p>This Agreement operates on a <b>month-to-month</b> basis.</p><p>Either party may terminate this Agreement with written or emailed notice. Services performed prior to the termination date remain billable, and chemicals or materials already applied are non-refundable.</p></div><div class=\"term\"><h4>8. Liability &amp; Limitations</h4><p>Mission Custom Pool Solutions LLC is not responsible for:</p><ul><li>Pre-existing equipment or structural conditions</li><li>Damage caused by acts of God, weather, vandalism, or misuse</li><li>Delays or issues caused by utility outages or restricted access</li></ul><p>Service Provider makes no guarantee against algae growth, staining, or equipment failure beyond routine maintenance efforts.</p></div><div class=\"term\"><h4>9. Independent Contractor</h4><p>Mission Custom Pool Solutions LLC operates as an independent contractor. Nothing in this Agreement shall be construed as creating a partnership, joint venture, or employment relationship.</p></div><div class=\"term\"><h4>10. Entire Agreement</h4><p>This Agreement constitutes the entire understanding between the parties and supersedes all prior discussions or agreements. Any modifications must be made in writing and agreed upon by both parties. This Agreement is governed by the laws of the State of Texas.</p></div><div class=\"term\"><h4>11. Acceptance</h4><p>By signing below, Client acknowledges understanding and acceptance of the terms outlined in this Agreement. By selecting \"Accept &amp; Sign\" and providing a signature, Client agrees to conduct this transaction electronically and acknowledges that the electronic signature is legally binding and enforceable to the same extent as a handwritten signature under the U.S. ESIGN Act and applicable state law (UETA).</p></div>"
+}

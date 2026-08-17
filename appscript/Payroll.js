@@ -425,6 +425,8 @@ function getEmployeeCompletions_(username, start, end) {
     var iDate = hdrs.indexOf('date');
     var iComp = hdrs.indexOf('completed_at');
     var iLogRow = hdrs.indexOf('service_log_row');
+    var iVisit = hdrs.indexOf('visit_id');
+    var iLogUid = hdrs.indexOf('service_log_uid');
 
     // Many older Job_Completions rows have a blank `technician`. Recover the name from the
     // Chemical_Usage_Log row each completion points at (service_log_row → Technician column).
@@ -466,6 +468,7 @@ function getEmployeeCompletions_(username, start, end) {
     } catch (ce) { Logger.log('getEmployeeCompletions_ clientMap: ' + ce); }
 
     var rows = [];
+    var seenCompletion = {};
     for (var i = 1; i < data.length; i++) {
       var slr = iLogRow >= 0 ? (parseInt(data[i][iLogRow], 10) || 0) : 0;
       // Effective technician: Job_Completions value, else recovered from the chem log row.
@@ -478,6 +481,14 @@ function getEmployeeCompletions_(username, start, end) {
       if (isNaN(dms) || dms < startMs || dms > endMs) continue;
 
       var poolId = iPool >= 0 ? String(data[i][iPool] || '') : '';
+      var visitId = iVisit >= 0 ? String(data[i][iVisit] || '').trim() : '';
+      var logUid = iLogUid >= 0 ? String(data[i][iLogUid] || '').trim() : '';
+      var dedupeKey = logUid ? ('loguid:' + logUid)
+        : (slr ? ('logrow:' + slr)
+        : (visitId ? ('visit:' + visitId)
+        : ('poolday:' + poolId + '|' + dateStr + '|' + effTech.toLowerCase().replace(/\s+/g, ' '))));
+      if (seenCompletion[dedupeKey]) continue;
+      seenCompletion[dedupeKey] = true;
       var client = clientMap[poolId] || {};
       rows.push({
         payroll_uid:         iUid >= 0 ? String(data[i][iUid] || '') : '',

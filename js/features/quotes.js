@@ -31,15 +31,28 @@ const _qDef = () => ({
   _calc:null, saved_id:null, saving:false,
   proposal_status:'none', proposal_url:'', proposal_image_data_url:'', proposal_image_preview:'', proposal_error:'',
   proposal_send_status:'none', proposal_sent_at:'', proposal_approval_url:'',
+  // ⚠️ These must mirror the fallbacks in buildProposalScopeHtml_() and
+  // buildProposalServiceRowsHtml_() (appscript/SalesHub.js). If they drift, the
+  // admin's chips show one thing and the generated PDF shows another.
   proposal_scope_options:{
-    pool_cleaning:true, chemical_treatment:true, filter_cleaning:true,
+    pool_cleaning:true, chemical_treatment:true,
     equipment_inspection:true, baskets:true, service_report:true,
+    // Opt-in extras — off by default, matching the server.
+    filter_cleaning:false, emergency_response:false,
     startup_chemical_work:true, equipment_programming:true, water_balance:true,
     follow_up:true, repair_labor:true, job_documentation:true,
     parts_coordination:true, completion_report:true
   },
+  // One-off Scope of Work lines typed for this quote only. Promoting one to the
+  // reusable library is a separate explicit action.
+  scope_custom_items:[],
   proposal_plan_options:{
-    main_service:true, spa_service:false, equipment_inspections:true,
+    // spa_service was false here while the server defaulted it true, so a pool
+    // WITH a spa got "Attached Spa Service" on the signed agreement but not on
+    // the proposal PDF. The server only emits the row when the quote has a spa
+    // and marks it Included, so true is the correct default on both sides.
+    main_service:true, spa_service:true, equipment_inspections:true,
+    equipment_monitoring:true,
     chemicals_included:true, service_reports:true, priority_service:false
   },
   contract_status:'none', contract_url:'', contract_download_url:'', contract_error:'',
@@ -53,13 +66,21 @@ function qSetSalesFlow(flow) {
   _qS.activation_method = flow === 'agreement_direct' ? 'AGREEMENT_DIRECT'
     : flow === 'operational_override' ? 'ADMIN_OVERRIDE'
     : 'SIGNED_AGREEMENT';
-  document.querySelectorAll('.q-flow-card').forEach(c => c.classList.toggle('active', c.dataset.flow === flow));
+  document.querySelectorAll('.q-flow-card').forEach(c => {
+    const active = c.dataset.flow === flow;
+    c.classList.toggle('active', active);
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
   qRecalc();
 }
 
 function qSetService(svc) {
   _qS.service = svc;
-  document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => c.classList.toggle('active', c.dataset.svc === svc));
+  document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => {
+    const active = c.dataset.svc === svc;
+    c.classList.toggle('active', active);
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
   const isRepair  = svc === 'repair_job';
   const isStartup = svc === 'pool_startup';
   document.getElementById('q-pool-sec').style.display    = (!isRepair && !isStartup) ? '' : 'none';
@@ -83,25 +104,136 @@ function qSetService(svc) {
   qRecalc();
 }
 
+// ── Scope of Work display formatting ──────────────────────────────────────────
+// Byte-identical twin of formatScopeLabel_() in appscript/SalesHub.js. Exists so
+// the admin's live preview shows exactly the wording the customer will sign.
+// ⚠️ If you change one, change the other.
+//
+//   "Pool and spa cleaning and brushing"  ->  "Pool & Spa Cleaning & Brushing"
+//   "Testing and balancing of water"      ->  "Testing & Balancing of Water"
+//
+// Scope items only — never contract prose.
+const Q_SCOPE_CONNECTORS = ['of','to','for','in','on','with','by','a','an','the'];
+function qFormatScopeLabel(raw) {
+  let s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  s = s.replace(/\band\b/gi, '&');
+  const caseSegment = (seg, isLead) => {
+    const lower = seg.toLowerCase();
+    if (!isLead && Q_SCOPE_CONNECTORS.indexOf(lower) !== -1) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  };
+  return s.split(/\s+/).map((word, i) => {
+    if (word === '&') return word;
+    // Each half of a hyphenated compound is cased on its own, so "24-hour"
+    // reads "24-Hour" while connectors still lowercase: "green-to-clean"
+    // becomes "Green-to-Clean", not "Green-To-Clean".
+    return word.split('-').map((seg, j) => caseSegment(seg, i === 0 && j === 0)).join('-');
+  }).join(' ');
+}
+
+// ── Scope library (three-tier load, never blocks) ─────────────────────────────
+// tier 0: SCOPE_LIBRARY_FALLBACK bundled in constants.js — 0ms, survives a cold
+//         cache AND a dead network
+// tier 1: localStorage, 24h — instant on every repeat open
+// tier 2: background refresh from the Scope_Library sheet, repaint only if changed
+let _qScopeLibrary = (typeof SCOPE_LIBRARY_FALLBACK !== 'undefined')
+  ? SCOPE_LIBRARY_FALLBACK.slice()
+  : [];
+
+function qServiceScopeKey() {
+  if (_qS.service === 'pool_startup') return 'startup';
+  if (_qS.service === 'green_to_clean') return 'g2c';
+  if (_qS.service === 'repair_job') return 'repair';
+  return 'weekly';
+}
+
+// Items offered for the current service type (blank service_types = all).
+function qScopeItemsForService() {
+  const key = qServiceScopeKey();
+  return _qScopeLibrary.filter(it =>
+    !it.service_types || !it.service_types.length || it.service_types.indexOf(key) !== -1);
+}
+
+function qLoadScopeLibrary() {
+  return qSwr('q_scope_library', 24 * 60 * 60 * 1000,
+    () => api({ action: 'get_scope_library', token: _s ? _s.token : '' })
+            .then(res => (res && res.ok && Array.isArray(res.items) && res.items.length) ? res.items : null),
+    items => {
+      _qScopeLibrary = items;
+      if (typeof qRenderSavedCard === 'function' && _qS.saved_id) qRenderSavedCard();
+    }
+  );
+}
+
+// The exact list the admin is looking at — library selections in library order,
+// then any one-off items they typed. This is what gets persisted server-side, so
+// the proposal PDF, signing page and signed contract all show precisely this.
+function qResolvedScopeItems() {
+  const opts = _qS.proposal_scope_options || {};
+  const selected = qScopeItemsForService()
+    .filter(it => {
+      const v = opts[it.scope_item_id];
+      return v === undefined ? !!it.default_on : !!v;
+    })
+    .map(it => it.label);
+  const customs = (_qS.scope_custom_items || [])
+    .map(s => String(s || '').trim())
+    .filter(Boolean);
+  return selected.concat(customs);
+}
+
+// ── Stale-while-revalidate loader ─────────────────────────────────────────────
+// Every dropdown in this tool used to block on a fresh Apps Script → Sheets round
+// trip (~0.8–3s each, often several in a row), which is why the quote builder felt
+// slow. These lists change rarely, so: paint from localStorage immediately, then
+// refetch in the background and only repaint if the data actually changed.
+//
+//   cacheKey    stored via _appCacheSet under `mcps_<cacheKey>` (app.js)
+//   maxStaleMs  how old a cached copy may be and still be worth painting
+//   fetcher()   returns a Promise of the fresh list, or null/undefined to skip
+//   apply(list) renders it — may be called twice (cached, then fresh-if-changed)
+function qSwr(cacheKey, maxStaleMs, fetcher, apply) {
+  let painted = false;
+  let cached = null;
+  try { cached = _appCacheGet(cacheKey, maxStaleMs); } catch (e) { cached = null; }
+  if (cached) {
+    try { apply(cached); painted = true; } catch (e) {}
+  }
+  return Promise.resolve()
+    .then(fetcher)
+    .then(fresh => {
+      if (fresh === null || fresh === undefined) return;
+      let changed = true;
+      try { changed = JSON.stringify(fresh) !== JSON.stringify(cached); } catch (e) {}
+      _appCacheSet(cacheKey, fresh);
+      if (!painted || changed) apply(fresh);
+    })
+    .catch(() => { /* offline or failed — whatever we painted from cache stands */ });
+}
+
 // ── Repair work-order helpers ─────────────────────────────────────────────────
 let _qRepairTechsLoaded = false;
 function qLoadRepairTechs() {
   if (_qRepairTechsLoaded) return;
-  api({ secret: SEC, action: 'list_users' }).then(res => {
-    if (!res || !res.ok) return;
-    const sel = document.getElementById('q-rep-tech');
-    if (!sel) return;
-    const techs = (res.users || []).filter(u => {
-      const roles = String(u.roles || '').toLowerCase();
-      const active = String(u.active).toUpperCase();
-      return (roles.includes('technician') || roles.includes('lead') || roles.includes('admin')) &&
-             active !== 'FALSE' && active !== 'NO';
-    });
-    sel.innerHTML = '<option value="">Unassigned</option>' +
-      techs.map(u => `<option value="${escHtml(u.username)}">${escHtml(u.name || u.username)}</option>`).join('');
-    if (_qS.repair_assigned_to) sel.value = _qS.repair_assigned_to;
-    _qRepairTechsLoaded = true;
-  }).catch(() => {});
+  qSwr('q_repair_techs', 6 * 60 * 60 * 1000,
+    () => api({ secret: SEC, action: 'list_users' })
+            .then(res => (res && res.ok) ? (res.users || []) : null),
+    users => {
+      const sel = document.getElementById('q-rep-tech');
+      if (!sel) return;
+      const techs = users.filter(u => {
+        const roles = String(u.roles || '').toLowerCase();
+        const active = String(u.active).toUpperCase();
+        return (roles.includes('technician') || roles.includes('lead') || roles.includes('admin')) &&
+               active !== 'FALSE' && active !== 'NO';
+      });
+      sel.innerHTML = '<option value="">Unassigned</option>' +
+        techs.map(u => `<option value="${escHtml(u.username)}">${escHtml(u.name || u.username)}</option>`).join('');
+      if (_qS.repair_assigned_to) sel.value = _qS.repair_assigned_to;
+      _qRepairTechsLoaded = true;
+    }
+  );
 }
 
 let _qRepClientSearchTimer = null;
@@ -115,10 +247,15 @@ function qRepSearchClients(term) {
     return;
   }
   _qRepClientSearchTimer = setTimeout(() => {
-    apiGet({ action: 'get_clients', token: _s ? _s.token : '', q: q }).then(res => {
-      _qS.repair_clients = res && res.ok && Array.isArray(res.clients) ? res.clients : [];
-      qRenderRepairClientOptions();
-    }).catch(() => {});
+    // Keyed by search term so retyping the same client name is instant.
+    qSwr('q_clients_' + q.toLowerCase(), 10 * 60 * 1000,
+      () => apiGet({ action: 'get_clients', token: _s ? _s.token : '', q: q })
+              .then(res => (res && res.ok && Array.isArray(res.clients)) ? res.clients : null),
+      clients => {
+        _qS.repair_clients = clients;
+        qRenderRepairClientOptions();
+      }
+    );
   }, 300);
 }
 
@@ -162,21 +299,24 @@ function qRepClientSelect(clientId) {
 
 function qRepLoadLocations(clientId) {
   const msg = document.getElementById('q-rep-existing-msg');
-  apiGet({ action: 'get_client_locations', token: _s ? _s.token : '', client_id: clientId }).then(res => {
-    const all = res && res.ok && Array.isArray(res.locations) ? res.locations : [];
-    _qS.repair_locations = all.filter(l => (l.pool_id || '').toString().trim());
-    const locWrap = document.getElementById('q-rep-location-wrap');
-    if (_qS.repair_locations.length === 0) {
-      if (locWrap) locWrap.style.display = 'none';
-      if (msg) msg.textContent = 'No active service location on file for this client.';
-    } else if (_qS.repair_locations.length === 1) {
-      if (locWrap) locWrap.style.display = 'none';
-      qRepLocationSelect(_qS.repair_locations[0].location_id);
-    } else {
-      qRenderRepairLocationOptions();
-      if (locWrap) locWrap.style.display = '';
+  qSwr('q_client_locations_' + clientId, 30 * 60 * 1000,
+    () => apiGet({ action: 'get_client_locations', token: _s ? _s.token : '', client_id: clientId })
+            .then(res => (res && res.ok && Array.isArray(res.locations)) ? res.locations : null),
+    all => {
+      _qS.repair_locations = all.filter(l => (l.pool_id || '').toString().trim());
+      const locWrap = document.getElementById('q-rep-location-wrap');
+      if (_qS.repair_locations.length === 0) {
+        if (locWrap) locWrap.style.display = 'none';
+        if (msg) msg.textContent = 'No active service location on file for this client.';
+      } else if (_qS.repair_locations.length === 1) {
+        if (locWrap) locWrap.style.display = 'none';
+        qRepLocationSelect(_qS.repair_locations[0].location_id);
+      } else {
+        qRenderRepairLocationOptions();
+        if (locWrap) locWrap.style.display = '';
+      }
     }
-  }).catch(() => {});
+  );
 }
 
 function qRenderRepairLocationOptions() {
@@ -259,7 +399,38 @@ function qChk(key) {
 
 function qToggleProposalScope(key) {
   _qS.proposal_scope_options = _qS.proposal_scope_options || {};
-  _qS.proposal_scope_options[key] = !_qS.proposal_scope_options[key];
+  // First click on an untouched item must flip its LIBRARY default, not flip
+  // undefined→true. Otherwise clicking a default-on chip appears to do nothing.
+  if (_qS.proposal_scope_options[key] === undefined) {
+    const it = (typeof qScopeItemsForService === 'function' ? qScopeItemsForService() : [])
+      .find(x => x.scope_item_id === key);
+    _qS.proposal_scope_options[key] = it ? !it.default_on : true;
+  } else {
+    _qS.proposal_scope_options[key] = !_qS.proposal_scope_options[key];
+  }
+  qRenderSavedCard();
+}
+
+// One-off scope lines, this quote only. Promoting one into the reusable library
+// is a separate deliberate action in Admin → Scope of Work Library.
+function qAddCustomScope() {
+  const input = document.getElementById('q-scope-custom');
+  if (!input) return;
+  const v = String(input.value || '').trim();
+  if (!v) return;
+  _qS.scope_custom_items = _qS.scope_custom_items || [];
+  // Don't let the same line be added twice, or duplicate it against a library item.
+  const already = _qS.scope_custom_items.some(s => s.toLowerCase() === v.toLowerCase()) ||
+    qScopeItemsForService().some(it => String(it.label).toLowerCase() === v.toLowerCase());
+  if (already) { input.value = ''; return; }
+  _qS.scope_custom_items.push(v);
+  input.value = '';
+  qRenderSavedCard();
+}
+
+function qRemoveCustomScope(i) {
+  if (!_qS.scope_custom_items) return;
+  _qS.scope_custom_items.splice(i, 1);
   qRenderSavedCard();
 }
 
@@ -272,7 +443,15 @@ function qToggleProposalPlan(key) {
 function qProposalOptionChip(type, key, label) {
   const map = type === 'scope' ? _qS.proposal_scope_options : _qS.proposal_plan_options;
   const fn = type === 'scope' ? 'qToggleProposalScope' : 'qToggleProposalPlan';
-  const active = map && map[key];
+  let active = map && map[key];
+  // Untouched scope items fall back to the library's default_on — the same rule
+  // qResolvedScopeItems() applies. Without this, a defaulted-on item would render
+  // as an OFF chip while still appearing on the contract.
+  if (type === 'scope' && (!map || map[key] === undefined)) {
+    const it = (typeof qScopeItemsForService === 'function' ? qScopeItemsForService() : [])
+      .find(x => x.scope_item_id === key);
+    active = it ? !!it.default_on : false;
+  }
   return `<button type="button" class="q-chk ${active ? 'active' : ''}" style="border-radius:8px;padding:.34rem .55rem;font-size:.76rem" onclick="${fn}('${key}')">${esc(label)}</button>`;
 }
 
@@ -297,11 +476,14 @@ async function qLoadStartupCompanies() {
     qRenderStartupCompanyOptions();
     return;
   }
-  try {
-    const res = await apiGet({ action: 'get_startup_companies', token: _s ? _s.token : '' });
-    _qS.startup_companies = res.ok && Array.isArray(res.companies) ? res.companies : [];
-    qRenderStartupCompanyOptions();
-  } catch(e) {}
+  return qSwr('q_startup_companies', 6 * 60 * 60 * 1000,
+    () => apiGet({ action: 'get_startup_companies', token: _s ? _s.token : '' })
+            .then(res => (res && res.ok && Array.isArray(res.companies)) ? res.companies : null),
+    companies => {
+      _qS.startup_companies = companies;
+      qRenderStartupCompanyOptions();
+    }
+  );
 }
 
 function qRenderStartupCompanyOptions() {
@@ -739,19 +921,26 @@ function qRenderSummary() {
   btn.disabled = !eng.pricing_ready || _qS.saving;
   const label = _qS.sales_flow === 'agreement_direct' ? 'Save Agreement Draft'
     : _qS.sales_flow === 'operational_override' ? 'Activate Service'
-    : 'Save Proposal';
+    : 'Save Quote + Agreement';
   btn.textContent = _qS.saving ? 'Saving…' : (_qS.saved_id ? `Saved ✓ (${_qS.saved_id})` : label);
 }
 
 function qReset() {
   _qS = _qDef();
-  document.querySelectorAll('.q-flow-card').forEach(c => c.classList.toggle('active', c.dataset.flow === 'proposal_first'));
-  document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => c.classList.toggle('active', c.dataset.svc==='weekly_full'));
+  document.querySelectorAll('.q-flow-card').forEach(c => {
+    const active = c.dataset.flow === 'proposal_first';
+    c.classList.toggle('active', active);
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => {
+    const active = c.dataset.svc==='weekly_full';
+    c.classList.toggle('active', active);
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
   const pd = { size:'medium', pool_type:'inground', material:'plaster', finish:'light', debris:'light', repair_type:'repair_replacement' };
   Object.entries(pd).forEach(([g,v]) => document.querySelectorAll(`.q-pill[data-grp="${g}"]`).forEach(p => p.classList.toggle('active', p.dataset.val===v)));
   document.getElementById('q-pool-sec').style.display    = '';
   document.getElementById('q-startup-sec').style.display = 'none';
-  document.getElementById('q-repair-sec').style.display  = 'none';
   document.getElementById('q-repair-sec').style.display  = 'none';
   const hint = document.getElementById('q-startup-date-hint'); if(hint) hint.textContent='';
   ['spa','robot','sun','pets','school','mcp'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
@@ -786,6 +975,8 @@ async function qSave() {
 
   const payload = {
     action: 'save_quote', token: _s ? _s.token : '',
+    // Resolved Scope of Work — persisted so every downstream document matches.
+    scope_items: qResolvedScopeItems(),
     first_name:_qS.first_name, last_name:_qS.last_name, email:_qS.email, phone:_qS.phone,
     address:_qS.address, city:_qS.city, zip_code:_qS.zip_code, area:_qS.area,
     service:eng.service_label, pool_type:eng.pool_type, size:eng.size, material:eng.material,
@@ -880,6 +1071,9 @@ function qSyncStartupPriceLabels_() {
 function qInit() {
   qSyncStartupPriceLabels_();
   if (!_qS._calc) qRecalc();
+  // Non-blocking: the bundled fallback is already in memory, so this only
+  // upgrades the list if the sheet has diverged from it.
+  qLoadScopeLibrary();
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -903,7 +1097,7 @@ function qRenderSavedCard() {
   const specs = eng ? (eng.specs_summary || '') : '';
   const flowLabel = _qS.sales_flow === 'agreement_direct' ? 'Agreement direct'
     : _qS.sales_flow === 'operational_override' ? 'Activated by override'
-    : 'Proposal first';
+    : 'Quote + agreement';
 
   // Contract section
   let proposalHtml = '';
@@ -911,37 +1105,35 @@ function qRenderSavedCard() {
     const isStartup = _qS.service === 'pool_startup';
     const isGtc = _qS.service === 'green_to_clean';
     const isRepair = _qS.service === 'repair_job';
-    const scopeOptions = isStartup
-      ? [
-          ['startup_chemical_work','Chemical work'], ['equipment_programming','Programming'],
-          ['water_balance','Water balance'], ['service_report','Service report']
-        ]
-      : isRepair
-        ? [
-            ['repair_labor','Repair labor'], ['job_documentation','Job documentation'],
-            ['parts_coordination','Parts coordination'], ['completion_report','Completion report']
-          ]
-        : isGtc
-          ? [
-              ['pool_cleaning', _qS.spa ? 'Pool + spa cleanup' : 'Cleanup'],
-              ['chemical_treatment','Chemical treatment'], ['baskets','Brushing + debris'],
-              ['follow_up','Follow-up scheduling']
-            ]
-          : [
-            ['pool_cleaning', _qS.spa ? 'Pool + spa cleaning' : (isGtc ? 'Cleanup' : 'Pool cleaning')],
-            ['chemical_treatment','Chemical treatment'], ['filter_cleaning','Filter cleaning'],
-            ['equipment_inspection','Equipment inspection'], ['baskets','Baskets'],
-            [isGtc ? 'follow_up' : 'service_report', isGtc ? 'Follow-up scheduling' : 'Service report']
-          ];
+    // Scope chips come from the Scope of Work Library (Admin → Scope of Work
+    // Library), filtered to this service type — NOT a hardcoded list.
+    //
+    // ⚠️ They used to be hardcoded with keys like 'pool_cleaning', while
+    // qResolvedScopeItems() reads opts[scope_item_id] ('_w1', 'SCP0001'…). The keys
+    // never matched, so toggling a chip changed nothing: the proposal and the
+    // signed contract always used the library defaults. Keyed by scope_item_id now,
+    // so the chip you click is the line the customer signs.
+    const scopeOptions = qScopeItemsForService()
+      .map(it => [it.scope_item_id, it.label]);
     const planOptions = [
       ['main_service','Main service'],
       ...(_qS.spa ? [['spa_service','Spa included']] : []),
       ['equipment_inspections','Equipment inspections'],
+      ['equipment_monitoring','Equipment monitoring'],
       ['chemicals_included','Chemical treatment'],
       ['service_reports','Service reports'],
       ['priority_service','Priority service']
     ];
     const scopeChips = scopeOptions.map(([key,label]) => qProposalOptionChip('scope', key, label)).join('');
+    // One-off lines typed for this quote only. They are not library items, so they
+    // are removable rather than toggleable.
+    const customChips = (_qS.scope_custom_items || []).length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem">` +
+        _qS.scope_custom_items.map((s, i) =>
+          `<button type="button" class="q-chk active" style="border-radius:8px;padding:.34rem .55rem;font-size:.76rem"
+             title="Remove this one-off line" onclick="qRemoveCustomScope(${i})">${esc(s)} ✕</button>`).join('') +
+        `</div>`
+      : '';
     const planChips = planOptions.map(([key,label]) => qProposalOptionChip('plan', key, label)).join('');
     const imgPreview = _qS.proposal_image_preview
       ? `<img src="${_qS.proposal_image_preview}" alt="Proposal pool" style="width:100%;max-width:220px;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`
@@ -950,16 +1142,23 @@ function qRenderSavedCard() {
     const proposalSent = _qS.proposal_send_status === 'sent' || !!_qS.proposal_sent_at;
     const proposalSendLabel = _qS.proposal_send_status === 'sending'
       ? 'Sending…'
-      : proposalSent ? 'Resend Approval Email' : 'Send for Approval';
+      : proposalSent ? 'Resend Signature Email' : 'Send for Signature';
     proposalHtml = `<div class="q-contract-section">
-      <span class="q-contract-status ${proposalSent || proposalReady ? 'ok' : 'none'}">${proposalSent ? 'Proposal sent for approval' : (proposalReady ? 'Proposal ready' : 'Proposal document')}</span>
+      <span class="q-contract-status ${proposalSent || proposalReady ? 'ok' : 'none'}">${proposalSent ? 'Quote + agreement sent' : (proposalReady ? 'Quote + agreement ready' : 'Quote + agreement')}</span>
       ${_qS.proposal_error ? `<span class="q-contract-err">${esc(_qS.proposal_error)}</span>` : ''}
       ${proposalSent ? `<span style="font-size:.75rem;color:var(--muted)">Sent ${new Date(_qS.proposal_sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>` : ''}
-      <div style="font-size:.78rem;color:var(--muted);margin-top:.2rem">This image appears in the proposal. Use a pool or property photo, not the MCPS logo.</div>
+      <div style="font-size:.78rem;color:var(--muted);margin-top:.2rem">This image appears in the customer signing page. Use a pool or property photo, not the MCPS logo.</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.45rem">
         <div>
           <div class="q-flabel" style="margin-bottom:.35rem">Scope included</div>
           <div style="display:flex;flex-wrap:wrap;gap:.35rem">${scopeChips}</div>
+          ${customChips}
+          <div style="display:flex;gap:.35rem;margin-top:.4rem">
+            <input id="q-scope-custom" type="text" maxlength="120" placeholder="Add a one-off line for this quote"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();qAddCustomScope();}"
+              style="flex:1;min-width:0;padding:.3rem .5rem;border:1px solid var(--border);border-radius:6px;font-size:.76rem">
+            <button type="button" class="q-btn-outline" style="padding:.28rem .6rem;font-size:.76rem" onclick="qAddCustomScope()">Add</button>
+          </div>
         </div>
         <div>
           <div class="q-flabel" style="margin-bottom:.35rem">Service plan included</div>
@@ -972,11 +1171,12 @@ function qRenderSavedCard() {
           <input type="file" id="q-proposal-photo-input" accept="image/*" style="display:none" onchange="qProposalPhotoSelected(this)">
           <button class="q-btn-outline" onclick="document.getElementById('q-proposal-photo-input').click()">Choose Pool Photo</button>
           <button class="q-btn-primary" onclick="qGenerateProposal()" ${_qS.proposal_status === 'generating' ? 'disabled' : ''}>
-            ${_qS.proposal_status === 'generating' ? 'Generating…' : (proposalReady ? 'Regenerate Proposal' : 'Generate Proposal PDF')}
+            ${_qS.proposal_status === 'generating' ? 'Generating…' : (proposalReady ? 'Regenerate Packet' : 'Generate Quote + Agreement')}
           </button>
-          ${proposalReady ? `<a class="q-btn-outline" href="${_qS.proposal_url}" target="_blank" rel="noopener">View Proposal</a>` : ''}
+          ${proposalReady ? `<a class="q-btn-outline" href="${_qS.proposal_url}" target="_blank" rel="noopener">View Packet</a>` : ''}
+          ${proposalReady ? `<a class="q-btn-outline" href="/agreement.html?preview=1&quote=${encodeURIComponent(_qS.saved_id)}" target="_blank" rel="noopener">Preview Agreement</a>` : ''}
           ${proposalReady ? `<button class="q-btn-primary" onclick="qSendProposalApproval()" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>${proposalSendLabel}</button>` : ''}
-          ${_qS.proposal_approval_url ? `<a class="q-btn-outline" href="${_qS.proposal_approval_url}" target="_blank" rel="noopener">Approval Link</a>` : ''}
+          ${_qS.proposal_approval_url ? `<a class="q-btn-outline" href="${_qS.proposal_approval_url}" target="_blank" rel="noopener">Signing Link</a>` : ''}
         </div>
       </div>
     </div>`;
@@ -984,11 +1184,11 @@ function qRenderSavedCard() {
 
   // Contract section
   let contractHtml = '';
-  if (_qS.contract_status === 'generating') {
+  if (_qS.sales_flow === 'agreement_direct' && _qS.contract_status === 'generating') {
     contractHtml = `<div class="q-contract-section">
       <span class="q-contract-status generating">Generating contract…</span>
     </div>`;
-  } else if (_qS.contract_status === 'generated') {
+  } else if (_qS.sales_flow === 'agreement_direct' && _qS.contract_status === 'generated') {
     const sendLabel = _qS.send_contract_status === 'sending' ? 'Sending…'
                     : _qS.sent_at ? 'Resend Agreement'
                     : 'Send Agreement';
@@ -1007,7 +1207,7 @@ function qRenderSavedCard() {
       ${sentNote}
       <div id="q-send-msg" style="display:none;font-size:.8rem;margin-top:.35rem;color:var(--error)"></div>
     </div>`;
-  } else {
+  } else if (_qS.sales_flow === 'agreement_direct') {
     const errHtml = _qS.contract_error
       ? `<span class="q-contract-err">${_qS.contract_error}</span>` : '';
     contractHtml = `<div class="q-contract-section">
@@ -1217,7 +1417,10 @@ async function qGenerateProposal() {
       quote_id: _qS.saved_id,
       proposal_image_data_url: _qS.proposal_image_data_url || '',
       proposal_scope_options: _qS.proposal_scope_options || {},
-      proposal_plan_options: _qS.proposal_plan_options || {}
+      proposal_plan_options: _qS.proposal_plan_options || {},
+      // The exact list shown in the preview. Persisted server-side so the signing
+      // page and signed contract render this and not a recomputed default.
+      scope_items: qResolvedScopeItems()
     });
     if (res.ok) {
       _qS.proposal_status = 'generated';

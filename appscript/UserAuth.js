@@ -451,6 +451,15 @@ function handleUpdateUser(payload) {
     if ("worker_type"       in fields) setCol("worker_type",       fields.worker_type);
     if ("pay_rate"          in fields) setCol("pay_rate",          fields.pay_rate);
     if ("shift_preferences" in fields) setCol("shift_preferences", fields.shift_preferences);
+    // Auto-assignment fields. setCol creates the column on first write, so these
+    // self-migrate. auto_assign_eligible defaults to FALSE simply by never having
+    // been written — nobody is opted into automated routing silently.
+    if ("auto_assign_eligible" in fields) setCol("auto_assign_eligible", fields.auto_assign_eligible === true || fields.auto_assign_eligible === "true" ? "TRUE" : "FALSE");
+    if ("max_per_day"       in fields) setCol("max_per_day",       fields.max_per_day);
+    if ("preferred_zones"   in fields) setCol("preferred_zones",   fields.preferred_zones);
+    if ("staff_bio"         in fields) setCol("staff_bio",         fields.staff_bio);
+    if ("show_photo_to_customers" in fields) setCol("show_photo_to_customers", fields.show_photo_to_customers === true || fields.show_photo_to_customers === "true" ? "TRUE" : "FALSE");
+    if ("show_bio_to_customers"   in fields) setCol("show_bio_to_customers",   fields.show_bio_to_customers === true || fields.show_bio_to_customers === "true" ? "TRUE" : "FALSE");
     if ("active" in fields && !fields.active) revokeAllSessionsForUser_(username);
   }
 

@@ -1,0 +1,260 @@
+<!-- MCPS Merged Service Agreement Template (proposal + contract + signature).
+     Placeholders are replaced by Apps Script (renderSignedAgreementPdf_).
+     Double-brace = escaped text, triple-brace = raw HTML. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MCPS Service Agreement {{proposal_number}}</title>
+  <style>
+    @page { size: letter; margin: 0.5in 0; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #17212b;
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .sheet {
+      width: 8.5in;
+      margin: 0 auto;
+      padding: 0 0.5in;
+    }
+
+    .top-bar {
+      background: #083f45;
+      color: #ffffff;
+      text-align: center;
+      padding: 0.12in 0.25in;
+      font-size: 15.5pt;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .masthead { display: table; width: 100%; margin: 0.2in 0 0.13in; }
+    .brand, .proposal-meta { display: table-cell; vertical-align: top; }
+    .brand { width: 58%; }
+    .logo { max-width: 1.15in; max-height: 0.95in; object-fit: contain; display: block; }
+    .proposal-meta { text-align: right; width: 42%; }
+    .proposal-label {
+      color: #0b4d54; font-size: 17pt; font-weight: 800; letter-spacing: 0.04em;
+      text-transform: uppercase; line-height: 1.05;
+    }
+    .proposal-number { margin-top: 0.04in; font-size: 10pt; color: #303941; font-weight: 700; }
+
+    .prepared-row {
+      display: table; width: 100%;
+      border-top: 1px solid #d6e0e2; border-bottom: 1px solid #d6e0e2;
+      padding: 0.11in 0; margin-bottom: 0.13in;
+    }
+    .prepared, .dates { display: table-cell; vertical-align: top; }
+    .prepared { width: 58%; font-size: 9pt; line-height: 1.34; }
+    .dates { width: 42%; text-align: right; font-size: 8.8pt; }
+    .eyebrow {
+      color: #687685; text-transform: uppercase; letter-spacing: 0.08em;
+      font-weight: 800; font-size: 7.4pt; margin-bottom: 0.03in;
+    }
+    .client-name { font-size: 12.5pt; color: #0e2433; font-weight: 800; margin-bottom: 0.02in; }
+    .date-line { margin-bottom: 0.06in; }
+    .date-line span {
+      display: inline-block; min-width: 0.88in; color: #687685;
+      text-transform: uppercase; letter-spacing: 0.06em; font-size: 7.3pt; font-weight: 800;
+    }
+
+    .summary-grid { display: table; width: 100%; margin-bottom: 0.12in; }
+    .summary-card, .spec-card {
+      display: table-cell; vertical-align: top; border: 1px solid #d6e0e2;
+      background: #fbfcfc; padding: 0.1in 0.13in;
+    }
+    .summary-card { width: 62%; border-right: none; }
+    .spec-card { width: 38%; background: #edf6f5; }
+    .card-title {
+      color: #0b4d54; font-size: 8.2pt; text-transform: uppercase;
+      letter-spacing: 0.1em; font-weight: 800; margin-bottom: 0.045in;
+    }
+    .summary-card p, .spec-card p { margin: 0; font-size: 8.7pt; line-height: 1.34; }
+
+    .section-title {
+      background: #083f45; color: #ffffff; padding: 0.07in 0.12in;
+      font-size: 8.8pt; line-height: 1; text-transform: uppercase;
+      letter-spacing: 0.08em; font-weight: 800; margin-top: 0.05in;
+    }
+
+    .scope { display: table; width: 100%; border: 1px solid #d6e0e2; border-top: none; margin-bottom: 0.12in; }
+    .scope-list, .photo-cell { display: table-cell; vertical-align: top; }
+    .scope-list { width: 52%; padding: 0.1in 0.14in; }
+    .scope-list ul { list-style: none; margin: 0; padding: 0; }
+    .scope-list li {
+      position: relative; padding-left: 0.2in; margin-bottom: 0.05in;
+      font-size: 8.9pt; line-height: 1.2;
+    }
+    .scope-list li::before { content: "✓"; position: absolute; left: 0; top: -1px; color: #0b4d54; font-weight: 900; }
+    .photo-cell { width: 48%; padding: 0.1in 0.1in 0.1in 0; }
+    .photo-frame {
+      width: 3.35in; height: 1.45in; background: #d7e8e8; overflow: hidden;
+      margin-left: auto; border: 1px solid #bed3d5;
+    }
+    .photo-frame img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: center; }
+
+    .plan-table {
+      width: 100%; border-collapse: collapse; margin-bottom: 0.1in;
+      border: 1px solid #d6e0e2; font-size: 8.8pt;
+    }
+    .plan-table th {
+      background: #083f45; color: #ffffff; text-align: left; padding: 0.062in 0.12in;
+      text-transform: uppercase; letter-spacing: 0.06em; font-size: 7.8pt;
+    }
+    .plan-table th:nth-child(2), .plan-table th:nth-child(3),
+    .plan-table td:nth-child(2), .plan-table td:nth-child(3) { text-align: center; }
+    .plan-table td { padding: 0.062in 0.12in; border-top: 1px solid #e3eaeb; }
+
+    .totals-table {
+      width: 55%; border-collapse: collapse; margin: 0 0 0.12in auto;
+      border: 1px solid #d6e0e2; font-size: 8.8pt;
+    }
+    .totals-table td { padding: 0.055in 0.12in; border-top: 1px solid #e3eaeb; }
+    .totals-table td:last-child { text-align: right; font-weight: 700; }
+    .totals-table tr:last-child td {
+      background: #083f45; color: #ffffff; font-weight: 900; font-size: 9.6pt; border-top: none;
+    }
+
+    .price-strip { display: table; width: 100%; margin: 0 0 0.14in; background: #083f45; color: #ffffff; }
+    .price-label, .price-value {
+      display: table-cell; vertical-align: middle; padding: 0.09in 0.14in;
+      font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .price-label { font-size: 9pt; }
+    .price-value { text-align: right; font-size: 13pt; }
+
+    /* Terms & Conditions */
+    .terms { margin-top: 0.05in; }
+    .term { page-break-inside: avoid; margin: 0.09in 0; }
+    .term h4 {
+      margin: 0 0 0.03in; font-size: 9pt; color: #0b4d54;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .term p { margin: 0; font-size: 8.6pt; line-height: 1.4; color: #2c3944; }
+
+    /* Signature block */
+    .sig-wrap {
+      margin-top: 0.2in; border: 2px solid #083f45; border-radius: 4px;
+      padding: 0.16in 0.18in; page-break-inside: avoid;
+    }
+    .sig-heading {
+      font-size: 9.5pt; font-weight: 800; color: #0b4d54; text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 0.12in;
+    }
+    .sig-grid { display: table; width: 100%; }
+    .sig-col { display: table-cell; vertical-align: bottom; width: 50%; padding-right: 0.2in; }
+    .sig-mark { min-height: 0.7in; }
+    .sig-rule { border-bottom: 1.5px solid #17212b; margin: 0.05in 0 0.05in; }
+    .sig-cap { font-size: 8.6pt; }
+    .sig-meta { font-size: 8.4pt; line-height: 1.5; color: #2c3944; }
+    .sig-legal { margin: 0.14in 0 0; font-size: 7.6pt; line-height: 1.4; color: #556169; }
+
+    .footer {
+      background: #083f45; color: #ffffff; display: table; width: 100%;
+      padding: 0.08in 0.32in; font-size: 7.8pt; font-weight: 700; margin-top: 0.2in;
+    }
+    .footer span { display: table-cell; text-align: center; white-space: nowrap; }
+    .footer span:first-child { text-align: left; }
+    .footer span:last-child { text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">Pool Service Agreement</div>
+
+  <div class="sheet">
+    <header class="masthead">
+      <div class="brand">
+        <img class="logo" src="{{logo_url}}" alt="Mission Custom Pool Solutions">
+      </div>
+      <div class="proposal-meta">
+        <div class="proposal-label">Service Agreement</div>
+        <div class="proposal-number">{{proposal_number}}</div>
+      </div>
+    </header>
+
+    <section class="prepared-row">
+      <div class="prepared">
+        <div class="eyebrow">Prepared For</div>
+        <div class="client-name">{{client_name}}</div>
+        <div>{{service_address}}</div>
+        <div>{{city_state_zip}}</div>
+        <div>{{phone}}</div>
+        <div>{{email}}</div>
+      </div>
+      <div class="dates">
+        <div class="date-line"><span>Date:</span>{{proposal_date}}</div>
+        <div class="date-line"><span>Service:</span>{{service_type}}</div>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <div class="summary-card">
+        <div class="card-title">Recommended Plan</div>
+        <p>Thank you for choosing Mission Custom Pool Solutions. Below is your service scope, plan, and investment, followed by the full terms of this agreement.</p>
+      </div>
+      <div class="spec-card">
+        <div class="card-title">Pool Profile</div>
+        <p>{{pool_specs}}</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">Scope Of Work</div>
+      <div class="scope">
+        <div class="scope-list">
+          <ul>{{{scope_of_work}}}</ul>
+        </div>
+        <div class="photo-cell">
+          <div class="photo-frame">
+            <img src="{{pool_image_url}}" alt="Pool or property photo">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <table class="plan-table">
+        <thead>
+          <tr><th>Included Service</th><th>Frequency</th><th>Price</th></tr>
+        </thead>
+        <tbody>{{{service_plan_rows}}}</tbody>
+      </table>
+    </section>
+
+    <section>
+      <table class="totals-table">{{{proposal_items}}}</table>
+    </section>
+
+    <section class="price-strip">
+      <div class="price-label">Investment</div>
+      <div class="price-value">{{investment}}</div>
+    </section>
+
+    <section>
+      <div class="section-title">Terms &amp; Conditions</div>
+      <div class="terms">{{{terms_html}}}</div>
+    </section>
+
+    <section class="sig-wrap">
+      <div class="sig-heading">Accepted &amp; Signed</div>
+      {{{signature_block}}}
+    </section>
+  </div>
+
+  <footer class="footer">
+    <span>{{company_phone}}</span>
+    <span>{{company_email}}</span>
+    <span>{{company_website}}</span>
+  </footer>
+</body>
+</html>

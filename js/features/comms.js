@@ -14,7 +14,9 @@ let _commsCompose    = { category:'service_update', audienceType:'all_active',
                          testEmails:'', subject:'', body:'', sendAt:'' };
 
 const COMMS_STATUSES = ['LEAD','SENT','SIGNED','ACTIVE_CUSTOMER','PAUSED','LOST','COMPLETED_JOB'];
-const COMMS_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+// Mon–Sat only, matching WEEKDAYS in RouteData.js. There is no Sunday route, so a
+// Sunday option can never resolve to anyone.
+const COMMS_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const COMMS_PLACEHOLDERS = ['first_name','last_name','name','address','city','area','day','technician','properties_list'];
 
 // ── Entry point (called by router.navigateTo) ───────────────────────────────
@@ -274,10 +276,26 @@ function _commsBuildAudience() {
   const c = _commsCompose;
   if (c.audienceType==='status')    return { type:'status', statuses:c.statuses };
   if (c.audienceType==='area')      return { type:'area', areas:c.areas };
-  if (c.audienceType==='route_day') return { type:'route_day', day:c.day, operator:c.operator||'' };
+  // Pin the week explicitly (reusing routes.js's helper). Without it the backend
+  // falls back to "current week at send time", so a scheduled campaign could resolve
+  // against a different week than the one you previewed.
+  if (c.audienceType==='route_day') return { type:'route_day', day:c.day, operator:c.operator||'',
+                                             week_start:_weekStartForOffset_(0) };
   if (c.audienceType==='manual')    return { type:'manual', quote_ids:c.quoteIds };
   if (c.audienceType==='test')      return { type:'test', emails:c.testEmails.split(',').map(s=>s.trim()).filter(Boolean) };
   return { type:'all_active' };
+}
+
+// Why this person is on the list — same labels the schedule uses for its stop badges
+// (routes.js:1362-1364), so a preview can be eyeballed against Technician Hub.
+function _commsVisitTag(visitType) {
+  if (!visitType) return '';
+  const label = (typeof _VISIT_TYPE_LABELS === 'object' && _VISIT_TYPE_LABELS[visitType])
+    || visitType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  // Teal for a normal recurring stop, purple for a one-off — same split the schedule
+  // uses (svc-weekly vs the scheduled-visit badge).
+  const cls = visitType === 'weekly' ? 'type' : 'type visit';
+  return `<span class="comms-tag ${cls}">${escHtml(label)}</span>`;
 }
 
 async function commsPreviewAudience() {
@@ -287,7 +305,7 @@ async function commsPreviewAudience() {
     const res = await api({ action:'comms_preview_audience', audience:_commsBuildAudience(), category:_commsCompose.category });
     if (!res.ok) { box.innerHTML = `<div class="comms-msg error">${escHtml(res.error||'Failed')}</div>`; return; }
     _commsPreview = res;
-    const list = (res.recipients||[]).slice(0,50).map(r=>`<div class="comms-precol"><span>${escHtml(r.name||'(no name)')}</span><span class="comms-muted">${escHtml(r.email||'—')}</span>${r.invalid?'<span class="comms-tag err">invalid</span>':''}${r.opted_out?'<span class="comms-tag warn">opted out</span>':''}</div>`).join('');
+    const list = (res.recipients||[]).slice(0,50).map(r=>`<div class="comms-precol"><span>${escHtml(r.name||'(no name)')}</span>${_commsVisitTag(r.visit_type)}<span class="comms-muted">${escHtml(r.email||'—')}</span>${r.invalid?'<span class="comms-tag err">invalid</span>':''}${r.opted_out?'<span class="comms-tag warn">opted out</span>':''}</div>`).join('');
     box.innerHTML = `
       <div class="comms-precount"><b>${res.sendable_count}</b> will receive this
         <span class="comms-muted">· ${res.total} matched · ${res.invalid_count} invalid · ${res.opted_out_count} opted out</span></div>
@@ -556,6 +574,9 @@ function _commsInjectStyles() {
   .comms-tag.ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}
   .comms-tag.err{background:#fee2e2;color:#991b1b;border-color:#fecaca}
   .comms-tag.warn{background:#fef3c7;color:#92400e;border-color:#fde68a}
+  .comms-tag.type{background:rgba(26,122,110,.1);color:var(--teal-mid);border-color:transparent;
+                  font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+  .comms-tag.type.visit{background:rgba(147,51,234,.15);color:#7e22ce}
   .comms-msg{margin-top:var(--sp-2);font-size:var(--text-sm);min-height:1em}
   .comms-msg.ok{color:var(--success)} .comms-msg.error{color:var(--error)}
   .comms-emailwrap{margin-top:var(--sp-3)}

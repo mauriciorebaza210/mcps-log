@@ -6,9 +6,38 @@
 const AS  = 'https://script.google.com/macros/s/AKfycbxFrdZRbkXuGuazfqf7q-rKp-T-3DinM8t_3Pp5i6Efr7tciDU59Go6L7s3kxCQl9I/exec';
 const SEC = '220ed543794285b632c27dec0b1b6529';
 
+// ── Scope of Work: bundled fallback library ──────────────────────────────────
+// Tier 0 of the three-tier load. Shipping these in the bundle means the quote
+// tool's scope list renders at 0ms even on a cold cache with a dead network —
+// it never blocks on Apps Script. localStorage (tier 1) and a background refresh
+// from the Scope_Library sheet (tier 2) layer on top.
+//
+// ⚠️ These mirror the server-side defaults in buildProposalScopeHtml_
+// (appscript/SalesHub.js). They are a floor, not the source of truth — anything
+// saved to the Scope_Library sheet supersedes them once it loads.
+const SCOPE_LIBRARY_FALLBACK = [
+  { scope_item_id:'_w1', label:'Weekly pool service',          service_types:['weekly'], default_on:true,  sort_order:10 },
+  { scope_item_id:'_w2', label:'Water testing and balancing',  service_types:['weekly','startup','g2c'], default_on:true, sort_order:20 },
+  { scope_item_id:'_w3', label:'Clean pool baskets',           service_types:['weekly','g2c'], default_on:true, sort_order:30 },
+  { scope_item_id:'_w4', label:'Equipment inspection',         service_types:['weekly','startup'], default_on:true, sort_order:40 },
+  { scope_item_id:'_w5', label:'Weekly service report',        service_types:['weekly'], default_on:true,  sort_order:50 },
+  { scope_item_id:'_w6', label:'Filter cleaning and inspection', service_types:['weekly','g2c'], default_on:false, sort_order:60 },
+  { scope_item_id:'_w7', label:'24-hour emergency response',   service_types:['weekly'], default_on:false, sort_order:70 },
+  { scope_item_id:'_s1', label:'Startup chemical work',        service_types:['startup'], default_on:true, sort_order:10 },
+  { scope_item_id:'_s2', label:'Equipment programming support',service_types:['startup'], default_on:true, sort_order:20 },
+  { scope_item_id:'_g1', label:'Green pool cleanup',           service_types:['g2c'], default_on:true, sort_order:10 },
+  { scope_item_id:'_g2', label:'Brushing and debris removal',  service_types:['g2c'], default_on:true, sort_order:20 },
+  { scope_item_id:'_g3', label:'Follow-up visit scheduling as needed', service_types:['g2c'], default_on:true, sort_order:30 },
+  { scope_item_id:'_r1', label:'Repair / replacement labor',   service_types:['repair'], default_on:true, sort_order:10 },
+  { scope_item_id:'_r2', label:'Job documentation',            service_types:['repair'], default_on:true, sort_order:20 },
+  { scope_item_id:'_r3', label:'Parts coordination as approved', service_types:['repair'], default_on:true, sort_order:30 },
+  { scope_item_id:'_r4', label:'Completion report',            service_types:['repair'], default_on:true, sort_order:40 }
+];
+
 const PAGE_META = {
   home:'Home', jobs:'Jobs', live_map:'Technician Hub', service_log:'Service Log',
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
+  contracts:'Contracts', action_queue:'Action Queue',
   onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues',
   comms:'Communications'
 };
@@ -34,10 +63,27 @@ const SVG_STAR     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const SVG_PEOPLE   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 const SVG_BELL     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
 const SVG_MAIL     = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>`;
+const SVG_INBOX    = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`;
 
 // ── Shared utilities ─────────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ⚠️ Use this — NOT escHtml — for a value going into an inline handler such as
+// onclick="fn(...)". escHtml does not escape apostrophes, so a value containing
+// one terminates the JS string early and whatever follows is executed:
+//
+//   onclick="fn('${escHtml(id)}')"   with id = O'Brien   →   fn('O'Brien')
+//
+// JSON.stringify emits a valid JS string literal (handling quotes, backslashes
+// and control characters); escHtml then makes it safe for the double-quoted HTML
+// attribute, and the parser hands JS back the correct literal.
+//
+// Note there are NO surrounding quotes at the call site — jsArg supplies them:
+//   onclick="fn(${jsArg(id)})"
+function jsArg(v) {
+  return escHtml(JSON.stringify(String(v == null ? '' : v)));
 }
 
 // ── Chemical registry (CHEM-XX) — presentation only ───────────────────────────
@@ -91,9 +137,11 @@ const SIDEBAR_GROUPS = [
     id: 'sales',
     label: 'Sales Hub',
     children: [
-      { page:'crm',    label:'Leads CRM',       icon:SVG_CHART },
-      { page:'quotes', label:'Quote Tool',      icon:SVG_DOC   },
-      { page:'comms',  label:'Communications',  icon:SVG_MAIL }
+      { page:'action_queue', label:'Action Queue',  icon:SVG_INBOX, badgeId:'aq-badge' },
+      { page:'crm',       label:'Leads CRM',       icon:SVG_CHART },
+      { page:'quotes',    label:'Quote Tool',      icon:SVG_DOC   },
+      { page:'contracts', label:'Contracts',       icon:SVG_LOCK  },
+      { page:'comms',     label:'Communications',  icon:SVG_MAIL }
     ]
   },
   {
@@ -135,8 +183,13 @@ const ROLE_PAGES = {
   trainee:['home','live_map'],
   new_hire:['onboarding'],
   office:['home','inventory','alerts'],
-  manager:['home','crm','comms','live_map','service_log','inventory','quotes','financial_hub','alerts'],
-  admin:['home','crm','comms','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
+  // 'action_queue' is deliberately NOT granted to office: every card in the queue
+  // deep-links to 'crm' (aqOpenQuote), and navigateTo() hard-returns on a page the
+  // role lacks — office would get an inbox whose every button silently did nothing.
+  // 'contracts' is admin/manager only for the same reason the GAS route is:
+  // executed agreements carry pricing, signer IPs and signature images.
+  manager:['home','crm','comms','live_map','service_log','inventory','quotes','financial_hub','alerts','action_queue','contracts'],
+  admin:['home','crm','comms','live_map','service_log','inventory','quotes','admin','financial_hub','alerts','action_queue','contracts'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

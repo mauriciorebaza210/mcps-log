@@ -6,7 +6,10 @@ const RM_ROUTES_SS_ID = "1cXDjTSO1XmbXZFEAf6tctDdL0_Oijt__axmI-9ZBENM";
 const RM_CRM_SS_ID    = "1fw2qMdWnNbYlb3F6wM3A69CMDIymYVd2uhOF_iPoB6E";
 
 // ─── Move a pool to a different day/operator ─────────────────────────────────
-function movePool(token, poolId, newDay, newOperator, pinned, monthlyWeek) {
+// notifyCustomer: pass false to move a pool WITHOUT telling the customer.
+// Defaults to true (undefined => notify) so the honest behaviour is the default
+// and silence has to be chosen deliberately.
+function movePool(token, poolId, newDay, newOperator, pinned, monthlyWeek, notifyCustomer) {
   const auth = validateToken(token);
   if (!auth.ok) return { ok: false, error: auth.error };
   if (!hasRole(auth, "admin") && !hasRole(auth, "manager"))
@@ -127,6 +130,23 @@ function movePool(token, poolId, newDay, newOperator, pinned, monthlyWeek) {
       sc.removeAll(keys);
     }
   } catch(e) {}
+
+  // If this customer was previously TOLD a service day, a permanent move makes
+  // that promise false — so correct it. Fires only on a real change to a customer
+  // who was actually notified; no-op saves, pin-only edits, and customers who
+  // were never given a day all send nothing. Non-blocking: a failed email must
+  // never fail the route move.
+  //
+  // Suppress with notify_customer:false when making a correction the customer
+  // shouldn't be bothered with.
+  try {
+    if (typeof notifyScheduleChangeIfNeeded_ === 'function') {
+      notifyScheduleChangeIfNeeded_(poolId, newDay, newOperator, { notifyCustomer: notifyCustomer });
+    }
+  } catch (notifyErr) {
+    Logger.log('movePool: schedule-change notification failed (non-blocking): ' + notifyErr);
+  }
+
   return { ok: true };
 }
 

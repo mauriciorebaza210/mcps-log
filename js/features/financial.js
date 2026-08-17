@@ -3066,6 +3066,10 @@ async function _finEmpSyncPaycheckToQbo(paycheckId) {
   if (r && !r.ok) alert('QuickBooks sync failed: ' + r.error);
 }
 
+function _finJsStringArg(value) {
+  return JSON.stringify(String(value || '')).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+}
+
 // Inline status chip (+ Post/Retry button for admins) for a paycheck row.
 function _finQboStatusHtml(p) {
   const st = String((p && p.qbo_status) || '').toLowerCase();
@@ -3080,9 +3084,137 @@ function _finQboStatusHtml(p) {
       : `<span style="background:#f1f5f9;color:#64748b;padding:.1rem .5rem;border-radius:99px;font-size:.72rem;font-weight:700">Not synced</span>`;
   const btnLabel = st === 'failed' ? 'Retry' : (st === 'stale' ? 'Update in QuickBooks' : 'Post to QuickBooks');
   const btn = isAdmin()
-    ? ` <button class="mvt-btn" style="font-size:.72rem;padding:.1rem .45rem" onclick="event.stopPropagation();_finEmpSyncPaycheckToQbo('${p.paycheck_id}')">${btnLabel}</button>`
+    ? ` <button class="mvt-btn" style="font-size:.72rem;padding:.1rem .45rem" onclick="event.stopPropagation();_finEmpSyncPaycheckToQbo(${_finJsStringArg(p.paycheck_id)})">${btnLabel}</button>`
     : '';
   return label + btn;
+}
+
+let _finQboMapCache = null;
+
+function _finQboCents(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function _finQboDocNumberFor(paycheckId) {
+  return 'PR-' + String(paycheckId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 18);
+}
+
+function _finQboManualLines(p, accountMap) {
+  const gross = _finQboCents(p.gross);
+  const fed = _finQboCents(p.fed);
+  const ss = _finQboCents(p.ss);
+  const med = _finQboCents(p.med);
+  const erSs = _finQboCents(p.er_ss);
+  const erMed = _finQboCents(p.er_med);
+  const futa = _finQboCents(p.futa);
+  const suta = _finQboCents(p.suta);
+  const payrollTax = _finQboCents(erSs + erMed + futa + suta);
+  const fica = _finQboCents(ss + med + erSs + erMed);
+  const drift = _finQboCents(_finQboCents(gross + payrollTax) - _finQboCents(fed + fica + futa + suta + _finQboCents(p.net)));
+  const net = _finQboCents(_finQboCents(p.net) + (Math.abs(drift) <= 0.02 ? drift : 0));
+  const nameFor = (bucket, fallback) => {
+    const mapped = accountMap && accountMap[bucket];
+    return (mapped && mapped.account_name) || fallback;
+  };
+  return [
+    { bucket: 'wages_expense', side: 'Debit', amount: gross, account: nameFor('wages_expense', 'Payroll Wages Expense'), description: 'Gross wages' },
+    { bucket: 'payroll_tax_expense', side: 'Debit', amount: payrollTax, account: nameFor('payroll_tax_expense', 'Payroll Tax Expense'), description: 'Employer payroll taxes' },
+    { bucket: 'federal_income_tax_payable', side: 'Credit', amount: fed, account: nameFor('federal_income_tax_payable', 'Federal Income Tax Payable'), description: 'Federal income tax withheld' },
+    { bucket: 'fica_payable', side: 'Credit', amount: fica, account: nameFor('fica_payable', 'FICA Payable (SS + Medicare)'), description: 'FICA: SS + Medicare, employee + employer' },
+    { bucket: 'futa_payable', side: 'Credit', amount: futa, account: nameFor('futa_payable', 'FUTA Payable'), description: 'FUTA' },
+    { bucket: 'suta_payable', side: 'Credit', amount: suta, account: nameFor('suta_payable', 'SUTA TX Payable'), description: 'SUTA (TX)' },
+    { bucket: 'bank_checking', side: 'Credit', amount: net, account: nameFor('bank_checking', 'Bank / Checking'), description: 'Net pay' }
+  ].filter(l => l.amount > 0);
+}
+
+function _finQboManualGuideHtml(p, accountMap) {
+  const lines = _finQboManualLines(p, accountMap);
+  const debits = _finQboCents(lines.filter(l => l.side === 'Debit').reduce((sum, l) => sum + l.amount, 0));
+  const credits = _finQboCents(lines.filter(l => l.side === 'Credit').reduce((sum, l) => sum + l.amount, 0));
+  const rows = lines.map((l, idx) => `
+    <tr>
+      <td style="padding:.38rem .45rem;border-bottom:1px solid var(--border);color:var(--muted);text-align:center">${idx + 1}</td>
+      <td style="padding:.38rem .45rem;border-bottom:1px solid var(--border);font-weight:600">${escHtml(l.account)}</td>
+      <td style="padding:.38rem .45rem;border-bottom:1px solid var(--border);text-align:right">${l.side === 'Debit' ? _finFmtCurrency(l.amount) : ''}</td>
+      <td style="padding:.38rem .45rem;border-bottom:1px solid var(--border);text-align:right">${l.side === 'Credit' ? _finFmtCurrency(l.amount) : ''}</td>
+      <td style="padding:.38rem .45rem;border-bottom:1px solid var(--border);color:var(--muted)">${escHtml(l.description)}</td>
+    </tr>`).join('');
+  return `
+    <div style="margin-top:1rem;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;padding:.7rem .8rem;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:700;color:var(--teal);font-size:.92rem">Manual QBO journal guide</div>
+          <div style="color:var(--muted);font-size:.78rem">Date ${escHtml(p.pay_date || p.period_end || '')} · Doc ${escHtml(_finQboDocNumberFor(p.paycheck_id))}</div>
+        </div>
+        <button class="mvt-btn" style="font-size:.75rem;padding:.28rem .55rem" onclick="event.stopPropagation();_finCopyQboManualGuide(${_finJsStringArg(p.paycheck_id)})">Copy</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;min-width:620px;border-collapse:collapse;font-size:.8rem">
+          <thead>
+            <tr style="color:var(--muted);text-align:left">
+              <th style="padding:.35rem .45rem;text-align:center;width:2.5rem">#</th>
+              <th style="padding:.35rem .45rem">Account</th>
+              <th style="padding:.35rem .45rem;text-align:right">Debit</th>
+              <th style="padding:.35rem .45rem;text-align:right">Credit</th>
+              <th style="padding:.35rem .45rem">Description</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr style="font-weight:700">
+              <td colspan="2" style="padding:.45rem;text-align:right">Total</td>
+              <td style="padding:.45rem;text-align:right">${_finFmtCurrency(debits)}</td>
+              <td style="padding:.45rem;text-align:right">${_finFmtCurrency(credits)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="padding:.65rem .8rem;color:var(--muted);font-size:.76rem;border-top:1px solid var(--border)">
+        Memo: MCPS payroll · ${escHtml(p.name || p.username || '')} · ${escHtml(p.period_start || '')} → ${escHtml(p.period_end || '')} · paycheck_id=${escHtml(p.paycheck_id || '')}
+      </div>
+    </div>`;
+}
+
+function _finQboManualGuideText(paycheckId) {
+  const p = (_finEmpPaychecks || []).find(x => x.paycheck_id === paycheckId);
+  if (!p) return '';
+  const lines = _finQboManualLines(p, _finQboMapCache);
+  const debits = _finQboCents(lines.filter(l => l.side === 'Debit').reduce((sum, l) => sum + l.amount, 0));
+  const credits = _finQboCents(lines.filter(l => l.side === 'Credit').reduce((sum, l) => sum + l.amount, 0));
+  return [
+    `Manual QBO journal guide`,
+    `Date\t${p.pay_date || p.period_end || ''}`,
+    `Doc\t${_finQboDocNumberFor(p.paycheck_id)}`,
+    `Memo\tMCPS payroll · ${p.name || p.username || ''} · ${p.period_start || ''} → ${p.period_end || ''} · paycheck_id=${p.paycheck_id || ''}`,
+    '',
+    '#\tAccount\tDebit\tCredit\tDescription',
+    ...lines.map((l, i) => `${i + 1}\t${l.account}\t${l.side === 'Debit' ? l.amount.toFixed(2) : ''}\t${l.side === 'Credit' ? l.amount.toFixed(2) : ''}\t${l.description}`),
+    `Total\t\t${debits.toFixed(2)}\t${credits.toFixed(2)}`
+  ].join('\n');
+}
+
+async function _finLoadQboManualGuideMap(paycheckId) {
+  if (!isAdmin() || _finQboMapCache) return;
+  try {
+    const res = await fetch(`/api/qbo/map?token=${encodeURIComponent(_s.token)}`);
+    const json = await res.json();
+    if (!res.ok || !json.ok) return;
+    _finQboMapCache = json.map || {};
+    const p = (_finEmpPaychecks || []).find(x => x.paycheck_id === paycheckId);
+    const el = document.getElementById('emp-qbo-manual-guide');
+    if (p && el) el.innerHTML = _finQboManualGuideHtml(p, _finQboMapCache);
+  } catch (e) { /* guide still works with bucket labels */ }
+}
+
+async function _finCopyQboManualGuide(paycheckId) {
+  const text = _finQboManualGuideText(paycheckId);
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    window.prompt('Copy the manual QuickBooks guide:', text);
+  }
 }
 
 function _finEmpShowPaycheck(paycheckId) {
@@ -3108,10 +3240,12 @@ function _finEmpShowPaycheck(paycheckId) {
       ${p.note ? line('Note', escHtml(p.note)) : ''}
       ${line('Recorded by', escHtml(p.logged_by || '—'))}
       ${line('QuickBooks', _finQboStatusHtml(p) + (p.qbo_je_id ? ` <span style="color:var(--muted);font-size:.78rem">JE #${escHtml(p.qbo_je_id)}</span>` : ''))}
+      ${isAdmin() ? `<div id="emp-qbo-manual-guide">${_finQboManualGuideHtml(p, _finQboMapCache)}</div>` : ''}
       ${isAdmin() ? `<div style="display:flex;justify-content:flex-end;margin-top:1rem">
-        <button class="adm-new-btn" style="background:var(--teal)" onclick="_finEmpGoToPeriod('${p.period_start}')">Edit this pay period</button>
+        <button class="adm-new-btn" style="background:var(--teal)" onclick="_finEmpGoToPeriod(${_finJsStringArg(p.period_start)})">Edit this pay period</button>
       </div>` : ''}
     </div>`);
+  _finLoadQboManualGuideMap(paycheckId);
 }
 
 // ── QuickBooks setup modal (connect + account mapping) ────────────────────────
@@ -3220,6 +3354,7 @@ async function _finQboSaveMap() {
     });
     const json = await res.json();
     if (!res.ok || !json.ok) throw new Error(json.error || 'save failed');
+    _finQboMapCache = json.map || map;
     _prlCloseModal();
   } catch (e) {
     showErr(String(e.message || e));
@@ -3236,6 +3371,7 @@ async function _finQboDisconnect() {
       body: JSON.stringify({ token: _s.token })
     });
   } catch (e) {}
+  _finQboMapCache = null;
   _finQboRenderSetup();
 }
 

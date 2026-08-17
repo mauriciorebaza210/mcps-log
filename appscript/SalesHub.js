@@ -47,6 +47,15 @@ const MCPS_PROPOSAL_ITEM_HEADERS = [
   'quickbooks_item_name', 'sort_order', 'created_at', 'updated_at'
 ];
 
+// Reusable Scope of Work items, authored once and offered across every quote.
+//   service_types  comma-separated: weekly,startup,g2c,repair (blank = all)
+//   default_on     TRUE/FALSE — pre-checked for those service types
+//   active         FALSE archives an item without destroying history
+const MCPS_SCOPE_LIBRARY_HEADERS = [
+  'scope_item_id', 'label', 'service_types', 'default_on', 'sort_order',
+  'active', 'created_at', 'updated_at'
+];
+
 const MCPS_SERVICE_ACCOUNT_HEADERS = [
   'service_account_id', 'client_id', 'location_id', 'source_proposal_id',
   'source_agreement_id', 'source_quote_id', 'pool_id', 'service_type',
@@ -64,13 +73,26 @@ const MCPS_SERVICE_AGREEMENT_HEADERS = [
   'billing_start', 'service_start', 'invoice_day', 'agreement_pdf_url',
   'contract_url', 'contract_file_id', 'signrequest_id', 'sent_at', 'signed_at',
   'declined_at', 'activated_at', 'created_by', 'created_at', 'updated_at',
-  'notes'
+  'notes',
+  // In-portal e-signature audit trail (ESIGN Act / UETA). Appended additively
+  // so existing column positions are preserved.
+  'signature_name', 'signature_image_url', 'signature_method', 'signer_ip',
+  'signer_user_agent', 'consent_accepted', 'consent_at', 'signed_pdf_url',
+  'agreement_version'
 ];
 
 const MCPS_PROPOSAL_APPROVAL_HEADERS = [
   'approval_id', 'proposal_id', 'quote_id', 'token', 'status',
   'customer_note', 'sent_at', 'responded_at', 'expires_at', 'created_at',
   'updated_at'
+];
+
+const MCPS_CONTRACT_FOLLOWUP_COLUMNS = [
+  'target_agreement_id', 'followup_enabled', 'followup_schedule',
+  'final_notice_lead_days', 'followup_next_index', 'followup_cycle',
+  'last_followup_at', 'last_followup_error', 'followup_claimed_until',
+  'followup_claim_id', 'followup_stopped_reason', 'followup_updated_at',
+  'viewed_at', 'update_requested_at'
 ];
 
 const MCPS_MIGRATION_LOG_HEADERS = [
@@ -324,10 +346,58 @@ function quoteHasSpa_(q) {
     String(value_(q, 'spa') || '').toLowerCase() === 'true';
 }
 
+// Connector words that stay lowercase inside a Title Cased scope item.
+var SCOPE_CONNECTORS_ = ['of','to','for','in','on','with','by','a','an','the'];
+
+// Display formatting for Scope of Work line items ONLY.
+//   "Pool and spa cleaning and brushing"  ->  "Pool & Spa Cleaning & Brushing"
+//   "Testing and balancing of water"      ->  "Testing & Balancing of Water"
+//
+// Two rules, per Mau's confirmation:
+//   1. A standalone "and" becomes "&" — word-boundary matched, so "Sand" and
+//      "Standard" are never touched.
+//   2. Title Case, except connector words, which stay lowercase unless they lead.
+//
+// ⚠️ Scope items only. Never run this over contract prose (buildAgreementTermsHtml_)
+// or anything else — legal text must read as written, not as a headline.
+// ⚠️ A byte-identical twin lives in js/features/quotes.js as qFormatScopeLabel().
+// If you change one, change the other, or the admin's live preview will disagree
+// with what the customer actually signs.
+function formatScopeLabel_(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  s = s.replace(/\band\b/gi, '&');
+  var caseSegment = function (seg, isLead) {
+    var lower = seg.toLowerCase();
+    if (!isLead && SCOPE_CONNECTORS_.indexOf(lower) !== -1) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  };
+  return s.split(/\s+/).map(function (word, i) {
+    if (word === '&') return word;
+    // Each half of a hyphenated compound is cased on its own, so "24-hour"
+    // reads "24-Hour" while connectors still lowercase: "green-to-clean"
+    // becomes "Green-to-Clean", not "Green-To-Clean".
+    return word.split('-').map(function (seg, j) {
+      return caseSegment(seg, i === 0 && j === 0);
+    }).join('-');
+  }).join(' ');
+}
+
 function buildProposalScopeHtml_(service, q, options) {
   const s = String(service || '').toLowerCase();
   let items = [];
   const hasSpa = quoteHasSpa_(q);
+
+  // If this quote has a resolved scope stored on it, that IS the scope — for the
+  // proposal PDF, the signing page and the signed contract alike. This is what
+  // stops the three documents disagreeing. Quotes saved before this existed have
+  // nothing stored and fall through to the service-type defaults below.
+  const stored = readStoredScopeItems_(q);
+  if (stored) {
+    return stored.map(function (item) {
+      return '<li>' + htmlEscape_(formatScopeLabel_(item)) + '</li>';
+    }).join('');
+  }
   if (s.indexOf('startup') !== -1) {
     if (proposalOptionEnabled_(options, 'startup_chemical_work', true)) items.push('Startup chemical work');
     if (proposalOptionEnabled_(options, 'equipment_programming', true)) items.push('Equipment programming support');
@@ -344,15 +414,223 @@ function buildProposalScopeHtml_(service, q, options) {
     if (proposalOptionEnabled_(options, 'parts_coordination', true)) items.push('Parts coordination as approved');
     if (proposalOptionEnabled_(options, 'completion_report', true)) items.push('Completion report');
   } else {
-    if (proposalOptionEnabled_(options, 'pool_cleaning', true)) items.push(hasSpa ? 'Pool and spa cleaning and brushing' : 'Pool cleaning and brushing');
-    if (proposalOptionEnabled_(options, 'chemical_treatment', true)) items.push('Chemical testing and treatment');
-    if (proposalOptionEnabled_(options, 'filter_cleaning', true)) items.push('Filter cleaning and inspection');
+    // Recurring/weekly scope. Wording per Tony's review (2026-07-27): the previous
+    // list was "too broad", so each service is named specifically. Ordered
+    // service → chemistry → cleaning → inspection → reporting so it reads as the
+    // visit actually runs.
+    if (proposalOptionEnabled_(options, 'pool_cleaning', true)) items.push(hasSpa ? 'Weekly pool and spa service' : 'Weekly pool service');
+    if (proposalOptionEnabled_(options, 'chemical_treatment', true)) items.push('Water testing and balancing');
+    if (proposalOptionEnabled_(options, 'baskets', true)) items.push('Clean pool baskets');
     if (proposalOptionEnabled_(options, 'equipment_inspection', true)) items.push('Equipment inspection');
-    if (proposalOptionEnabled_(options, 'baskets', true)) items.push('Skimmer and pump basket cleaning');
-    if (proposalOptionEnabled_(options, 'service_report', true)) items.push('Service report after each visit');
+    if (proposalOptionEnabled_(options, 'service_report', true)) items.push('Weekly service report');
+    // Opt-in extras — default OFF. Tony flagged emergency response as a
+    // "potential addition", and filter cleaning is now folded into equipment
+    // inspection rather than promised separately on every quote.
+    if (proposalOptionEnabled_(options, 'filter_cleaning', false)) items.push('Filter cleaning and inspection');
+    if (proposalOptionEnabled_(options, 'emergency_response', false)) items.push('24-hour emergency response');
   }
   if (!items.length) items = [service || 'Pool service'];
-  return items.map(function(item) { return '<li>' + htmlEscape_(item) + '</li>'; }).join('');
+  // Single choke point for scope wording — the proposal PDF, the signing page and
+  // the signed agreement PDF all render through here, so they cannot disagree.
+  return items.map(function(item) {
+    return '<li>' + htmlEscape_(formatScopeLabel_(item)) + '</li>';
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SCOPE LIBRARY — reusable scope items + per-quote persistence
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// THE DEFECT THIS FIXES: proposal_scope_options was only ever read from the
+// request payload when generating the proposal PDF. It was persisted nowhere, so
+// handleGetProposalApproval_ (the signing page) and renderSignedAgreementPdf_
+// (the signed contract) both called the scope builder with {} and silently fell
+// back to service-type defaults. An admin could uncheck an item, send the
+// proposal, and the customer would still sign a contract listing it.
+//
+// Now: the resolved scope is written to the quote's `scope_items_json` column at
+// save/generate time, and all three render paths read that same stored value.
+
+// v2: items gained an `active` field. Bumped so cached v1 payloads, which lack
+// it, expire immediately rather than lingering for up to six hours.
+var SCOPE_LIBRARY_CACHE_KEY_ = 'scope_library_v2';
+
+function getScopeLibrarySheet_() {
+  return ensureSheet_('Scope_Library', MCPS_SCOPE_LIBRARY_HEADERS);
+}
+
+function scopeServiceKeyFor_(service) {
+  var s = String(service || '').toLowerCase();
+  if (s.indexOf('startup') !== -1) return 'startup';
+  if (s.indexOf('green') !== -1) return 'g2c';
+  if (s.indexOf('repair') !== -1) return 'repair';
+  return 'weekly';
+}
+
+// Reads the library, newest-cached-first. Small and rarely changed, so a 6h
+// server cache is plenty; any write invalidates it immediately.
+function readScopeLibrary_(includeInactive) {
+  var cache = CacheService.getScriptCache();
+  // The admin view is never served from cache: it is read immediately after an
+  // edit, and a 6-hour-stale list would make saves look like they did nothing.
+  if (!includeInactive) {
+    var hit = cache.get(SCOPE_LIBRARY_CACHE_KEY_);
+    if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  }
+
+  var sheet = getScopeLibrarySheet_();
+  var items = [];
+  if (sheet.getLastRow() > 1) {
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var idx = function (name) { return headers.indexOf(name); };
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      var id = String(row[idx('scope_item_id')] || '').trim();
+      var label = String(row[idx('label')] || '').trim();
+      if (!id || !label) continue;
+      var isActive = String(row[idx('active')] || '').toUpperCase() !== 'FALSE';
+      if (!isActive && !includeInactive) continue;
+      items.push({
+        scope_item_id: id,
+        label: label,
+        service_types: String(row[idx('service_types')] || '').split(',')
+          .map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean),
+        default_on: String(row[idx('default_on')] || '').toUpperCase() !== 'FALSE',
+        sort_order: Number(row[idx('sort_order')] || 0),
+        active: isActive
+      });
+    }
+  }
+  items.sort(function (a, b) { return (a.sort_order || 0) - (b.sort_order || 0); });
+  if (!includeInactive) {
+    try { cache.put(SCOPE_LIBRARY_CACHE_KEY_, JSON.stringify(items), 21600); } catch (e) {}
+  }
+  return items;
+}
+
+function invalidateScopeLibraryCache_() {
+  try { CacheService.getScriptCache().remove(SCOPE_LIBRARY_CACHE_KEY_); } catch (e) {}
+}
+
+// Public read used by the quote tool. Returns everything so the tool can offer
+// items from other service types too; it filters client-side.
+// The quote tool wants active items only. The admin management view needs the
+// archived ones too, or a deactivated item becomes unrecoverable from the UI.
+function handleGetScopeLibrary_(payload) {
+  try {
+    if (payload && payload.include_inactive) {
+      return { ok: true, items: readScopeLibrary_(true), include_inactive: true };
+    }
+    return { ok: true, items: readScopeLibrary_() };
+  } catch (e) {
+    return { ok: false, error: 'handleGetScopeLibrary_ Error: ' + e };
+  }
+}
+
+// Admin write — create/update/archive a library item.
+function handleSaveScopeLibraryItem_(payload) {
+  try {
+    var sheet = getScopeLibrarySheet_();
+    var now = nowIso_();
+    var id = String(payload.scope_item_id || '').trim();
+    var label = String(payload.label || '').trim();
+    if (!label && !id) return { ok: false, error: 'label required' };
+
+    var serviceTypes = Array.isArray(payload.service_types)
+      ? payload.service_types.join(',')
+      : String(payload.service_types || '');
+
+    if (id) {
+      var existing = findRowByValue_(sheet, 'scope_item_id', id);
+      if (!existing) return { ok: false, error: 'Scope item not found: ' + id };
+      if (label) softSetCell_(sheet, existing._rowNum, 'label', label);
+      if (payload.service_types !== undefined) softSetCell_(sheet, existing._rowNum, 'service_types', serviceTypes);
+      if (payload.default_on !== undefined) softSetCell_(sheet, existing._rowNum, 'default_on', payload.default_on ? 'TRUE' : 'FALSE');
+      if (payload.sort_order !== undefined) softSetCell_(sheet, existing._rowNum, 'sort_order', payload.sort_order);
+      if (payload.active !== undefined) softSetCell_(sheet, existing._rowNum, 'active', payload.active ? 'TRUE' : 'FALSE');
+      softSetCell_(sheet, existing._rowNum, 'updated_at', now);
+      invalidateScopeLibraryCache_();
+      return { ok: true, scope_item_id: id, updated: true };
+    }
+
+    var newId = nextSequence_(sheet, 'scope_item_id', 'SCP', 4);
+    appendObject_(sheet, {
+      scope_item_id: newId,
+      label: label,
+      service_types: serviceTypes,
+      default_on: payload.default_on === false ? 'FALSE' : 'TRUE',
+      sort_order: payload.sort_order === undefined ? 100 : payload.sort_order,
+      active: 'TRUE',
+      created_at: now,
+      updated_at: now
+    }, MCPS_SCOPE_LIBRARY_HEADERS);
+    invalidateScopeLibraryCache_();
+    return { ok: true, scope_item_id: newId, created: true };
+  } catch (e) {
+    return { ok: false, error: 'handleSaveScopeLibraryItem_ Error: ' + e };
+  }
+}
+
+// ── Per-quote resolved scope ─────────────────────────────────────────────────
+// Stored on the quote as JSON: { items: ["Weekly pool service", ...] }
+// Plain labels, not ids, so the record stays readable and survives library edits.
+function readStoredScopeItems_(q) {
+  var raw = String(value_(q, 'scope_items_json') || '').trim();
+  if (!raw) return null;
+  try {
+    var parsed = JSON.parse(raw);
+    var items = Array.isArray(parsed) ? parsed : (parsed && parsed.items);
+    if (!Array.isArray(items)) return null;
+    items = items.map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+    return items.length ? items : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeStoredScopeItems_(sheet, rowNum, items) {
+  var clean = (items || []).map(function (s) { return String(s || '').trim(); }).filter(Boolean);
+  softSetCell_(sheet, rowNum, 'scope_items_json', clean.length ? JSON.stringify({ items: clean }) : '');
+  return clean;
+}
+
+// Turns a save payload into the JSON stored on the quote.
+//
+// The quote tool sends `scope_items` — the final list the admin actually sees in
+// the preview (library selections + one-offs, in order). That is authoritative.
+//
+// ⚠️ Returns '' when the payload carries no scope information at all, rather than
+// inventing one. An empty string means "nothing stored", so rendering falls back
+// to service-type defaults — which is what every pre-existing quote must keep
+// doing. Writing a resolved list here for a payload that never mentioned scope
+// would silently freeze defaults onto quotes that were never authored.
+function resolveScopeItemsJson_(payload) {
+  if (!payload) return '';
+
+  if (Array.isArray(payload.scope_items)) {
+    var items = payload.scope_items
+      .map(function (s) { return String(s || '').trim(); })
+      .filter(Boolean);
+    return items.length ? JSON.stringify({ items: items }) : '';
+  }
+
+  // Older/other callers may still send only the option toggles. Resolve those
+  // through the SAME builder the documents use, so the stored list can never
+  // disagree with what the renderer would have produced.
+  if (payload.proposal_scope_options && typeof payload.proposal_scope_options === 'object') {
+    var pseudoQuote = { service: payload.service, spa: payload.spa };
+    var html = buildProposalScopeHtml_(payload.service, pseudoQuote, payload.proposal_scope_options);
+    var labels = String(html).split('</li>')
+      .map(function (chunk) { return chunk.replace(/^\s*<li>/, '').trim(); })
+      .filter(Boolean)
+      .map(function (s) {
+        return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+      });
+    return labels.length ? JSON.stringify({ items: labels }) : '';
+  }
+
+  return '';
 }
 
 function buildProposalServiceRowsHtml_(service, rate, q, options) {
@@ -367,6 +645,12 @@ function buildProposalServiceRowsHtml_(service, rate, q, options) {
   }
   if (proposalOptionEnabled_(options, 'equipment_inspections', true)) {
     rows.push(['Equipment Inspections', freq === 'Weekly' ? 'Monthly' : 'As Needed', 'Included']);
+  }
+  // Added per Tony's review (2026-07-27): "What do you think about adding
+  // Equipment Monitoring — Weekly — Included". Recurring plans only.
+  if (proposalOptionEnabled_(options, 'equipment_monitoring', true) &&
+      (freq === 'Weekly' || freq === 'Bi-Weekly')) {
+    rows.push(['Equipment Monitoring', freq, 'Included']);
   }
   if (proposalOptionEnabled_(options, 'chemicals_included', true) && String(service || '').toLowerCase().indexOf('repair') === -1) {
     rows.push(['Chemical Treatment', freq === 'Weekly' || freq === 'Bi-Weekly' ? 'Each Visit' : 'As Needed', 'Included']);
@@ -402,7 +686,7 @@ function proposalApprovalToken_() {
 
 function proposalApprovalBaseUrl_() {
   return PropertiesService.getScriptProperties().getProperty('PROPOSAL_APPROVAL_BASE_URL') ||
-    'https://mcps-log.vercel.app/proposal-approval.html';
+    'https://mcps-log.vercel.app/agreement.html';
 }
 
 function proposalApprovalUrl_(token, action) {
@@ -434,6 +718,87 @@ function getProposalByQuoteId_(quoteId) {
   };
 }
 
+// ── Agreement-link email (sent when a proposal goes out for signature) ───────
+// ⚠️ Leads with "Prepared For", NOT the price — confirmed with Mau, per Tony's
+// review. The investment appears on the signing page below the terms.
+function buildAgreementLinkEmailHtml_(d) {
+  var facts = [
+    ['Service', d.serviceName],
+    d.serviceAddress ? ['Property', d.serviceAddress] : null,
+    d.validUntil ? ['Valid Until', d.validUntil] : null
+  ].filter(Boolean);
+
+  var factRows = facts.map(function (f, i) {
+    return '<tr>' +
+      '<td style="padding:9px 0;border-bottom:' + (i === facts.length - 1 ? 'none' : '1px solid #E4EAEA') + ';' +
+        'font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:10px;letter-spacing:.1em;' +
+        'text-transform:uppercase;color:#6B7777;" width="110">' + htmlEscape_(f[0]) + '</td>' +
+      '<td style="padding:9px 0;border-bottom:' + (i === facts.length - 1 ? 'none' : '1px solid #E4EAEA') + ';' +
+        'font-family:' + MCPS_EMAIL_FB_ + ';font-size:14.5px;color:#222222;">' + htmlEscape_(f[1]) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var body =
+    '<tr><td style="padding:30px 32px 4px;">' +
+      '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:15px;line-height:1.65;color:#3A4645;margin:0 0 20px;">' +
+        'Hi ' + htmlEscape_(d.firstName) + ' &mdash; thank you for considering Mission Custom Pool Solutions. ' +
+        'Your service agreement is ready to review and sign. It takes about two minutes, and there&rsquo;s ' +
+        'nothing to download or print.' +
+      '</div>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+        'style="background:#F3F5F6;border-radius:10px;margin:0 0 6px;"><tr><td style="padding:6px 18px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' + factRows + '</table>' +
+      '</td></tr></table>' +
+    '</td></tr>' +
+    '<tr><td align="center" style="padding:22px 32px 8px;">' +
+      '<a href="' + htmlEscape_(d.approvalUrl) + '" ' +
+        'style="display:inline-block;background:#1FA7A8;color:#FFFFFF;text-decoration:none;' +
+        'font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:15px;padding:15px 34px;' +
+        'border-radius:11px;">Review &amp; Sign Your Agreement</a>' +
+      '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:12.5px;color:#6B7777;margin-top:14px;">' +
+        'Secure signing &middot; no account needed' +
+      '</div>' +
+    '</td></tr>' +
+    '<tr><td style="padding:14px 32px 30px;">' +
+      '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:13px;line-height:1.6;color:#6B7777;' +
+        'border-top:1px solid #E4EAEA;padding-top:16px;">' +
+        'Need something changed first? You can request an adjustment right from that page &mdash; ' +
+        'just tell us what to fix and we&rsquo;ll send an updated agreement.' +
+      '</div>' +
+    '</td></tr>';
+
+  return mcpsEmailShell_(
+    mcpsEmailHero_({
+      headline: 'Your service<br>agreement is ready.',
+      lede: 'Prepared for ' + htmlEscape_(d.customerName) + '. Review the details and sign whenever you&rsquo;re ready.'
+    }) + body + mcpsEmailFooter_(),
+    'Your MCPS service agreement is ready to review and sign.'
+  );
+}
+
+function buildAgreementLinkEmailText_(d) {
+  var co = mcpsEmailCompany_();
+  return [
+    'YOUR SERVICE AGREEMENT IS READY',
+    '',
+    'Hi ' + d.firstName + ' — thank you for considering Mission Custom Pool Solutions.',
+    'Your service agreement is ready to review and sign. It takes about two minutes.',
+    '',
+    'Service: ' + d.serviceName,
+    d.serviceAddress ? 'Property: ' + d.serviceAddress : '',
+    d.validUntil ? 'Valid until: ' + d.validUntil : '',
+    '',
+    'Review and sign here:',
+    d.approvalUrl,
+    '',
+    'Need something changed first? You can request an adjustment right from that page.',
+    '',
+    'Every pool matters.',
+    'Mission Custom Pool Solutions LLC · San Antonio, TX',
+    co.website + ' · ' + co.phone
+  ].filter(function (line) { return line !== ''; }).join('\n');
+}
+
 function handleSendProposalForApproval_(payload) {
   try {
     ensureNormalizedSalesSheets_();
@@ -450,10 +815,11 @@ function handleSendProposalForApproval_(payload) {
     const email = value_(q, 'email');
     if (!email) return { ok: false, error: 'Customer email is required to send proposal approval.' };
 
-    const props = PropertiesService.getScriptProperties();
-    const webhookUrl = props.getProperty('ZAPIER_PROPOSAL_WEBHOOK');
-    if (!webhookUrl) return { ok: false, error: 'ZAPIER_PROPOSAL_WEBHOOK not set in Script Properties.' };
-
+    // The agreement link is now emailed by the portal itself (see below) rather
+    // than relayed through Zapier, so there is no ZAPIER_PROPOSAL_WEBHOOK guard
+    // here any more. The old guard returned an error *before* the approval record
+    // was created, which meant this whole action was dead on any script where the
+    // property was unset.
     const approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
     const now = nowIso_();
     const expires = new Date();
@@ -482,34 +848,72 @@ function handleSendProposalForApproval_(payload) {
       softSetCell_(approvals, approval._rowNum, 'status', 'SENT');
       softSetCell_(approvals, approval._rowNum, 'sent_at', now);
       softSetCell_(approvals, approval._rowNum, 'updated_at', now);
-      softSetCell_(approvals, approval._rowNum, 'expires_at', value_(approval, 'expires_at') || expires.toISOString());
+      // A resend is a fresh offer, so it gets a fresh window. This previously
+      // preserved the ORIGINAL expires_at (the `||` only filled a blank), which
+      // meant a resend on day 20 left the customer 10 days rather than 30 — and
+      // made any "expires in N days" copy wrong.
+      softSetCell_(approvals, approval._rowNum, 'expires_at', expires.toISOString());
+      // ⚠️ This row is REUSED, not recreated, so the follow-up lifecycle must be
+      // reset too. Without it a resend inherits the previous cycle's state and an
+      // already-exhausted approval would never be chased again. The cycle counter
+      // also versions the Comms_Log ledger IDs so cycle 2's day-3 send cannot
+      // collide with cycle 1's already-'sent' record.
+      if (typeof fuResetLifecycleOnResend_ === 'function') {
+        try {
+          fuResetLifecycleOnResend_(approvals, approval._rowNum, value_(approval, 'followup_cycle'));
+        } catch (fuErr) {
+          Logger.log('followup lifecycle reset failed (non-blocking): ' + fuErr);
+        }
+      }
     }
 
     const approvalUrl = proposalApprovalUrl_(token, '');
-    const zapPayload = {
-      quote_id: quoteId,
-      proposal_id: proposal.proposal_id,
-      proposal_number: proposal.proposal_number,
-      first_name: value_(q, 'first_name'),
-      last_name: value_(q, 'last_name'),
-      email: email,
-      phone: value_(q, 'phone'),
-      service: value_(q, 'service'),
-      total: value_(q, 'total_with_tax'),
-      proposal_pdf_url: pdfUrl,
-      approval_url: approvalUrl,
-      approve_url: proposalApprovalUrl_(token, 'approve'),
-      decline_url: proposalApprovalUrl_(token, 'decline'),
-      changes_url: proposalApprovalUrl_(token, 'changes_requested'),
-      sent_at: now
-    };
 
-    UrlFetchApp.fetch(webhookUrl, {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify(zapPayload),
-      muteHttpExceptions: true
-    });
+    // Send the agreement link natively.
+    // ⚠️ commsSendViaGmail_ deliberately, NOT sendCommsEmail_: the generic helper
+    // dispatches on COMMS_SEND_MODE and routes through Zapier when that is set to
+    // 'zapier', which would quietly reintroduce the relay we just removed.
+    // HeadsUp.js sets the same precedent for transactional mail.
+    const emailData = {
+      firstName: String(value_(q, 'first_name') || '').trim() || 'there',
+      customerName: [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim() || 'Customer',
+      serviceName: value_(q, 'service') || 'Pool Service',
+      serviceAddress: [value_(q, 'address'), value_(q, 'city'), value_(q, 'zip_code')].filter(Boolean).join(', '),
+      validUntil: value_(proposal, 'valid_until') || '',
+      approvalUrl: approvalUrl
+    };
+    const sendMsg = {
+      to: email,
+      subject: 'Your MCPS service agreement is ready to sign',
+      htmlBody: buildAgreementLinkEmailHtml_(emailData),
+      plainBody: buildAgreementLinkEmailText_(emailData),
+      recipientId: 'agreement_link_' + String(quoteId)
+    };
+    let sendResult;
+    try {
+      sendResult = (typeof commsSendViaGmail_ === 'function')
+        ? commsSendViaGmail_(sendMsg)
+        : (GmailApp.sendEmail(email, sendMsg.subject, sendMsg.plainBody,
+            { name: 'Mission Custom Pool Solutions', htmlBody: sendMsg.htmlBody }),
+           { ok: true, provider: 'gmail_fallback' });
+    } catch (sendErr) {
+      // Surface the failure rather than reporting a send that never happened —
+      // the approval record already exists, so the link can be resent.
+      return {
+        ok: false,
+        error: 'Agreement link email failed to send: ' + sendErr,
+        approval_url: approvalUrl,
+        proposal_id: proposal.proposal_id
+      };
+    }
+    if (sendResult && sendResult.ok === false) {
+      return {
+        ok: false,
+        error: 'Agreement link email failed to send: ' + (sendResult.error || 'unknown error'),
+        approval_url: approvalUrl,
+        proposal_id: proposal.proposal_id
+      };
+    }
 
     softSetCell_(result.proposals, proposal._rowNum, 'status', 'SENT');
     softSetCell_(result.proposals, proposal._rowNum, 'sent_at', now);
@@ -517,10 +921,78 @@ function handleSendProposalForApproval_(payload) {
     softSetCell_(hit.sheet, hit.rowNum, 'proposal_sent_at', now);
     softSetCell_(hit.sheet, hit.rowNum, 'proposal_approval_url', approvalUrl);
     softSetCell_(hit.sheet, hit.rowNum, 'proposal_number', proposal.proposal_number);
-    return { ok: true, sent_at: now, approval_url: approvalUrl, proposal_id: proposal.proposal_id, proposal_number: proposal.proposal_number };
+    return { ok: true, sent_at: now, approval_url: approvalUrl, proposal_id: proposal.proposal_id, proposal_number: proposal.proposal_number, sent_to: email };
   } catch(e) {
     return { ok: false, error: 'handleSendProposalForApproval_ Error: ' + e.toString() };
   }
+}
+
+// Everything the signing page renders, built in ONE place.
+//
+// `approval` is null when an admin is previewing a proposal that has not been
+// sent yet. That is the entire point of sharing this builder: a preview assembled
+// separately would drift from the live page, and a preview that drifts is worse
+// than no preview — it certifies the wrong thing.
+function buildAgreementPagePayload_(quoteRow, proposal, approval) {
+  let q = quoteRow;
+  // ⚠️ An amendment approval carries target_agreement_id. The signing page and the
+  // /api/agreement/sign proxy both branch on this: without it, an amendment link
+  // posts to sign_agreement and runs the ORIGINAL path — activating the customer
+  // again, minting a second pool_id and re-sending the welcome email.
+  const isAmendment = !!String(value_(approval, 'target_agreement_id') || '').trim();
+
+  // ⚠️ Same substitution as the PDF: for an amendment, `q` is the PARENT quote, so
+  // rendering its pricing would show the customer the original agreement's figures
+  // on a page asking them to sign a change. Money comes from the amendment's own
+  // snapshot; identity still comes from the parent, because it is the same
+  // customer and property.
+  if (isAmendment && typeof amAmendmentQuoteView_ === 'function') {
+    try {
+      const amendmentRow = findRowByValue_(
+        ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS),
+        'agreement_id', String(value_(approval, 'target_agreement_id') || '').trim());
+      if (amendmentRow) q = amAmendmentQuoteView_(q, proposal, amendmentRow);
+    } catch (amErr) {
+      Logger.log('buildAgreementPagePayload_ amendment view failed: ' + amErr);
+    }
+  }
+
+  const serviceName = value_(proposal, 'service_type') || value_(q, 'service') || 'Pool Service';
+  const rate = value_(q, 'discounted_service_subtotal') || value_(q, 'quote_subtotal') || value_(q, 'service_subtotal');
+  return {
+    is_amendment: isAmendment,
+    // The action the page must submit to. Never inferred client-side.
+    sign_action: isAmendment ? 'sign_amendment' : 'sign_agreement',
+    // Full legal Terms & Conditions for the merged agreement (bottom of the
+    // signing page). Single source shared with the signed PDF renderer.
+    agreement_terms_html: buildAgreementTermsHtml_(q),
+    approval: {
+      status: approval ? (value_(approval, 'status') || 'SENT') : 'SENT',
+      customer_note: approval ? value_(approval, 'customer_note') : '',
+      responded_at: approval ? value_(approval, 'responded_at') : ''
+    },
+      proposal: {
+        proposal_number: value_(proposal, 'proposal_number'),
+        status: value_(proposal, 'status'),
+        proposal_pdf_url: value_(proposal, 'proposal_pdf_url'),
+        service: serviceName,
+        pool_specs: value_(q, 'specs_summary'),
+        subtotal: value_(q, 'service_subtotal'),
+        discount_amount: value_(q, 'discount_amount'),
+        travel_fee: value_(q, 'travel_fee'),
+        total: value_(proposal, 'total') || value_(q, 'total_with_tax'),
+        sales_tax: value_(proposal, 'sales_tax') || value_(q, 'sales_tax'),
+        investment: mcpsMoney_(rate) + (String(serviceName).toLowerCase().indexOf('weekly') !== -1 ? ' / month' : ''),
+        valid_until: value_(proposal, 'valid_until'),
+        // Pre-rendered scope list + service-plan rows so the page shows the same
+        // detail as the proposal without re-implementing the logic client-side.
+        scope_html: buildProposalScopeHtml_(serviceName, q, {}),
+        service_plan_html: buildProposalServiceRowsHtml_(serviceName, rate, q, {}),
+        customer_name: [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim() || 'Customer',
+        service_address: value_(q, 'address'),
+        city_state_zip: [value_(q, 'city'), value_(q, 'zip_code')].filter(Boolean).join(', ')
+      }
+  };
 }
 
 function handleGetProposalApproval_(payload) {
@@ -534,31 +1006,529 @@ function handleGetProposalApproval_(payload) {
     const proposal = findRowByValue_(ensureSheet_('Proposals', MCPS_PROPOSAL_HEADERS), 'proposal_id', approval.proposal_id);
     const hit = getQuoteById_(approval.quote_id);
     if (!proposal || !hit) return { ok: false, error: 'This proposal is no longer available.' };
-    const q = hit.object;
-    const expired = value_(approval, 'expires_at') && new Date(value_(approval, 'expires_at')).getTime() < new Date().getTime();
-    return {
-      ok: true,
-      expired: !!expired,
-      approval: {
-        status: value_(approval, 'status') || 'SENT',
-        customer_note: value_(approval, 'customer_note'),
-        responded_at: value_(approval, 'responded_at')
-      },
-      proposal: {
-        proposal_number: value_(proposal, 'proposal_number'),
-        status: value_(proposal, 'status'),
-        proposal_pdf_url: value_(proposal, 'proposal_pdf_url'),
-        service: value_(proposal, 'service_type') || value_(q, 'service'),
-        total: value_(proposal, 'total') || value_(q, 'total_with_tax'),
-        sales_tax: value_(proposal, 'sales_tax') || value_(q, 'sales_tax'),
-        valid_until: value_(proposal, 'valid_until'),
-        customer_name: [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim() || 'Customer',
-        service_address: value_(q, 'address'),
-        city_state_zip: [value_(q, 'city'), value_(q, 'zip_code')].filter(Boolean).join(', ')
+    // ⚠️ An amendment token whose target row is missing or mistyped must FAIL,
+    // not fall through. Silently rendering the parent quote would show the
+    // customer the original agreement's pricing on a page headed as a change —
+    // and they would sign it believing it was the amendment.
+    const targetId = String(value_(approval, 'target_agreement_id') || '').trim();
+    if (targetId) {
+      const amdRow = findRowByValue_(
+        ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', targetId);
+      if (!amdRow) {
+        return { ok: false, error: 'This amendment is no longer available.' };
       }
-    };
+      if (!isAmendmentRow_(amdRow)) {
+        return { ok: false, error: 'This link is misconfigured. Please contact us for a new one.' };
+      }
+    }
+
+    const expired = value_(approval, 'expires_at') && new Date(value_(approval, 'expires_at')).getTime() < new Date().getTime();
+
+    recordApprovalViewed_(approvals, approval);
+
+    const out = buildAgreementPagePayload_(hit.object, proposal, approval);
+    out.ok = true;
+    out.expired = !!expired;
+    return out;
   } catch(e) {
     return { ok: false, error: 'handleGetProposalApproval_ Error: ' + e.toString() };
+  }
+}
+
+// First time a customer opens their agreement. This is the one measurement that
+// turns the funnel from guesswork into fact: without it "sent but not signed" and
+// "never even opened" are indistinguishable.
+//
+// ⚠️ Deliberately inert beyond a single cell:
+//   * writes ONLY if empty — first view, never last
+//   * does NOT touch updated_at (that is an operational timestamp; analytics must
+//     not make a row look edited)
+//   * invalidates NO cache
+//   * affects NO ordering anywhere
+//   * swallows every error — this runs on the customer's signing page and must
+//     never slow it down or break it
+//
+// ⚠️ The staff preview goes through handleGetAgreementPreview_, a different
+// handler, so previewing a proposal correctly does not register as a customer
+// view. Keep that separation.
+function recordApprovalViewed_(approvals, approval) {
+  try {
+    if (String(value_(approval, 'viewed_at') || '').trim()) return;
+    ensureColumn_(approvals, 'viewed_at');
+    softSetCell_(approvals, approval._rowNum, 'viewed_at', nowIso_());
+  } catch (e) {
+    Logger.log('recordApprovalViewed_ failed (non-blocking): ' + e);
+  }
+}
+
+// ── Preview before send (staff only) ─────────────────────────────────────────
+// Renders the REAL signing page against a quote that has not been sent yet, so
+// what an admin approves is byte-for-byte what the customer will receive. Uses
+// the shared builder above — a separate "preview renderer" would drift silently.
+//
+// No approval row is created and no token is minted: previewing must never be
+// able to start a signing flow, and an abandoned preview must leave no trace.
+function handleGetAgreementPreview_(payload) {
+  try {
+    ensureNormalizedSalesSheets_();
+    const quoteId = String(payload.quote_id || '').trim();
+    if (!quoteId) return { ok: false, error: 'quote_id required' };
+    const hit = getQuoteById_(quoteId);
+    if (!hit) return { ok: false, error: 'Quote not found: ' + quoteId };
+    const result = getProposalByQuoteId_(quoteId);
+    const proposal = result && result.proposal;
+    if (!proposal) {
+      return { ok: false, error: 'Generate the proposal first — there is nothing to preview yet.' };
+    }
+
+    const out = buildAgreementPagePayload_(hit.object, proposal, null);
+    out.ok = true;
+    out.expired = false;
+    out.preview = true;
+    return out;
+  } catch (e) {
+    return { ok: false, error: 'handleGetAgreementPreview_ Error: ' + e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SALES FUNNEL
+//
+// Definitions matter more than the code here, so they are stated once:
+//
+//   basis      Proposal_Approvals.sent_at, in the script timezone, calendar month
+//   cohort     every approval SENT in that month. All metrics use that cohort as
+//              their denominator, so an agreement sent in June and signed in July
+//              counts in JUNE — otherwise close rate silently drifts with lag.
+//   close rate signed ÷ sent, same cohort
+//   median     median of (signed_at − sent_at). Median, not mean: one stalled
+//              deal drags a mean badly.
+//
+// ⚠️ Amendments are EXCLUDED from the primary funnel. They are expansion revenue
+// on an existing customer, not new-customer acquisition, and counting them would
+// inflate close rate (an amendment is nearly always signed). Reported separately.
+// ══════════════════════════════════════════════════════════════════════════════
+var SALES_FUNNEL_CACHE_KEY_ = 'sales_funnel_v1';
+
+function sfMonthKey_(d, tz) { return Utilities.formatDate(d, tz, 'yyyy-MM'); }
+
+function sfParse_(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  var s = String(v).trim();
+  if (!s) return null;
+  var d = new Date(s.length === 10 ? s + 'T00:00:00' : s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function sfMedian_(nums) {
+  if (!nums.length) return null;
+  var a = nums.slice().sort(function (x, y) { return x - y; });
+  var mid = Math.floor(a.length / 2);
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+
+// ── Joined customer identity for agreement rows ──────────────────────────────
+// Service_Agreements stores no customer name — only who signed. Resolving it
+// client-side meant the Contracts page rendered the literal word "Customer" until
+// the CRM cache loaded, then flickered to the real name. Fake placeholder data is
+// worse than an honest empty field, so the join happens here.
+//
+// Resolution order, quote LAST: an agreement can outlive a clean quote link
+// (quotes get merged, re-keyed, archived), whereas Clients/Client_Locations are
+// the normalized records the agreement actually points at.
+//   1. Clients          by client_id    → display_name, else first + last
+//   2. Client_Locations by location_id  → service_address, city
+//   3. Quote            by source_quote_id (fallback only)
+//
+// Returns '' rather than a placeholder when nothing resolves — the UI skeletons
+// the field instead of inventing a name.
+function withAgreementCustomer_(rows) {
+  if (!rows || !rows.length) return rows || [];
+  try {
+    var clients = {};
+    sheetToObjects_(ensureSheet_('Clients', MCPS_CLIENT_HEADERS)).rows.forEach(function (c) {
+      var id = String(value_(c, 'client_id') || '').trim();
+      if (id) clients[id] = c;
+    });
+    var locations = {};
+    sheetToObjects_(ensureSheet_('Client_Locations', MCPS_LOCATION_HEADERS)).rows.forEach(function (l) {
+      var id = String(value_(l, 'location_id') || '').trim();
+      if (id) locations[id] = l;
+    });
+
+    // ⚠️ Built ONCE, lazily, from a single read — and only if some row actually
+    // needs the fallback. This previously called getQuoteById_ per agreement, and
+    // that function re-reads the ENTIRE Quotes sheet every call: N contracts meant
+    // N full-sheet scans, which is why names arrived late or not at all.
+    var quoteIndex = null;
+    function quoteFor(qid) {
+      if (!qid) return null;
+      if (quoteIndex === null) quoteIndex = buildQuoteNameIndex_();
+      return quoteIndex[qid] || null;
+    }
+
+    return rows.map(function (a) {
+      var name = '', label = '';
+
+      var c = clients[String(a.client_id || '').trim()];
+      if (c) {
+        name = String(value_(c, 'display_name') || '').trim() ||
+               [value_(c, 'first_name'), value_(c, 'last_name')].filter(Boolean).join(' ').trim();
+      }
+      var l = locations[String(a.location_id || '').trim()];
+      if (l) {
+        label = [value_(l, 'service_address'), value_(l, 'city')].filter(Boolean).join(', ').trim();
+      }
+
+      if (!name || !label) {
+        var q = quoteFor(String(a.source_quote_id || '').trim());
+        if (q) {
+          if (!name) name = q.name;
+          if (!label) label = q.label;
+        }
+      }
+
+      a.customer_name = name || '';
+      a.location_label = label || '';
+      return a;
+    });
+  } catch (e) {
+    Logger.log('withAgreementCustomer_ failed (non-blocking): ' + e);
+    return rows;
+  }
+}
+
+// One read of Quotes → { quote_id: { name, label } }.
+//
+// ⚠️ Exists specifically because getQuoteById_ re-reads the whole sheet on every
+// call. Any loop that needs several quotes must use an index like this, never
+// getQuoteById_ per iteration.
+function buildQuoteNameIndex_() {
+  var idx = {};
+  try {
+    var sheet = getCrmSheet_();
+    if (!sheet || sheet.getLastRow() < 2) return idx;
+    var data = sheet.getDataRange().getValues();
+    var h = data[0];
+    var qi = headerIndex_(h, 'quote_id');
+    if (qi === -1) return idx;
+    var ni = headerIndex_(h, 'client_name');
+    var fi = headerIndex_(h, 'first_name'), li = headerIndex_(h, 'last_name');
+    var ai = headerIndex_(h, 'address'),    ci = headerIndex_(h, 'city');
+    var cell = function (row, i) { return i === -1 ? '' : String(row[i] == null ? '' : row[i]).trim(); };
+
+    for (var r = 1; r < data.length; r++) {
+      var id = cell(data[r], qi);
+      if (!id || idx[id]) continue;
+      var name = cell(data[r], ni) ||
+                 [cell(data[r], fi), cell(data[r], li)].filter(Boolean).join(' ');
+      idx[id] = {
+        name: name,
+        label: [cell(data[r], ai), cell(data[r], ci)].filter(Boolean).join(', ')
+      };
+    }
+  } catch (e) {
+    Logger.log('buildQuoteNameIndex_ failed (non-blocking): ' + e);
+  }
+  return idx;
+}
+
+// ── Contract follow-up cadence ──────────────────────────────────────────────
+// Contracts display from Service_Agreements, but automated follow-ups are sent
+// from Proposal_Approvals. These helpers join the operational row back onto the
+// contract so staff can edit cadence inside the portal instead of Script Props.
+function cfuEnsureColumns_(sheet) {
+  MCPS_CONTRACT_FOLLOWUP_COLUMNS.forEach(function (c) { ensureColumn_(sheet, c); });
+}
+
+function cfuIsOriginalAgreement_(agreement) {
+  var type = String(value_(agreement, 'agreement_type') || '').trim().toLowerCase();
+  return !type || type === 'original';
+}
+
+function cfuApprovalMatchesAgreement_(approval, agreement) {
+  var aid = String(value_(agreement, 'agreement_id') || '').trim();
+  var target = String(value_(approval, 'target_agreement_id') || '').trim();
+  if (target) return target === aid;
+  if (!cfuIsOriginalAgreement_(agreement)) return false;
+  var pid = String(value_(agreement, 'proposal_id') || '').trim();
+  var qid = String(value_(agreement, 'source_quote_id') || '').trim();
+  if (pid && String(value_(approval, 'proposal_id') || '').trim() === pid) return true;
+  if (qid && String(value_(approval, 'quote_id') || '').trim() === qid) return true;
+  return false;
+}
+
+function cfuPickApproval_(agreement, approvals, strict) {
+  var aid = String(value_(agreement, 'agreement_id') || '').trim();
+  var targetMatches = approvals.filter(function (r) {
+    return String(value_(r, 'target_agreement_id') || '').trim() === aid;
+  });
+  if (targetMatches.length === 1) return targetMatches[0];
+  if (targetMatches.length > 1) {
+    if (strict) throw new Error('Multiple amendment approvals point at this agreement.');
+    return null;
+  }
+
+  if (!cfuIsOriginalAgreement_(agreement)) return null;
+  var pid = String(value_(agreement, 'proposal_id') || '').trim();
+  var qid = String(value_(agreement, 'source_quote_id') || '').trim();
+  var original = approvals.filter(function (r) {
+    if (String(value_(r, 'target_agreement_id') || '').trim()) return false;
+    if (pid && String(value_(r, 'proposal_id') || '').trim() === pid) return true;
+    if (qid && String(value_(r, 'quote_id') || '').trim() === qid) return true;
+    return false;
+  });
+  if (original.length === 1) return original[0];
+  if (original.length > 1 && strict) {
+    throw new Error('Multiple approval rows match this contract. Open the approval row directly before editing cadence.');
+  }
+  return original[0] || null;
+}
+
+function cfuApplyApprovalFields_(agreement, approval) {
+  if (!approval) return agreement;
+  agreement.followup_approval_id = String(value_(approval, 'approval_id') || '').trim();
+  agreement.followup_enabled = String(value_(approval, 'followup_enabled') || '').trim();
+  agreement.followup_schedule = String(value_(approval, 'followup_schedule') || '').trim();
+  agreement.final_notice_lead_days = String(value_(approval, 'final_notice_lead_days') || '').trim();
+  agreement.followup_next_index = String(value_(approval, 'followup_next_index') || '').trim();
+  agreement.followup_cycle = String(value_(approval, 'followup_cycle') || '').trim();
+  agreement.last_followup_at = String(value_(approval, 'last_followup_at') || '').trim();
+  agreement.last_followup_error = String(value_(approval, 'last_followup_error') || '').trim();
+  agreement.followup_stopped_reason = String(value_(approval, 'followup_stopped_reason') || '').trim();
+  agreement.followup_updated_at = String(value_(approval, 'followup_updated_at') || '').trim();
+  agreement.approval_status = String(value_(approval, 'status') || '').trim();
+  agreement.approval_sent_at = String(value_(approval, 'sent_at') || '').trim();
+  agreement.approval_expires_at = String(value_(approval, 'expires_at') || '').trim();
+  return agreement;
+}
+
+function withAgreementFollowups_(rows) {
+  if (!rows || !rows.length) return rows || [];
+  try {
+    var approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
+    cfuEnsureColumns_(approvals);
+    var approvalRows = sheetToObjects_(approvals).rows;
+    return rows.map(function (a) {
+      var copy = Object.assign({}, a);
+      return cfuApplyApprovalFields_(copy, cfuPickApproval_(copy, approvalRows, false));
+    });
+  } catch (e) {
+    Logger.log('withAgreementFollowups_ failed (non-blocking): ' + e);
+    return rows;
+  }
+}
+
+function cfuNormalizeSchedule_(raw) {
+  var source = Array.isArray(raw) ? raw.join(',') : String(raw || '');
+  var seen = {}, out = [];
+  source.split(/[,\s]+/).forEach(function (part) {
+    if (!part) return;
+    var n = Number(part);
+    if (isNaN(n) || n < 1 || n > 90 || Math.floor(n) !== n) return;
+    if (!seen[n]) { seen[n] = true; out.push(n); }
+  });
+  out.sort(function (a, b) { return a - b; });
+  if (!out.length) return { ok: false, error: 'Enter at least one follow-up day.' };
+  if (out.length > 8) return { ok: false, error: 'Use 8 follow-up touches or fewer.' };
+  return { ok: true, days: out, value: out.join(',') };
+}
+
+function cfuBool_(v) {
+  if (v === true) return true;
+  var s = String(v || '').trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+}
+
+function handleUpdateContractFollowups_(payload) {
+  try {
+    var agreementId = String(payload.agreement_id || '').trim();
+    if (!agreementId) return { ok: false, error: 'agreement_id required' };
+
+    var schedule = cfuNormalizeSchedule_(payload.followup_schedule);
+    if (!schedule.ok) return schedule;
+
+    var finalLead = Number(String(payload.final_notice_lead_days || '').trim());
+    if (isNaN(finalLead) || finalLead < 1 || finalLead > 30 || Math.floor(finalLead) !== finalLead) {
+      return { ok: false, error: 'Final notice lead must be 1–30 days.' };
+    }
+
+    var agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
+    var agreement = findRowByValue_(agreements, 'agreement_id', agreementId);
+    if (!agreement) return { ok: false, error: 'Service agreement not found.' };
+
+    var approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
+    cfuEnsureColumns_(approvals);
+    var approval = cfuPickApproval_(agreement, sheetToObjects_(approvals).rows, true);
+    if (!approval) return { ok: false, error: 'No approval row is linked to this contract.' };
+
+    var enabled = cfuBool_(payload.followup_enabled);
+    var reset = cfuBool_(payload.reset_followups);
+    var now = nowIso_();
+    softSetCell_(approvals, approval._rowNum, 'followup_enabled', enabled ? 'TRUE' : 'FALSE');
+    softSetCell_(approvals, approval._rowNum, 'followup_schedule', schedule.value);
+    softSetCell_(approvals, approval._rowNum, 'final_notice_lead_days', finalLead);
+    softSetCell_(approvals, approval._rowNum, 'followup_claimed_until', '');
+    softSetCell_(approvals, approval._rowNum, 'followup_claim_id', '');
+    softSetCell_(approvals, approval._rowNum, 'followup_updated_at', now);
+    softSetCell_(approvals, approval._rowNum, 'updated_at', now);
+
+    if (reset) {
+      softSetCell_(approvals, approval._rowNum, 'followup_next_index', 0);
+      softSetCell_(approvals, approval._rowNum, 'last_followup_at', '');
+      softSetCell_(approvals, approval._rowNum, 'last_followup_error', '');
+      softSetCell_(approvals, approval._rowNum, 'followup_stopped_reason', '');
+    }
+
+    var fresh = findRowByValue_(approvals, 'approval_id', approval.approval_id);
+    return {
+      ok: true,
+      agreement_id: agreementId,
+      approval_id: String(value_(fresh, 'approval_id') || ''),
+      followup_enabled: String(value_(fresh, 'followup_enabled') || ''),
+      followup_schedule: String(value_(fresh, 'followup_schedule') || ''),
+      final_notice_lead_days: String(value_(fresh, 'final_notice_lead_days') || ''),
+      followup_next_index: String(value_(fresh, 'followup_next_index') || ''),
+      followup_cycle: String(value_(fresh, 'followup_cycle') || ''),
+      last_followup_at: String(value_(fresh, 'last_followup_at') || ''),
+      last_followup_error: String(value_(fresh, 'last_followup_error') || ''),
+      followup_stopped_reason: String(value_(fresh, 'followup_stopped_reason') || ''),
+      followup_updated_at: String(value_(fresh, 'followup_updated_at') || '')
+    };
+  } catch (e) {
+    return { ok: false, error: 'handleUpdateContractFollowups_ Error: ' + e };
+  }
+}
+
+function handleGetSalesFunnel_(payload) {
+  try {
+    var months = Math.min(24, Math.max(1, Number(payload && payload.months) || 6));
+    var cacheVersion = String((payload && payload.cache_version) || 'stage5b-current-month').trim();
+    var cacheKey = SALES_FUNNEL_CACHE_KEY_ + ':' + cacheVersion + ':' + months;
+    var cache = CacheService.getScriptCache();
+    if (payload && payload.refresh) {
+      try { cache.remove(cacheKey); } catch (e) {}
+    } else {
+      var cached = cache.get(cacheKey);
+      if (cached) { try { return JSON.parse(cached); } catch (e) {} }
+    }
+
+    ensureNormalizedSalesSheets_();
+    var tz = Session.getScriptTimeZone() || 'America/Chicago';
+    var now = new Date();
+
+    // Signed timestamps live on Service_Agreements, NOT on the approval row.
+    // ⚠️ Filter to original agreements: parent and amendments share a
+    // source_quote_id, so an amendment could otherwise supply the close timestamp
+    // for a new-customer deal.
+    var agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
+    var signedByProposal = {}, signedByQuote = {};
+    sheetToObjects_(agreements).rows.forEach(function (a) {
+      var type = String(value_(a, 'agreement_type') || '').trim().toLowerCase();
+      if (type && type !== 'original') return;              // blank counts as original (legacy rows)
+      var signedAt = sfParse_(value_(a, 'signed_at'));
+      if (!signedAt) return;
+      var pid = String(value_(a, 'proposal_id') || '').trim();
+      var qid = String(value_(a, 'source_quote_id') || '').trim();
+      if (pid && !signedByProposal[pid]) signedByProposal[pid] = signedAt;
+      if (qid && !signedByQuote[qid]) signedByQuote[qid] = signedAt;
+    });
+
+    var approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
+    var rows = sheetToObjects_(approvals).rows;
+
+    var buckets = {};
+    var expiringSoon = 0, amendmentsSigned = 0, trackingStart = null;
+
+    rows.forEach(function (r) {
+      var isAmendment = !!String(value_(r, 'target_agreement_id') || '').trim();
+      var status = String(value_(r, 'status') || '').toUpperCase();
+      var sentAt = sfParse_(value_(r, 'sent_at'));
+      var viewedAt = sfParse_(value_(r, 'viewed_at'));
+      var expiresAt = sfParse_(value_(r, 'expires_at'));
+
+      if (viewedAt && (!trackingStart || viewedAt.getTime() < trackingStart.getTime())) {
+        trackingStart = viewedAt;
+      }
+
+      // Live worklist — deliberately NOT cohort-scoped. "What needs chasing right
+      // now" has nothing to do with which month it was sent in.
+      if (status === 'SENT' && expiresAt &&
+          expiresAt.getTime() > now.getTime() &&
+          expiresAt.getTime() - now.getTime() <= 7 * 86400000) {
+        expiringSoon++;
+      }
+
+      if (isAmendment) {
+        if (status === 'APPROVED') amendmentsSigned++;
+        return;                                             // out of the primary funnel
+      }
+      if (!sentAt) return;
+
+      var key = sfMonthKey_(sentAt, tz);
+      var b = buckets[key] || (buckets[key] = { month: key, sent: 0, viewed: 0, signed: 0, days: [] });
+      b.sent++;
+      if (viewedAt) b.viewed++;
+      if (status === 'APPROVED') {
+        b.signed++;
+        var pid = String(value_(r, 'proposal_id') || '').trim();
+        var qid = String(value_(r, 'quote_id') || '').trim();
+        // Prefer the real signature timestamp; fall back to responded_at, which is
+        // when the customer acted, for rows with no agreement record.
+        var signedAt = signedByProposal[pid] || signedByQuote[qid] || sfParse_(value_(r, 'responded_at'));
+        if (signedAt) {
+          var days = (signedAt.getTime() - sentAt.getTime()) / 86400000;
+          if (days >= 0) b.days.push(days);
+        }
+      }
+    });
+
+    // ⚠️ The CURRENT calendar month must always exist, even with no activity.
+    // Without this, `current` fell back to the newest month that happened to have
+    // data — so in August the band read "Sent in June 2026", which looks like a
+    // stale page rather than a quiet month.
+    var currentKey = sfMonthKey_(now, tz);
+    if (!buckets[currentKey]) {
+      buckets[currentKey] = { month: currentKey, sent: 0, viewed: 0, signed: 0, days: [] };
+    }
+
+    var shape = function (b) {
+      var med = sfMedian_(b.days);
+      return {
+        month: b.month, sent: b.sent, viewed: b.viewed, signed: b.signed,
+        close_rate: b.sent ? Math.round((b.signed / b.sent) * 1000) / 10 : 0,
+        median_days_to_close: med === null ? null : Math.round(med * 10) / 10
+      };
+    };
+
+    var keys = Object.keys(buckets).sort().reverse().slice(0, months);
+    var out = keys.map(function (k) { return shape(buckets[k]); });
+
+    // The most recent month that actually had activity — useful when the current
+    // month is empty, but it must be LABELLED as historical, never as "now".
+    var latestKey = Object.keys(buckets).filter(function (k) { return buckets[k].sent > 0; })
+                          .sort().reverse()[0];
+
+    var res = {
+      ok: true,
+      months: out,
+      current: shape(buckets[currentKey]),
+      latest_cohort: latestKey && latestKey !== currentKey ? shape(buckets[latestKey]) : null,
+      expiring_soon: expiringSoon,
+      amendments_signed: amendmentsSigned,
+      // ⚠️ viewed_at only exists from the day tracking shipped. The UI must label
+      // "viewed" against this date rather than implying older quotes went unopened.
+      viewed_tracking_since: trackingStart ? Utilities.formatDate(trackingStart, tz, 'yyyy-MM-dd') : '',
+      timezone: tz,
+      generated_at: nowIso_()
+    };
+    if (!(payload && payload.refresh)) {
+      try { cache.put(cacheKey, JSON.stringify(res), 300); } catch (e) {}
+    }
+    return res;
+  } catch (e) {
+    return { ok: false, error: 'handleGetSalesFunnel_ Error: ' + e };
   }
 }
 
@@ -597,6 +1567,44 @@ function handleRespondToProposal_(payload) {
     const hit = getQuoteById_(approval.quote_id);
     if (!proposal || !hit) return { ok: false, error: 'This proposal is no longer available.' };
     const now = nowIso_();
+    // ⚠️ AMENDMENT BRANCH — must return before touching the parent quote.
+    //
+    // Every write below this point targets the parent quote row, and the APPROVED
+    // path additionally advances repair work orders and GENERATES AND SENDS a
+    // contract for the parent. Running any of that because a customer declined or
+    // queried an addendum would corrupt the original agreement's record.
+    const amendmentTarget = String(value_(approval, 'target_agreement_id') || '').trim();
+    if (amendmentTarget) {
+      if (approvalStatus === 'APPROVED') {
+        // Approving an amendment means signing it — that path writes the audit
+        // trail. Accepting it here would mark it accepted with no signature.
+        return { ok: false, error: 'Amendments are accepted by signing them.' };
+      }
+      softSetCell_(approvals, approval._rowNum, 'status', approvalStatus);
+      softSetCell_(approvals, approval._rowNum, 'customer_note', note);
+      softSetCell_(approvals, approval._rowNum, 'responded_at', now);
+      softSetCell_(approvals, approval._rowNum, 'updated_at', now);
+      if (proposal) {
+        softSetCell_(proposals, proposal._rowNum, 'status',
+          approvalStatus === 'DECLINED' ? 'DECLINED' : 'GENERATED');
+        softSetCell_(proposals, proposal._rowNum, 'updated_at', now);
+        if (approvalStatus === 'DECLINED') softSetCell_(proposals, proposal._rowNum, 'declined_at', now);
+      }
+      // Status on the AMENDMENT's own agreement row — never the parent's.
+      try {
+        const amendments = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
+        const amendmentRow = findRowByValue_(amendments, 'agreement_id', amendmentTarget);
+        if (amendmentRow && approvalStatus === 'DECLINED') {
+          softSetCell_(amendments, amendmentRow._rowNum, 'status', 'DECLINED');
+          softSetCell_(amendments, amendmentRow._rowNum, 'declined_at', now);
+          softSetCell_(amendments, amendmentRow._rowNum, 'updated_at', now);
+        }
+      } catch (amErr) {
+        Logger.log('respond_to_proposal amendment status write failed: ' + amErr);
+      }
+      return { ok: true, status: approvalStatus, amendment: true, amendment_id: amendmentTarget };
+    }
+
     softSetCell_(approvals, approval._rowNum, 'status', approvalStatus);
     softSetCell_(approvals, approval._rowNum, 'customer_note', note);
     softSetCell_(approvals, approval._rowNum, 'responded_at', now);
@@ -638,6 +1646,814 @@ function handleRespondToProposal_(payload) {
     return { ok: true, status: 'CHANGES_REQUESTED' };
   } catch(e) {
     return { ok: false, error: 'handleRespondToProposal_ Error: ' + e.toString() };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MERGED AGREEMENT (proposal + contract in one document) + IN-PORTAL E-SIGNATURE
+// ──────────────────────────────────────────────────────────────────────────────
+
+// Legal Terms & Conditions body for the merged Service Agreement. Rendered both
+// into the signed PDF (renderSignedAgreementPdf_) and onto the public signing
+// page (handleGetProposalApproval_) so there is a single source of truth.
+//
+// SOURCE OF TRUTH: this is a transcription of the official MCPS Service Agreement
+// (the CONTRACT_TEMPLATE_ID Google Doc / "template (1).pdf"), with the {{...}}
+// placeholders wired to real quote data. Three deliberate adaptations, all approved:
+//
+//   §2  SCOPE OF SERVICES — the template hard-codes a fixed bullet list. Because the
+//       signing page renders the quote's actual Scope of Work directly above these
+//       terms (and that list is per-quote), §2 now REFERENCES that section instead of
+//       duplicating it. Prevents the contract contradicting what the customer was
+//       quoted — e.g. a quote without filter cleaning can no longer sign a contract
+//       that promises it.
+//   §7  TERM & CANCELLATION — the template requires 30 days' notice. Per Tony's
+//       review (2026-07-27: "I would also reconsider the 30-day cancellation policy.
+//       For now, I believe cancellation should remain flexible"), the fixed 30-day
+//       period is omitted. Restore it here if that policy is ever reinstated.
+//   §11 ACCEPTANCE — the template was written for a wet signature. ESIGN/UETA consent
+//       language is appended so the electronic signature is enforceable.
+//
+// Rendered into BOTH the signed PDF (renderSignedAgreementPdf_) and the public
+// signing page (handleGetProposalApproval_) — one source of truth. Each signed
+// agreement snapshots its own PDF, so edits here never alter an executed contract.
+function buildAgreementTermsHtml_(q) {
+  const fullName = [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim() || 'Customer';
+  const serviceName = value_(q, 'service') || 'Pool Service';
+  const address = [value_(q, 'address'), value_(q, 'city'), value_(q, 'zip_code')].filter(Boolean).join(', ');
+  const total = mcpsMoney_(value_(q, 'total_with_tax'));
+  const monthly = mcpsMoney_(value_(q, 'discounted_service_subtotal') || value_(q, 'quote_subtotal') || value_(q, 'service_subtotal'));
+  const salesTax = mcpsMoney_(value_(q, 'sales_tax'));
+  const isRecurring = String(serviceName).toLowerCase().indexOf('weekly') !== -1;
+
+  const clause = function(title, body) {
+    return '<div class="term"><h4>' + htmlEscape_(title) + '</h4><p>' + body + '</p></div>';
+  };
+  // Same wrapper, but for clauses whose body carries its own block markup (lists).
+  const clauseHtml = function(title, bodyHtml) {
+    return '<div class="term"><h4>' + htmlEscape_(title) + '</h4>' + bodyHtml + '</div>';
+  };
+  const bullets = function(items) {
+    return '<ul>' + items.map(function(i) { return '<li>' + i + '</li>'; }).join('') + '</ul>';
+  };
+
+  // Sales-tax label: use the quote's real rate rather than hard-coding 8.25%,
+  // accepting either 0.0825 or 8.25 from the sheet.
+  const taxRateRaw = Number(value_(q, 'tax_rate') || 0);
+  const taxPct = taxRateRaw > 0 ? (taxRateRaw < 1 ? taxRateRaw * 100 : taxRateRaw) : 0;
+  const taxLabel = taxPct > 0
+    ? 'Sales Tax (' + String(taxPct.toFixed(2)).replace(/\.?0+$/, '') + '%)'
+    : 'Sales Tax';
+
+  return [
+    clause('1. Property & Service Details',
+      'This Service Agreement ("Agreement") is entered into between Mission Custom Pool Solutions LLC ' +
+      '("Service Provider") and <b>' + htmlEscape_(fullName) + '</b> ("Client") for pool-related services ' +
+      'at the property listed below.<br><br>' +
+      '<b>Service Address:</b> ' + htmlEscape_(address || 'the address on file') + '<br>' +
+      '<b>Service Type:</b> ' + htmlEscape_(serviceName)),
+
+    clause('2. Scope of Services',
+      'Mission Custom Pool Solutions LLC will provide the services set out in the <b>Scope of Work</b> and ' +
+      '<b>Service Plan</b> shown above, which form part of this Agreement. Services not listed there are not ' +
+      'included unless expressly agreed in writing.'),
+
+    clauseHtml('3. Exclusions & Additional Services',
+      '<p>Unless expressly stated in writing, this Agreement does not include:</p>' +
+      bullets([
+        'Equipment repairs or replacements',
+        'Plumbing or electrical repairs',
+        'Filter replacement or full filter tear-downs',
+        'Acid washes or green-to-clean treatments',
+        'Storm cleanups beyond normal service scope',
+        'Services requiring a licensed repair technician'
+      ]) +
+      '<p>Any excluded or additional services may be quoted separately and performed only upon Client approval.</p>'),
+
+    clause('4. Access & Safety',
+      'Client agrees to provide clear and safe access to the pool area on scheduled service days. All pets must ' +
+      'be secured prior to service. Mission Custom Pool Solutions LLC is not responsible for service delays or ' +
+      'incomplete service due to restricted access, unsafe conditions, or environmental hazards.'),
+
+    clauseHtml('5. Chemical Usage & Water Conditions',
+      '<p>Service pricing assumes standard chemical usage under normal conditions.</p>' +
+      '<p>Excessive chemical demand resulting from weather events, heavy bather load, algae growth, water ' +
+      'features, or other abnormal conditions may result in additional charges. Any such charges will be ' +
+      'communicated to the Client when identified.</p>' +
+      '<p>Mission Custom Pool Solutions LLC is not responsible for chemical imbalances caused by factors ' +
+      'outside scheduled service visits.</p>'),
+
+    clauseHtml('6. Pricing & Payment Terms',
+      (isRecurring
+        ? bullets([
+            'Monthly Service Rate: <b>' + htmlEscape_(monthly) + '</b>',
+            htmlEscape_(taxLabel) + ': <b>' + htmlEscape_(salesTax) + '</b>',
+            'Total Monthly Investment: <b>' + htmlEscape_(total) + '</b>'
+          ])
+        : bullets([
+            'Service Total: <b>' + htmlEscape_(monthly) + '</b>',
+            htmlEscape_(taxLabel) + ': <b>' + htmlEscape_(salesTax) + '</b>',
+            'Total Investment: <b>' + htmlEscape_(total) + '</b>'
+          ])) +
+      '<p>Invoices are due upon receipt unless otherwise agreed in writing. Accounts past due may result in ' +
+      'suspension of service until payment is received. Prices may be adjusted with reasonable advance notice.</p>'),
+
+    clauseHtml('7. Term & Cancellation',
+      isRecurring
+        ? '<p>This Agreement operates on a <b>month-to-month</b> basis.</p>' +
+          '<p>Either party may terminate this Agreement with written or emailed notice. Services performed prior ' +
+          'to the termination date remain billable, and chemicals or materials already applied are non-refundable.</p>'
+        : '<p>This Agreement covers the one-time service described above and is complete upon delivery of that ' +
+          'service and the associated report.</p>' +
+          '<p>One-time services may be rescheduled with reasonable notice. Deposits or work already performed ' +
+          'are non-refundable.</p>'),
+
+    clauseHtml('8. Liability & Limitations',
+      '<p>Mission Custom Pool Solutions LLC is not responsible for:</p>' +
+      bullets([
+        'Pre-existing equipment or structural conditions',
+        'Damage caused by acts of God, weather, vandalism, or misuse',
+        'Delays or issues caused by utility outages or restricted access'
+      ]) +
+      '<p>Service Provider makes no guarantee against algae growth, staining, or equipment failure beyond ' +
+      'routine maintenance efforts.</p>'),
+
+    clause('9. Independent Contractor',
+      'Mission Custom Pool Solutions LLC operates as an independent contractor. Nothing in this Agreement shall ' +
+      'be construed as creating a partnership, joint venture, or employment relationship.'),
+
+    clause('10. Entire Agreement',
+      'This Agreement constitutes the entire understanding between the parties and supersedes all prior ' +
+      'discussions or agreements. Any modifications must be made in writing and agreed upon by both parties. ' +
+      'This Agreement is governed by the laws of the State of Texas.'),
+
+    clause('11. Acceptance',
+      'By signing below, Client acknowledges understanding and acceptance of the terms outlined in this ' +
+      'Agreement. By selecting "Accept &amp; Sign" and providing a signature, Client agrees to conduct this ' +
+      'transaction electronically and acknowledges that the electronic signature is legally binding and ' +
+      'enforceable to the same extent as a handwritten signature under the U.S. ESIGN Act and applicable ' +
+      'state law (UETA).')
+  ].join('');
+}
+
+// Renders the merged Service Agreement (proposal scope + investment + terms +
+// signature block) to a PDF in Drive and returns its URLs. Mirrors the rendering
+// approach of handleGenerateProposal_ but uses the AgreementTemplate and injects
+// the captured signature. Returns { url, downloadUrl, fileId }.
+function renderSignedAgreementPdf_(q, proposal, sig) {
+  const props = PropertiesService.getScriptProperties();
+  const folderId = props.getProperty('CONTRACT_FOLDER_ID') || props.getProperty('PROPOSAL_FOLDER_ID');
+  if (!folderId) throw new Error('CONTRACT_FOLDER_ID or PROPOSAL_FOLDER_ID not set in Script Properties.');
+  const folder = DriveApp.getFolderById(folderId);
+  const tz = Session.getScriptTimeZone();
+  const now = new Date();
+  const fullName = [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim() || 'Customer';
+  const serviceName = value_(q, 'service') || 'Pool Service';
+  const rate = value_(q, 'discounted_service_subtotal') || value_(q, 'quote_subtotal') || value_(q, 'service_subtotal');
+  const fileName = 'Service Agreement - ' + fullName + ' - ' + (proposal && proposal.proposal_number || value_(q, 'quote_id'));
+
+  let imageDataUri = '';
+  const imageUrl = (proposal && value_(proposal, 'proposal_image_url')) || value_(q, 'proposal_image_url');
+  if (imageUrl) imageDataUri = fetchImageAsDataUri_(imageUrl);
+
+  const signedDate = sig.signedAt ? new Date(sig.signedAt) : now;
+  const signatureImg = sig.signatureData
+    ? '<img src="' + sig.signatureData + '" alt="Signature" style="max-height:70px;max-width:320px;">'
+    : '<span style="font-family:\'Brush Script MT\',cursive;font-size:30px;color:#0f2b2f;">' + htmlEscape_(sig.signatureName) + '</span>';
+
+  const signatureBlock =
+    '<div class="sig-grid">' +
+      '<div class="sig-col">' +
+        '<div class="sig-mark">' + signatureImg + '</div>' +
+        '<div class="sig-rule"></div>' +
+        '<div class="sig-cap"><b>' + htmlEscape_(sig.signatureName) + '</b> — Customer</div>' +
+      '</div>' +
+      '<div class="sig-col">' +
+        '<div class="sig-meta">' +
+          'Signed electronically: <b>' + htmlEscape_(Utilities.formatDate(signedDate, tz, 'MMMM d, yyyy h:mm a')) + '</b><br>' +
+          (sig.signerIp ? 'IP address: ' + htmlEscape_(sig.signerIp) + '<br>' : '') +
+          'Agreement ref: ' + htmlEscape_((proposal && proposal.proposal_number) || value_(q, 'quote_id')) + '<br>' +
+          'Method: ' + htmlEscape_(sig.signatureMethod === 'typed' ? 'Typed signature' : 'Drawn signature') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<p class="sig-legal">This Agreement was signed electronically through the Mission Custom Pool Solutions customer portal. ' +
+    'Under the U.S. ESIGN Act and applicable UETA, this electronic signature is legally binding and enforceable to the same ' +
+    'extent as a handwritten signature. A copy of this signed Agreement has been retained by MCPS.</p>';
+
+  const templateHtml = HtmlService.createHtmlOutputFromFile('AgreementTemplate').getContent();
+  const rendered = replaceProposalPlaceholders_(templateHtml, {
+    proposal_number: (proposal && proposal.proposal_number) || value_(q, 'quote_id'),
+    proposal_date: Utilities.formatDate(now, tz, 'MM/dd/yyyy'),
+    logo_url: getProposalLogoDataUri_(props),
+    pool_image_url: imageDataUri || '',
+    client_name: fullName,
+    service_address: value_(q, 'address'),
+    city_state_zip: [value_(q, 'city'), value_(q, 'zip_code')].filter(Boolean).join(', '),
+    phone: value_(q, 'phone'),
+    email: value_(q, 'email'),
+    service_type: serviceName,
+    pool_specs: value_(q, 'specs_summary'),
+    subtotal: mcpsMoney_(value_(q, 'service_subtotal')),
+    discount_amount: mcpsMoney_(value_(q, 'discount_amount')),
+    travel_fee: mcpsMoney_(value_(q, 'travel_fee')),
+    sales_tax: mcpsMoney_(value_(q, 'sales_tax')),
+    total: mcpsMoney_(value_(q, 'total_with_tax')),
+    investment: mcpsMoney_(rate) + (String(serviceName).toLowerCase().indexOf('weekly') !== -1 ? ' / MONTH' : ''),
+    company_phone: props.getProperty('MCPS_COMPANY_PHONE') || '(210) 559-2073',
+    company_email: props.getProperty('MCPS_COMPANY_EMAIL') || 'mauricio@mcpoolsolutions.org',
+    company_website: props.getProperty('MCPS_COMPANY_WEBSITE') || 'missioncustompools.com'
+  }, {
+    scope_of_work: buildProposalScopeHtml_(serviceName, q, {}),
+    service_plan_rows: buildProposalServiceRowsHtml_(serviceName, rate, q, {}),
+    proposal_items: buildProposalItemsHtml_(q),
+    terms_html: buildAgreementTermsHtml_(q),
+    signature_block: signatureBlock
+  });
+
+  const htmlBlob = Utilities.newBlob(rendered, 'text/html', fileName + '.html');
+  const htmlFile = folder.createFile(htmlBlob);
+  const pdf = htmlFile.getAs(MimeType.PDF).setName(fileName + '.pdf');
+  const pdfFile = folder.createFile(pdf);
+  pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  htmlFile.setTrashed(true);
+  const fileId = pdfFile.getId();
+  return {
+    url: pdfFile.getUrl(),
+    downloadUrl: 'https://drive.google.com/uc?export=download&id=' + fileId,
+    fileId: fileId
+  };
+}
+
+// ── Shared transactional-email chrome ────────────────────────────────────────
+// Table-based with fully inline styles. <style> blocks and flexbox are unreliable
+// across mail clients, so nothing structural depends on either. Mirrors the
+// already-shipped buildOnMyWayHtml_ in HeadsUp.js — keep the two visually in step.
+//
+// Font stacks degrade toward the brand rather than to Arial: Montserrat is
+// geometric -> Avenir Next/Avenir (Mac + iPhone), then Segoe UI / Roboto.
+// Open Sans is humanist -> Segoe UI (Windows), Roboto (Android), Helvetica Neue.
+var MCPS_EMAIL_FH_ = "'Montserrat','Avenir Next','Avenir','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+var MCPS_EMAIL_FB_ = "'Open Sans','Segoe UI',Roboto,'Helvetica Neue',Helvetica,Arial,sans-serif";
+
+function mcpsEmailPortalBase_() {
+  return (PropertiesService.getScriptProperties().getProperty('PORTAL_BASE_URL') || 'https://mcps-log.vercel.app')
+    .replace(/\/$/, '');
+}
+function mcpsEmailIconUrl_() {
+  return mcpsEmailPortalBase_() + '/assets/mission-icon-transparent.png';
+}
+function mcpsEmailCompany_() {
+  var props = PropertiesService.getScriptProperties();
+  return {
+    phone: props.getProperty('MCPS_COMPANY_PHONE') || '(210) 559-2073',
+    website: props.getProperty('MCPS_COMPANY_WEBSITE') || 'missioncustompools.com'
+  };
+}
+
+// Teal hero band with the aqua glow. bgcolor is the universal fallback; the
+// radial-gradient renders in Gmail/Apple Mail and degrades to flat teal elsewhere.
+function mcpsEmailHero_(opts) {
+  return '' +
+  '<tr><td align="center" bgcolor="#0D3D3E" style="background-color:#0D3D3E;' +
+    'background-image:radial-gradient(ellipse at 50% -20%, rgba(94,214,211,0.24), rgba(13,61,62,0) 60%);' +
+    'padding:40px 32px 36px;">' +
+    '<img src="' + htmlEscape_(mcpsEmailIconUrl_()) + '" alt="Mission Custom Pool Solutions" width="60" ' +
+      'style="display:block;width:60px;max-width:60px;height:auto;border:0;margin:0 auto 16px;">' +
+    '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:11px;letter-spacing:.16em;' +
+      'text-transform:uppercase;color:#5ED6D3;margin:0 0 14px;">Mission Custom Pool Solutions</div>' +
+    '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:29px;line-height:1.08;' +
+      'letter-spacing:-.3px;color:#FFFFFF;margin:0 0 10px;">' + opts.headline + '</div>' +
+    '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:14.5px;line-height:1.6;color:#BFD4D4;' +
+      'max-width:390px;margin:0 auto;">' + opts.lede + '</div>' +
+  '</td></tr>';
+}
+
+function mcpsEmailFooter_() {
+  var co = mcpsEmailCompany_();
+  return '' +
+  '<tr><td align="center" style="padding:24px 32px 30px;border-top:1px solid #E4EAEA;">' +
+    '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:10px;letter-spacing:.2em;' +
+      'text-transform:uppercase;color:#1FA7A8;margin-bottom:8px;">Every pool matters.</div>' +
+    '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:12px;line-height:1.7;color:#8A9494;">' +
+      'Mission Custom Pool Solutions LLC &middot; San Antonio, TX<br>' +
+      '<a href="https://' + htmlEscape_(co.website) + '" style="color:#0D3D3E;text-decoration:none;">' +
+        htmlEscape_(co.website) + '</a> &middot; ' + htmlEscape_(co.phone) +
+    '</div>' +
+  '</td></tr>';
+}
+
+function mcpsEmailShell_(innerRows, preheader) {
+  return '' +
+  '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+  '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+  '<meta name="color-scheme" content="light only">' +
+  '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">' +
+  '</head><body style="margin:0;padding:0;background:#F3F5F6;">' +
+  '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' + htmlEscape_(preheader || '') + '</div>' +
+  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F5F6;">' +
+  '<tr><td align="center" style="padding:24px 12px;">' +
+  '<table role="presentation" width="600" cellpadding="0" cellspacing="0" ' +
+    'style="width:600px;max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden;">' +
+  innerRows +
+  '</table></td></tr></table></body></html>';
+}
+
+// Numbered "what happens next" list, shared by the welcome email.
+function mcpsEmailSteps_(steps) {
+  return steps.map(function (s, i) {
+    return '<tr>' +
+      '<td valign="top" width="30" style="padding:11px 12px 11px 0;">' +
+        '<div style="width:24px;height:24px;border-radius:12px;background:#0D3D3E;color:#FFFFFF;' +
+          'font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:12px;line-height:24px;' +
+          'text-align:center;">' + (i + 1) + '</div></td>' +
+      '<td valign="top" style="padding:11px 0;border-bottom:' +
+        (i === steps.length - 1 ? 'none' : '1px solid #E4EAEA') + ';' +
+        'font-family:' + MCPS_EMAIL_FB_ + ';font-size:14px;line-height:1.55;color:#3A4645;">' +
+        s + '</td></tr>';
+  }).join('');
+}
+
+// ── Welcome email (sent the moment the agreement is signed) ──────────────────
+// ⚠️ Deliberately carries NO pricing — that lives on the signed PDF, which is
+// linked below. Confirmed with Mau.
+//
+// d.serviceDay / d.techName are populated once auto-assignment lands (Stage 3).
+// Until then — and permanently for startups and green-to-cleans, which have no
+// day at signing — the block renders a deliberate "we'll be in touch" fallback
+// rather than looking like missing data.
+function buildWelcomeEmailHtml_(d) {
+  var hasSchedule = !!(d.serviceDay && String(d.serviceDay).trim());
+
+  // Technician avatar. A real photo when one is on file, otherwise their initials
+  // in a teal circle — never a broken image or an empty hole. Circles use
+  // border-radius, which every modern client honours; Outlook desktop squares it
+  // off, which is a fine degradation.
+  var techAvatar = '';
+  if (d.techName && d.showPhoto !== false) {
+    if (d.techPhotoUrl) {
+      techAvatar =
+        '<td width="64" valign="top" style="padding-right:14px;">' +
+          '<img src="' + htmlEscape_(d.techPhotoUrl) + '" alt="' + htmlEscape_(d.techName) + '" ' +
+            'width="56" height="56" style="display:block;width:56px;height:56px;border:0;' +
+            'border-radius:28px;object-fit:cover;background:#0D3D3E;">' +
+        '</td>';
+    } else {
+      var initials = String(d.techName).trim().split(/\s+/).map(function (p) { return p.charAt(0); })
+        .join('').slice(0, 2).toUpperCase();
+      techAvatar =
+        '<td width="64" valign="top" style="padding-right:14px;">' +
+          '<div style="width:56px;height:56px;border-radius:28px;background:#0D3D3E;color:#FFFFFF;' +
+            'font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:19px;line-height:56px;' +
+            'text-align:center;">' + htmlEscape_(initials) + '</div>' +
+        '</td>';
+    }
+  }
+
+  var techBlock = d.techName
+    ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;' +
+        'border-top:1px solid rgba(13,61,62,.12);padding-top:14px;"><tr>' +
+        '<td style="padding-top:14px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>' +
+          techAvatar +
+          '<td valign="middle">' +
+            '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:10px;' +
+              'letter-spacing:.1em;text-transform:uppercase;color:#1FA7A8;margin-bottom:2px;">Your technician</div>' +
+            '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:17px;color:#0D3D3E;">' +
+              htmlEscape_(d.techName) + '</div>' +
+            (d.techBio && d.showBio !== false
+              ? '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:13px;line-height:1.55;' +
+                'color:#3A4645;margin-top:5px;max-width:340px;">' + htmlEscape_(d.techBio) + '</div>'
+              : '') +
+          '</td>' +
+        '</tr></table></td>' +
+      '</tr></table>'
+    : '';
+
+  var scheduleCard = hasSchedule
+    ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+        'style="background:#EAF8F7;border-radius:10px;margin:0 0 22px;"><tr>' +
+        '<td style="padding:18px 20px;">' +
+          '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:10px;letter-spacing:.12em;' +
+            'text-transform:uppercase;color:#1FA7A8;margin-bottom:4px;">Your service day</div>' +
+          '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:19px;color:#0D3D3E;">' +
+            htmlEscape_(d.serviceDay) + '</div>' +
+          '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:12.5px;color:#6B7777;margin-top:6px;">' +
+            'No need to be home &mdash; we&rsquo;ll text you when we&rsquo;re on the way.</div>' +
+          techBlock +
+        '</td></tr></table>'
+    : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+        'style="background:#F3F5F6;border-radius:10px;margin:0 0 22px;"><tr>' +
+        '<td style="padding:16px 18px;">' +
+          '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:10px;letter-spacing:.12em;' +
+            'text-transform:uppercase;color:#6B7777;margin-bottom:4px;">Your service day</div>' +
+          '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:14px;line-height:1.6;color:#3A4645;">' +
+            'Your service coordinator will be in touch shortly to confirm the day we&rsquo;ll be servicing ' +
+            'your pool, and to introduce your technician.</div>' +
+        '</td></tr></table>';
+
+  var steps = [
+    hasSchedule
+      ? '<strong style="color:#0D3D3E;">Your first visit is on the schedule.</strong> ' +
+        'We&rsquo;ll text you when we&rsquo;re on the way.'
+      : '<strong style="color:#0D3D3E;">We schedule your first visit.</strong> ' +
+        'Your service coordinator will be in touch to let you know your service day.',
+    '<strong style="color:#0D3D3E;">Your technician arrives.</strong> ' +
+      htmlEscape_(d.serviceName) + ', with a service report after every visit.',
+    '<strong style="color:#0D3D3E;">You relax.</strong> ' +
+      'Consistent care, transparent pricing, no surprises.'
+  ];
+
+  var cta = d.signedPdfUrl
+    ? '<tr><td align="center" style="padding:6px 32px 34px;">' +
+        '<a href="' + htmlEscape_(d.signedPdfUrl) + '" ' +
+          'style="display:inline-block;background:#1FA7A8;color:#FFFFFF;text-decoration:none;' +
+          'font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:15px;padding:14px 30px;' +
+          'border-radius:11px;">View Your Signed Agreement</a>' +
+      '</td></tr>'
+    : '';
+
+  var body =
+    '<tr><td style="padding:30px 32px 4px;">' +
+      '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:15px;line-height:1.65;color:#3A4645;margin:0 0 18px;">' +
+        'Thank you for trusting us with your pool, ' + htmlEscape_(d.firstName) + '. You&rsquo;re set up for ' +
+        '<strong style="color:#0D3D3E;">' + htmlEscape_(d.serviceName) + '</strong>: the same technician each ' +
+        'visit, water tested and balanced every time, and a service report sent to you afterward so you always ' +
+        'know exactly what was done.' +
+      '</div>' +
+      scheduleCard +
+      '<div style="font-family:' + MCPS_EMAIL_FH_ + ';font-weight:bold;font-size:12px;letter-spacing:.14em;' +
+        'text-transform:uppercase;color:#0D3D3E;margin:24px 0 4px;">What happens next</div>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' + mcpsEmailSteps_(steps) + '</table>' +
+    '</td></tr>';
+
+  return mcpsEmailShell_(
+    mcpsEmailHero_({
+      headline: 'Welcome to the<br>Mission family.',
+      lede: 'Your agreement is signed, ' + htmlEscape_(d.firstName) + ' &mdash; and your pool is officially in good hands.'
+    }) + body + cta + mcpsEmailFooter_(),
+    'Your agreement is signed. Here is what happens next.'
+  );
+}
+
+function buildWelcomeEmailText_(d) {
+  var co = mcpsEmailCompany_();
+  return [
+    'WELCOME TO THE MISSION FAMILY',
+    '',
+    'Thank you for trusting us with your pool, ' + d.firstName + '. You are set up for ' + d.serviceName + ':',
+    'the same technician each visit, water tested and balanced every time, and a service report after each visit.',
+    '',
+    d.serviceDay
+      ? 'Your service day: ' + d.serviceDay + (d.techName ? ' (technician: ' + d.techName + ')' : '')
+      : 'Your service coordinator will be in touch shortly to confirm your service day and introduce your technician.',
+    '',
+    'WHAT HAPPENS NEXT',
+    d.serviceDay
+      ? '1. Your first visit is on the schedule. We will text you when we are on the way.'
+      : '1. We schedule your first visit and let you know your service day.',
+    '2. Your technician arrives — ' + d.serviceName + ', with a service report after every visit.',
+    '3. You relax. Consistent care, transparent pricing, no surprises.',
+    '',
+    d.signedPdfUrl ? 'Your signed agreement: ' + d.signedPdfUrl : '',
+    '',
+    'Every pool matters.',
+    'Mission Custom Pool Solutions LLC · San Antonio, TX',
+    co.website + ' · ' + co.phone
+  ].filter(function (line) { return line !== ''; }).join('\n');
+}
+
+function sendSignedAgreementWelcomeEmail_(q, proposal, pdf, activate, signatureName) {
+  const to = String(value_(q, 'email') || '').trim();
+  if (!to) return { ok: false, skipped: true, error: 'Customer email is missing.' };
+
+  const firstName = String(value_(q, 'first_name') || String(signatureName || '').split(' ')[0] || 'there').trim();
+  const customerName = [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim() || signatureName || 'Customer';
+  const serviceName = value_(q, 'service') || (proposal && value_(proposal, 'service_type')) || 'Pool Service';
+  const signedPdfUrl = (pdf && (pdf.url || pdf.downloadUrl)) || value_(q, 'contract_url') || value_(q, 'contract_download_url') || '';
+  const proposalNumber = (proposal && value_(proposal, 'proposal_number')) || value_(q, 'proposal_number') || value_(q, 'quote_id') || '';
+
+  // ⚠️ Re-read the Routes row rather than trusting `q`. `q` was loaded BEFORE
+  // activation ran, so it predates the assignment write — using it would render
+  // the "we'll be in touch" fallback for every customer while appearing to work.
+  const poolId = (activate && activate.pool_id) || value_(q, 'pool_id') || '';
+  const schedule = lookupAssignedScheduleForPool_(poolId);
+
+  const d = {
+    firstName: firstName,
+    customerName: customerName,
+    serviceName: serviceName,
+    signedPdfUrl: signedPdfUrl,
+    serviceDay: schedule.serviceDay,   // '' -> fallback copy (startups, G2C, unassigned)
+    techName: schedule.techName,
+    techPhotoUrl: schedule.techPhotoUrl,
+    techBio: schedule.techBio,
+    showPhoto: schedule.showPhoto,
+    showBio: schedule.showBio
+  };
+
+  const subject = 'Welcome to the Mission family, ' + firstName;
+  const htmlBody = buildWelcomeEmailHtml_(d);
+  const plainBody = buildWelcomeEmailText_(d);
+
+  const msg = {
+    to: to,
+    subject: subject,
+    htmlBody: htmlBody,
+    plainBody: plainBody,
+    recipientId: 'signed_welcome_' + String(value_(q, 'quote_id') || proposalNumber || to)
+  };
+
+  // Record what we told them, but ONLY once the send actually succeeded — the
+  // marker is what makes a later schedule change detectable, and marking an email
+  // that never went out would suppress the correction the customer needs.
+  const markNotified = function () {
+    try {
+      if (schedule.serviceDay && typeof recordScheduleNotified_ === 'function') {
+        recordScheduleNotified_(poolId, schedule.rawDay || schedule.serviceDay, schedule.techName);
+      }
+    } catch (e) {
+      Logger.log('recordScheduleNotified_ skipped: ' + e);
+    }
+  };
+
+  if (typeof sendCommsEmail_ === 'function') {
+    const res = sendCommsEmail_(msg);
+    if (!res || res.ok !== false) markNotified();
+    return Object.assign({ sent_to: to }, res);
+  }
+
+  const opts = { name: 'Mission Custom Pool Solutions', htmlBody: htmlBody };
+  GmailApp.sendEmail(to, subject, plainBody, opts);
+  markNotified();
+  return { ok: true, provider: 'gmail_fallback', providerMessageId: '', sent_to: to };
+}
+
+// Public customer action: accept + e-sign the merged agreement in one step.
+// Authenticated by the Proposal_Approvals token (no portal session). On success
+// it records the signature audit trail, generates the signed PDF, and activates
+// the customer by reusing activateQuoteServiceFromAgreement_ (assigns pool_id,
+// sets ACTIVE_CUSTOMER, contract_status=SIGNED, syncs the route schedule).
+// ══════════════════════════════════════════════════════════════════════════════
+// SHARED SIGNING CORE
+//
+// Records acceptance, saves the signature image, renders the signed PDF, and
+// writes the ESIGN/UETA audit trail onto the agreement row it is GIVEN. Returns
+// the artifacts. That is the whole job.
+//
+// ⚠️ It deliberately does NOT:
+//   * activate the customer      (mints pool_id + Routes row — original only)
+//   * advance repair work orders (original only)
+//   * send the welcome email     (original only — existing customers already had it)
+//   * mirror anything onto the QUOTE row
+//
+// Those live only on the original-signing path, so the amendment path is
+// structurally incapable of triggering them. There is deliberately no
+// `isAmendment` flag: a flag is how the wrong branch eventually runs, and the
+// thing being protected is an executed contract.
+// ══════════════════════════════════════════════════════════════════════════════
+function signAndRecord_(ctx) {
+  var now = ctx.now || nowIso_();
+  var sig = ctx.signature || {};
+  var out = { pdf: null, signatureUrl: '', signedAt: now, audited: false };
+
+  // Acceptance on the approval + proposal. Both are per-document records, so an
+  // amendment updates its OWN approval and proposal, never the parent's.
+  if (ctx.approvals && ctx.approval) {
+    softSetCell_(ctx.approvals, ctx.approval._rowNum, 'status', 'APPROVED');
+    softSetCell_(ctx.approvals, ctx.approval._rowNum, 'customer_note', ctx.note || '');
+    softSetCell_(ctx.approvals, ctx.approval._rowNum, 'responded_at', now);
+    softSetCell_(ctx.approvals, ctx.approval._rowNum, 'updated_at', now);
+  }
+  if (ctx.proposals && ctx.proposal) {
+    softSetCell_(ctx.proposals, ctx.proposal._rowNum, 'status', 'ACCEPTED');
+    softSetCell_(ctx.proposals, ctx.proposal._rowNum, 'accepted_at', now);
+    softSetCell_(ctx.proposals, ctx.proposal._rowNum, 'updated_at', now);
+  }
+
+  // Signature image (drawn signatures only).
+  if (sig.data) {
+    try {
+      out.signatureUrl = saveProposalImageToDrive_(sig.data, 'sig_' + (ctx.quoteId || 'agreement'));
+    } catch (sigErr) {
+      Logger.log('signAndRecord_ signature save failed: ' + sigErr);
+    }
+  }
+
+  // The signed document.
+  try {
+    out.pdf = renderSignedAgreementPdf_(ctx.quote, ctx.proposal, {
+      signatureName: sig.name,
+      signatureMethod: sig.method,
+      signatureData: sig.data,
+      signatureUrl: out.signatureUrl,
+      signedAt: now,
+      signerIp: sig.ip
+    });
+  } catch (pdfErr) {
+    Logger.log('signAndRecord_ PDF render failed: ' + pdfErr);
+  }
+
+  // Audit trail onto the GIVEN row — never one this function looked up itself.
+  var row = ctx.agreementRow;
+  if (ctx.agreements && row) {
+    var sheet = ctx.agreements, n = row._rowNum;
+    softSetCell_(sheet, n, 'status', 'SIGNED');
+    softSetCell_(sheet, n, 'signed_at', now);
+    softSetCell_(sheet, n, 'activated_at', now);
+    softSetCell_(sheet, n, 'activation_method', ctx.activationMethod || 'IN_PORTAL_ESIGN');
+    if (out.pdf && out.pdf.url) {
+      softSetCell_(sheet, n, 'agreement_pdf_url', out.pdf.url);
+      softSetCell_(sheet, n, 'contract_url', out.pdf.url);
+      softSetCell_(sheet, n, 'contract_file_id', out.pdf.fileId);
+      softSetCell_(sheet, n, 'signed_pdf_url', out.pdf.url);
+    }
+    softSetCell_(sheet, n, 'signature_name', sig.name || '');
+    softSetCell_(sheet, n, 'signature_image_url', out.signatureUrl);
+    softSetCell_(sheet, n, 'signature_method', sig.method || '');
+    softSetCell_(sheet, n, 'signer_ip', sig.ip || '');
+    softSetCell_(sheet, n, 'signer_user_agent', sig.userAgent || '');
+    softSetCell_(sheet, n, 'consent_accepted', 'TRUE');
+    softSetCell_(sheet, n, 'consent_at', now);
+    softSetCell_(sheet, n, 'agreement_version', (ctx.proposal && value_(ctx.proposal, 'proposal_number')) || '');
+    softSetCell_(sheet, n, 'updated_at', now);
+    out.audited = true;
+  } else {
+    Logger.log('signAndRecord_: no agreement row supplied — audit trail NOT written');
+  }
+
+  return out;
+}
+
+function handleSignAgreement_(payload) {
+  try {
+    ensureNormalizedSalesSheets_();
+    const token = String(payload.token || '').trim();
+    if (!token) return { ok: false, error: 'Signing link is missing a token.' };
+    const signatureName = String(payload.signature_name || '').trim();
+    const signatureData = String(payload.signature_data || '').trim();
+    const signatureMethod = String(payload.signature_method || (signatureData ? 'drawn' : 'typed')).trim().toLowerCase();
+    const consent = payload.consent === true || String(payload.consent).toUpperCase() === 'TRUE';
+    const note = String(payload.note || '').trim();
+    const signerIp = String(payload.signer_ip || '').trim();
+    const signerUa = String(payload.signer_user_agent || '').trim();
+    if (!consent) return { ok: false, error: 'Please accept the electronic signature consent to continue.' };
+    if (!signatureName) return { ok: false, error: 'Please enter your full legal name to sign.' };
+    if (signatureMethod === 'drawn' && !signatureData) return { ok: false, error: 'Please draw your signature before signing.' };
+
+    const approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
+    const approval = findRowByValue_(approvals, 'token', token);
+    if (!approval) return { ok: false, error: 'This signing link is invalid.' };
+    const current = String(value_(approval, 'status') || '').toUpperCase();
+    if (current && current !== 'SENT') {
+      return { ok: true, already_responded: true, status: current, message: 'This agreement has already been responded to.' };
+    }
+    if (value_(approval, 'expires_at') && new Date(value_(approval, 'expires_at')).getTime() < new Date().getTime()) {
+      softSetCell_(approvals, approval._rowNum, 'status', 'EXPIRED');
+      return { ok: false, expired: true, error: 'This signing link has expired.' };
+    }
+
+    const proposals = ensureSheet_('Proposals', MCPS_PROPOSAL_HEADERS);
+    const proposal = findRowByValue_(proposals, 'proposal_id', approval.proposal_id);
+    const hit = getQuoteById_(approval.quote_id);
+    if (!proposal || !hit) return { ok: false, error: 'This agreement is no longer available.' };
+    const q = hit.object;
+    const quoteId = String(approval.quote_id);
+    const now = nowIso_();
+
+    // ⚠️ DEFENCE IN DEPTH. An amendment token must never reach the original path.
+    // If it did — through a stale page, a replayed request, or a future proxy bug —
+    // it would activate the customer a second time, mint another pool_id, create a
+    // duplicate Routes row and re-send the welcome email. Fail BEFORE any of the
+    // PDF, quote-mirroring or activation work happens.
+    if (String(value_(approval, 'target_agreement_id') || '').trim()) {
+      return { ok: false, error: 'This is an amendment link. Use the amendment signing flow.' };
+    }
+
+    // ── 1. Resolve (or create) the agreement row BEFORE signing ──────────────
+    // The audit trail has to be written onto a row that already exists, and
+    // activation must REUSE that row rather than create a second one. Doing this
+    // first is what makes the id explicit for every step below.
+    let agreementId = '';
+    try {
+      const pre = syncQuoteToNormalized_(quoteId);
+      agreementId = (pre && pre.agreement_id) || '';
+    } catch (preErr) {
+      Logger.log('handleSignAgreement_ pre-sync failed (non-blocking): ' + preErr);
+    }
+    const agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
+    let agreementRow = agreementId ? findRowByValue_(agreements, 'agreement_id', agreementId) : null;
+    // ⚠️ Originals only — parent and amendments share a source_quote_id.
+    if (!agreementRow) agreementRow = findOriginalAgreementByQuoteStrict_(agreements, quoteId);
+    if (agreementRow && !agreementId) agreementId = String(agreementRow.agreement_id || '');
+
+    // ── 2. Sign and record ───────────────────────────────────────────────────
+    // Shared with amendment signing. Records acceptance, saves the signature,
+    // renders the PDF and writes the ESIGN audit trail — and nothing else.
+    const signed = signAndRecord_({
+      quote: q, quoteId: quoteId,
+      proposal: proposal, proposals: proposals,
+      approval: approval, approvals: approvals,
+      agreements: agreements, agreementRow: agreementRow,
+      signature: {
+        name: signatureName, method: signatureMethod, data: signatureData,
+        ip: signerIp, userAgent: signerUa
+      },
+      note: note, now: now, activationMethod: 'IN_PORTAL_ESIGN'
+    });
+    const pdf = signed.pdf;
+    const signatureUrl = signed.signatureUrl;
+
+    // ── 3. Mirror onto the QUOTE ─────────────────────────────────────────────
+    // ⚠️ ORIGINAL PATH ONLY, and deliberately outside signAndRecord_. An
+    // amendment writing these would repoint the parent quote at the addendum PDF
+    // and overwrite its acceptance timestamps.
+    softSetCell_(hit.sheet, hit.rowNum, 'proposal_accepted_at', now);
+    if (note) softSetCell_(hit.sheet, hit.rowNum, 'proposal_response_note', note);
+    if (pdf && pdf.url) {
+      softSetCell_(hit.sheet, hit.rowNum, 'contract_generated', 'Yes');
+      softSetCell_(hit.sheet, hit.rowNum, 'contract_url', pdf.url);
+      softSetCell_(hit.sheet, hit.rowNum, 'contract_download_url', pdf.downloadUrl);
+      softSetCell_(hit.sheet, hit.rowNum, 'contract_file_id', pdf.fileId);
+    }
+
+    // The customer's PREFERRED start date, if they picked one. Recorded atomically
+    // with the signature so there is no orphan write from an abandoned signing.
+    // ⚠️ A request only — service_start and billing_start are untouched here and
+    // remain admin-set. Confirming this is a separate, deliberate action.
+    try {
+      const requestedStart = String(payload.requested_start_date || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(requestedStart)) {
+        ensureColumn_(hit.sheet, 'requested_start_date');
+        ensureColumn_(hit.sheet, 'requested_start_at');
+        softSetCell_(hit.sheet, hit.rowNum, 'requested_start_date', requestedStart);
+        softSetCell_(hit.sheet, hit.rowNum, 'requested_start_at', now);
+      }
+
+      // The weekday we actually SHOWED them, stored separately from the date.
+      // Not redundant: if an admin later shifts the date, the promise we made
+      // was the day.
+      const committedDay = String(payload.committed_service_day || '').trim().toUpperCase();
+      if (/^(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY)$/.test(committedDay)) {
+        ensureColumn_(hit.sheet, 'committed_service_day');
+        softSetCell_(hit.sheet, hit.rowNum, 'committed_service_day', committedDay);
+      }
+
+      // ⚠️ PREFERRED-WEEK MODE. The customer was shown NO service day, so there
+      // is no promise here — only a week, plus the date they happened to click.
+      //
+      // The hint is stored under its own name and is deliberately NOT written to
+      // requested_start_date. addWeeklyPoolToRoutes_ derives preferredDay from
+      // requested_start_date, so putting the hint there would silently convert a
+      // "some time that week" into a hard weekday commitment the customer was
+      // never offered.
+      const requestedWeek = String(payload.requested_start_week || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(requestedWeek)) {
+        ensureColumn_(hit.sheet, 'requested_start_week');
+        ensureColumn_(hit.sheet, 'requested_start_at');
+        softSetCell_(hit.sheet, hit.rowNum, 'requested_start_week', requestedWeek);
+        softSetCell_(hit.sheet, hit.rowNum, 'requested_start_at', now);
+
+        const hint = String(payload.requested_start_date_hint || '').trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(hint)) {
+          ensureColumn_(hit.sheet, 'requested_start_date_hint');
+          softSetCell_(hit.sheet, hit.rowNum, 'requested_start_date_hint', hint);
+        }
+      }
+    } catch (startErr) {
+      Logger.log('requested_start_date persist failed (non-blocking): ' + startErr);
+    }
+
+    // ── 4. Activate the customer ─────────────────────────────────────────────
+    // ⚠️ ORIGINAL PATH ONLY. Mints pool_id and creates the Routes row; running it
+    // for an amendment would produce a duplicate pool and a phantom route stop.
+    // The explicit agreementId makes it reuse the row from step 1.
+    const activate = activateQuoteServiceFromAgreement_(quoteId, now, 'IN_PORTAL_ESIGN', agreementId);
+
+    // 7. Advance any repair work orders tied to this quote
+    try { markRepairOrdersApprovedForQuote_(quoteId); } catch (roErr) { Logger.log('markRepairOrdersApprovedForQuote_: ' + roErr); }
+
+    // 8. Send a branded welcome email. Non-blocking: signing/activation should
+    // stay complete even if the email provider is temporarily unavailable.
+    let welcomeEmail = { ok: false, skipped: true, error: 'Not attempted.' };
+    try {
+      welcomeEmail = sendSignedAgreementWelcomeEmail_(q, proposal, pdf, activate, signatureName);
+      if (!welcomeEmail.ok) Logger.log('sendSignedAgreementWelcomeEmail_: ' + (welcomeEmail.error || 'failed'));
+    } catch (welcomeErr) {
+      welcomeEmail = { ok: false, skipped: false, error: String(welcomeErr) };
+      Logger.log('sendSignedAgreementWelcomeEmail_ exception: ' + welcomeErr);
+    }
+
+    return {
+      ok: true,
+      status: 'SIGNED',
+      signed_pdf_url: (pdf && pdf.url) || '',
+      pool_id: (activate && activate.pool_id) || '',
+      customer_name: signatureName,
+      welcome_email_sent: !!welcomeEmail.ok,
+      welcome_email_error: welcomeEmail.ok ? '' : (welcomeEmail.error || '')
+    };
+  } catch (e) {
+    return { ok: false, error: 'handleSignAgreement_ Error: ' + e.toString() };
   }
 }
 
@@ -710,6 +2526,23 @@ function handleGenerateProposal_(payload) {
     const proposal = findRowByValue_(proposals, 'proposal_id', sync.proposal_id);
     if (!proposal) return { ok: false, error: 'Proposal not found for quote ' + quoteId };
 
+    // Freeze the scope that this PDF is about to show onto the quote, so the
+    // signing page and the signed contract render the identical list. When the
+    // caller supplies scope explicitly it wins (the admin may have just edited
+    // it); otherwise whatever is already stored stands.
+    try {
+      const resolvedScope = resolveScopeItemsJson_(
+        Object.assign({}, payload, { service: value_(q, 'service'), spa: value_(q, 'spa') })
+      );
+      if (resolvedScope) {
+        ensureColumn_(hit.sheet, 'scope_items_json');
+        softSetCell_(hit.sheet, hit.rowNum, 'scope_items_json', resolvedScope);
+        q.scope_items_json = resolvedScope;   // so this render uses it immediately
+      }
+    } catch (scopeErr) {
+      Logger.log('Scope persist on generate failed (non-blocking): ' + scopeErr);
+    }
+
     let imageUrl = value_(proposal, 'proposal_image_url');
     let imageDataUri = '';
     if (payload.proposal_image_data_url) {
@@ -755,7 +2588,7 @@ function handleGenerateProposal_(payload) {
       sales_tax: mcpsMoney_(value_(q, 'sales_tax')),
       total: mcpsMoney_(value_(q, 'total_with_tax')),
       investment: mcpsMoney_(rate) + (serviceName.toLowerCase().indexOf('weekly') !== -1 ? ' / MONTH' : ''),
-      company_phone: props.getProperty('MCPS_COMPANY_PHONE') || '(210) 989-0287',
+      company_phone: props.getProperty('MCPS_COMPANY_PHONE') || '(210) 559-2073',
       company_email: props.getProperty('MCPS_COMPANY_EMAIL') || 'mauricio@mcpoolsolutions.org',
       company_website: props.getProperty('MCPS_COMPANY_WEBSITE') || 'missioncustompools.com'
     }, {
@@ -900,7 +2733,17 @@ function defaultActivationMethodFromQuote_(q) {
   return 'SIGNED_AGREEMENT';
 }
 
+// ⚠️ One place decides what an amendment is. Blank type = original, because every
+// row written before amendments existed carries no type.
+function isAmendmentRow_(agreement) {
+  return String(value_(agreement, 'agreement_type') || '').trim().toLowerCase() === 'amendment';
+}
+
 function agreementCanActivate_(agreement) {
+  // ⚠️ An amendment can be perfectly valid and SIGNED and still must never
+  // activate — activation is for a NEW service, and an amendment changes one that
+  // already exists. Without this, a signed amendment passed the status check.
+  if (isAmendmentRow_(agreement)) return false;
   const status = String(value_(agreement, 'status')).toUpperCase();
   const sigReq = String(value_(agreement, 'signature_required', 'TRUE')).toUpperCase();
   const method = String(value_(agreement, 'activation_method')).toUpperCase();
@@ -1238,6 +3081,11 @@ function findOrCreateServiceAccountFromQuote_(clientId, locationId, proposalId, 
   if (!shouldCreateServiceAccountFromQuote_(q)) return '';
   const services = ensureSheet_('Service_Accounts', MCPS_SERVICE_ACCOUNT_HEADERS);
   const quoteId = String(value_(q, 'quote_id')).trim();
+  // ⚠️ This is Service_ACCOUNTS, not Service_Agreements — it has no
+  // agreement_type column, so the originals-only filter used elsewhere does not
+  // apply here. The guarantee is structural instead: amendments never call this.
+  // Only activateQuoteServiceFromAgreement_ reaches it, and the amendment signing
+  // path never invokes activation. The negative test asserts zero calls.
   const existing = quoteId ? findRowByValue_(services, 'source_quote_id', quoteId) : null;
   const now = nowIso_();
   if (existing) {
@@ -1302,10 +3150,57 @@ function shouldHaveServiceAgreementFromQuote_(q) {
     status === 'SIGNED' || status === 'ACTIVE_CUSTOMER');
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ⚠️ RESOLVING AN AGREEMENT FROM A QUOTE ID
+//
+// A parent agreement and every amendment made against it share the SAME
+// source_quote_id. Any lookup that resolves "the agreement for this quote" by
+// scanning for the first matching row can therefore land on an amendment and
+// write to — or activate from — the wrong record, silently corrupting an executed
+// contract. Six call sites did exactly that.
+//
+// Blank agreement_type counts as 'original': every row written before amendments
+// existed carries no type, and all of those are originals.
+//
+// Returns { row, count }. `count > 1` is ambiguous and callers MUST refuse rather
+// than pick one — returning the first match is the bug this replaces.
+// ══════════════════════════════════════════════════════════════════════════════
+function findOriginalAgreementByQuote_(agreements, quoteId) {
+  var qid = String(quoteId || '').trim();
+  if (!qid) return { row: null, count: 0 };
+  var matches = sheetToObjects_(agreements).rows.filter(function (a) {
+    if (String(value_(a, 'source_quote_id') || '').trim() !== qid) return false;
+    var type = String(value_(a, 'agreement_type') || '').trim().toLowerCase();
+    return !type || type === 'original';
+  });
+  return { row: matches.length === 1 ? matches[0] : null, count: matches.length };
+}
+
+// ⚠️ THROWS on ambiguity. It must not return null there.
+//
+// "Ambiguous" and "missing" are completely different states and conflating them
+// is dangerous: a caller that reads null as "none exists" will happily CREATE
+// another original, turning two conflicting agreements into three. Returning null
+// here did exactly that in findOrCreateServiceAgreementFromQuote_.
+//
+// Two originals for one quote is already a data fault. Refusing loudly is the only
+// safe response — the alternative is silently picking one, or manufacturing more.
+function findOriginalAgreementByQuoteStrict_(agreements, quoteId) {
+  var hit = findOriginalAgreementByQuote_(agreements, quoteId);
+  if (hit.count > 1) {
+    throw new Error('Ambiguous agreement lookup: ' + hit.count +
+      ' original agreements exist for quote ' + quoteId +
+      '. Resolve by agreement_id — refusing to guess or create another.');
+  }
+  return hit.row;   // null only when genuinely none exists
+}
+
 function findOrCreateServiceAgreementFromQuote_(clientId, locationId, proposalId, q, forceCreate) {
   const agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
   const quoteId = String(value_(q, 'quote_id')).trim();
-  const existing = quoteId ? findRowByValue_(agreements, 'source_quote_id', quoteId) : null;
+  // ⚠️ Originals only — an amendment shares this quote id and must never be
+  // reused or updated as if it were the primary agreement.
+  const existing = findOriginalAgreementByQuoteStrict_(agreements, quoteId);
   if (!existing && !forceCreate && !shouldHaveServiceAgreementFromQuote_(q)) return '';
 
   const now = nowIso_();
@@ -1370,7 +3265,14 @@ function updateAgreementServiceAccountLink_(agreementId, serviceAccountId) {
   }
 }
 
-function syncQuoteToNormalized_(quoteId) {
+// knownAgreementId: when the caller already resolved (or created) the agreement
+// row, pass it. It is authoritative — this function then updates that row rather
+// than looking one up, which is what stops a second agreement being created for a
+// quote that already has one.
+// allowCreate=false means: use knownAgreementId, or resolve the existing original,
+// but NEVER manufacture a new agreement row. Activation passes false — an
+// activation that creates its own agreement is how a quote ends up with two.
+function syncQuoteToNormalized_(quoteId, knownAgreementId, allowCreate) {
   ensureNormalizedSalesSheets_();
   const hit = getQuoteById_(quoteId);
   if (!hit) return { ok: false, error: 'Quote not found: ' + quoteId };
@@ -1379,7 +3281,20 @@ function syncQuoteToNormalized_(quoteId) {
   const locationId = findOrCreateLocationFromQuote_(clientId, q);
   const proposal = findOrCreateProposalFromQuote_(clientId, locationId, q);
   createProposalItemsIfMissing_(proposal.proposal_id, q);
-  const agreementId = findOrCreateServiceAgreementFromQuote_(clientId, locationId, proposal.proposal_id, q, false);
+  // ⚠️ Explicit id wins. Parent and amendments share a source_quote_id, so a
+  // lookup here could resolve the wrong row — or create a duplicate original.
+  let agreementId = String(knownAgreementId || '').trim();
+  if (!agreementId) {
+    if (allowCreate === false) {
+      // No id supplied and creation forbidden: resolve an EXISTING original only.
+      // Ambiguity throws rather than yielding a null that reads as "none".
+      const existingOnly = findOriginalAgreementByQuoteStrict_(
+        ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), quoteId);
+      agreementId = existingOnly ? String(existingOnly.agreement_id || '') : '';
+    } else {
+      agreementId = findOrCreateServiceAgreementFromQuote_(clientId, locationId, proposal.proposal_id, q, false);
+    }
+  }
   const serviceAccountId = findOrCreateServiceAccountFromQuote_(clientId, locationId, proposal.proposal_id, q, agreementId);
   updateAgreementServiceAccountLink_(agreementId, serviceAccountId);
 
@@ -1457,6 +3372,100 @@ function migrateQuotesToNormalizedSheets_(limit) {
   return { ok: errors === 0, migrated: migrated, errors: errors };
 }
 
+// ── Stage 0b: migration coverage (READ-ONLY) ─────────────────────────────────
+//
+// Answers one question before any backfill is written: does every person in
+// Quotes actually have a Clients row?
+//
+// The reason to check rather than assume: migrateQuotesToNormalizedSheets_
+// calls isLeadImportOnlyQuote_ and deliberately SKIPS bare imported leads
+// (status LEAD with no service, no pricing, no source). That was correct when
+// the goal was migrating deals — a lead has no deal. But it means the exact
+// people we now want to send proposals to may have no Clients row and would be
+// invisible to a relational people-search.
+//
+// If unlinked_people is 0, the backfill is unnecessary and should not be built.
+// ⚠️ WRITES NOTHING.
+function analyzeMigrationCoverage_() {
+  const sheet = getCrmSheet_();
+  if (!sheet || sheet.getLastRow() < 2) {
+    return { ok: true, quotes: 0, note: 'Quotes sheet is empty.' };
+  }
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idx = (name) => headerIndex_(headers, name);
+  const qIdx = idx('quote_id'), statusIdx = idx('migration_status'), cliIdx = idx('client_id');
+
+  const clients = sheetToObjects_(ensureSheet_('Clients', MCPS_CLIENT_HEADERS)).rows;
+  const knownClientIds = {};
+  clients.forEach(function (c) {
+    const id = String(c.client_id || '').trim();
+    if (id) knownClientIds[id] = true;
+  });
+
+  let total = 0, linked = 0, skippedLeadImport = 0, wouldSkip = 0, danglingClientId = 0;
+  const unlinked = [];        // people with no Clients row — the actual gap
+
+  for (let i = 1; i < data.length; i++) {
+    const quoteId = qIdx !== -1 ? String(data[i][qIdx] || '').trim() : '';
+    if (!quoteId) continue;
+    total++;
+
+    const q = quoteObjectFromRow_(headers, data[i], i + 1);
+    const clientId = cliIdx !== -1 ? String(data[i][cliIdx] || '').trim() : '';
+    const mstatus = statusIdx !== -1 ? String(data[i][statusIdx] || '').trim().toUpperCase() : '';
+
+    if (mstatus === 'SKIPPED_LEAD_IMPORT') skippedLeadImport++;
+    if (isLeadImportOnlyQuote_(q)) wouldSkip++;
+
+    if (clientId && knownClientIds[clientId]) { linked++; continue; }
+    // A client_id pointing at a row that no longer exists is its own problem —
+    // counted separately so a merge or manual edit doesn't hide as "unlinked".
+    if (clientId && !knownClientIds[clientId]) { danglingClientId++; continue; }
+
+    unlinked.push({
+      quote_id: quoteId,
+      name: [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' ').trim(),
+      email: String(value_(q, 'email') || ''),
+      phone: String(value_(q, 'phone') || ''),
+      status: String(value_(q, 'status') || ''),
+      migration_status: mstatus,
+      lead_import_only: isLeadImportOnlyQuote_(q)
+    });
+  }
+
+  const leadOnlyUnlinked = unlinked.filter(function (u) { return u.lead_import_only; }).length;
+
+  return {
+    ok: true,
+    generated_at: nowIso_(),
+    quotes: total,
+    clients: clients.length,
+    linked_to_client: linked,
+    dangling_client_id: danglingClientId,
+    marked_skipped_lead_import: skippedLeadImport,
+    would_be_skipped_today: wouldSkip,
+    unlinked_people: unlinked.length,
+    unlinked_because_lead_import: leadOnlyUnlinked,
+    // Capped: this is a diagnostic, not an export, and the response crosses the
+    // GAS payload limit on a large sheet.
+    sample: unlinked.slice(0, 50),
+    verdict: unlinked.length === 0
+      ? 'complete — every quote resolves to a Clients row; the C1 backfill is not needed'
+      : (leadOnlyUnlinked === unlinked.length
+          ? 'gap is entirely lead-import rows — a person-only backfill closes it'
+          : 'gap includes non-lead rows — inspect the sample before backfilling')
+  };
+}
+
+function handleAnalyzeMigrationCoverage_(payload) {
+  try {
+    return analyzeMigrationCoverage_();
+  } catch (e) {
+    return { ok: false, error: 'analyzeMigrationCoverage_ Error: ' + e };
+  }
+}
+
 function isLeadImportOnlyQuote_(q) {
   const status = String(value_(q, 'status')).trim().toUpperCase();
   if (status !== 'LEAD') return false;
@@ -1467,9 +3476,57 @@ function isLeadImportOnlyQuote_(q) {
   return !service && !total && !subtotal && !source;
 }
 
-function activateQuoteServiceFromAgreement_(quoteId, signedAt, activationMethod) {
+// agreementId: the row this activation belongs to, resolved by the caller BEFORE
+// signing. Passing it prevents the sync below from finding-or-creating a second
+// agreement — which for an amendment would mean a duplicate original, a second
+// pool_id and a phantom customer on the route board.
+function activateQuoteServiceFromAgreement_(quoteId, signedAt, activationMethod, agreementId) {
   const hit = getQuoteById_(quoteId);
   if (!hit) return { ok: false, error: 'Quote not found: ' + quoteId };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ VALIDATE BEFORE MUTATING. Everything below this block writes: it mints a
+  // pool_id, flips the quote to ACTIVE_CUSTOMER and creates Routes rows. Those
+  // are not undoable, and the id was previously only checked afterwards, by
+  // syncQuoteToNormalized_ — by which point a phantom customer already existed
+  // on the route board.
+  //
+  // Three things must be true before a single cell changes:
+  //   1. an agreement id was supplied            (no id, no activation)
+  //   2. that row actually exists
+  //   3. it is an ORIGINAL, never an amendment   (an amendment activating would
+  //      mint a SECOND pool_id for a customer who already has one)
+  // ══════════════════════════════════════════════════════════════════════════
+  const agrId = String(agreementId || '').trim();
+  if (!agrId) {
+    return { ok: false, error: 'Activation requires an explicit agreement_id.' };
+  }
+  const agrSheet = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
+  const agrRow = findRowByValue_(agrSheet, 'agreement_id', agrId);
+  if (!agrRow) {
+    return { ok: false, error: 'Agreement not found: ' + agrId };
+  }
+  if (isAmendmentRow_(agrRow)) {
+    return { ok: false, error: 'Cannot activate from an amendment. Amendments change an existing service.' };
+  }
+  // ⚠️ 4. The agreement must BELONG to the quote being activated.
+  // Existing + original is not enough: a valid agreement for quote A could
+  // activate quote B, minting a pool_id and Routes row for a customer whose
+  // agreement nobody signed.
+  //
+  // A blank source_quote_id cannot contradict anything, so it is allowed (legacy
+  // rows predate the link) but logged — silently trusting it would be worse.
+  const agrQuote = String(value_(agrRow, 'source_quote_id') || '').trim();
+  const wantQuote = String(quoteId || '').trim();
+  if (agrQuote && agrQuote !== wantQuote) {
+    return { ok: false, error: 'Agreement ' + agrId + ' belongs to quote ' + agrQuote +
+                               ', not ' + wantQuote + '. Refusing to activate.' };
+  }
+  if (!agrQuote) {
+    Logger.log('activateQuoteServiceFromAgreement_: agreement ' + agrId +
+               ' has no source_quote_id — cannot verify ownership of quote ' + wantQuote);
+  }
+
   const now = nowIso_();
   const method = activationMethod || defaultActivationMethodFromQuote_(hit.object);
   let poolId = String(value_(hit.object, 'pool_id')).trim();
@@ -1489,7 +3546,9 @@ function activateQuoteServiceFromAgreement_(quoteId, signedAt, activationMethod)
     Logger.log('activateQuoteServiceFromAgreement_ route sync failed: ' + routesErr);
   }
 
-  const sync = syncQuoteToNormalized_(quoteId);
+  // ⚠️ allowCreate=false — activation must REUSE the row resolved before signing,
+  // never mint a second one for the same quote.
+  const sync = syncQuoteToNormalized_(quoteId, agreementId, false);
   return Object.assign({ ok: true, quote_id: quoteId, pool_id: poolId }, sync);
 }
 
@@ -1497,10 +3556,64 @@ function handleServiceAgreementSigned_(payload) {
   ensureNormalizedSalesSheets_();
   const agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
   const signedAt = payload.signed_at || nowIso_();
-  let agreement = null;
-  if (payload.agreement_id) agreement = findRowByValue_(agreements, 'agreement_id', payload.agreement_id);
-  if (!agreement && payload.quote_id) agreement = findRowByValue_(agreements, 'source_quote_id', payload.quote_id);
-  if (!agreement && payload.signrequest_id) agreement = findRowByValue_(agreements, 'signrequest_id', payload.signrequest_id);
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ EXTERNAL, UNAUTHENTICATED CALLER (SignRequest → Zapier).
+  //
+  // Every identifier here comes from outside. Resolving them in priority order
+  // and taking the first hit meant a later identifier was never examined: a
+  // payload carrying a valid quote_id AND a rogue amendment signrequest_id
+  // resolved on the quote_id, passed the type check, and silently ignored the
+  // signrequest entirely.
+  //
+  // So: resolve EVERY supplied identifier, then require them to agree. A payload
+  // whose identifiers point at different agreements is not a request to be
+  // interpreted — it is a request to be refused.
+  // ══════════════════════════════════════════════════════════════════════════
+  const resolved = [];
+  if (payload.agreement_id) {
+    resolved.push({ src: 'agreement_id',
+                    row: findRowByValue_(agreements, 'agreement_id', payload.agreement_id) });
+  }
+  if (payload.signrequest_id) {
+    resolved.push({ src: 'signrequest_id',
+                    row: findRowByValue_(agreements, 'signrequest_id', payload.signrequest_id) });
+  }
+  if (payload.quote_id) {
+    try {
+      resolved.push({ src: 'quote_id',
+                      row: findOriginalAgreementByQuoteStrict_(agreements, payload.quote_id) });
+    } catch (ambErr) {
+      return { ok: false, error: String(ambErr.message || ambErr) };
+    }
+  }
+
+  const hits = resolved.filter(function (r) { return !!r.row; });
+
+  // ⚠️ Type-check EVERY resolved row, not just the winner. An amendment reached
+  // through any identifier must stop the whole request — otherwise a rogue
+  // signrequest_id rides along beside a legitimate quote_id.
+  for (var ri = 0; ri < hits.length; ri++) {
+    if (isAmendmentRow_(hits[ri].row)) {
+      return { ok: false,
+               error: 'This is an amendment (via ' + hits[ri].src +
+                      '). Amendments are signed through the amendment flow.' };
+    }
+  }
+
+  // Identifiers must not disagree.
+  const distinct = [];
+  hits.forEach(function (h) {
+    var id = String(value_(h.row, 'agreement_id') || '');
+    if (distinct.indexOf(id) === -1) distinct.push(id);
+  });
+  if (distinct.length > 1) {
+    return { ok: false,
+             error: 'Conflicting identifiers: ' +
+                    hits.map(function (h) { return h.src + '→' + value_(h.row, 'agreement_id'); }).join(', ') +
+                    '. Refusing to guess which agreement was signed.' };
+  }
+
+  let agreement = hits.length ? hits[0].row : null;
 
   let quoteId = String(payload.quote_id || (agreement && agreement.source_quote_id) || '').trim();
   if (!quoteId && payload.row_number) {
@@ -1514,8 +3627,9 @@ function handleServiceAgreementSigned_(payload) {
   }
   if (!quoteId) return { ok: false, error: 'quote_id, agreement_id, row_number, or signrequest_id required' };
 
-  const activate = activateQuoteServiceFromAgreement_(quoteId, signedAt, payload.activation_method || 'SIGNED_AGREEMENT');
-  const refreshedAgreement = agreement || findRowByValue_(agreements, 'source_quote_id', quoteId);
+  const activate = activateQuoteServiceFromAgreement_(quoteId, signedAt,
+    payload.activation_method || 'SIGNED_AGREEMENT', agreement && agreement.agreement_id);
+  const refreshedAgreement = agreement || findOriginalAgreementByQuoteStrict_(agreements, quoteId);
   if (refreshedAgreement) {
     softSetCell_(agreements, refreshedAgreement._rowNum, 'status', 'SIGNED');
     softSetCell_(agreements, refreshedAgreement._rowNum, 'signed_at', signedAt);
@@ -1857,26 +3971,44 @@ function handleNormalizedSalesAction_(payload) {
   }
 
   if (action === 'get_service_agreements') {
-    return { ok: true, agreements: listSheetRows_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS, {}) };
+    return { ok: true, agreements: withAgreementFollowups_(withAgreementCustomer_(listSheetRows_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS, {}))) };
   }
 
   if (action === 'get_client_service_agreements') {
-    return { ok: true, agreements: listSheetRows_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS, { client_id: payload.client_id }) };
+    return { ok: true, agreements: withAgreementFollowups_(withAgreementCustomer_(listSheetRows_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS, { client_id: payload.client_id }))) };
   }
 
   if (action === 'get_location_service_agreements') {
-    return { ok: true, agreements: listSheetRows_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS, { location_id: payload.location_id }) };
+    return { ok: true, agreements: withAgreementFollowups_(withAgreementCustomer_(listSheetRows_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS, { location_id: payload.location_id }))) };
   }
 
   if (action === 'get_service_agreement') {
     const sheet = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
-    const key = payload.agreement_id ? 'agreement_id' : (payload.agreement_number ? 'agreement_number' : 'source_quote_id');
-    const val = payload.agreement_id || payload.agreement_number || payload.quote_id || payload.source_quote_id;
-    const agreement = findRowByValue_(sheet, key, val);
+    let agreement = null;
+    if (payload.agreement_id) {
+      agreement = findRowByValue_(sheet, 'agreement_id', payload.agreement_id);
+    } else if (payload.agreement_number) {
+      agreement = findRowByValue_(sheet, 'agreement_number', payload.agreement_number);
+    } else {
+      // ⚠️ Quote id is AMBIGUOUS by nature — the parent and every amendment share
+      // one. Resolve to the original only, and refuse rather than return a guess.
+      try {
+        agreement = findOriginalAgreementByQuoteStrict_(sheet,
+          payload.quote_id || payload.source_quote_id);
+      } catch (ambErr) {
+        return { ok: false, error: String(ambErr.message || ambErr) };
+      }
+    }
     if (!agreement) return { ok: false, error: 'Service agreement not found' };
     const clean = {};
     Object.keys(agreement).forEach(function(k) { if (k !== '_rowNum') clean[k] = agreement[k]; });
-    return { ok: true, agreement: clean };
+    // Same joined fields as the list routes — otherwise a contract shows one name
+    // in the list and another (or none) in the detail view.
+    return { ok: true, agreement: withAgreementFollowups_(withAgreementCustomer_([clean]))[0] };
+  }
+
+  if (action === 'update_contract_followups') {
+    return handleUpdateContractFollowups_(payload);
   }
 
   if (action === 'create_direct_service_agreement' || action === 'create_service_agreement_from_proposal') {
@@ -1903,10 +4035,17 @@ function handleNormalizedSalesAction_(payload) {
   if (action === 'activate_service_account_from_agreement') {
     const agreement = payload.agreement_id
       ? findRowByValue_(ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', payload.agreement_id)
-      : findRowByValue_(ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'source_quote_id', payload.quote_id);
+      : findOriginalAgreementByQuoteStrict_(
+          ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), payload.quote_id);
     if (!agreement) return { ok: false, error: 'Service agreement not found' };
+    // ⚠️ Staff can pass an explicit agreement_id here. A signed amendment would
+    // otherwise satisfy the status check and activate a duplicate service.
+    if (isAmendmentRow_(agreement)) {
+      return { ok: false, error: 'Cannot activate from an amendment.' };
+    }
     if (!agreementCanActivate_(agreement)) return { ok: false, error: 'Agreement is not signed or override-enabled.' };
-    return activateQuoteServiceFromAgreement_(agreement.source_quote_id, agreement.signed_at || nowIso_(), agreement.activation_method);
+    return activateQuoteServiceFromAgreement_(agreement.source_quote_id,
+      agreement.signed_at || nowIso_(), agreement.activation_method, agreement.agreement_id);
   }
 
   if (action === 'get_client_service_accounts') {
@@ -2075,10 +4214,29 @@ function handleSetWeeklyGoal_(newGoal) {
   return { ok: true };
 }
 
+// Appends a column to a sheet if it isn't already there, and returns the current
+// header row. Needed because handleSaveQuote_'s set() silently no-ops on unknown
+// columns — without this, writing a newly added field fails with no error at all.
+function ensureColumn_(sheet, columnName) {
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var exists = headers.some(function (h) {
+    return String(h).trim().toLowerCase() === String(columnName).trim().toLowerCase();
+  });
+  if (!exists) {
+    sheet.getRange(1, lastCol + 1).setValue(columnName);
+    headers = sheet.getRange(1, 1, 1, lastCol + 1).getValues()[0];
+  }
+  return headers;
+}
+
 function handleSaveQuote_(payload) {
   try {
     ensureNormalizedSalesSheets_();
     const sheet = getCrmSheet_();
+    // Self-migrating: adds scope_items_json the first time a quote is saved after
+    // this ships, so no manual sheet edit is required.
+    ensureColumn_(sheet, 'scope_items_json');
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     const quoteId = "Q-" + Utilities.getUuid().substring(0, 8).toUpperCase();
@@ -2145,6 +4303,11 @@ function handleSaveQuote_(payload) {
     set('created_by',                  payload.created_by);
     set('quote_source',                payload.quote_source);
     set('quote_version',               payload.quote_version);
+    // Resolved Scope of Work for THIS quote — the toggles plus any one-off items
+    // the admin typed. Persisting it here is what makes the proposal PDF, the
+    // signing page and the signed contract show the same scope. Sent as
+    // scope_items (array of labels) by the quote tool.
+    set('scope_items_json',            resolveScopeItemsJson_(payload));
     set('status',                      payload.status || 'UNSENT');
     set('sales_flow',                  payload.sales_flow || 'proposal_first');
     set('signature_required',          payload.signature_required === false || String(payload.signature_required).toUpperCase() === 'FALSE' ? 'FALSE' : 'TRUE');
@@ -2617,7 +4780,10 @@ function addWeeklyPoolToRoutes_(quoteHeaders, quoteRow, poolId) {
     }
     return idx;
   };
-  ['pool_id', 'customer_name', 'address', 'city', 'service', 'route_status', 'day_of_week', 'operator', 'maps_link', 'lat', 'lng', 'pinned'].forEach(ensureRoutesCol);
+  // pin_reason / pinned_at live past column J. They survive a recalculation only
+  // because captureRouteExtras_ now carries extra columns by pool_id — before
+  // that fix, calculateRoutes() blanked everything past J on every run.
+  ['pool_id', 'customer_name', 'address', 'city', 'service', 'route_status', 'day_of_week', 'operator', 'maps_link', 'lat', 'lng', 'pinned', 'pin_reason', 'pinned_at'].forEach(ensureRoutesCol);
 
   const rData = routesSheet.getDataRange().getValues();
   const rHeaders = rData[0].map(h => String(h || '').trim().toLowerCase().replace(/ /g, '_'));
@@ -2648,16 +4814,111 @@ function addWeeklyPoolToRoutes_(quoteHeaders, quoteRow, poolId) {
   setR('city',          city);
   setR('service',       service || 'Weekly Full Service');
   setR('route_status',  'weekly');
-  setR('day_of_week',   'UNSCHEDULED');
-  setR('operator',      'UNASSIGNED');
+
+  // Automatic day + technician assignment (AutoAssign.js). Returns null whenever
+  // the feature is off, no eligible technician is configured, or anything at all
+  // goes wrong — in which case this falls back to the original
+  // UNSCHEDULED/UNASSIGNED placeholder and the pool lands in the manual routing
+  // queue exactly as before. Signing must never fail because of scheduling.
+  var assignment = null;
+  try {
+    if (typeof autoAssignWeeklyPool_ === 'function') {
+      // The weekday the customer picked off the Starts calendar, so the engine
+      // assigns the day we actually offered them. Callers reach here through
+      // activateQuoteServiceFromAgreement_, which re-reads the quote AFTER
+      // handleSignAgreement_ stores the request — so this row is current.
+      // ⚠️ Reads requested_start_date ONLY — never requested_start_date_hint.
+      // A hint means the customer chose a WEEK and was shown no weekday; turning
+      // it into a preferred day would manufacture a commitment nobody made.
+      // committed_service_day wins when present: it is the day we actually
+      // displayed, which survives an admin moving the date.
+      var committed = String(get('committed_service_day') || '').trim().toUpperCase();
+      var preferredDay = committed || ((typeof aaWeekdayFromDate_ === 'function')
+        ? aaWeekdayFromDate_(get('requested_start_date')) : '');
+      assignment = autoAssignWeeklyPool_({
+        address: [address, city].filter(Boolean).join(', '),
+        // Zone inputs: the ZIP resolves the service area without geocoding, and
+        // location_id carries any per-location override an admin has set for an
+        // address that sits in the wrong ZIP.
+        zip: get('zip_code'),
+        locationId: get('location_id'),
+        preferredDay: preferredDay
+      });
+    }
+  } catch (assignErr) {
+    Logger.log('addWeeklyPoolToRoutes_: auto-assign failed (non-blocking): ' + assignErr);
+    assignment = null;
+  }
+
+  setR('day_of_week',   assignment ? assignment.day : 'UNSCHEDULED');
+  setR('operator',      assignment ? assignment.operator : 'UNASSIGNED');
   setR('maps_link',     mapsUrl);
-  setR('lat',           0);
-  setR('lng',           0);
-  setR('pinned',        'FALSE');
+  // Store the geocode the assignment already paid for. Writing 0,0 here left every
+  // newly signed pool invisible to clustering until the next full recalculation.
+  setR('lat',           assignment && assignment.lat ? assignment.lat : 0);
+  setR('lng',           assignment && assignment.lng ? assignment.lng : 0);
+  // ⚠️ Pinned by DEFAULT. Routes are not bulk-refreshed in practice, because
+  // moving a customer means telling them — so stability is the real default and
+  // the code should say so. calculateRoutes() skips pinned weekly pools, which
+  // narrows a recalculation to what it should be doing: placing new and
+  // unassigned pools rather than reshuffling served customers.
+  setR('pinned',        'TRUE');
+  setR('pin_reason',    assignment && assignment.day ? 'promised_at_signing' : 'new_pool');
+  setR('pinned_at',     nowIso_());
 
   routesSheet.appendRow(newRow);
   try { CacheService.getScriptCache().remove('unassigned_pools'); } catch(e) {}
-  Logger.log('addWeeklyPoolToRoutes_: created weekly Routes placeholder for ' + poolId + ' (' + customerName + ')');
+
+  // B7 — turn the promised date into a real scheduled stop, so it shows on the
+  // route board that week instead of living as a note on a quote.
+  //
+  // ⚠️ Only when an actual DATE was promised. Preferred-week mode stores
+  // requested_start_week and no date, so there is nothing to schedule and
+  // nothing is created — inventing a date would be a promise nobody made.
+  //
+  // ensureWeeklyServiceVisit_ (not createScheduledVisit_) because signing is
+  // retried on network failure and the raw creator has no dedupe guard.
+  try {
+    var promisedDate = String(get('requested_start_date') || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(promisedDate) &&
+        typeof ensureWeeklyServiceVisit_ === 'function') {
+      ensureWeeklyServiceVisit_(poolId, promisedDate, {
+        customer_name: customerName,
+        service_type: service,
+        assigned_technician: assignment ? assignment.operator : '',
+        created_by: 'signing'
+      });
+    }
+  } catch (svErr) {
+    Logger.log('addWeeklyPoolToRoutes_: first visit not scheduled (non-blocking): ' + svErr);
+  }
+
+  if (assignment) {
+    Logger.log('addWeeklyPoolToRoutes_: auto-assigned ' + poolId + ' to ' +
+      assignment.operator + ' on ' + assignment.day);
+    if (assignment.exceptions && assignment.exceptions.length) {
+      // PERSIST FIRST, THEN EMAIL. These objects used to exist only inside the
+      // alert email — once it was archived the problem was invisible, and an
+      // Action Queue card would have had nothing to read.
+      try {
+        if (typeof recordAssignmentExceptions_ === 'function') {
+          recordAssignmentExceptions_(poolId, get('quote_id'), assignment.exceptions);
+        }
+      } catch (exErr) {
+        Logger.log('addWeeklyPoolToRoutes_: could not persist exceptions (non-blocking): ' + exErr);
+      }
+      // Alert AFTER the row is written and the lock released — never during.
+      if (typeof sendAssignmentExceptionAlert_ === 'function') {
+        sendAssignmentExceptionAlert_({
+          customerName: customerName, poolId: poolId,
+          operator: assignment.operator, day: assignment.day,
+          exceptions: assignment.exceptions
+        });
+      }
+    }
+  } else {
+    Logger.log('addWeeklyPoolToRoutes_: created weekly Routes placeholder for ' + poolId + ' (' + customerName + ')');
+  }
 }
 
 function repairMissingWeeklyRouteRows_() {

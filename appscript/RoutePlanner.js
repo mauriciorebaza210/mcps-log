@@ -15,6 +15,11 @@ const CALENDAR_NAME  = "MCPS Operator Routes";
 const AUTH_SPREADSHEET_ID = "1e2XmGuosFSzeDQYMf3TYG3ZFfENYTyne5pqOi3L5m1g";
 const AUTH_USERS_SHEET    = "Users";
 
+// Pools a technician is expected to service in a day when no explicit
+// max_per_day is set on their Users row. Single source of truth — the route
+// planner, auto-assignment, and the admin UI hint all read this.
+const DEFAULT_MAX_POOLS_PER_DAY = 10;
+
 // Sheet Names
 const CRM_SIGNED_SHEET    = "Signed_Customers";
 const GEOCODE_CACHE_SHEET = "Geocode_Cache";
@@ -43,9 +48,17 @@ function getTechnicianOperators_() {
   const h = data[0].map(x => String(x).trim().toLowerCase().replace(/ /g, '_'));
 
   const nameCol   = h.indexOf('name');
+  const userCol   = h.indexOf('username');
   const rolesCol  = h.indexOf('roles');
   const activeCol = h.indexOf('active');
   const daysCol   = h.indexOf('available_days');
+  // Columns added for auto-assignment. All optional — absent means "not configured
+  // yet", and every consumer must degrade to today's behaviour when they're missing.
+  const maxCol    = h.indexOf('max_per_day');
+  const eligCol   = h.indexOf('auto_assign_eligible');
+  const zonesCol  = h.indexOf('preferred_zones');
+  const bioCol    = h.indexOf('staff_bio');
+  const avatarCol = h.indexOf('avatar_url');
 
   const out = [];
 
@@ -67,9 +80,27 @@ function getTechnicianOperators_() {
       .map(d => d.trim().toUpperCase())
       .filter(Boolean);
 
+    // Explicit capacity from the Users sheet, or null meaning "no explicit value"
+    // so callers can distinguish a deliberate number from an unset cell.
+    const rawMax = maxCol !== -1 ? String(row[maxCol] ?? '').trim() : '';
+    const explicitMax = rawMax !== '' && !isNaN(Number(rawMax)) && Number(rawMax) > 0
+      ? Math.floor(Number(rawMax))
+      : null;
+
     out.push({
+      // Join on username where possible — display names are ambiguous and get
+      // edited. Routes still stores the display NAME (see ROUTE_OPERATOR note).
+      username: userCol !== -1 ? String(row[userCol] || '').trim() : '',
       name: name,
-      maxPerDay: 4,
+      maxPerDay: explicitMax === null ? DEFAULT_MAX_POOLS_PER_DAY : explicitMax,
+      explicitMaxPerDay: explicitMax,
+      autoAssignEligible: eligCol !== -1
+        ? String(row[eligCol] ?? '').trim().toUpperCase() === 'TRUE'
+        : false,   // default OFF — nobody is opted in silently
+      preferredZones: (zonesCol !== -1 ? String(row[zonesCol] || '') : '')
+        .split(',').map(z => z.trim()).filter(Boolean),
+      staffBio: bioCol !== -1 ? String(row[bioCol] || '').trim() : '',
+      avatarUrl: avatarCol !== -1 ? String(row[avatarCol] || '').trim() : '',
       days: days.length ? days : ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'],
       currentDayLoad: 0
     });
@@ -261,6 +292,78 @@ function geocodePools_(pools, cache, cacheSheet, newCacheRows) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Routes schema preservation ───────────────────────────────────────────────
+// calculateRoutes() rebuilds the Routes sheet from scratch: it clears every row
+// across the full width, then writes back only the ten core columns
+// (day, operator, pool_id, name, address, city, service, maps, lat, lng).
+//
+// Anything past column J is therefore ERASED on every recalculation. `Pinned`
+// only survives because it is explicitly re-stamped afterwards. That is why
+// AutoAssign.js stores schedule-notified markers on Quotes instead of Routes —
+// see the comment above recordScheduleNotified_.
+//
+// These two helpers close that hole: extras are captured keyed by pool_id and
+// re-attached to the same pool after the rebuild reorders every row. Keying by
+// pool_id (not row position) is the whole point — the rewrite emits pinned rows
+// first, so row N after a recalc is almost never the pool that was on row N
+// before it.
+//
+// Pure functions on arrays, so they are tested directly without stubbing Apps
+// Script. See tests/route-schema-preservation.test.js.
+const ROUTES_CORE_WIDTH = 10;
+
+// existingData: full getValues() of the Routes sheet, headers included.
+// Returns { extrasByPoolId, width } — width is the sheet's full column count so
+// the rebuild can restore it exactly.
+function captureRouteExtras_(existingData, coreWidth) {
+  const core = coreWidth || ROUTES_CORE_WIDTH;
+  const out = { extrasByPoolId: {}, width: core };
+  if (!existingData || existingData.length < 1) return out;
+
+  const headers = existingData[0].map(h => String(h || '').trim().toLowerCase().replace(/ /g, '_'));
+  out.width = Math.max(headers.length, core);
+  if (out.width <= core) return out;                 // nothing beyond the core block
+
+  const pidCol = headers.indexOf('pool_id');
+  if (pidCol === -1) return out;                     // can't key extras without an id
+
+  for (let i = 1; i < existingData.length; i++) {
+    const poolId = String(existingData[i][pidCol] || '').trim();
+    if (!poolId) continue;                           // unkeyed row: extras can't be restored
+    // First row wins. A duplicate pool_id is a data problem, and silently
+    // letting the later row overwrite would move one pool's metadata onto
+    // another's — exactly the failure this function exists to prevent.
+    if (out.extrasByPoolId[poolId]) {
+      Logger.log('RoutePlanner: duplicate pool_id ' + poolId + ' in Routes; keeping the first row\'s extra columns.');
+      continue;
+    }
+    out.extrasByPoolId[poolId] = existingData[i].slice(core);
+  }
+  return out;
+}
+
+// coreRows: the freshly built ten-wide rows. Returns full-width rows with each
+// pool's extra columns re-attached. Pools with no previous row get blanks —
+// never another pool's values.
+function mergeRouteExtras_(coreRows, extrasByPoolId, width, coreWidth) {
+  const core = coreWidth || ROUTES_CORE_WIDTH;
+  const total = Math.max(width || core, core);
+  const extraCount = total - core;
+  if (!coreRows || !coreRows.length) return [];
+  if (extraCount <= 0) return coreRows;
+
+  const map = extrasByPoolId || {};
+  return coreRows.map(function (row) {
+    const poolId = String(row[2] || '').trim();      // index 2 == pool_id in the core block
+    const saved = map[poolId] || [];
+    const extras = [];
+    for (let i = 0; i < extraCount; i++) {
+      extras.push(saved[i] !== undefined && saved[i] !== null ? saved[i] : '');
+    }
+    return row.slice(0, core).concat(extras);
+  });
+}
+
 function calculateRoutes() {
   const crmSs    = SpreadsheetApp.openById(CRM_SPREADSHEET_ID);
   const routesSs = SpreadsheetApp.openById(ROUTES_SPREADSHEET_ID);
@@ -284,12 +387,17 @@ function calculateRoutes() {
   // maps link, lat, lng, and all other columns as-is.
   const pinnedRows = [];      // raw row arrays to re-write verbatim
   const pinnedPoolIds = new Set(); // pool_ids that are pinned — skip in clustering
+  // Everything past the core ten columns, keyed by pool_id, so the rebuild can
+  // put each pool's metadata back on its own row. See captureRouteExtras_.
+  let routeExtras = { extrasByPoolId: {}, width: ROUTES_CORE_WIDTH };
 
   if (routesSheet.getLastRow() > 1) {
     const existingData    = routesSheet.getDataRange().getValues();
     const existingHeaders = existingData[0].map(h => String(h || '').trim().toLowerCase().replace(/ /g, '_'));
     const ePidCol    = existingHeaders.indexOf('pool_id');
     const ePinnedCol = existingHeaders.indexOf('pinned');
+
+    routeExtras = captureRouteExtras_(existingData, ROUTES_CORE_WIDTH);
 
     for (let i = 1; i < existingData.length; i++) {
       const row     = existingData[i];
@@ -300,7 +408,8 @@ function calculateRoutes() {
         pinnedPoolIds.add(poolId);
       }
     }
-    Logger.log(`RoutePlanner: ${pinnedRows.length} pinned pools preserved.`);
+    Logger.log(`RoutePlanner: ${pinnedRows.length} pinned pools preserved, ` +
+               `${routeExtras.width - ROUTES_CORE_WIDTH} extra column(s) carried by pool_id.`);
   }
 
   // ── 3. Read signed customers ──────────────────────────────────────────────
@@ -579,10 +688,18 @@ function calculateRoutes() {
     const totalUnpinned  = poolsWeekly.length;
     const totalOpDays    = operators.reduce((sum, op) => sum + op.days.length, 0);
     // Natural load = how many pools per op-day if spread perfectly evenly
-    const naturalPerDay  = totalOpDays > 0 ? Math.ceil(totalUnpinned / totalOpDays) : 3;
+    // Guard for "no operator working-days at all" — no slots get built in that
+    // case, so this is only a sane placeholder rather than a real cap.
+    const naturalPerDay  = totalOpDays > 0 ? Math.ceil(totalUnpinned / totalOpDays) : DEFAULT_MAX_POOLS_PER_DAY;
 
+    // BUGFIX: this previously overwrote EVERY operator with naturalPerDay, so the
+    // max_per_day column the comment above promises was silently ignored — an
+    // operator capped at 6 could still be handed 9. Now an explicit value is
+    // honoured and only unset operators fall back to the derived figure.
     operators.forEach(op => {
-      op.maxPerDay = Math.max(1, naturalPerDay);
+      op.maxPerDay = (op.explicitMaxPerDay !== null && op.explicitMaxPerDay !== undefined)
+        ? op.explicitMaxPerDay
+        : Math.max(1, naturalPerDay);
     });
 
     Logger.log(`RoutePlanner: ${totalUnpinned} un-pinned weekly pools, naturalPerDay=${naturalPerDay}`);
@@ -743,10 +860,16 @@ function calculateRoutes() {
   }
 
   // ── 7. Write Routes sheet ─────────────────────────────────────────────────
+  // Re-attach every pool's extra columns BEFORE writing, then write the full
+  // width. Writing only the core ten (as this once did) left columns K+ blank
+  // after the clearContent above, silently wiping zone_id, pin_reason and any
+  // other Routes metadata on every recalculation.
   const lastRow = routesSheet.getLastRow();
   if (lastRow > 1) routesSheet.getRange(2, 1, lastRow - 1, routesSheet.getLastColumn()).clearContent();
   if (allRouteRows.length) {
-    routesSheet.getRange(2, 1, allRouteRows.length, 10).setValues(allRouteRows);
+    const fullRows = mergeRouteExtras_(
+      allRouteRows, routeExtras.extrasByPoolId, routeExtras.width, ROUTES_CORE_WIDTH);
+    routesSheet.getRange(2, 1, fullRows.length, fullRows[0].length).setValues(fullRows);
   }
 
   // Re-write Pinned = TRUE for pinned rows so the column survives the rewrite

@@ -304,6 +304,29 @@ function _loadRouteCompletionsForWeek_(silent) {
     });
 }
 
+function _applyRouteCompletionsFromPayload_(routeData) {
+  const byDate = routeData && routeData.completions_by_date;
+  if (!byDate || typeof byDate !== 'object') return false;
+
+  const before = JSON.stringify(_jobCompletionsByDate);
+  Object.keys(byDate).forEach(date => {
+    _jobCompletionsByDate[date] = Array.isArray(byDate[date]) ? byDate[date] : [];
+  });
+  return before !== JSON.stringify(_jobCompletionsByDate);
+}
+
+function _refreshRouteCompletionsFast_(silent) {
+  if (!_routeData || !_routeData.days) return Promise.resolve();
+  return _fetchRouteDataViaSheets_(_activeOp, { refresh: false })
+    .then(res => {
+      if (!res || !res.completions_by_date) return _loadRouteCompletionsForWeek_(silent);
+      const changed = _applyRouteCompletionsFromPayload_(res);
+      if (changed && _routeData) renderRoutePage();
+      if (!silent) _flashRouteRefresh_('Completion data refreshed.');
+    })
+    .catch(() => _loadRouteCompletionsForWeek_(silent));
+}
+
 function refreshRouteCompletions() {
   if (!_routeData || !_routeData.days) return _loadRouteCompletionsForWeek_(false);
   _flashRouteRefresh_('Checking submitted logs...');
@@ -321,7 +344,7 @@ function refreshRouteCompletions() {
 function _startRouteCompletionPolling_() {
   if (_routeCompletionTimer) clearInterval(_routeCompletionTimer);
   _routeCompletionTimer = setInterval(() => {
-    if (_curPage === 'live_map' && _activeHubTab === 'schedule') _loadRouteCompletionsForWeek_(true);
+    if (_curPage === 'live_map' && _activeHubTab === 'schedule') _refreshRouteCompletionsFast_(true);
   }, 60000);
 }
 
@@ -331,6 +354,59 @@ function _flashRouteRefresh_(msg) {
   el.textContent = msg || '';
   el.style.opacity = msg ? '1' : '0';
   if (msg) setTimeout(() => { if (el) el.style.opacity = '0'; }, 1800);
+}
+
+const ROUTE_SHEETS_TIMEOUT_MS = 10000;
+
+function _routeShouldRefreshServer_() {
+  const refresh = !!window._routeNextRefresh;
+  window._routeNextRefresh = false;
+  return refresh;
+}
+
+function _fetchRouteDataViaSheets_(op, opts) {
+  opts = opts || {};
+  if (typeof apiLocalGet !== 'function') return Promise.reject(new Error('Local schedule endpoint unavailable'));
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ROUTE_SHEETS_TIMEOUT_MS);
+  const params = {
+    token: _s.token,
+    operator: op,
+    week_start: _weekStartForOffset_(_weekOffset),
+    cache_version: 'schedule-direct-v1'
+  };
+  if (opts.refresh) params.refresh = '1';
+
+  return apiLocalGet('/api/schedule', params, { signal: controller.signal })
+    .then(res => {
+      if (!res || !res.ok || !Array.isArray(res.days)) {
+        throw new Error((res && res.error) || 'Invalid schedule endpoint response');
+      }
+      return res;
+    })
+    .finally(() => clearTimeout(timeoutId));
+}
+
+function _fetchRouteDataViaGas_(op) {
+  const params = { action: 'route_data', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
+  if (_weekOffset !== 0) params.week_offset = _weekOffset;
+
+  const svParams = { action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
+
+  return Promise.all([
+    apiGet(params),
+    apiGet(svParams)
+  ]).then(([res, svRes]) => {
+    if (res && res.ok && svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
+      _mergeScheduledVisits_(res.days, svRes.visits);
+    }
+    return res;
+  });
+}
+
+function _fetchRouteData_(op, opts) {
+  return _fetchRouteDataViaSheets_(op, opts).catch(() => _fetchRouteDataViaGas_(op));
 }
 
 function loadRoutes(opOverride) {
@@ -354,29 +430,26 @@ function loadRoutes(opOverride) {
   const cached = _getRouteCache(op, _weekOffset);
   if (cached) {
     _routeData = cached;
+    const cachedHasCompletions = !!(cached && cached.completions_by_date);
+    _applyRouteCompletionsFromPayload_(cached);
     document.getElementById('route-loading').style.display = 'none';
     document.getElementById('route-content').style.display = 'block';
     renderRoutePage();
-    _loadRouteCompletionsForWeek_(true);
+    if (!cachedHasCompletions) _loadRouteCompletionsForWeek_(true);
     _startRouteCompletionPolling_();
     _loadPoolNotes_();
-    if (isAdmin()) loadUnassigned(true);
-    // Revalidate route_data + scheduled_visits in background; re-render only if data changed
-    const rdParams = { action: 'route_data', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
-    if (_weekOffset !== 0) rdParams.week_offset = _weekOffset;
-    Promise.all([
-      apiGet(rdParams),
-      apiGet({ action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) })
-    ]).then(([freshRes, svRes]) => {
+    if (isAdmin()) loadUnassigned(false);
+    // Revalidate in background; re-render only if data changed.
+    _fetchRouteData_(op, { refresh: false }).then(freshRes => {
       if (!freshRes || !freshRes.ok) return;
-      if (svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
-        _mergeScheduledVisits_(freshRes.days, svRes.visits);
-      }
+      const completionChanged = _applyRouteCompletionsFromPayload_(freshRes);
       const freshJson = JSON.stringify(freshRes.days);
       const cachedJson = JSON.stringify(cached.days);
       if (freshJson !== cachedJson) {
         _routeData = freshRes;
         _setRouteCache(op, _weekOffset, freshRes);
+        renderRoutePage();
+      } else if (completionChanged) {
         renderRoutePage();
       }
     }).catch(() => {});
@@ -393,34 +466,23 @@ function loadRoutes(opOverride) {
   // ── Show skeleton while loading ──
   _showRouteSkeleton();
 
-  const params = { action: 'route_data', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
-  if (_weekOffset !== 0) params.week_offset = _weekOffset;
-
-  const svParams = { action: 'scheduled_visits', token: _s.token, operator: op, week_start: _weekStartForOffset_(_weekOffset) };
-
-  const fetchPromise = Promise.all([
-    apiGet(params),
-    apiGet(svParams)
-  ])
-    .then(([res, svRes]) => {
+  const fetchPromise = _fetchRouteData_(op, { refresh: _routeShouldRefreshServer_() })
+    .then(res => {
       _routeFetchInFlight = null;
       if (!res.ok) {
         document.getElementById('route-content').innerHTML = `<div class="route-empty"><div class="route-empty-icon">⚠️</div><div class="route-empty-text">${res.error}</div></div>`;
         return;
       }
 
-      // Merge scheduled visits into route data days
-      if (svRes && svRes.ok && svRes.visits && svRes.visits.length > 0) {
-        _mergeScheduledVisits_(res.days, svRes.visits);
-      }
-
       _routeData = res;
+      const hasCompletionPayload = !!(res && res.completions_by_date);
+      _applyRouteCompletionsFromPayload_(res);
       _setRouteCache(op, _weekOffset, res);
       renderRoutePage();
-      _loadRouteCompletionsForWeek_(true);
+      if (!hasCompletionPayload) _loadRouteCompletionsForWeek_(true);
       _startRouteCompletionPolling_();
       _loadPoolNotes_();
-      if (isAdmin()) loadUnassigned(true);
+      if (isAdmin()) loadUnassigned(false);
     })
     .catch(e => {
       _routeFetchInFlight = null;
@@ -2010,6 +2072,28 @@ function updatePasPin_(pinned) {
   text.textContent = pinned ? 'Pinned — won\'t be moved by auto-placement' : 'Unpinned — can be auto-reassigned';
 }
 
+// Whether to email the customer about a permanent schedule change. Defaults to
+// ON — telling them is the honest default; staying quiet is a deliberate choice.
+// The backend still stays silent when the customer was never told a day at all.
+function togglePasNotify() {
+  if (!_pasState) return;
+  _pasState.notifyCustomer = _pasState.notifyCustomer === false;
+  updatePasNotify_(_pasState.notifyCustomer);
+}
+
+function updatePasNotify_(notify) {
+  const toggle = document.getElementById('pas-notify-toggle');
+  const icon = document.getElementById('pas-notify-icon');
+  const text = document.getElementById('pas-notify-text');
+  if (!toggle || !icon || !text) return;
+  const on = notify !== false;
+  toggle.classList.toggle('pinned', on);
+  icon.textContent = on ? '✅' : '🔕';
+  text.textContent = on
+    ? 'Tell the customer their service day changed'
+    : 'Move quietly — don\'t email the customer';
+}
+
 function applyPoolAction() {
   if (!_pasState) return;
   const btn = document.getElementById('pas-apply-btn');
@@ -2046,7 +2130,10 @@ function applyPoolAction() {
       pool_id: _pasState.pool_id,
       new_day: _pasState.newDay,
       new_operator: _pasState.newOp,
-      pinned: _pasState.newPinned
+      pinned: _pasState.newPinned,
+      // Permanent moves email the customer when they were previously told a
+      // service day. Untick "Tell the customer" for a silent correction.
+      notify_customer: _pasState.notifyCustomer !== false
     };
     // Monthly Full Service: persist which week-of-month it runs
     if (_pasState.isMonthly) payload.monthly_week = _pasState.monthlyWeek || '1';
@@ -2213,6 +2300,15 @@ function pasSetScope(scope) {
   // Operator & pin only apply to permanent changes
   if (opSec) opSec.style.opacity = scope === 'week' ? '.4' : '1';
   if (pinSec) pinSec.style.opacity = scope === 'week' ? '.4' : '1';
+
+  // The customer-notification choice is meaningless for a one-week shuffle —
+  // those are temporary and the existing day-before/on-my-way comms cover them.
+  const notifySec = document.getElementById('pas-notify-section');
+  if (notifySec) notifySec.style.display = scope === 'week' ? 'none' : '';
+  if (scope !== 'week') {
+    if (_pasState.notifyCustomer === undefined) _pasState.notifyCustomer = true;
+    updatePasNotify_(_pasState.notifyCustomer);
+  }
 }
 
 // ── Startup: convert to Weekly Full Service — step 1: show day picker ────────

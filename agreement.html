@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Service Agreement</title>
+  <link rel="icon" href="/favicon.ico">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --teal: #0D3D3E;
+      --teal-2: #082a2b;
+      --aqua: #1FA7A8;
+      --aqua-light: #5ED6D3;
+      --gray: #F3F5F6;
+      --charcoal: #222222;
+      --white: #FFFFFF;
+      --muted: rgba(34,34,34,.58);
+      --line: #E4EAEA;
+      --bg: #FFFFFF;
+      --card: #FFFFFF;
+      --danger: #8a2f2f;
+      --ok: #0D3D3E;
+      --font-heading: 'Montserrat', sans-serif;
+      --font-body: 'Open Sans', sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--charcoal);
+      font-family: var(--font-body); padding: 0 0 70px; line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { width: 100%; max-width: 780px; margin: 0 auto; padding: 0 26px; }
+
+    /* ── Full-bleed teal masthead ───────────────────────────────────────── */
+    .band { background: var(--teal); color: #fff; padding: 34px 0 46px; position: relative; overflow: hidden; }
+    .band::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 78% -10%, rgba(94,214,211,.20), transparent 55%);
+    }
+    .band .wrap { position: relative; }
+    /* Logo + title locked together as one unit */
+    .band-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+    .lockup { display: flex; align-items: center; gap: 16px; }
+    .lockup img { height: 52px; flex: 0 0 auto; }
+    .lockup .rule { width: 1px; align-self: stretch; background: rgba(255,255,255,.22); }
+    .lockup .mark .co {
+      font-family: var(--font-heading); font-weight: 700; font-size: 11px; letter-spacing: .15em;
+      text-transform: uppercase; color: var(--aqua-light); margin: 0 0 4px;
+    }
+    .lockup .mark h1 {
+      font-family: var(--font-heading); font-weight: 800; font-size: 27px; line-height: 1.05;
+      margin: 0; letter-spacing: -.01em; color: #fff;
+    }
+    .band-top .num {
+      font-size: 12px; color: rgba(255,255,255,.6); letter-spacing: .06em;
+      white-space: nowrap; padding-top: 6px;
+    }
+    .band .who { color: rgba(255,255,255,.72); font-size: 15px; margin-top: 22px; }
+
+    /* ── Prepared-for card (overlaps the band). Never shows pricing. ────── */
+    .prepared { max-width: 780px; margin: -30px auto 0; padding: 0 26px; position: relative; z-index: 3; }
+    .prepared .inner {
+      background: #fff; border-radius: 16px; box-shadow: 0 18px 44px rgba(13,61,62,.16);
+      padding: 22px 28px; border: 1px solid var(--line);
+    }
+    .prepared .eyebrow { margin: 0 0 4px; }
+    .prepared .name {
+      font-family: var(--font-heading); font-weight: 800; font-size: 26px; color: var(--teal);
+      letter-spacing: -.01em; margin: 0 0 3px;
+    }
+    .prepared .addr { font-size: 14px; color: var(--muted); }
+    .prepared .facts {
+      display: flex; gap: 34px; flex-wrap: wrap; margin-top: 18px; padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .prepared .fact .k {
+      font-family: var(--font-heading); font-weight: 700; font-size: 9px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 3px;
+    }
+    .prepared .fact .v { font-family: var(--font-heading); font-weight: 700; font-size: 15px; color: var(--teal); }
+
+    /* "Starts" — the fact pill doubles as the button that opens the calendar */
+    .fact-btn { background: none; border: 0; padding: 0; margin: 0; text-align: left; font: inherit; cursor: pointer; }
+    .fact-btn .v { display: inline-flex; align-items: center; gap: 5px; }
+    .fact-btn .v::after { content: "›"; color: var(--aqua); font-weight: 800; font-size: 16px; line-height: 1; transition: transform .12s; }
+    .fact-btn:hover .v { color: var(--aqua); }
+    .fact-btn:hover .v::after { transform: translateX(2px); }
+
+    /* Preferred start-date picker. Floating, centred, never touching a screen
+       edge. The card owns the rounded corners and clips, so the scrollbar can
+       never poke past the rounding; the head is fixed and the body scrolls, so
+       content can never slide underneath the close button. */
+    .cal-modal { position: fixed; inset: 0; background: rgba(13,23,22,.5); display: none;
+      align-items: center; justify-content: center; padding: 20px; z-index: 200; }
+    .cal-modal.open { display: flex; }
+    .cal-modal-card { background: #fff; border-radius: 18px; box-shadow: 0 30px 70px rgba(13,61,62,.32);
+      width: 100%; max-width: 360px; max-height: min(560px, 82vh); overflow: hidden;
+      display: flex; flex-direction: column;
+      transform: translateY(8px); opacity: 0; transition: transform .18s ease, opacity .18s ease; }
+    .cal-modal.open .cal-modal-card { transform: translateY(0); opacity: 1; }
+    .cal-modal-head { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 14px; padding: 20px 22px 4px; }
+    .cal-modal-close { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line);
+      background: #fff; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+    .cal-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 22px 24px;
+      scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+    .cal-modal-body::-webkit-scrollbar { width: 6px; }
+    .cal-modal-body::-webkit-scrollbar-track { background: transparent; }
+    .cal-modal-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
+    .cal-modal-title { font-family: var(--font-heading); font-weight: 800; font-size: 18px; color: var(--teal);
+      letter-spacing: -.01em; margin: 2px 0 18px; }
+    .cal-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .cal-top .mo { font-family: var(--font-heading); font-weight: 800; font-size: 17px; color: var(--teal); }
+    .cal-nav { display: flex; gap: 6px; }
+    .cal-nav button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: #fff;
+      color: var(--teal); font-family: var(--font-heading); font-size: 15px; cursor: pointer; line-height: 1; }
+    .cal-nav button:disabled { opacity: .3; cursor: not-allowed; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cal-dow { font-family: var(--font-heading); font-weight: 700; font-size: 10px; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted); text-align: center; padding-bottom: 6px; }
+    .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 9px;
+      font-size: 14px; cursor: pointer; border: 1.5px solid transparent; color: var(--charcoal);
+      background: var(--gray); transition: background .12s, color .12s; }
+    .cal-day.pad { visibility: hidden; cursor: default; }
+    /* Unavailable days are simply unclickable — no reason is ever shown, so the
+       customer never sees our staffing or capacity. */
+    .cal-day.unavail { background: transparent; color: var(--line); cursor: not-allowed; text-decoration: line-through; }
+    .cal-day.avail:hover { background: #E4F5F4; border-color: var(--aqua-light); }
+    .cal-day.selected { background: var(--teal); color: #fff; font-weight: 700; }
+    /* Preferred-week mode: the unit of choice is the whole week, so hover and
+       selection light the Mon–Sat run rather than a single day. Sunday is never
+       included — it is not a service day. */
+    .cal-day.wk-hov { background: #E4F5F4; border-color: var(--aqua-light); }
+    .cal-day.wk-sel { background: var(--teal); color: #fff; font-weight: 700; }
+    .cal-day-note { margin-bottom: 16px; padding: 10px 12px; border-radius: 9px; background: var(--gray);
+      font-size: 13px; color: var(--teal); font-weight: 600; }
+    .cal-legend { display: flex; gap: 18px; margin-top: 16px; flex-wrap: wrap; }
+    .cal-legend span { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+    .cal-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+    .cal-legend i.a { background: var(--gray); border: 1.5px solid var(--aqua-light); }
+    .cal-legend i.u { background: transparent; border: 1.5px solid var(--line); }
+    .cal-note { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    .cal-loading { padding: 30px 0; text-align: center; color: var(--muted); font-size: 13px; }
+
+    section { padding-top: 44px; }
+    .sec-label {
+      font-family: var(--font-heading); font-weight: 700; font-size: 11px; letter-spacing: .2em;
+      text-transform: uppercase; color: var(--aqua); margin: 0 0 4px;
+    }
+    .sec-title {
+      font-family: var(--font-heading); font-weight: 700; font-size: 22px; color: var(--teal);
+      margin: 0 0 22px; letter-spacing: -.01em;
+    }
+
+    /* ── Scope ──────────────────────────────────────────────────────────── */
+    .scope { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 40px; }
+    .scope li {
+      position: relative; padding-left: 28px; margin-bottom: 14px; font-size: 16px; break-inside: avoid;
+    }
+    .scope li::before {
+      content: "✓"; position: absolute; left: 0; top: 5px; width: 16px; height: 16px; border-radius: 50%;
+      background: var(--aqua-light); color: var(--teal); font-weight: 800; font-size: 10px;
+      text-align: center; line-height: 16px;
+    }
+
+    /* ── Plan / totals ──────────────────────────────────────────────────── */
+    table.plan { width: 100%; border-collapse: collapse; font-size: 16px; }
+    table.plan thead th {
+      font-family: var(--font-heading); font-weight: 700; font-size: 11px; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 0 14px;
+      border-bottom: 2px solid var(--teal);
+    }
+    table.plan th:last-child, table.plan td:last-child { text-align: right; }
+    table.plan td { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    table.plan td:first-child { font-weight: 600; color: var(--teal); }
+    /* Server sends 3-column rows; the pre-Terms copy is stripped to 2 in JS. */
+    table.plan.no-price th:last-child, table.plan.no-price td:last-child { text-align: left; }
+
+    table.totals { width: 100%; max-width: 340px; margin: 22px 0 0 auto; border-collapse: collapse; font-size: 15px; }
+    table.totals td { padding: 8px 0; }
+    table.totals td:last-child { text-align: right; }
+    table.totals td:first-child { color: var(--muted); }
+    table.totals tr:last-child td {
+      border-top: 2px solid var(--teal); padding-top: 14px;
+      font-family: var(--font-heading); font-weight: 800; font-size: 19px; color: var(--teal);
+    }
+    table.totals tr:last-child td:first-child { color: var(--teal); }
+
+    .invest {
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      background: var(--teal); color: var(--white); border-radius: 12px; padding: 18px 22px; margin-top: 22px;
+    }
+    .invest .lab {
+      font-family: var(--font-heading); font-weight: 700; text-transform: uppercase;
+      letter-spacing: .12em; font-size: 11px; color: var(--aqua-light);
+    }
+    .invest .val { font-family: var(--font-heading); font-weight: 800; font-size: 24px; }
+
+    /* ── Terms — the only internally scrolling region ───────────────────── */
+    .contract-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .progress { flex: 1; height: 4px; background: var(--gray); border-radius: 20px; overflow: hidden; max-width: 220px; }
+    .progress i { display: block; height: 100%; width: 0; background: var(--aqua); border-radius: 20px; transition: width .1s; }
+    .terms-box {
+      max-height: 56vh; min-height: 300px; overflow-y: auto; overscroll-behavior: contain;
+      border: 1px solid var(--line); border-radius: 14px; background: #FBFCFC; padding: 8px 28px;
+      scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+    }
+    .terms-box::-webkit-scrollbar { width: 6px; }
+    .terms-box::-webkit-scrollbar-track { background: transparent; }
+    .terms-box::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; }
+    .terms-box .term { padding: 22px 0; border-bottom: 1px solid var(--gray); }
+    .terms-box .term:last-child { border-bottom: 0; }
+    .terms-box .term h4 {
+      font-family: var(--font-heading); font-weight: 700; font-size: 13px; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--teal); margin: 0 0 10px;
+    }
+    .terms-box .term p { margin: 0 0 8px; font-size: 15px; line-height: 1.6; color: #33403f; }
+    .terms-box .term p:last-child { margin-bottom: 0; }
+    .terms-box .term ul { margin: 6px 0 0; padding-left: 22px; }
+    .terms-box .term li { font-size: 15px; color: #33403f; margin-bottom: 6px; }
+
+    /* ── Sign — full-bleed teal footer ──────────────────────────────────── */
+    .sign { background: var(--teal); color: #fff; margin-top: 50px; padding: 44px 0 50px; position: relative; overflow: hidden; }
+    .sign::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 15% 120%, rgba(94,214,211,.16), transparent 55%);
+    }
+    .sign .wrap { position: relative; }
+    .sign .sec-label { color: var(--aqua-light); }
+    .sign .sec-title { color: #fff; }
+    .consent {
+      display: flex; gap: 12px; align-items: flex-start; margin: 0 0 24px; font-size: 14px;
+      line-height: 1.55; color: rgba(255,255,255,.86);
+    }
+    .consent input { margin-top: 2px; width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--aqua); }
+    label.fld {
+      display: block; font-family: var(--font-heading); font-weight: 700; font-size: 10px;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--aqua-light); margin: 0 0 8px;
+    }
+    input.name {
+      width: 100%; border: 1px solid rgba(255,255,255,.2); border-radius: 12px; padding: 15px 18px;
+      font: inherit; font-size: 16px; background: rgba(255,255,255,.06); color: #fff; margin-bottom: 26px;
+    }
+    input.name::placeholder { color: rgba(255,255,255,.4); }
+    input.name:focus { outline: none; border-color: var(--aqua-light); box-shadow: 0 0 0 3px rgba(94,214,211,.18); }
+    .sigtabs { display: inline-flex; background: rgba(255,255,255,.08); border-radius: 12px; padding: 4px; gap: 3px; margin-bottom: 12px; }
+    .sigtab {
+      border: 0; background: transparent; color: rgba(255,255,255,.7); border-radius: 8px;
+      padding: 10px 24px; font-family: var(--font-heading); font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    .sigtab.active { background: var(--aqua); color: #fff; }
+    .padwrap { position: relative; }
+    canvas#pad {
+      width: 100%; height: 190px; border: 1.5px dashed var(--aqua-light); border-radius: 14px;
+      background: rgba(255,255,255,.97); touch-action: none; display: block;
+    }
+    .padtools { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 0; }
+    .padtools .hint { font-size: 12px; color: rgba(255,255,255,.6); }
+    .clearlink {
+      background: none; border: none; color: rgba(255,255,255,.7); cursor: pointer;
+      font-size: 12px; text-decoration: underline; padding: 0;
+    }
+    .typewrap { display: none; }
+    input.typed {
+      width: 100%; border: 1.5px solid rgba(255,255,255,.2); border-radius: 14px; padding: 16px 18px;
+      font-family: 'Brush Script MT', cursive; font-size: 36px; color: #fff; background: rgba(255,255,255,.06);
+    }
+    textarea {
+      width: 100%; min-height: 90px; border: 1px solid rgba(255,255,255,.2); border-radius: 12px;
+      padding: 14px; font: inherit; background: rgba(255,255,255,.06); color: #fff;
+      margin-top: 6px; resize: vertical;
+    }
+    textarea::placeholder { color: rgba(255,255,255,.4); }
+    .actions { margin-top: 30px; }
+    button.act {
+      width: 100%; border: 0; background: var(--aqua); color: #fff; border-radius: 14px; padding: 19px;
+      font-family: var(--font-heading); font-weight: 800; font-size: 17px; letter-spacing: .04em;
+      cursor: pointer; box-shadow: 0 12px 30px rgba(31,167,168,.34);
+    }
+    button.act:disabled { opacity: .5; box-shadow: none; cursor: not-allowed; }
+    button.outline {
+      display: block; width: 100%; text-align: center; margin-top: 16px; background: none; border: 0;
+      color: var(--aqua-light); text-decoration: underline; cursor: pointer; font-size: 14px;
+      font-family: var(--font-body); box-shadow: none; padding: 4px;
+    }
+    .msg { margin-top: 16px; border-radius: 10px; padding: 12px 14px; background: rgba(255,255,255,.1); font-size: 14px; display: none; }
+    .msg.err { background: rgba(255,120,120,.16); color: #ffd9d9; }
+    .sign-foot { text-align: center; margin-top: 34px; color: rgba(255,255,255,.55); font-size: 12px; }
+    .sign-foot .m {
+      font-family: var(--font-heading); font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+      color: var(--aqua-light); font-size: 11px; margin-bottom: 6px;
+    }
+
+    /* ── Shared states: loading, error, success ─────────────────────────── */
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 14px 38px rgba(13,61,62,.10); overflow: hidden; margin: 40px 0 18px;
+    }
+    .body { padding: 34px 30px; }
+    .eyebrow {
+      color: var(--aqua); font-family: var(--font-heading); font-weight: 700; font-size: 11px;
+      letter-spacing: .16em; text-transform: uppercase;
+    }
+    h2 { margin: 8px 0 6px; font-family: var(--font-heading); font-weight: 800; font-size: 24px; color: var(--teal); letter-spacing: -.01em; }
+    p { line-height: 1.6; }
+    .muted { color: var(--muted); }
+    .center { text-align: center; }
+    .big-ok {
+      width: 72px; height: 72px; border-radius: 50%; background: var(--aqua); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 36px;
+      margin: 0 auto 20px; box-shadow: 0 12px 34px rgba(31,167,168,.35);
+    }
+    /* Expired-link recovery. It renders inside the light .card, so it cannot
+       reuse the signing card's textarea/.outline rules — those are built for a
+       dark surface and are effectively invisible on white. */
+    .recovery { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 22px; }
+    .recovery-note {
+      width: 100%; min-height: 88px; margin-top: 12px; padding: 13px; font: inherit;
+      border: 1px solid var(--line); border-radius: 12px; background: var(--white);
+      color: var(--charcoal); resize: vertical;
+    }
+    .recovery-note::placeholder { color: var(--muted); }
+    .recovery .actions { margin-top: 16px; }
+    .recovery-msg {
+      margin-top: 14px; border-radius: 10px; padding: 12px 14px; font-size: 14px; display: none;
+      background: rgba(31,167,168,.10); color: var(--teal);
+    }
+    .recovery-msg.err { background: rgba(138,47,47,.10); color: var(--danger); }
+    /* Staff preview banner. Deliberately loud — this page is indistinguishable
+       from the live one by design, so the only thing separating "reviewing" from
+       "the customer is looking at this" must be impossible to miss. */
+    .preview-bar {
+      position: sticky; top: 0; z-index: 50; background: var(--gold, #c8a84b); color: #2a2205;
+      text-align: center; padding: 10px 16px; font-size: 13px; font-family: var(--font-body);
+      box-shadow: 0 2px 10px rgba(0,0,0,.16);
+    }
+    .preview-bar strong { font-family: var(--font-heading); letter-spacing: .06em; text-transform: uppercase; }
+    a.btn {
+      display: inline-block; margin-top: 14px; color: var(--teal); font-weight: 700;
+      font-family: var(--font-heading);
+    }
+
+    @media (max-width: 640px) {
+      .wrap, .prepared { padding-left: 18px; padding-right: 18px; }
+      .band-top { flex-direction: column; gap: 10px; }
+      .band-top .num { padding-top: 0; }
+      .lockup { gap: 13px; }
+      .lockup img { height: 44px; }
+      .lockup .mark h1 { font-size: 22px; }
+      .prepared .name { font-size: 22px; }
+      .prepared .facts { gap: 20px 26px; }
+      .scope { columns: 1; }
+      .body { padding: 24px 20px; }
+      .cal-day { font-size: 12.5px; border-radius: 7px; }
+      .cal-modal-head { padding: 18px 20px 4px; }
+      .cal-modal-body { padding: 0 20px 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="wrap"><div class="card"><div class="body center">
+      <div class="eyebrow">Loading</div>
+      <h2>Opening your agreement…</h2>
+      <p class="muted">This should only take a moment.</p>
+    </div></div></div>
+  </div>
+
+  <script src="/js/lib/constants.js"></script>
+  <script src="/js/lib/api.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token') || '';
+    const demoMode = params.get('demo') === '1' || params.get('sample') === '1';
+    // Staff preview: render this exact page for a quote that hasn't been sent, so
+    // what gets approved internally is what the customer actually receives.
+    // Read-only — no token exists yet, so nothing here can start a signing flow.
+    const previewQuote = params.get('quote') || '';
+    const previewMode = params.get('preview') === '1' && !!previewQuote;
+
+    // The portal session, if this browser has one. Used ONLY for staff preview.
+    // A customer signing from an email link has no such session, and the public
+    // path never sends this.
+    function staffToken() {
+      try {
+        const raw = localStorage.getItem('mcps_s');
+        return raw ? (JSON.parse(raw).token || '') : '';
+      } catch (e) {
+        return '';
+      }
+    }
+    let data = null;
+    let sigMode = 'draw';     // 'draw' | 'type'
+    let padHasInk = false;
+
+    function money(v) {
+      const n = Number(v || 0);
+      return isNaN(n) ? '$0.00' : '$' + n.toFixed(2);
+    }
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function screen(html) { document.getElementById('app').innerHTML = html; }
+
+    // A lapsed link used to dead-end here. valid_until runs on a 30-day timer, so
+    // that happens routinely — whenever the token still resolves to a real quote
+    // (opts.canRecover) the page offers a way forward instead. The token is
+    // re-checked server-side; nothing on this screen identifies the customer.
+    function renderError(message, opts) {
+      const o = opts || {};
+      screen(`<div class="card"><div class="body">
+        <div class="eyebrow">${o.canRecover ? 'Link Expired' : 'Unable To Open'}</div>
+        <h2>${o.canRecover ? 'This agreement link has expired' : 'This agreement link is unavailable'}</h2>
+        <p class="muted">${esc(message || 'This link is invalid or has expired. Please contact Mission Custom Pool Solutions for assistance.')}</p>
+        ${o.canRecover ? `
+          <div class="recovery">
+            <p>We can send you a fresh one — just let us know and we'll get an updated quote out to you.</p>
+            <textarea class="recovery-note" id="recovery-note" placeholder="Anything changed since we last spoke? (optional)"></textarea>
+            <div class="actions">
+              <button type="button" class="act" id="recovery-btn" onclick="doRequestUpdate()">Request an updated quote</button>
+            </div>
+            <div class="recovery-msg" id="recovery-msg"></div>
+          </div>`
+        : `<p class="muted">Please call us at (210) 559-2073 and we'll send you a new one.</p>`}
+      </div></div>`);
+    }
+
+    async function doRequestUpdate() {
+      const btn  = document.getElementById('recovery-btn');
+      const msg  = document.getElementById('recovery-msg');
+      const note = (document.getElementById('recovery-note').value || '').trim();
+      function show(text, isErr) {
+        msg.textContent = text;
+        msg.classList.toggle('err', !!isErr);
+        msg.style.display = 'block';
+      }
+      btn.disabled = true;
+      show('Sending your request…', false);
+      if (demoMode) {
+        renderDone('Request sent.', 'Someone from Mission Custom Pool Solutions will follow up with an updated quote shortly.');
+        return;
+      }
+      try {
+        const res = await api({ action: 'request_quote_update', token, note });
+        if (!res.ok) { show(res.error || 'Could not send your request.', true); btn.disabled = false; return; }
+        renderDone(
+          res.already ? 'We already have your request.' : 'Request sent.',
+          'Someone from Mission Custom Pool Solutions will follow up with an updated quote shortly.'
+        );
+      } catch (e) {
+        show('Network error. Please try again.', true);
+        btn.disabled = false;
+      }
+    }
+
+    function renderDone(title, sub, pdfUrl) {
+      screen(`<div class="card"><div class="body center">
+        <div class="big-ok">✓</div>
+        <div class="eyebrow">All Set</div>
+        <h2>${esc(title)}</h2>
+        <p class="muted">${esc(sub)}</p>
+        ${pdfUrl ? `<a class="btn" href="${esc(pdfUrl)}" target="_blank" rel="noopener">Download your signed agreement (PDF)</a>` : ''}
+        <p class="muted" style="margin-top:16px">You can safely close this page.</p>
+      </div></div>`);
+    }
+
+    function totalsRows(p) {
+      const rows = [
+        ['Service Subtotal', money(p.subtotal)],
+        Number(p.discount_amount) ? ['Discount', '-' + money(p.discount_amount)] : null,
+        Number(p.travel_fee) ? ['Travel Fee', money(p.travel_fee)] : null,
+        ['Sales Tax', money(p.sales_tax)],
+        ['Total', money(p.total)]
+      ].filter(Boolean);
+      return rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join('');
+    }
+
+    function render(d) {
+      data = d;
+      const p = d.proposal || {};
+      const a = d.approval || {};
+      const responded = a.status && a.status !== 'SENT';
+
+      if (responded) {
+        renderDone(
+          a.status === 'APPROVED' ? 'This agreement has already been signed.' : 'This agreement has already been responded to.',
+          'No further action is needed.'
+        );
+        return;
+      }
+
+      screen(`
+        ${previewMode ? `<div class="preview-bar">
+          <strong>Preview</strong> — this is exactly what your customer will see. Signing is disabled.
+        </div>` : ''}
+        <div class="band"><div class="wrap">
+          <div class="band-top">
+            <div class="lockup">
+              <img src="/assets/mission-icon-transparent.png" alt="Mission Custom Pool Solutions">
+              <div class="rule"></div>
+              <div class="mark">
+                <div class="co">Mission Custom Pool Solutions</div>
+                <h1>Service Agreement</h1>
+              </div>
+            </div>
+            <span class="num">${esc(p.proposal_number || '')}</span>
+          </div>
+          <div class="who">Please review the details below, then sign at the bottom of this page.</div>
+        </div></div>
+
+        <div class="prepared"><div class="inner">
+          <div class="eyebrow">Prepared For</div>
+          <div class="name">${esc(p.customer_name || 'Customer')}</div>
+          <div class="addr">${esc([p.service_address, p.city_state_zip].filter(Boolean).join(', ')) || 'Address on file'}</div>
+          <div class="facts">
+            <div class="fact"><div class="k">Service</div><div class="v">${esc(p.service || 'Pool Service')}</div></div>
+            <div class="fact"><div class="k">Valid Until</div><div class="v">${esc(p.valid_until || '—')}</div></div>
+            <button type="button" class="fact fact-btn" id="starts-btn" onclick="openCalModal()">
+              <div class="k">Starts</div><div class="v" id="starts-val">Choose date</div>
+            </button>
+          </div>
+        </div></div>
+
+        <div class="wrap">
+          <section>
+            <div class="sec-label">Included</div>
+            <div class="sec-title">Scope of Work</div>
+            <ul class="scope">${p.scope_html || ''}</ul>
+          </section>
+
+          <section>
+            <div class="sec-label">Plan</div>
+            <div class="sec-title">Your Service Plan</div>
+            <table class="plan no-price">
+              <thead><tr><th>Included Service</th><th>Frequency</th></tr></thead>
+              <tbody>${stripPriceColumn(p.service_plan_html || '')}</tbody>
+            </table>
+          </section>
+
+          <section>
+            <div class="contract-head">
+              <div>
+                <div class="sec-label" style="margin:0">Terms</div>
+                <div class="sec-title" style="margin:2px 0 0">The Service Agreement</div>
+              </div>
+              <div class="progress"><i id="prog"></i></div>
+            </div>
+            <div class="terms-box" id="terms">${d.agreement_terms_html || '<p class="muted">Agreement terms unavailable.</p>'}</div>
+          </section>
+
+          <section>
+            <div class="sec-label">Pricing</div>
+            <div class="sec-title">Your Investment</div>
+            <table class="plan">
+              <thead><tr><th>Included Service</th><th>Frequency</th><th>Price</th></tr></thead>
+              <tbody>${p.service_plan_html || ''}</tbody>
+            </table>
+            <table class="totals">${totalsRows(p)}</table>
+            <div class="invest">
+              <span class="lab">Investment</span>
+              <span class="val">${esc(p.investment || money(p.total))}</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="sign" id="sign"><div class="wrap">
+          <div class="sec-label">Accept</div>
+          <div class="sec-title">Accept &amp; Sign</div>
+
+          <label class="consent">
+            <input type="checkbox" id="consent">
+            <span>I have read and agree to this Service Agreement. I consent to sign electronically and understand my electronic signature is legally binding under the U.S. ESIGN Act and applicable state law (UETA).</span>
+          </label>
+
+          <label class="fld" for="signer-name">Your full legal name</label>
+          <input class="name" id="signer-name" type="text" placeholder="e.g. Jane A. Smith" autocomplete="name">
+
+          <label class="fld">Signature</label>
+          <div class="sigtabs">
+            <button type="button" class="sigtab active" id="tab-draw" onclick="setSigMode('draw')">Draw</button>
+            <button type="button" class="sigtab" id="tab-type" onclick="setSigMode('type')">Type</button>
+          </div>
+
+          <div class="padwrap" id="draw-wrap">
+            <canvas id="pad"></canvas>
+            <div class="padtools">
+              <span class="hint">Sign with your finger or mouse</span>
+              <button type="button" class="clearlink" onclick="clearPad()">Clear</button>
+            </div>
+          </div>
+
+          <div class="typewrap" id="type-wrap">
+            <input class="typed" id="typed-sig" type="text" placeholder="Type your name" oninput="syncTyped()">
+          </div>
+
+          <div class="actions">
+            <button type="button" class="act primary" id="sign-btn" onclick="doSign()"${previewMode ? ' disabled' : ''}>Accept &amp; Sign Agreement</button>
+            ${previewMode ? '' : `<button type="button" class="outline" onclick="showChanges()">Request changes instead</button>`}
+          </div>
+          <div class="msg" id="msg"></div>
+
+          <div id="changes-wrap" style="display:none">
+            <textarea id="changes-note" placeholder="Tell us what needs to be adjusted."></textarea>
+            <div class="actions">
+              <button type="button" class="act primary" onclick="doChanges()">Send Changes</button>
+            </div>
+          </div>
+
+          <div class="sign-foot">
+            <div class="m">Every pool matters.</div>
+            Mission Custom Pool Solutions LLC
+          </div>
+        </div></div>
+
+        <div class="cal-modal" id="cal-modal" onclick="if(event.target===this) closeCalModal()">
+          <div class="cal-modal-card" role="dialog" aria-modal="true" aria-label="Choose a preferred start date">
+            <div class="cal-modal-head">
+              <div class="sec-label" style="margin:0">Schedule</div>
+              <button type="button" class="cal-modal-close" onclick="closeCalModal()" aria-label="Close">×</button>
+            </div>
+            <div class="cal-modal-body">
+              <div class="cal-modal-title" id="cal-modal-title">When would you like service to start?</div>
+              <div id="cal-content"><div class="cal-loading">Checking availability…</div></div>
+            </div>
+          </div>
+        </div>
+      `);
+
+      // typed signature mirrors the name field by default
+      const nameEl = document.getElementById('signer-name');
+      nameEl.addEventListener('input', () => {
+        if (sigMode === 'type') document.getElementById('typed-sig').value = nameEl.value;
+      });
+      initPad();
+
+      // Reading-progress indicator on the terms box
+      const tb = document.getElementById('terms');
+      const pr = document.getElementById('prog');
+      if (tb && pr) {
+        tb.addEventListener('scroll', () => {
+          const denom = tb.scrollHeight - tb.clientHeight;
+          pr.style.width = Math.min(100, denom > 0 ? (tb.scrollTop / denom) * 100 : 100) + '%';
+        });
+      }
+    }
+
+    // ── "Starts" — preferred start date ────────────────────────────────────
+    // The customer picks a PREFERRED date; MCPS confirms it afterwards. Nothing
+    // here reserves a slot, and the copy says so plainly.
+    //
+    // ⚠️ Availability is an enhancement, never a dependency. If the lookup fails
+    // the picker simply doesn't appear and signing proceeds untouched — a
+    // scheduling outage must never cost a signature.
+    // Two modes share ONE calendar.
+    //
+    //   route_locked   — the address resolved to a real service area, so only
+    //                    that weekday's dates are selectable and we name the day.
+    //   preferred_week — no zone, or no capacity. The customer picks a WEEK and
+    //                    NO weekday is named anywhere. Naming one here would be a
+    //                    promise the scheduler never made.
+    //
+    // A third path exists below: if the lookup fails outright, this degrades to a
+    // plain date input. A scheduling outage must never cost a signature.
+    let calAvailable = null;      // Set of 'YYYY-MM-DD' — route_locked only
+    let calWeeks = null;          // Set of Monday 'YYYY-MM-DD' — preferred_week only
+    let calMode = 'route_locked';
+    let calServiceDay = '';       // '' in preferred_week mode, always
+    let calZoneName = '';
+    let calSelected = null;       // chosen date (route_locked)
+    let calSelectedWeek = null;   // chosen week start (preferred_week)
+    let calHoverWeek = null;
+    let calMonth = null;
+    let calLoaded = false;
+    const CAL_MONTHS = ['January','February','March','April','May','June',
+                        'July','August','September','October','November','December'];
+    const CAL_DOWS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+    function isoOf(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+             '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function fmtDateShort(d) {
+      const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+      return `${dow}, ${CAL_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+    }
+
+    function openCalModal() {
+      // Availability is keyed to the customer's approval token, which does not
+      // exist before the agreement is sent. Rather than show an admin a calendar
+      // built from different inputs than the customer's, say so plainly.
+      // Staff preview now shows the REAL calendar rather than describing it.
+      // Availability needs a quote_id plus a valid staff session, which the
+      // server verifies — this page only supplies the token it already has in
+      // localStorage from the portal. If there is no session, the lookup is
+      // refused server-side and this falls back to the explanatory note below.
+      if (previewMode && !calLoaded && !staffToken()) {
+        alert('The customer picks their start date here.\n\n' +
+              'Available dates depend on their address and the route. Sign in to the ' +
+              'portal in this browser to preview exactly what they will see.');
+        return;
+      }
+      const m = document.getElementById('cal-modal');
+      if (!m) return;
+      m.classList.add('open');
+      document.addEventListener('keydown', calEscHandler);
+      if (!calLoaded) loadAvailability();
+      else renderCal();
+    }
+    function closeCalModal() {
+      const m = document.getElementById('cal-modal');
+      if (!m) return;
+      m.classList.remove('open');
+      document.removeEventListener('keydown', calEscHandler);
+    }
+    function calEscHandler(e) { if (e.key === 'Escape') closeCalModal(); }
+
+    async function loadAvailability() {
+      const content = document.getElementById('cal-content');
+      try {
+        // Three callers, one endpoint. The staff path sends quote_id AND a
+        // portal session; the server refuses that pair without a valid session
+        // rather than falling back to the public path, so a customer's page can
+        // never use it to look up an arbitrary quote.
+        const res = demoMode
+          ? { ok: true, mode: 'route_locked', service_day: 'TUESDAY', zone_name: 'Stone Oak', dates: demoAvailability() }
+          : previewMode
+            ? await api({ action: 'get_start_availability', quote_id: previewQuote, staff_token: staffToken() })
+            : await api({ action: 'get_start_availability', token });
+        if (!res || !res.ok) throw new Error('no availability');
+
+        if (res.mode === 'preferred_week') {
+          if (!Array.isArray(res.week_starts) || !res.week_starts.length) throw new Error('no weeks');
+          calMode = 'preferred_week';
+          calWeeks = new Set(res.week_starts);
+          // Defensive: the server omits these in this mode, but if a future
+          // change ever sent one, showing it would be a promise nobody made.
+          calServiceDay = '';
+          calZoneName = '';
+          const w = new Date(res.week_starts[0] + 'T00:00:00');
+          calMonth = new Date(w.getFullYear(), w.getMonth(), 1);
+        } else {
+          if (!Array.isArray(res.dates) || !res.dates.length) throw new Error('no availability');
+          calMode = 'route_locked';
+          calAvailable = new Set(res.dates);
+          calServiceDay = String(res.service_day || '');
+          calZoneName = String(res.zone_name || '');
+          const first = new Date(res.dates[0] + 'T00:00:00');
+          calMonth = new Date(first.getFullYear(), first.getMonth(), 1);
+        }
+        calLoaded = true;
+        // "Preferred week" is the honest heading when we have no service day to
+        // offer — the customer should not be led to expect a specific date.
+        const title = document.getElementById('cal-modal-title');
+        if (title && calMode === 'preferred_week') title.textContent = 'Which week would you like to start?';
+        updateStartsTrigger();
+        renderCal();
+      } catch (e) {
+        // Degrade to a plain date input rather than blocking the customer.
+        if (content) {
+          content.innerHTML =
+            `<label class="fld" for="starts-fallback" style="color:var(--muted)">Preferred start date</label>
+             <input class="name" id="starts-fallback" type="date" style="background:var(--gray);color:var(--charcoal)"
+               onchange="pickFallbackDate(this.value)">
+             <div class="cal-note">We'll confirm your first visit after you sign.</div>`;
+        }
+        calLoaded = true;
+      }
+    }
+
+    // Demo mode only: plausible availability so the page is explorable offline.
+    // Tuesdays only, matching the demo's declared service day — the real
+    // route-locked response offers exactly one weekday, and a demo that showed
+    // every weekday would misrepresent what customers actually see.
+    function demoAvailability() {
+      const out = [];
+      const today = new Date();
+      for (let i = 3; i <= 60; i++) {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+        if (d.getDay() !== 2) continue;            // Tuesday === the demo service day
+        if (d.getDate() % 9 === 0) continue;       // stand-in for "that week is full"
+        out.push(isoOf(d));
+      }
+      return out;
+    }
+
+    function calNav(dir) {
+      calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + dir, 1);
+      renderCal();
+    }
+    function calPick(iso) {
+      calSelected = iso;
+      updateStartsTrigger();
+      closeCalModal();
+    }
+    function pickFallbackDate(v) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '')) return;
+      calSelected = v;
+      updateStartsTrigger();
+      closeCalModal();
+    }
+
+    // Monday-keyed, matching how the server keys weeks. Sunday belongs to the
+    // week that began the previous Monday.
+    function weekStartOf(d) {
+      const day = d.getDay();
+      const delta = (day === 0) ? -6 : (1 - day);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta);
+    }
+    function fmtWeekLabel(iso) {
+      const d = new Date(iso + 'T00:00:00');
+      return `Week of ${CAL_MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+    }
+    // Clicking ANY day selects that day's week — the day itself is not a choice.
+    function calPickWeek(iso) {
+      const ws = isoOf(weekStartOf(new Date(iso + 'T00:00:00')));
+      if (!calWeeks || !calWeeks.has(ws)) return;
+      calSelectedWeek = ws;
+      updateStartsTrigger();
+      closeCalModal();
+    }
+    function calHover(iso) {
+      if (calMode !== 'preferred_week') return;
+      const ws = iso ? isoOf(weekStartOf(new Date(iso + 'T00:00:00'))) : null;
+      if (ws === calHoverWeek) return;
+      calHoverWeek = (ws && calWeeks && calWeeks.has(ws)) ? ws : null;
+      renderCal();
+    }
+
+    function updateStartsTrigger() {
+      const el = document.getElementById('starts-val');
+      if (!el) return;
+      if (calMode === 'preferred_week') {
+        el.textContent = calSelectedWeek ? fmtWeekLabel(calSelectedWeek) : 'Choose week';
+        return;
+      }
+      el.textContent = calSelected
+        ? fmtDateShort(new Date(calSelected + 'T00:00:00'))
+        : 'Choose date';
+    }
+
+    function renderCal() {
+      const content = document.getElementById('cal-content');
+      if (!content) return;
+      const weekMode = calMode === 'preferred_week';
+      const pool = weekMode ? calWeeks : calAvailable;
+      if (!pool || !pool.size) return;
+
+      const sorted = Array.from(pool).sort();
+      const minMonth = new Date(sorted[0] + 'T00:00:00');
+      // In week mode the last selectable DAY is the Saturday of the last week.
+      const lastRef = new Date(sorted[sorted.length - 1] + 'T00:00:00');
+      const maxMonth = weekMode
+        ? new Date(lastRef.getFullYear(), lastRef.getMonth(), lastRef.getDate() + 5)
+        : lastRef;
+      const atStart = calMonth.getFullYear() === minMonth.getFullYear() && calMonth.getMonth() === minMonth.getMonth();
+      const atEnd = calMonth.getFullYear() === maxMonth.getFullYear() && calMonth.getMonth() === maxMonth.getMonth();
+
+      const first = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+      const daysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
+      let cells = CAL_DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('');
+      for (let i = 0; i < first.getDay(); i++) cells += `<div class="cal-day pad"></div>`;
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(calMonth.getFullYear(), calMonth.getMonth(), day);
+        const iso = isoOf(d);
+
+        if (weekMode) {
+          const ws = isoOf(weekStartOf(d));
+          // Sunday is never a service day, so it is never part of the highlight
+          // even though it sits in the same calendar row.
+          const inWeek = calWeeks.has(ws) && d.getDay() !== 0;
+          const cls = ['cal-day',
+            inWeek ? 'avail' : 'unavail',
+            (inWeek && ws === calSelectedWeek) ? 'wk-sel' : '',
+            (inWeek && ws === calHoverWeek && ws !== calSelectedWeek) ? 'wk-hov' : ''
+          ].filter(Boolean).join(' ');
+          cells += inWeek
+            ? `<div class="${cls}" onclick="calPickWeek('${iso}')" onmouseenter="calHover('${iso}')">${day}</div>`
+            : `<div class="${cls}">${day}</div>`;
+          continue;
+        }
+
+        const avail = calAvailable.has(iso);
+        const cls = ['cal-day', avail ? 'avail' : 'unavail', iso === calSelected ? 'selected' : ''].filter(Boolean).join(' ');
+        cells += avail
+          ? `<div class="${cls}" onclick="calPick('${iso}')">${day}</div>`
+          : `<div class="${cls}">${day}</div>`;
+      }
+
+      // The day is named ONLY when it came from a real service area. In week
+      // mode there is deliberately no weekday anywhere in this markup.
+      const header = (!weekMode && calServiceDay)
+        ? `<div class="cal-day-note">We service ${calZoneName ? escapeHtml(calZoneName) : 'your area'} on ${dayPlural(calServiceDay)}.</div>`
+        : '';
+
+      content.innerHTML = `
+        ${header}
+        <div class="cal-top">
+          <div class="mo">${CAL_MONTHS[calMonth.getMonth()]} ${calMonth.getFullYear()}</div>
+          <div class="cal-nav">
+            <button type="button" onclick="calNav(-1)" ${atStart ? 'disabled' : ''} aria-label="Previous month">‹</button>
+            <button type="button" onclick="calNav(1)" ${atEnd ? 'disabled' : ''} aria-label="Next month">›</button>
+          </div>
+        </div>
+        <div class="cal-grid"${weekMode ? ' onmouseleave="calHover(null)"' : ''}>${cells}</div>
+        <div class="cal-legend">
+          <span><i class="a"></i>${weekMode ? 'Selectable week' : 'Available'}</span>
+          <span><i class="u"></i>Unavailable</span>
+        </div>
+        <div class="cal-note">${weekMode
+          ? "Choose your preferred week — we'll confirm your exact first service day after you sign."
+          : "This is a preferred date — we'll confirm your first visit after you sign."}</div>`;
+    }
+
+    // 'TUESDAY' → 'Tuesdays'. Only ever called in route_locked mode.
+    function dayPlural(day) {
+      const s = String(day || '');
+      if (!s) return '';
+      return s.charAt(0) + s.slice(1).toLowerCase() + 's';
+    }
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // The server sends 3-column plan rows (service / frequency / price). The copy
+    // shown above the Terms must carry no pricing, so drop the last cell — parsed
+    // by the browser rather than regexed, so it can't be fooled by the markup.
+    function stripPriceColumn(rowsHtml) {
+      if (!rowsHtml) return '';
+      const tb = document.createElement('tbody');
+      tb.innerHTML = rowsHtml;
+      tb.querySelectorAll('tr').forEach(tr => {
+        while (tr.cells.length > 2) tr.deleteCell(tr.cells.length - 1);
+      });
+      return tb.innerHTML;
+    }
+
+    // ── Signature pad ──────────────────────────────────────────────────────
+    let ctx, pad;
+    function initPad() {
+      pad = document.getElementById('pad');
+      const ratio = window.devicePixelRatio || 1;
+      const rect = pad.getBoundingClientRect();
+      pad.width = rect.width * ratio;
+      pad.height = rect.height * ratio;
+      ctx = pad.getContext('2d');
+      ctx.scale(ratio, ratio);
+      ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0D3D3E';
+      let drawing = false, last = null;
+      const pos = (e) => {
+        const r = pad.getBoundingClientRect();
+        const t = e.touches ? e.touches[0] : e;
+        return { x: t.clientX - r.left, y: t.clientY - r.top };
+      };
+      const start = (e) => { drawing = true; last = pos(e); e.preventDefault(); };
+      const move = (e) => {
+        if (!drawing) return;
+        const p = pos(e);
+        ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+        last = p; padHasInk = true; e.preventDefault();
+      };
+      const end = () => { drawing = false; };
+      pad.addEventListener('mousedown', start); pad.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      pad.addEventListener('touchstart', start, { passive: false });
+      pad.addEventListener('touchmove', move, { passive: false });
+      pad.addEventListener('touchend', end);
+    }
+    function clearPad() {
+      if (ctx && pad) ctx.clearRect(0, 0, pad.width, pad.height);
+      padHasInk = false;
+    }
+    function setSigMode(mode) {
+      sigMode = mode;
+      document.getElementById('tab-draw').classList.toggle('active', mode === 'draw');
+      document.getElementById('tab-type').classList.toggle('active', mode === 'type');
+      document.getElementById('draw-wrap').style.display = mode === 'draw' ? 'block' : 'none';
+      document.getElementById('type-wrap').style.display = mode === 'type' ? 'block' : 'none';
+      if (mode === 'type') {
+        const n = document.getElementById('signer-name').value;
+        if (n && !document.getElementById('typed-sig').value) document.getElementById('typed-sig').value = n;
+      }
+    }
+    function syncTyped() {}
+
+    function setMsg(text, isErr) {
+      const m = document.getElementById('msg');
+      if (!m) return;
+      m.className = 'msg' + (isErr ? ' err' : '');
+      m.textContent = text;
+      m.style.display = text ? 'block' : 'none';
+    }
+
+    // ── Accept & Sign ──────────────────────────────────────────────────────
+    async function doSign() {
+      // Belt and braces: the button is already disabled in preview, but re-enabling
+      // it in devtools must not be able to sign on a customer's behalf.
+      if (previewMode) return;
+      const consent = document.getElementById('consent').checked;
+      const name = document.getElementById('signer-name').value.trim();
+      if (!consent) { setMsg('Please check the box to consent to electronic signature.', true); return; }
+      if (!name)    { setMsg('Please enter your full legal name.', true); return; }
+
+      let signatureData = '', method = sigMode === 'type' ? 'typed' : 'drawn';
+      if (method === 'drawn') {
+        if (!padHasInk) { setMsg('Please draw your signature (or switch to Type).', true); return; }
+        signatureData = pad.toDataURL('image/png');
+      } else {
+        const typed = (document.getElementById('typed-sig').value || name).trim();
+        if (!typed) { setMsg('Please type your signature.', true); return; }
+      }
+
+      const btn = document.getElementById('sign-btn');
+      btn.disabled = true; setMsg('Signing your agreement…', false);
+      if (demoMode) {
+        setTimeout(() => renderDone(
+          'Preview signature captured.',
+          'This localhost demo did not send anything or update any records.'
+        ), 350);
+        return;
+      }
+      try {
+        // Post through the Vercel proxy so the signer IP is recorded server-side.
+        const res = await fetch('/api/agreement/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            // ⚠️ Which signing path this is, decided by the SERVER when the page
+            // loaded (data.sign_action). An amendment posted to sign_agreement
+            // would run the original path: activating the customer again, minting
+            // a second pool_id and re-sending the welcome email. Defaulting to
+            // sign_agreement keeps ordinary agreements working unchanged.
+            action: (data && data.sign_action) || 'sign_agreement',
+            signature_name: name,
+            signature_data: signatureData,
+            signature_method: method,
+            consent: true,
+            // What the customer chose, recorded with the signature as a REQUEST —
+            // MCPS confirms it separately. Amendments have no start date; the
+            // server ignores these there.
+            //
+            // route_locked   → a real date, plus the weekday we actually showed
+            //                  them. Storing the day separately matters: if an
+            //                  admin later shifts the date, the promise we made
+            //                  was the DAY.
+            // preferred_week → a week only. The clicked date rides along as a
+            //                  HINT for ops and must never be treated as a
+            //                  chosen service day.
+            requested_start_date: calMode === 'preferred_week' ? '' : (calSelected || ''),
+            committed_service_day: calMode === 'preferred_week' ? '' : (calServiceDay || ''),
+            requested_start_week: calMode === 'preferred_week' ? (calSelectedWeek || '') : '',
+            requested_start_date_hint: calMode === 'preferred_week' ? (calSelected || '') : '',
+            signer_user_agent: navigator.userAgent
+          })
+        }).then(r => r.json());
+
+        if (!res.ok) {
+          if (res.already_responded) { renderDone('This agreement has already been signed.', 'No further action is needed.'); return; }
+          // The link can lapse while the page is open. Offer recovery rather than
+          // leaving an inline error the customer can do nothing about.
+          if (res.expired) { renderError(res.error || 'This signing link has expired.', { canRecover: true }); return; }
+          setMsg(res.error || 'Could not complete signing. Please try again.', true);
+          btn.disabled = false; return;
+        }
+        renderDone(
+          'Thank you — your agreement is signed!',
+          res.welcome_email_sent
+            ? 'Welcome to Mission Custom Pool Solutions. We sent a welcome email with your service details and signed agreement.'
+            : 'Welcome to Mission Custom Pool Solutions. We will be in touch to get your service started.',
+          res.signed_pdf_url
+        );
+      } catch (e) {
+        setMsg('Network error. Please try again.', true);
+        btn.disabled = false;
+      }
+    }
+
+    // ── Suggest Changes ────────────────────────────────────────────────────
+    function showChanges() {
+      const w = document.getElementById('changes-wrap');
+      w.style.display = w.style.display === 'none' ? 'block' : 'none';
+      if (w.style.display === 'block') document.getElementById('changes-note').focus();
+    }
+    async function doChanges() {
+      if (previewMode) return;
+      const note = document.getElementById('changes-note').value.trim();
+      if (!note) { setMsg('Please add a short note describing the changes you’d like.', true); return; }
+      setMsg('Sending your requested changes…', false);
+      if (demoMode) {
+        setTimeout(() => renderDone(
+          'Preview changes captured.',
+          'This localhost demo did not send anything or update any records.'
+        ), 350);
+        return;
+      }
+      try {
+        const res = await api({ action: 'respond_to_proposal', token, response: 'changes_requested', note });
+        if (!res.ok) {
+          if (res.expired) { renderError(res.error || 'This link has expired.', { canRecover: true }); return; }
+          setMsg(res.error || 'Could not send your request.', true); return;
+        }
+        renderDone('Thanks — your changes have been sent.', 'MCPS will review and follow up with an updated agreement.');
+      } catch (e) {
+        setMsg('Network error. Please try again.', true);
+      }
+    }
+
+    async function load() {
+      if (demoMode) {
+        // Demo-only: preview the recovery screen without waiting 30 days for a
+        // real link to lapse. Gated behind demo mode, so a live signing link can
+        // never reach it.
+        if (params.get('state') === 'expired') {
+          renderError('This approval link has expired.', { canRecover: true });
+          return;
+        }
+        try {
+          const res = await fetch('/fixtures/agreement-sample.json', { cache: 'no-store' });
+          if (!res.ok) throw new Error('Sample fixture unavailable.');
+          render(await res.json());
+        } catch (e) {
+          renderError('Local sample data could not be loaded.');
+        }
+        return;
+      }
+      if (previewMode) {
+        try {
+          // No token passed — api() attaches the staff portal session from
+          // localStorage, and the GAS route rejects the call without one.
+          const res = await api({ action: 'get_agreement_preview', quote_id: previewQuote });
+          if (!res || !res.ok) {
+            renderError(/unauthorized/i.test(res && res.error || '')
+              ? 'Sign in to the MCPS portal in this browser, then reload this preview.'
+              : (res && res.error) || 'Could not load the preview.');
+            return;
+          }
+          render(res);
+        } catch (e) {
+          renderError('Network error loading the preview.');
+        }
+        return;
+      }
+      if (!token) { renderError('The signing link is missing its token.'); return; }
+      try {
+        const res = await api({ action: 'get_proposal_approval', token });
+        // res.expired arrives with ok:true — the token resolved, the link simply
+        // lapsed, so we know which quote to reissue. A failed lookup does not.
+        if (!res.ok || res.expired) {
+          renderError(res.error || 'This link is invalid or has expired.', { canRecover: !!res.expired });
+          return;
+        }
+        render(res);
+      } catch (e) {
+        renderError('Network error. Please try again later.');
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

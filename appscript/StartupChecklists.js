@@ -229,11 +229,11 @@ function sendStartupChecklistToCompany_(payload, checklistId, pdfInfo, submitted
   var toRecipients = [];
   if (company && company.clientEmail) toRecipients.push(company.clientEmail);
   if (company && company.email)       toRecipients.push(company.email);
-  if (!toRecipients.length)           toRecipients.push(VISIT_REPORT_FROM); // fallback so email always fires
+  if (!toRecipients.length)           toRecipients.push('mauricio@mcpoolsolutions.org'); // fallback so email always fires
   var toEmail = toRecipients.join(',');
 
-  // BCC: always antonio + mauricio, add rosy if sponsored by MCP
-  var bcc = 'antonio@mcpoolsolutions.org,mauricio@mcpoolsolutions.org';
+  // BCC: always Mauricio, add Rosy if sponsored by MCP
+  var bcc = 'mauricio@mcpoolsolutions.org';
   if (company && company.sponsoredByMcp) bcc += ',rosy@missioncustompools.com';
   var data = {
     checklistId: checklistId,

@@ -40,6 +40,7 @@ function _setRouteCache(op, weekOffset, data){
 }
 function _clearRouteCache(){
   Object.keys(localStorage).filter(k=>k.startsWith('mcps_route_')).forEach(k=>localStorage.removeItem(k));
+  window._routeNextRefresh = true;
 }
 
 // ── Weather cache (in-memory + localStorage, 24h TTL) ────────────────────────
@@ -155,8 +156,7 @@ function showApp(startPage) {
   // Refresh pages list in case ROLE_PAGES was updated
   _s.pages = unionPages_(_s.roles);
   _activeOp = isAdmin() ? 'all' : _s.name;
-  buildNav(); buildHomeCards(); loadHomeIssues();
-  if((_s.pages||[]).includes('admin')) { loadUsers(); }
+  buildNav(); buildHomeCards();
 
   // Safely run prefetch when the browser has free time
   const runIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 3000));
@@ -242,8 +242,13 @@ function _migrateAvatarToBase64_(username, url) {
 }
 
 function _prefetchCommon() {
+  const activePage = _curPage;
+  if (typeof primeActionQueueBadge === 'function') {
+    primeActionQueueBadge({ refresh: activePage !== 'contracts' });
+  }
   // CRM prefetch removed — home.js loadHomeStats caches it on page load for admins
-  if (hasRole('technician') || hasRole('lead')) {
+  if ((hasRole('technician') || hasRole('lead')) &&
+      ['live_map', 'service_log', 'jobs'].includes(activePage)) {
     api({ action: 'get_metadata', secret: SEC })
       .then(r => { if (r.ok) _appCacheSet('svc_meta', r); }).catch(()=>{});
   }
@@ -312,7 +317,11 @@ function _makeSbGroup(id, label, children) {
     } else {
       onclick = `navigateTo('${c.page}')`;
     }
-    return `<button class="sb-child" id="${childId}" onclick="${onclick}">${c.icon || ''}<span>${c.label}</span></button>`;
+    // badgeId lets a child carry a live count (Action Queue). .sb-child is flex,
+    // so the badge's margin-left:auto pushes it to the right edge.
+    const badge = c.badgeId
+      ? `<span class="sb-badge" id="${c.badgeId}" style="display:none">0</span>` : '';
+    return `<button class="sb-child" id="${childId}" onclick="${onclick}">${c.icon || ''}<span>${c.label}</span>${badge}</button>`;
   }).join('');
   return `<div class="sb-group" id="sbg-${id}"><div class="sb-group-header" onclick="_toggleAccordion('${id}')"><span>${label}</span>${SVG_CHEVRON}</div><div class="sb-group-children">${childrenHtml}</div></div>`;
 }
