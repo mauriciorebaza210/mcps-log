@@ -563,6 +563,22 @@
     </div>
   </div>
 
+  <div class="adm-card" id="adm-duplicate-customers-card">
+    <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+      <span>Duplicate Customers</span>
+      <button class="adm-new-btn" onclick="loadMergeDuplicates(true)">Scan</button>
+    </div>
+    <div style="padding:.85rem 1.1rem">
+      <p style="margin:0 0 .8rem;color:var(--muted);font-size:.82rem;line-height:1.45">
+        Find likely duplicate Clients rows by shared contact info or the same name at the same property.
+        Merging keeps one customer, moves linked records, and archives the duplicate row.
+      </p>
+      <div id="md-body">
+        <div class="sa-empty">Click Scan to look for duplicate customers.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="adm-card" id="adm-internal-notes-card">
     <div class="adm-title" style="display:flex;align-items:center;justify-content:space-between">
       <span>Internal Notes from Submissions</span>
@@ -1139,10 +1155,10 @@
 
       <!-- Contact Info -->
       <div class="q-sec">
-        <div class="q-sec-lbl">Contact Info <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(optional — saved to CRM)</span></div>
+        <div class="q-sec-lbl">Customer Info <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(saved to CRM)</span></div>
         <div id="q-contact-rep-search-wrap" style="display:none">
           <div class="q-1col">
-            <label class="q-flabel">Search Existing Customer <span style="font-weight:400;color:var(--muted)">(name, email, or phone)</span></label>
+            <label class="q-flabel">Find Existing Customer or Property <span style="font-weight:400;color:var(--muted)">(name, email, phone, address, or ZIP)</span></label>
             <div style="display:flex;gap:.5rem">
               <input class="q-inp" id="q-rep-client-search" type="text" placeholder="Start typing to search..." oninput="qRepSearchClients(this.value)" style="flex:1">
               <button type="button" class="q-btn-ghost" style="white-space:nowrap" onclick="qRepOpenAddCustomerModal()">+ Add New</button>
@@ -2228,6 +2244,7 @@
 <script src="/js/features/action-queue.js"></script>
 <script src="/js/features/scope-library.js"></script>
 <script src="/js/features/service-areas.js"></script>
+<script src="/js/features/merge-duplicates.js"></script>
 <script src="/js/features/contracts.js"></script>
 <script src="/js/lib/vendor/driver.iife.min.js"></script>
 <script src="/js/features/tour.js"></script>

@@ -85,5 +85,16 @@ const su = ev(`qScopeItemsForService()`).map(i=>i.scope_item_id);
 t('startup shows startup items', su.some(k=>k.startsWith('_s')));
 t('startup hides weekly-only items', !su.includes('_w7'));
 
+console.log('\nExisting-customer identity rides on every quote type');
+ev(`_qS.service='weekly_full'; _qS.client_id='CLI-001'; _qS.location_id='LOC-001'; _qS.pool_id='P-001';`);
+let ident = ev(`qSelectedIdentityPayload_()`);
+t('weekly quotes keep selected client_id', ident.client_id === 'CLI-001');
+t('weekly quotes keep selected location_id', ident.location_id === 'LOC-001');
+t('weekly quotes can carry the selected pool hint', ident.pool_id === 'P-001');
+
+ev(`_qS.client_id=''; _qS.location_id=''; _qS.pool_id=''; _qS.repair_client_id='CLI-R'; _qS.repair_location_id='LOC-R'; _qS.repair_pool_id='P-R';`);
+ident = ev(`qSelectedIdentityPayload_()`);
+t('repair compatibility fields still feed the save payload', ident.client_id === 'CLI-R' && ident.location_id === 'LOC-R' && ident.pool_id === 'P-R');
+
 console.log('\n'+pass+' passed, '+fail+' failed');
 process.exit(fail?1:0);

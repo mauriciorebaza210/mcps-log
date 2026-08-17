@@ -2791,6 +2791,10 @@ function getQuoteByPoolId_(poolId) {
 }
 
 function findClientForQuote_(q) {
+  if (typeof findConfidentClientForQuote_ === 'function') {
+    return findConfidentClientForQuote_(q);
+  }
+
   const clients = ensureSheet_('Clients', MCPS_CLIENT_HEADERS);
   const snap = sheetToObjects_(clients);
   const email = normalizeEmail_(value_(q, 'email'));
@@ -3837,6 +3841,18 @@ function handleNormalizedSalesAction_(payload) {
     }
     if (payload.status) clients = clients.filter(function(c) { return String(c.status || '') === String(payload.status); });
     return { ok: true, clients: clients };
+  }
+
+  if (action === 'search_people') {
+    return handleSearchPeople_(payload);
+  }
+
+  if (action === 'find_duplicate_people') {
+    return handleFindDuplicatePeople_(payload);
+  }
+
+  if (action === 'merge_clients') {
+    return handleMergeClients_(payload);
   }
 
   if (action === 'upsert_client') {

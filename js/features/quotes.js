@@ -23,6 +23,7 @@ const _qDef = () => ({
   repair_desc:'', repair_amount:0, repair_sku:'',
   repair_job_name:'', repair_priority:'medium', repair_equipment:'',
   repair_issue:'', repair_assigned_to:'', repair_parts:[],
+  people:[], client_id:'', location_id:'', pool_id:'',
   repair_clients:[], repair_client_id:'',
   repair_locations:[], repair_location_id:'', repair_pool_id:'',
   discount_type:'none', discount_value:0, custom_price:0,
@@ -87,7 +88,7 @@ function qSetService(svc) {
   document.getElementById('q-startup-sec').style.display = isStartup ? '' : 'none';
   document.getElementById('q-repair-sec').style.display  = isRepair  ? '' : 'none';
   const contactSearchWrap = document.getElementById('q-contact-rep-search-wrap');
-  if (contactSearchWrap) contactSearchWrap.style.display = isRepair ? '' : 'none';
+  if (contactSearchWrap) contactSearchWrap.style.display = '';
 
   if (isStartup && !_qS.startup_start_date) {
     const d = new Date(), diff = (8 - d.getDay()) % 7 || 7;
@@ -238,6 +239,7 @@ function qLoadRepairTechs() {
 
 let _qRepClientSearchTimer = null;
 function qRepSearchClients(term) {
+  _qS.person_search = term;
   _qS.repair_client_search = term;
   clearTimeout(_qRepClientSearchTimer);
   const q = (term || '').trim();
@@ -247,12 +249,13 @@ function qRepSearchClients(term) {
     return;
   }
   _qRepClientSearchTimer = setTimeout(() => {
-    // Keyed by search term so retyping the same client name is instant.
-    qSwr('q_clients_' + q.toLowerCase(), 10 * 60 * 1000,
-      () => apiGet({ action: 'get_clients', token: _s ? _s.token : '', q: q })
-              .then(res => (res && res.ok && Array.isArray(res.clients)) ? res.clients : null),
-      clients => {
-        _qS.repair_clients = clients;
+    // Keyed by search term so retyping the same person/address is instant.
+    qSwr('q_people_' + q.toLowerCase(), 10 * 60 * 1000,
+      () => apiGet({ action: 'search_people', token: _s ? _s.token : '', q: q })
+              .then(res => (res && res.ok && Array.isArray(res.people)) ? res.people : null),
+      people => {
+        _qS.people = people;
+        _qS.repair_clients = people; // compatibility for older repair helpers
         qRenderRepairClientOptions();
       }
     );
@@ -263,11 +266,12 @@ function qRenderRepairClientOptions() {
   const sel = document.getElementById('q-rep-client-select');
   const wrap = document.getElementById('q-rep-client-select-wrap');
   if (!sel || !wrap) return;
-  const clients = _qS.repair_clients || [];
-  wrap.style.display = clients.length ? '' : 'none';
-  sel.innerHTML = '<option value="">— Select —</option>' + clients.map(c =>
-    `<option value="${esc(c.client_id)}">${esc(c.display_name || [c.first_name, c.last_name].filter(Boolean).join(' '))} — ${esc(c.email || c.phone || '')}</option>`
-  ).join('');
+  const people = _qS.people || _qS.repair_clients || [];
+  wrap.style.display = people.length ? '' : 'none';
+  sel.innerHTML = '<option value="">— Select —</option>' + people.map(c => {
+    const n = Number(c.location_count || 0);
+    return `<option value="${esc(c.client_id)}">${esc(c.display_name || [c.first_name, c.last_name].filter(Boolean).join(' '))} — ${esc(c.email || c.phone || '')}${n ? ' · ' + n + ' propert' + (n === 1 ? 'y' : 'ies') : ''}</option>`;
+  }).join('');
 }
 
 function qRepClientSelect(clientId) {
@@ -275,11 +279,14 @@ function qRepClientSelect(clientId) {
   if (msg) msg.textContent = '';
   const locWrap = document.getElementById('q-rep-location-wrap');
   if (locWrap) locWrap.style.display = 'none';
+  _qS.location_id = '';
+  _qS.pool_id = '';
   _qS.repair_location_id = '';
   _qS.repair_pool_id = '';
-  if (!clientId) { _qS.repair_client_id = ''; return; }
-  const client = (_qS.repair_clients || []).find(c => String(c.client_id) === String(clientId));
+  if (!clientId) { _qS.client_id = ''; _qS.repair_client_id = ''; return; }
+  const client = (_qS.people || _qS.repair_clients || []).find(c => String(c.client_id) === String(clientId));
   if (!client) return;
+  _qS.client_id = clientId;
   _qS.repair_client_id = clientId;
   _qS.first_name = client.first_name || '';
   _qS.last_name = client.last_name || '';
@@ -293,29 +300,33 @@ function qRepClientSelect(clientId) {
     if (id === 'q-email') el.value = _qS.email;
     if (id === 'q-phone') el.value = _qS.phone;
   });
+  if (Array.isArray(client.locations) && client.locations.length) qApplyClientLocations_(client.locations);
   qRepLoadLocations(clientId);
   qRecalc();
 }
 
-function qRepLoadLocations(clientId) {
+function qApplyClientLocations_(all) {
   const msg = document.getElementById('q-rep-existing-msg');
+  _qS.locations = all || [];
+  _qS.repair_locations = _qS.locations;
+  const locWrap = document.getElementById('q-rep-location-wrap');
+  if (_qS.repair_locations.length === 0) {
+    if (locWrap) locWrap.style.display = 'none';
+    if (msg) msg.textContent = 'No property on file for this customer yet.';
+  } else if (_qS.repair_locations.length === 1) {
+    if (locWrap) locWrap.style.display = 'none';
+    qRepLocationSelect(_qS.repair_locations[0].location_id);
+  } else {
+    qRenderRepairLocationOptions();
+    if (locWrap) locWrap.style.display = '';
+  }
+}
+
+function qRepLoadLocations(clientId) {
   qSwr('q_client_locations_' + clientId, 30 * 60 * 1000,
     () => apiGet({ action: 'get_client_locations', token: _s ? _s.token : '', client_id: clientId })
             .then(res => (res && res.ok && Array.isArray(res.locations)) ? res.locations : null),
-    all => {
-      _qS.repair_locations = all.filter(l => (l.pool_id || '').toString().trim());
-      const locWrap = document.getElementById('q-rep-location-wrap');
-      if (_qS.repair_locations.length === 0) {
-        if (locWrap) locWrap.style.display = 'none';
-        if (msg) msg.textContent = 'No active service location on file for this client.';
-      } else if (_qS.repair_locations.length === 1) {
-        if (locWrap) locWrap.style.display = 'none';
-        qRepLocationSelect(_qS.repair_locations[0].location_id);
-      } else {
-        qRenderRepairLocationOptions();
-        if (locWrap) locWrap.style.display = '';
-      }
-    }
+    all => qApplyClientLocations_(all)
   );
 }
 
@@ -328,21 +339,31 @@ function qRenderRepairLocationOptions() {
 }
 
 function qRepLocationSelect(locationId) {
-  if (!locationId) { _qS.repair_location_id = ''; _qS.repair_pool_id = ''; return; }
-  const loc = (_qS.repair_locations || []).find(l => String(l.location_id) === String(locationId));
+  if (!locationId) {
+    _qS.location_id = ''; _qS.pool_id = '';
+    _qS.repair_location_id = ''; _qS.repair_pool_id = '';
+    return;
+  }
+  const loc = (_qS.locations || _qS.repair_locations || []).find(l => String(l.location_id) === String(locationId));
   if (!loc) return;
+  _qS.location_id = locationId;
+  _qS.pool_id = loc.pool_id || '';
   _qS.repair_location_id = locationId;
   _qS.repair_pool_id = loc.pool_id || '';
   _qS.address = loc.service_address || _qS.address;
   _qS.city = loc.city || _qS.city;
+  _qS.zip_code = loc.zip_code || _qS.zip_code;
+  _qS.area = loc.area || _qS.area;
   _qS.repair_company = _qS.repair_company || [_qS.first_name, _qS.last_name].filter(Boolean).join(' ');
   const sel = document.getElementById('q-rep-location-select');
   if (sel) sel.value = locationId;
-  ['q-address','q-city','q-rep-co'].forEach(id => {
+  ['q-address','q-city','q-zip','q-area','q-rep-co'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === 'q-address') el.value = _qS.address;
     if (id === 'q-city') el.value = _qS.city;
+    if (id === 'q-zip') el.value = _qS.zip_code;
+    if (id === 'q-area') el.value = _qS.area;
     if (id === 'q-rep-co') el.value = _qS.repair_company;
   });
   qRecalc();
@@ -705,6 +726,9 @@ async function qRepSaveNewCustomer() {
 
     _qS.first_name = first; _qS.last_name = last; _qS.email = email; _qS.phone = phone;
     _qS.address = address; _qS.city = city; _qS.zip_code = zip;
+    _qS.client_id = clientRes.client_id;
+    _qS.location_id = locRes.location_id;
+    _qS.pool_id = '';
     _qS.repair_client_id = clientRes.client_id;
     _qS.repair_location_id = locRes.location_id;
     _qS.repair_pool_id = ''; // brand-new property has no assigned pool_id yet
@@ -768,6 +792,14 @@ function qLookupTravel() {
 }
 
 function qVoidTravel() { _qS.void_travel = !_qS.void_travel; qRecalc(); }
+
+function qSelectedIdentityPayload_() {
+  return {
+    client_id: _qS.client_id || _qS.repair_client_id || '',
+    location_id: _qS.location_id || _qS.repair_location_id || '',
+    pool_id: _qS.pool_id || _qS.repair_pool_id || ''
+  };
+}
 
 // ─── Pricing engine — faithful port of pricing.py ────────────────────────────
 function qCalcEngine(s) {
@@ -942,13 +974,21 @@ function qReset() {
   document.getElementById('q-pool-sec').style.display    = '';
   document.getElementById('q-startup-sec').style.display = 'none';
   document.getElementById('q-repair-sec').style.display  = 'none';
+  const contactSearchWrap = document.getElementById('q-contact-rep-search-wrap');
+  if (contactSearchWrap) contactSearchWrap.style.display = '';
   const hint = document.getElementById('q-startup-date-hint'); if(hint) hint.textContent='';
   ['spa','robot','sun','pets','school','mcp'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
   document.getElementById('qchk-chem')?.classList.add('active');
   document.getElementById('qchk-prog')?.classList.add('active');
   ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
-   'q-startup-co','q-startup-company-email','q-startup-date','q-rep-amt'
+   'q-startup-co','q-startup-company-email','q-startup-date','q-rep-amt','q-rep-client-search'
   ].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const clientWrap = document.getElementById('q-rep-client-select-wrap');
+  if (clientWrap) clientWrap.style.display = 'none';
+  const locWrap = document.getElementById('q-rep-location-wrap');
+  if (locWrap) locWrap.style.display = 'none';
+  const existingMsg = document.getElementById('q-rep-existing-msg');
+  if (existingMsg) existingMsg.textContent = '';
   const startupCompanyMsg = document.getElementById('q-startup-company-msg');
   if (startupCompanyMsg) startupCompanyMsg.textContent = '';
   const startupCompanySelect = document.getElementById('q-startup-company-select');
@@ -997,9 +1037,7 @@ async function qSave() {
     repair_issue:           _qS.service==='repair_job' ? _qS.repair_issue    : '',
     repair_assigned_to:     _qS.service==='repair_job' ? _qS.repair_assigned_to : '',
     repair_parts:           _qS.service==='repair_job' ? JSON.stringify((_qS.repair_parts || []).filter(p => (p.name || '').trim())) : '[]',
-    client_id:   _qS.service==='repair_job' ? (_qS.repair_client_id   || '') : '',
-    location_id: _qS.service==='repair_job' ? (_qS.repair_location_id || '') : '',
-    pool_id:     _qS.service==='repair_job' ? (_qS.repair_pool_id     || '') : '',
+    ...qSelectedIdentityPayload_(),
     travel_fee:tFee,
     travel_one_way_miles:             (_qS.travel&&!_qS.void_travel)?_qS.travel.one_way_miles:0,
     travel_round_trip_miles:          (_qS.travel&&!_qS.void_travel)?_qS.travel.round_trip_miles:0,
@@ -1070,6 +1108,8 @@ function qSyncStartupPriceLabels_() {
 
 function qInit() {
   qSyncStartupPriceLabels_();
+  const contactSearchWrap = document.getElementById('q-contact-rep-search-wrap');
+  if (contactSearchWrap) contactSearchWrap.style.display = '';
   if (!_qS._calc) qRecalc();
   // Non-blocking: the bundled fallback is already in memory, so this only
   // upgrades the list if the sheet has diverged from it.
