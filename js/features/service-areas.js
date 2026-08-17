@@ -31,9 +31,11 @@ let _saSchedulableDays = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SA
 let _saZones = [];
 let _saCoverage = null;
 let _saProposals = null;
+let _saBlackouts = null;
 let _saTab = 'zones';
 let _saShowArchived = false;
 let _saEditing = null;      // zone_id being edited, '' for new, null for none
+let _saBlackoutEditing = null;
 
 function saDayLabel(d) {
   const s = String(d || '');
@@ -76,7 +78,7 @@ function loadServiceAreas(force) {
 // under a tab that still looked inactive.
 function saSetTab_(tab) {
   _saTab = tab;
-  ['zones', 'coverage', 'suggest'].forEach(t => {
+  ['zones', 'coverage', 'suggest', 'blackouts'].forEach(t => {
     const b = document.getElementById('sa-tab-' + t);
     if (b) b.className = 'sa-tab' + (t === tab ? ' active' : '');
   });
@@ -84,10 +86,11 @@ function saSetTab_(tab) {
 
 function saSwitchTab(tab) {
   saSetTab_(tab);
-  _saEditing = null;
+  saCloseEditor();
   saMsg('');
   if (tab === 'coverage' && !_saCoverage) return saLoadCoverage();
   if (tab === 'suggest' && !_saProposals) return saLoadProposals();
+  if (tab === 'blackouts' && !_saBlackouts) return saLoadBlackouts();
   renderServiceAreas();
 }
 
@@ -96,6 +99,7 @@ function renderServiceAreas() {
   if (!body) return;
   if (_saTab === 'coverage') return saRenderCoverage();
   if (_saTab === 'suggest') return saRenderProposals();
+  if (_saTab === 'blackouts') return saRenderBlackouts();
 
   const shown = _saZones.filter(z => _saShowArchived || z.active !== false);
   if (!shown.length) {
@@ -161,7 +165,11 @@ function saZoneRow(z) {
 }
 
 // ── Editor ───────────────────────────────────────────────────────────────────
-function saNewZone() { saOpenEditor(null); }
+function saNewZone() {
+  saSetTab_('zones');
+  renderServiceAreas();
+  saOpenEditor(null);
+}
 
 function saEditZone(id) {
   const z = _saZones.find(x => x.zone_id === id);
@@ -222,6 +230,7 @@ function saPickColor(c) {
 
 function saCloseEditor() {
   _saEditing = null;
+  _saBlackoutEditing = null;
   const wrap = document.getElementById('sa-editor');
   if (wrap) { wrap.style.display = 'none'; wrap.innerHTML = ''; }
 }
@@ -267,6 +276,133 @@ function saSetActive(id, makeActive) {
       loadServiceAreas(true);
     })
     .catch(() => saMsg('Network error updating the zone.', true));
+}
+
+// ── Blackouts ────────────────────────────────────────────────────────────────
+function saLoadBlackouts() {
+  const body = document.getElementById('sa-body');
+  if (body) body.innerHTML = '<div class="sa-empty">Loading schedule blackouts…</div>';
+  api({ action: 'list_schedule_blackouts', token: _s ? _s.token : '', include_archived: true })
+    .then(res => {
+      if (!res || !res.ok) {
+        if (body) body.innerHTML = `<div class="im err" style="display:block">${escHtml((res && res.error) || 'Could not load schedule blackouts.')}</div>`;
+        return;
+      }
+      _saBlackouts = res.blackouts || [];
+      saRenderBlackouts();
+    })
+    .catch(() => { if (body) body.innerHTML = '<div class="im err" style="display:block">Network error loading schedule blackouts.</div>'; });
+}
+
+function saRenderBlackouts() {
+  const body = document.getElementById('sa-body');
+  if (!body) return;
+  const rows = (_saBlackouts || []).filter(b => _saShowArchived || b.active !== false)
+    .sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')));
+
+  body.innerHTML = `
+    <div class="sa-alert ok">
+      Blackouts remove start dates from the signing calendar. Archived rows are kept for audit and ignored by availability.
+    </div>
+    <div class="sa-group">
+      <div class="sa-group-h">Schedule blackouts
+        <span class="sa-group-sub">${rows.length} shown</span>
+        <button class="sa-btn sa-primary" onclick="saNewBlackout()">New blackout</button>
+      </div>
+      ${rows.length ? rows.map(saBlackoutRow).join('') :
+        '<div class="sa-empty">No schedule blackouts in this view.</div>'}
+    </div>`;
+}
+
+function saBlackoutRow(b) {
+  const archived = b.active === false;
+  const id = String(b.blackout_id || '');
+  const range = b.end_date && b.end_date !== b.start_date
+    ? `${b.start_date} to ${b.end_date}`
+    : (b.start_date || 'No date');
+  return `<div class="sa-row${archived ? ' sa-archived' : ''}">
+    <div class="sa-main">
+      <div class="sa-name">${escHtml(range)}${archived ? ' <span class="sa-tag">Archived</span>' : ''}</div>
+      <div class="sa-meta">
+        <span class="sa-tag">${escHtml(id)}</span>
+        <span>${escHtml(b.reason || 'No reason')}</span>
+      </div>
+    </div>
+    <div class="sa-actions">
+      <button class="sa-btn" onclick="saEditBlackout(${jsArg(id)})">Edit</button>
+      <button class="sa-btn" onclick="saSetBlackoutActive(${jsArg(id)}, ${archived ? 'true' : 'false'})">
+        ${archived ? 'Restore' : 'Archive'}
+      </button>
+    </div>
+  </div>`;
+}
+
+function saNewBlackout() { saOpenBlackoutEditor(null); }
+
+function saEditBlackout(id) {
+  const b = (_saBlackouts || []).find(x => x.blackout_id === id);
+  if (b) saOpenBlackoutEditor(b);
+}
+
+function saOpenBlackoutEditor(b) {
+  const wrap = document.getElementById('sa-editor');
+  if (!wrap) return;
+  _saBlackoutEditing = b ? b.blackout_id : '';
+  _saEditing = null;
+  const v = b || { start_date: '', end_date: '', reason: '' };
+  wrap.style.display = 'block';
+  wrap.innerHTML = `
+    <div class="sa-ed-title">${b ? 'Edit blackout' : 'New blackout'}</div>
+    <div class="sa-ed-grid">
+      <div><label class="sa-lbl">Start date</label>
+        <input class="sa-inp" id="sa-b-start" type="date" value="${escHtml(v.start_date || '')}"></div>
+      <div><label class="sa-lbl">End date</label>
+        <input class="sa-inp" id="sa-b-end" type="date" value="${escHtml(v.end_date || v.start_date || '')}"></div>
+      <div class="sa-ed-full"><label class="sa-lbl">Reason</label>
+        <input class="sa-inp" id="sa-b-reason" value="${escHtml(v.reason || '')}" placeholder="Holiday, closed week, staffing hold"></div>
+    </div>
+    <div id="sa-msg" class="im" style="display:none"></div>
+    <div class="sa-ed-actions">
+      <button class="sa-btn sa-primary" onclick="saSaveBlackout()">${b ? 'Save changes' : 'Create blackout'}</button>
+      <button class="sa-btn" onclick="saCloseEditor()">Cancel</button>
+    </div>`;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function saSaveBlackout() {
+  const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  const blackout = {
+    start_date: val('sa-b-start'),
+    end_date: val('sa-b-end'),
+    reason: val('sa-b-reason')
+  };
+  if (_saBlackoutEditing) blackout.blackout_id = _saBlackoutEditing;
+  if (!blackout.start_date) return saMsg('Choose the first blocked date.', true);
+  if (!blackout.end_date) blackout.end_date = blackout.start_date;
+  if (blackout.end_date < blackout.start_date) return saMsg('End date must be on or after the start date.', true);
+
+  saMsg('Saving…');
+  api({ action: 'save_schedule_blackout', token: _s ? _s.token : '', blackout })
+    .then(res => {
+      if (!res || !res.ok) return saMsg((res && res.error) || 'Could not save the blackout.', true);
+      saCloseEditor();
+      _saBlackouts = null;
+      saLoadBlackouts();
+    })
+    .catch(() => saMsg('Network error saving the blackout.', true));
+}
+
+function saSetBlackoutActive(id, makeActive) {
+  const b = (_saBlackouts || []).find(x => x.blackout_id === id);
+  const label = b ? ((b.start_date || '') + (b.end_date && b.end_date !== b.start_date ? ' to ' + b.end_date : '')) : id;
+  if (!makeActive && !confirm(`Archive blackout "${label}"?\n\nThose dates will become available again unless another active blackout covers them.`)) return;
+  api({ action: 'archive_schedule_blackout', token: _s ? _s.token : '', blackout_id: id, restore: !!makeActive })
+    .then(res => {
+      if (!res || !res.ok) return saMsg((res && res.error) || 'Could not update the blackout.', true);
+      _saBlackouts = null;
+      saLoadBlackouts();
+    })
+    .catch(() => saMsg('Network error updating the blackout.', true));
 }
 
 // ── Coverage ─────────────────────────────────────────────────────────────────
@@ -428,8 +564,9 @@ function saToggleArchived() {
 }
 
 function saRefresh() {
-  _saCoverage = null; _saProposals = null;
+  _saCoverage = null; _saProposals = null; _saBlackouts = null;
   if (_saTab === 'coverage') return saLoadCoverage();
   if (_saTab === 'suggest') return saLoadProposals();
+  if (_saTab === 'blackouts') return saLoadBlackouts();
   loadServiceAreas(true);
 }

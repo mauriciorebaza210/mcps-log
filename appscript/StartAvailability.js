@@ -57,7 +57,9 @@ function savWeekStart_(d) {
 // ── Blackouts (optional) ─────────────────────────────────────────────────────
 // Entirely opt-in. With no sheet and no rows the feature is dormant and
 // availability behaves exactly as if it did not exist.
-var SCHEDULE_BLACKOUT_HEADERS = ['blackout_id', 'start_date', 'end_date', 'reason', 'created_at'];
+var SCHEDULE_BLACKOUT_HEADERS = [
+  'blackout_id', 'start_date', 'end_date', 'reason', 'active', 'created_at', 'updated_at'
+];
 
 function savBlackoutRanges_() {
   try {
@@ -72,6 +74,10 @@ function savBlackoutRanges_() {
     if (h.start_date === undefined) return [];
     var out = [];
     for (var i = 1; i < data.length; i++) {
+      if (h.active !== undefined) {
+        var active = String(data[i][h.active] == null ? '' : data[i][h.active]).trim().toUpperCase();
+        if (active === 'FALSE' || active === 'NO' || active === '0' || active === 'ARCHIVED') continue;
+      }
       var s = savCellToYmd_(data[i][h.start_date]);
       var e = h.end_date !== undefined ? savCellToYmd_(data[i][h.end_date]) : '';
       if (!s) continue;

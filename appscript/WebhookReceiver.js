@@ -2095,7 +2095,8 @@ function doPost(e) {
     // writes are admin/manager too. All via doPost per the CORS rule.
     if (payload.action === 'get_service_areas' || payload.action === 'save_service_area' ||
         payload.action === 'archive_service_area' || payload.action === 'get_zone_coverage' ||
-        payload.action === 'propose_service_areas') {
+        payload.action === 'propose_service_areas' || payload.action === 'list_schedule_blackouts' ||
+        payload.action === 'save_schedule_blackout' || payload.action === 'archive_schedule_blackout') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
       if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Not authorized' });
@@ -2103,6 +2104,9 @@ function doPost(e) {
       if (payload.action === 'save_service_area')     return jsonResponse_(handleSaveServiceArea_(payload));
       if (payload.action === 'archive_service_area')  return jsonResponse_(handleArchiveServiceArea_(payload));
       if (payload.action === 'propose_service_areas') return jsonResponse_(handleProposeServiceAreas_(payload));
+      if (payload.action === 'list_schedule_blackouts')   return jsonResponse_(handleListScheduleBlackouts_(payload));
+      if (payload.action === 'save_schedule_blackout')     return jsonResponse_(handleSaveScheduleBlackout_(payload));
+      if (payload.action === 'archive_schedule_blackout')  return jsonResponse_(handleArchiveScheduleBlackout_(payload));
       return jsonResponse_(handleGetZoneCoverage_(payload));
     }
 

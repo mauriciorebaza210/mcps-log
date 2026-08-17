@@ -27,6 +27,10 @@ var SERVICE_AREA_HEADERS = [
   'max_per_day', 'active', 'color', 'notes', 'created_at', 'updated_at'
 ];
 
+var SA_BLACKOUT_HEADERS = [
+  'blackout_id', 'start_date', 'end_date', 'reason', 'active', 'created_at', 'updated_at'
+];
+
 // Parsing accepts any weekday so an existing row with a now-unschedulable day
 // still reads back and can be seen and corrected. SAVING is stricter — see
 // saSchedulableDays_.
@@ -75,6 +79,32 @@ function saSheet_() {
   return sheet;
 }
 
+function saEnsureHeaders_(sheet, headers) {
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    return sheet;
+  }
+  var existing = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var norm = existing.map(function (h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+  headers.forEach(function (h) {
+    var key = String(h || '').trim().toLowerCase().replace(/ /g, '_');
+    if (norm.indexOf(key) === -1) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(h);
+      norm.push(key);
+    }
+  });
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+function saBlackoutSheet_() {
+  var ss = SpreadsheetApp.openById(SA_ROUTES_SS_ID);
+  var sheet = ss.getSheetByName('Schedule_Blackouts');
+  if (!sheet) sheet = ss.insertSheet('Schedule_Blackouts');
+  return saEnsureHeaders_(sheet, SA_BLACKOUT_HEADERS);
+}
+
 function saNormalizeZip_(value) {
   var s = String(value == null ? '' : value).trim();
   var m = /(\d{5})/.exec(s);          // tolerates "78258-1234" and stray text
@@ -115,6 +145,18 @@ function saMaxPerDay_(value) {
 function saIsActive_(value) {
   var s = String(value == null ? '' : value).trim().toUpperCase();
   return s !== 'FALSE' && s !== 'NO' && s !== '0' && s !== 'ARCHIVED';
+}
+
+function saYmd_(value) {
+  var s = String(value == null ? '' : value).trim();
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return '';
+  var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (isNaN(d.getTime())) return '';
+  if (d.getFullYear() !== Number(m[1]) || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[3])) {
+    return '';
+  }
+  return s;
 }
 
 function saRowToZone_(row) {
@@ -277,6 +319,105 @@ function handleGetServiceAreas_(payload) {
     };
   } catch (e) {
     return { ok: false, error: 'handleGetServiceAreas_ Error: ' + e };
+  }
+}
+
+// ── Schedule blackouts ──────────────────────────────────────────────────────
+// Date ranges where signing must not offer starts. The availability reader is
+// deliberately tolerant: if this sheet is missing it treats blackouts as empty.
+// The admin path below is the durable producer for that optional sheet.
+function saRowToBlackout_(row) {
+  return {
+    blackout_id: String(row.blackout_id || '').trim(),
+    start_date: saYmd_(row.start_date),
+    end_date: saYmd_(row.end_date) || saYmd_(row.start_date),
+    reason: String(row.reason || '').trim(),
+    active: saIsActive_(row.active),
+    created_at: String(row.created_at || '').trim(),
+    updated_at: String(row.updated_at || '').trim()
+  };
+}
+
+function listScheduleBlackouts_(includeArchived) {
+  var rows = sheetToObjects_(saBlackoutSheet_()).rows || [];
+  var out = rows.map(saRowToBlackout_).filter(function (b) {
+    return b.blackout_id && b.start_date;
+  });
+  return includeArchived ? out : out.filter(function (b) { return b.active; });
+}
+
+function saAppendBlackout_(sheet, obj) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+    .map(function (h) { return String(h || '').trim().toLowerCase().replace(/ /g, '_'); });
+  sheet.appendRow(headers.map(function (h) {
+    return obj[h] !== undefined && obj[h] !== null ? obj[h] : '';
+  }));
+}
+
+function handleListScheduleBlackouts_(payload) {
+  try {
+    return {
+      ok: true,
+      blackouts: listScheduleBlackouts_(payload && payload.include_archived === true)
+    };
+  } catch (e) {
+    return { ok: false, error: 'handleListScheduleBlackouts_ Error: ' + e };
+  }
+}
+
+function handleSaveScheduleBlackout_(payload) {
+  try {
+    var data = payload.blackout || payload;
+    var sheet = saBlackoutSheet_();
+    var id = String(data.blackout_id || '').trim();
+    var start = saYmd_(data.start_date);
+    var end = saYmd_(data.end_date) || start;
+    var reason = String(data.reason || '').trim();
+    if (!start) return { ok: false, error: 'Start date is required.' };
+    if (!end) return { ok: false, error: 'End date is required.' };
+    if (end < start) return { ok: false, error: 'End date must be on or after the start date.' };
+
+    var now = nowIso_();
+    var obj = {
+      start_date: start,
+      end_date: end,
+      reason: reason,
+      active: data.active === false ? 'FALSE' : 'TRUE',
+      updated_at: now
+    };
+
+    if (id) {
+      var row = findRowByValue_(sheet, 'blackout_id', id);
+      if (!row) return { ok: false, error: 'Blackout not found: ' + id };
+      updateObjectRow_(sheet, row._rowNum, obj);
+      saBustCaches_();
+      return { ok: true, blackout_id: id, created: false };
+    }
+
+    obj.blackout_id = nextSequence_(sheet, 'blackout_id', 'BLACKOUT', 4);
+    obj.created_at = now;
+    saAppendBlackout_(sheet, obj);
+    saBustCaches_();
+    return { ok: true, blackout_id: obj.blackout_id, created: true };
+  } catch (e) {
+    return { ok: false, error: 'handleSaveScheduleBlackout_ Error: ' + e };
+  }
+}
+
+function handleArchiveScheduleBlackout_(payload) {
+  try {
+    var id = String(payload.blackout_id || '').trim();
+    if (!id) return { ok: false, error: 'blackout_id is required.' };
+    var sheet = saBlackoutSheet_();
+    var row = findRowByValue_(sheet, 'blackout_id', id);
+    if (!row) return { ok: false, error: 'Blackout not found: ' + id };
+    var restore = payload.restore === true;
+    softSetCell_(sheet, row._rowNum, 'active', restore ? 'TRUE' : 'FALSE');
+    softSetCell_(sheet, row._rowNum, 'updated_at', nowIso_());
+    saBustCaches_();
+    return { ok: true, blackout_id: id, active: restore };
+  } catch (e) {
+    return { ok: false, error: 'handleArchiveScheduleBlackout_ Error: ' + e };
   }
 }
 

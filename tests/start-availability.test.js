@@ -59,8 +59,9 @@ function build(o) {
             return {
               getLastRow: () => rows.length + 1,
               getDataRange: () => ({ getValues: () => [
-                ['blackout_id','start_date','end_date','reason','created_at'],
-                ...rows.map((b, i) => ['B-' + i, b[0], b[1], b[2] || 'Holiday', ''])
+                ['blackout_id','start_date','end_date','reason','active','created_at','updated_at'],
+                ...rows.map((b, i) => ['B-' + i, b[0], b[1], b[2] || 'Holiday',
+                                       b[3] === undefined ? 'TRUE' : b[3], '', ''])
               ]})
             };
           }
@@ -494,6 +495,12 @@ console.log('A blackout removes the dates inside it');
     const r = build({ zone: ZONE_TUE, zones: [FULL_TUE], blackouts: [['2026-09-01', '']] })
       .handleGetStartAvailability_({ token: 'tok' });
     return r.dates.indexOf('2026-09-01') === -1;
+  })());
+  t('an archived blackout is ignored', (() => {
+    const r = build({ zone: ZONE_TUE, zones: [FULL_TUE],
+                      blackouts: [['2026-08-24', '2026-08-30', 'Old hold', 'FALSE']] })
+      .handleGetStartAvailability_({ token: 'tok' });
+    return r.dates.indexOf('2026-08-25') !== -1;
   })());
 }
 
