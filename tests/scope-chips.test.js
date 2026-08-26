@@ -14,7 +14,7 @@ const ctx={console,Date,String,Number,Math,JSON,Array,Object,isNaN,
   fetch:()=>Promise.resolve({json:()=>Promise.resolve({ok:true})})};
 ctx.globalThis=ctx; ctx.window.location=ctx.location; vm.createContext(ctx);
 const load=f=>{try{vm.runInContext(fs.readFileSync(R+f,'utf8'),ctx,{filename:f});}catch(e){console.log('load '+f+': '+e.message);}};
-['js/lib/constants.js','js/lib/api.js','js/lib/auth.js','js/features/quotes.js'].forEach(load);
+['js/lib/constants.js','js/lib/pricing.js','js/lib/api.js','js/lib/auth.js','js/features/quotes.js'].forEach(load);
 const ev=c=>vm.runInContext(c,ctx);
 ev(`qRenderSavedCard = function(){};`);            // isolate state logic from rendering
 ev(`_s={token:'t',roles:['admin'],pages:['quotes']};`);

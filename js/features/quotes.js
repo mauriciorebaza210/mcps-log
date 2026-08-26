@@ -5,11 +5,12 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // QUOTE CALCULATOR
 // ══════════════════════════════════════════════════════════════════════════════
-const Q_TAX = 0.0825;
-const STARTUP_PRICE_CHEM = 287.86;
-const STARTUP_PRICE_CHEM_COST = 162.86;
-const STARTUP_PRICE_PROG = 62.5;
-const STARTUP_PRICE_SCHOOL = 62.5;
+// Rates live in js/lib/pricing.js (MCPS_PRICING.CATALOG) so the browser, the
+// server and the tests all read one table. These aliases exist only so the
+// startup price labels can be stamped into the DOM.
+const STARTUP_PRICE_CHEM   = MCPS_PRICING.CATALOG.startup.chemical;
+const STARTUP_PRICE_PROG   = MCPS_PRICING.CATALOG.startup.programming;
+const STARTUP_PRICE_SCHOOL = MCPS_PRICING.CATALOG.startup.pool_school;
 
 const _qDef = () => ({
   sales_flow:'proposal_first', signature_required:true, activation_method:'',
@@ -26,10 +27,16 @@ const _qDef = () => ({
   people:[], client_id:'', location_id:'', pool_id:'',
   repair_clients:[], repair_client_id:'',
   repair_locations:[], repair_location_id:'', repair_pool_id:'',
-  discount_type:'none', discount_value:0, custom_price:0,
+  // 'none' | 'percentage' | 'dollar' | 'custom'. A custom value ABOVE the rate
+  // card is a premium and is charged — it is no longer clamped down silently.
+  adjustment_type:'none', adjustment_value:'',
+  manual_price:0,
   void_travel:false, travel:null, travel_loading:false, travel_error:'',
   first_name:'', last_name:'', email:'', phone:'', address:'', zip_code:'', city:'', area:'',
   _calc:null, saved_id:null, saving:false,
+  // Carried across retries so a double-click cannot mint a second quote.
+  idempotency_key:'', provisioning:false, provision_error:'',
+  editable:true, edit_blocked_reason:'', change_log:[], line_items:[],
   proposal_status:'none', proposal_url:'', proposal_image_data_url:'', proposal_image_preview:'', proposal_error:'',
   proposal_send_status:'none', proposal_sent_at:'', proposal_approval_url:'',
   // ⚠️ These must mirror the fallbacks in buildProposalScopeHtml_() and
@@ -56,16 +63,17 @@ const _qDef = () => ({
     equipment_monitoring:true,
     chemicals_included:true, service_reports:true, priority_service:false
   },
-  contract_status:'none', contract_url:'', contract_download_url:'', contract_error:'',
-  send_contract_status:'none', sent_at:''
+  // RETIRED: contract_status / contract_url / send_contract_status belonged to the
+  // `agreement_direct` flow (Google Docs contract -> Zapier -> SignRequest). The
+  // customer now signs the merged quote+agreement packet in the portal, so the
+  // proposal_* fields above are the whole signing lifecycle.
 });
 let _qS = _qDef();
 
 function qSetSalesFlow(flow) {
   _qS.sales_flow = flow;
   _qS.signature_required = flow !== 'operational_override';
-  _qS.activation_method = flow === 'agreement_direct' ? 'AGREEMENT_DIRECT'
-    : flow === 'operational_override' ? 'ADMIN_OVERRIDE'
+  _qS.activation_method = flow === 'operational_override' ? 'ADMIN_OVERRIDE'
     : 'SIGNED_AGREEMENT';
   document.querySelectorAll('.q-flow-card').forEach(c => {
     const active = c.dataset.flow === flow;
@@ -753,27 +761,63 @@ async function qRepSaveNewCustomer() {
   }
 }
 
-function qDiscTypeChange(val) {
-  _qS.discount_type = val; _qS.discount_value = 0; _qS.custom_price = 0;
-  const wrap = document.getElementById('q-disc-val-wrap');
-  const lbl  = document.getElementById('q-disc-val-lbl');
-  const inp  = document.getElementById('q-disc-val');
-  inp.value = '';
-  if (val === 'none') { wrap.style.display = 'none'; }
-  else {
+function qAdjTypeChange(val) {
+  _qS.adjustment_type = val;
+  _qS.adjustment_value = '';
+  const wrap = document.getElementById('q-adj-val-wrap');
+  const lbl  = document.getElementById('q-adj-val-lbl');
+  const inp  = document.getElementById('q-adj-val');
+  if (inp) inp.value = '';
+  if (val === 'none') { if (wrap) wrap.style.display = 'none'; }
+  else if (wrap) {
     wrap.style.display = '';
-    if (val === 'Percentage')    { lbl.textContent = 'Discount %'; inp.placeholder = '10'; }
-    else if (val === 'Dollar Amount') { lbl.textContent = 'Discount $'; inp.placeholder = '20.00'; }
-    else                              { lbl.textContent = 'Custom Service Price'; inp.placeholder = '220.00'; }
+    if (val === 'percentage')   { lbl.textContent = 'Discount %';        inp.placeholder = '10'; }
+    else if (val === 'dollar')  { lbl.textContent = 'Discount $';        inp.placeholder = '20.00'; }
+    else                        { lbl.textContent = 'Final Service Price'; inp.placeholder = '350.00'; }
   }
   qRecalc();
 }
 
-function qDiscValChange(raw) {
-  const v = parseFloat(raw) || 0;
-  if (_qS.discount_type === 'Custom Price') { _qS.custom_price = v; _qS.discount_value = 0; }
-  else { _qS.discount_value = v; _qS.custom_price = 0; }
+function qAdjValChange(raw) {
+  // Kept as the raw string: the engine distinguishes "empty" from "zero" and
+  // refuses the former, which a parseFloat here would have flattened to 0.
+  _qS.adjustment_value = raw;
   qRecalc();
+}
+
+// Operator-typed price — repair jobs and above-ground bi-weekly.
+function qManualPriceChange(raw) {
+  const v = parseFloat(raw);
+  _qS.manual_price = isFinite(v) ? Math.max(v, 0) : 0;
+  _qS.repair_amount = _qS.manual_price;
+  qRecalc();
+}
+
+// The "+$25" / "-$5" hints next to the add-on toggles are stamped FROM the rate
+// card. They used to be hardcoded in index.html, where changing a rate left the
+// label behind, advertising a surcharge that no longer existed.
+function qSyncModifierLabels_() {
+  const c = _qS._calc;
+  const suppressed = (c && c.suppressed_modifiers) || [];
+  const map = {
+    'q-mod-spa':   'spa',
+    'q-mod-robot': 'has_robot',
+    'q-mod-sun':   'high_sun_exposure',
+    'q-mod-pets':  'has_pets',
+    'q-mod-dark':  'dark_finish',
+    'q-mod-heavy': 'heavy_debris'
+  };
+  Object.keys(map).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const key = map[id];
+    const delta = MCPS_PRICING.CATALOG.modifiers[key];
+    const off = suppressed.indexOf(key) !== -1;
+    el.textContent = off
+      ? 'no charge'
+      : (delta < 0 ? '\u2212$' + Math.abs(delta).toFixed(2) : '+$' + delta.toFixed(2));
+    el.style.textDecoration = off ? 'line-through' : '';
+  });
 }
 
 function qLookupTravel() {
@@ -801,128 +845,65 @@ function qSelectedIdentityPayload_() {
   };
 }
 
-// ─── Pricing engine — faithful port of pricing.py ────────────────────────────
-function qCalcEngine(s) {
-  const { service, size, pool_type, material, spa, finish, debris, has_robot,
-          high_sun_exposure, has_pets, startup_chemical, startup_programming,
-          startup_pool_school, startup_company, repair_type, repair_company,
-          repair_amount, address, first_name, last_name } = s;
+// ─── Pricing ──────────────────────────────────────────────────────────────────
+// The engine moved to js/lib/pricing.js so the browser and the server compute
+// prices with the SAME code. qCalcEngine and qCalcDiscount used to live here and
+// nothing on the server checked their output — see the header of that file.
+//
+// qCalcDiscount in particular did Math.min(customPrice, subtotal), so a price
+// above the preset was silently rewritten down to the preset. That is gone: a
+// custom price above preset is now a premium and is charged.
 
-  let base = 0, chem = 0, pr = true, pw = '';
-  let svcLabel = '', sizeLabel = size, qbNames = [], qbSkus = [];
-  const ptLabel  = pool_type === 'inground' ? 'Inground' : 'Above Ground';
-  const matLabel = material.charAt(0).toUpperCase() + material.slice(1);
-
-  if (service === 'green_to_clean') {
-    base = 200; svcLabel = 'Green-to-Clean Cleaning Service';
-    qbNames = [svcLabel]; qbSkus = ['GTC-CLEAN'];
-  } else if (service === 'pool_startup') {
-    svcLabel = 'Pool Startup'; sizeLabel = 'startup';
-    if (startup_chemical)    { base += STARTUP_PRICE_CHEM; chem += STARTUP_PRICE_CHEM_COST; qbNames.push('Startup Chemicals','Pool Startup Chemical Work'); qbSkus.push('START-CHEM','START-CHEM-LABOR'); }
-    if (startup_programming) { base += STARTUP_PRICE_PROG; qbNames.push('Pool Startup Programming'); qbSkus.push('START-PROGRAM'); }
-    if (startup_pool_school) { base += STARTUP_PRICE_SCHOOL; qbNames.push('Pool School'); qbSkus.push('POOL-SCHOOL'); }
-  } else if (service === 'repair_job') {
-    base = Math.max(parseFloat(repair_amount) || 0, 0);
-    svcLabel = 'Repair / Replacement / Other Job'; sizeLabel = 'repair';
-    const sku = repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB';
-    qbNames = [svcLabel]; qbSkus = [sku];
-  } else {
-    svcLabel = service === 'weekly_full' ? 'Weekly Full Service' : 'Bi-Weekly Maintenance';
-    if (service === 'weekly_full') {
-      const r = {small:220,medium:260,large:300}, c = {small:25,medium:40,large:60};
-      base = r[size]||0; chem = c[size]||0;
-      qbNames = [svcLabel]; qbSkus = [`WEEKLY-${size.toUpperCase()}`];
-    } else {
-      if (pool_type === 'above_ground') { base = 0; pr = false; pw = 'Above-ground bi-weekly pricing not set yet.'; }
-      else { const r = {small:120,medium:140,large:170}; base = r[size]||0; }
-      qbNames = [svcLabel]; qbSkus = [`BIWEEKLY-${size.toUpperCase()}`];
-    }
-  }
-
-  let specs = [`Pool Type: ${ptLabel}`, `Size: ${sizeLabel}`, `Material: ${matLabel}`];
-
-  if (service === 'weekly_full' || service === 'biweekly_maint') {
-    const fg = service === 'weekly_full' && material === 'fiberglass';
-    if (fg) { base = 200; qbNames = ['Swimming Pool Maintenance (Fiberglass Pool)']; qbSkus = ['WEEKLY-FIBERGLASS']; specs.push('Fiberglass Weekly Full Service Flat Rate'); }
-    if (spa)               { if (!fg) { base += 25; specs.push('Attached Spa'); } }
-    if (finish === 'dark') { if (!fg) { base += 10; specs.push('Dark Pool Color'); } } else { if (!fg) specs.push('Light Pool Color'); }
-    if (debris === 'heavy'){ if (!fg) { base += 10; specs.push('Debris: Heavy'); } } else { if (!fg) specs.push('Debris: Light'); }
-    if (high_sun_exposure && !fg) { base += 10; specs.push('High Sun Exposure'); }
-    if (has_pets && !fg)          { base +=  5; specs.push('Pets on Property'); }
-    if (has_robot && !fg)         { base -=  5; specs.push('Cleaning Robot Discount'); }
-  } else {
-    if (spa) specs.push('Attached Spa');
-    specs.push(`Pool Color: ${finish === 'dark' ? 'Dark' : 'Light'}`);
-    specs.push(`Debris: ${debris === 'heavy' ? 'Heavy' : 'Light'}`);
-    if (high_sun_exposure) specs.push('High Sun Exposure');
-    if (has_pets)          specs.push('Pets on Property');
-    if (has_robot)         specs.push('Cleaning Robot On Site');
-    if (service === 'pool_startup') {
-      const si = [startup_chemical?'Chemical Work':'', startup_programming?'Programming':'', startup_pool_school?'Pool School':''].filter(Boolean);
-      specs.push(`Startup Services: ${si.join(', ') || 'None Selected'}`);
-      if ((startup_company || '').trim()) specs.push(`Startup Coming From: ${startup_company.trim()}`);
-    } else if (service === 'repair_job') {
-      const sku = repair_type === 'repair_replacement' ? 'REPAIR-GENERAL' : 'OTHER-JOB';
-      const cn = ((first_name||'')+' '+(last_name||'')).trim() || (repair_company||'').trim();
-      specs = [
-        `Job Type: ${repair_type === 'repair_replacement' ? 'Repair / Replacement' : 'Other Job'}`,
-        `Company: ${(repair_company||'').trim() || cn || 'N/A'}`,
-        `Address: ${(address||'').trim() || 'Not provided'}`,
-        `QuickBooks SKU: ${sku}`
-      ];
-    }
-  }
-
-  return { service_label:svcLabel, pool_type:ptLabel, size:sizeLabel, material:matLabel,
-           spa:spa?'Yes':'No', finish:finish==='dark'?'Dark':'Light', debris:debris==='heavy'?'Heavy':'Light',
-           subtotal:Math.round(base*100)/100, chem_cost:Math.round(chem*100)/100,
-           specs_summary:specs.join(', '), pricing_ready:pr, pricing_warning:pw, qb_names:qbNames, qb_skus:qbSkus };
-}
-
-function qCalcDiscount(subtotal, dtype, dval, cprice) {
-  if (dtype === 'Percentage') {
-    const da = Math.round(subtotal * Math.min(dval, 100) / 100 * 100) / 100;
-    return { da, discounted: Math.round(Math.max(subtotal-da,0)*100)/100 };
-  } else if (dtype === 'Dollar Amount') {
-    const da = Math.round(Math.min(dval, subtotal)*100)/100;
-    return { da, discounted: Math.round(Math.max(subtotal-da,0)*100)/100 };
-  } else if (dtype === 'Custom Price') {
-    const cp = Math.round(Math.min(cprice, subtotal)*100)/100;
-    return { da: Math.round(Math.max(subtotal-cp,0)*100)/100, discounted: cp };
-  }
-  return { da:0, discounted:subtotal };
+// Maps the quote-tool state onto the engine's input shape. One place, so a
+// renamed field breaks loudly here instead of quietly mispricing.
+function qPricingInput() {
+  return {
+    service:            _qS.service,
+    size:               _qS.size,
+    pool_type:          _qS.pool_type,
+    material:           _qS.material,
+    spa:                _qS.spa,
+    finish:             _qS.finish,
+    debris:             _qS.debris,
+    has_robot:          _qS.has_robot,
+    high_sun_exposure:  _qS.high_sun_exposure,
+    has_pets:           _qS.has_pets,
+    startup_chemical:   _qS.startup_chemical,
+    startup_programming:_qS.startup_programming,
+    startup_pool_school:_qS.startup_pool_school,
+    repair_type:        _qS.repair_type,
+    // Repair and above-ground bi-weekly are operator-priced; both read the same field.
+    manual_price:       _qS.manual_price || _qS.repair_amount || 0,
+    adjustment_type:    _qS.adjustment_type,
+    adjustment_value:   _qS.adjustment_value,
+    travel_fee:         (_qS.travel && !_qS.travel_loading) ? (_qS.travel.travel_fee || 0) : 0,
+    void_travel:        _qS.void_travel
+  };
 }
 
 function qRecalc() {
-  const eng = qCalcEngine(_qS);
-  const tFee = _qS.void_travel ? 0 : ((_qS.travel && !_qS.travel_loading) ? (_qS.travel.travel_fee||0) : 0);
-  const { da, discounted } = qCalcDiscount(eng.subtotal, _qS.discount_type, _qS.discount_value, _qS.custom_price);
-  const sub   = Math.round((discounted+tFee)*100)/100;
-  const tax   = Math.round(sub*Q_TAX*100)/100;
-  const total = Math.round((sub+tax)*100)/100;
-  const net   = Math.round((sub-eng.chem_cost)*100)/100;
-  const margin = sub > 0 ? Math.round(net/sub*1000)/10 : 0;
-  _qS._calc = { eng, tFee, da, discounted, sub, tax, total, net, margin };
+  _qS._calc = MCPS_PRICING.priceQuote(qPricingInput());
+  qSyncModifierLabels_();
   qRenderSummary();
 }
 
 function qRenderSummary() {
   const c = _qS._calc;
-  if (!c) { document.getElementById('q-summary').style.display='none'; return; }
+  if (!c) { document.getElementById('q-summary').style.display = 'none'; return; }
   document.getElementById('q-summary').style.display = '';
-  const { eng, tFee, da, discounted, sub, tax, total, net, margin } = c;
   let html = '';
 
+  const taxPct = (MCPS_PRICING.CATALOG.tax_rate * 100).toFixed(2).replace(/\.00$/, '');
   html += `<div class="q-metrics4">
-    <div class="q-met"><div class="q-met-lbl">Service</div><div class="q-met-val">$${eng.subtotal.toFixed(2)}</div></div>
-    <div class="q-met"><div class="q-met-lbl">Travel</div><div class="q-met-val">${_qS.travel_loading?'…':`$${tFee.toFixed(2)}`}</div></div>
-    <div class="q-met"><div class="q-met-lbl">Tax (8.25%)</div><div class="q-met-val">$${tax.toFixed(2)}</div></div>
-    <div class="q-met hi"><div class="q-met-lbl">Total</div><div class="q-met-val">$${total.toFixed(2)}</div></div>
+    <div class="q-met"><div class="q-met-lbl">Service</div><div class="q-met-val">$${c.adjusted_service.toFixed(2)}</div></div>
+    <div class="q-met"><div class="q-met-lbl">Travel</div><div class="q-met-val">${_qS.travel_loading ? '\u2026' : '$' + c.travel_fee.toFixed(2)}</div></div>
+    <div class="q-met"><div class="q-met-lbl">Tax (${taxPct}%)</div><div class="q-met-val">$${c.sales_tax.toFixed(2)}</div></div>
+    <div class="q-met hi"><div class="q-met-lbl">Total</div><div class="q-met-val">$${c.total_with_tax.toFixed(2)}</div></div>
   </div>`;
 
   if (_qS.travel && !_qS.void_travel) {
     html += `<div class="q-travel-bar">
-      <div class="q-travel-info">🚗 ${_qS.travel.round_trip_miles} mi RT · Billable: ${_qS.travel.billable_round_trip_miles} mi · <em>${_qS.travel.distance_source}</em></div>
+      <div class="q-travel-info">\ud83d\ude97 ${_qS.travel.round_trip_miles} mi RT \u00b7 Billable: ${_qS.travel.billable_round_trip_miles} mi \u00b7 <em>${_qS.travel.distance_source}</em></div>
       <button class="q-voidbtn" onclick="qVoidTravel()">Void Travel</button>
     </div>`;
   } else if (_qS.void_travel && _qS.travel) {
@@ -931,30 +912,60 @@ function qRenderSummary() {
       <button class="q-voidbtn restored" onclick="qVoidTravel()">Restore</button>
     </div>`;
   } else if (_qS.travel_loading) {
-    html += `<div class="q-travel-bar"><div class="q-travel-info">⏳ Looking up travel distance…</div></div>`;
+    html += `<div class="q-travel-bar"><div class="q-travel-info">\u23f3 Looking up travel distance\u2026</div></div>`;
   } else if (_qS.travel_error) {
-    html += `<div class="q-travel-bar"><div class="q-travel-info" style="color:var(--warn)">⚠️ ${_qS.travel_error}</div></div>`;
+    html += `<div class="q-travel-bar"><div class="q-travel-info" style="color:var(--warn)">\u26a0\ufe0f ${esc(_qS.travel_error)}</div></div>`;
   }
 
-  if (_qS.discount_type !== 'none' && da > 0) {
-    html += `<div class="q-disc-bar">🏷️ Discount: <b>−$${da.toFixed(2)}</b> · Discounted service: <b>$${discounted.toFixed(2)}</b></div>`;
+  // Says which way the adjustment went and by how much. A premium used to be
+  // impossible to express: the figure was clamped to the preset and this bar,
+  // keyed off a discount amount of 0, hid itself.
+  if (c.adjustment_kind === 'premium') {
+    html += `<div class="q-disc-bar q-prem-bar">\u25b2 Preset $${c.service_subtotal.toFixed(2)}
+      \u2192 <b>Premium +$${c.adjustment_amount.toFixed(2)}</b> (+${c.adjustment_percent.toFixed(1)}%)
+      \u00b7 Charging <b>$${c.adjusted_service.toFixed(2)}</b></div>`;
+  } else if (c.adjustment_kind === 'discount') {
+    html += `<div class="q-disc-bar">\ud83c\udff7\ufe0f Preset $${c.service_subtotal.toFixed(2)}
+      \u2192 <b>Discount \u2212$${c.adjustment_amount.toFixed(2)}</b> (\u2212${c.adjustment_percent.toFixed(1)}%)
+      \u00b7 Charging <b>$${c.adjusted_service.toFixed(2)}</b></div>`;
   }
 
-  html += `<div class="q-specs-txt">${eng.specs_summary || '—'}</div>`;
-  if (eng.qb_skus && eng.qb_skus.length) html += eng.qb_skus.map(s=>`<span class="q-sku-chip">${s}</span>`).join('');
-  if (!eng.pricing_ready && eng.pricing_warning) html += `<div class="q-warn-box">⚠️ ${eng.pricing_warning}</div>`;
-  if (_qS.service !== 'repair_job') {
-    const mc = margin >= 50 ? 'var(--success)' : margin >= 25 ? 'var(--warn)' : 'var(--error)';
-    html += `<div class="q-margin-row">Margin: <b style="color:${mc}">${margin.toFixed(1)}%</b> · Est. Net: <b>$${net.toFixed(2)}</b> · Chem: $${eng.chem_cost.toFixed(2)}</div>`;
+  const specs = MCPS_PRICING.buildSpecsSummary(qPricingInput(), c);
+  html += `<div class="q-specs-txt">${esc(specs) || '\u2014'}</div>`;
+  if (c.qb_skus && c.qb_skus.length) html += c.qb_skus.map(x => `<span class="q-sku-chip">${esc(x)}</span>`).join('');
+
+  // Every warning, not just the first. The old code showed one string and only
+  // when pricing_ready was false, so a fiberglass surcharge notice never appeared.
+  (c.warnings || []).forEach(w => { html += `<div class="q-warn-box">\u26a0\ufe0f ${esc(w)}</div>`; });
+
+  if (c.service_key !== 'repair_job') {
+    const mc = c.margin_percent >= 50 ? 'var(--success)' : c.margin_percent >= 25 ? 'var(--warn)' : 'var(--error)';
+    html += `<div class="q-margin-row">Margin: <b style="color:${mc}">${c.margin_percent.toFixed(1)}%</b>
+      \u00b7 Est. Net: <b>$${c.net_profit_est.toFixed(2)}</b> \u00b7 Chem: $${c.chem_cost_est.toFixed(2)}</div>`;
   }
 
   document.getElementById('q-sum-content').innerHTML = html;
+
+  // The operator-typed price field only exists for configurations without a rate
+  // card. Above-ground bi-weekly used to have neither a rate nor a field, which
+  // disabled Save permanently with no way forward.
+  const manualWrap = document.getElementById('q-manual-price-wrap');
+  if (manualWrap) manualWrap.style.display = c.requires_manual_price ? '' : 'none';
+
+  // Field-level feedback, using the .is-invalid style that already existed in
+  // style.css and had never been applied by any code.
+  const adjInp = document.getElementById('q-adj-val');
+  const adjErr = document.getElementById('q-adj-err');
+  if (adjInp) adjInp.classList.toggle('is-invalid', !!c.adjustment_error);
+  if (adjErr) {
+    adjErr.textContent = c.adjustment_error || '';
+    adjErr.style.display = c.adjustment_error ? '' : 'none';
+  }
+
   const btn = document.getElementById('q-save-btn');
-  btn.disabled = !eng.pricing_ready || _qS.saving;
-  const label = _qS.sales_flow === 'agreement_direct' ? 'Save Agreement Draft'
-    : _qS.sales_flow === 'operational_override' ? 'Activate Service'
-    : 'Save Quote + Agreement';
-  btn.textContent = _qS.saving ? 'Saving…' : (_qS.saved_id ? `Saved ✓ (${_qS.saved_id})` : label);
+  btn.disabled = !c.pricing_ready || _qS.saving;
+  const label = _qS.sales_flow === 'operational_override' ? 'Activate Service' : 'Save Quote + Agreement';
+  btn.textContent = _qS.saving ? 'Saving\u2026' : (_qS.saved_id ? `Saved \u2713 (${_qS.saved_id})` : label);
 }
 
 function qReset() {
@@ -965,129 +976,346 @@ function qReset() {
     c.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   document.querySelectorAll('.q-svc-card[data-svc]').forEach(c => {
-    const active = c.dataset.svc==='weekly_full';
+    const active = c.dataset.svc === 'weekly_full';
     c.classList.toggle('active', active);
     c.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
-  const pd = { size:'medium', pool_type:'inground', material:'plaster', finish:'light', debris:'light', repair_type:'repair_replacement' };
-  Object.entries(pd).forEach(([g,v]) => document.querySelectorAll(`.q-pill[data-grp="${g}"]`).forEach(p => p.classList.toggle('active', p.dataset.val===v)));
+  const pd = { size:'medium', pool_type:'inground', material:'plaster', finish:'light',
+               debris:'light', repair_type:'repair_replacement', repair_priority:'medium' };
+  Object.entries(pd).forEach(([g, v]) =>
+    document.querySelectorAll(`.q-pill[data-grp="${g}"]`).forEach(x => x.classList.toggle('active', x.dataset.val === v)));
+
   document.getElementById('q-pool-sec').style.display    = '';
   document.getElementById('q-startup-sec').style.display = 'none';
   document.getElementById('q-repair-sec').style.display  = 'none';
   const contactSearchWrap = document.getElementById('q-contact-rep-search-wrap');
   if (contactSearchWrap) contactSearchWrap.style.display = '';
-  const hint = document.getElementById('q-startup-date-hint'); if(hint) hint.textContent='';
-  ['spa','robot','sun','pets','school','mcp'].forEach(k => document.getElementById('qchk-'+k)?.classList.remove('active'));
+
+  // ⚠️ EVERY text input on the page. The old list omitted the repair work-order
+  // fields, so "+ New Quote" cleared the state but left the previous customer's
+  // job name, issue, equipment and assigned tech on screen — an operator who
+  // didn't retype them saved a blank work order while reading a filled-in form.
+  [ 'q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
+    'q-startup-co','q-startup-company-email','q-startup-date','q-startup-company-select',
+    'q-rep-name','q-rep-issue','q-rep-equip','q-rep-tech','q-rep-company-select',
+    'q-rep-client-search','q-rep-client-select','q-rep-location-select',
+    'q-adj-val','q-manual-price','q-scope-custom'
+  ].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+  const adjType = document.getElementById('q-adj-type');
+  if (adjType) adjType.value = 'none';
+  ['q-adj-val-wrap','q-manual-price-wrap','q-rep-client-select-wrap','q-rep-location-wrap','q-adj-err']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+
+  ['spa','robot','sun','pets','school','mcp'].forEach(k => document.getElementById('qchk-' + k)?.classList.remove('active'));
   document.getElementById('qchk-chem')?.classList.add('active');
   document.getElementById('qchk-prog')?.classList.add('active');
-  ['q-fname','q-lname','q-email','q-phone','q-address','q-zip','q-city','q-area',
-   'q-startup-co','q-startup-company-email','q-startup-date','q-rep-amt','q-rep-client-search'
-  ].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
-  const clientWrap = document.getElementById('q-rep-client-select-wrap');
-  if (clientWrap) clientWrap.style.display = 'none';
-  const locWrap = document.getElementById('q-rep-location-wrap');
-  if (locWrap) locWrap.style.display = 'none';
-  const existingMsg = document.getElementById('q-rep-existing-msg');
-  if (existingMsg) existingMsg.textContent = '';
-  const startupCompanyMsg = document.getElementById('q-startup-company-msg');
-  if (startupCompanyMsg) startupCompanyMsg.textContent = '';
-  const startupCompanySelect = document.getElementById('q-startup-company-select');
-  if (startupCompanySelect) startupCompanySelect.value = '';
-  document.getElementById('q-disc-type').value = 'none';
-  document.getElementById('q-disc-val-wrap').style.display = 'none';
-  document.getElementById('q-disc-val').value = '';
-  const msg = document.getElementById('q-save-msg'); msg.className='q-msg'; msg.textContent='';
+
+  ['q-startup-date-hint','q-rep-existing-msg','q-startup-company-msg'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = '';
+  });
+  // The parts list is JS-rendered, so clearing state is not enough — it has to
+  // be repainted or the previous job's rows stay, wired to indexes that are gone.
+  if (typeof qRepRenderParts === 'function') qRepRenderParts();
+
+  const msg = document.getElementById('q-save-msg');
+  if (msg) { msg.className = 'q-msg'; msg.textContent = ''; }
   qRenderSavedCard();
   qRecalc();
 }
 
+// A stable key per save attempt. Regenerated only by qReset()/qLoadQuote, so a
+// double-click, a flaky connection retry or an impatient second click all carry
+// the SAME key and the server returns the original quote instead of minting a
+// second customer and a second pool_id.
+function qEnsureIdempotencyKey_() {
+  if (!_qS.idempotency_key) {
+    _qS.idempotency_key = 'q-' + Date.now().toString(36) + '-' +
+      Math.random().toString(36).slice(2, 10);
+  }
+  return _qS.idempotency_key;
+}
+
 async function qSave() {
   const c = _qS._calc;
-  if (!c || !c.eng.pricing_ready || _qS.saving) return;
-  const { eng, tFee, da, discounted, sub, tax, total, net, margin } = c;
+  if (!c || !c.pricing_ready || _qS.saving) return;
+
+  // Refuse before the round trip rather than saving a quote nobody can contact.
+  const missing = qMissingRequiredFields_();
+  if (missing.length) {
+    const msg = document.getElementById('q-save-msg');
+    msg.className = 'q-msg err';
+    msg.textContent = 'Missing: ' + missing.join(', ');
+    qMarkInvalidFields_(missing);
+    return;
+  }
+
   _qS.saving = true; qRenderSummary();
-  const autoOperational = _qS.service === 'pool_startup' || _qS.service === 'green_to_clean';
-  const activationMethod = _qS.sales_flow === 'operational_override' ? 'ADMIN_OVERRIDE'
-    : _qS.service === 'pool_startup' ? 'STARTUP_AUTO'
-    : _qS.service === 'green_to_clean' ? 'GTC_AUTO'
-    : _qS.sales_flow === 'agreement_direct' ? 'AGREEMENT_DIRECT'
-    : 'SIGNED_AGREEMENT';
+  const msg = document.getElementById('q-save-msg');
+  msg.className = 'q-msg';
+  msg.textContent = 'Saving quote…';
 
   const payload = {
-    action: 'save_quote', token: _s ? _s.token : '',
-    // Resolved Scope of Work — persisted so every downstream document matches.
+    idempotency_key: qEnsureIdempotencyKey_(),
+    // Scope of Work as resolved in the preview, persisted so the packet, the
+    // signing page and the signed contract all render this exact list.
     scope_items: qResolvedScopeItems(),
-    first_name:_qS.first_name, last_name:_qS.last_name, email:_qS.email, phone:_qS.phone,
-    address:_qS.address, city:_qS.city, zip_code:_qS.zip_code, area:_qS.area,
-    service:eng.service_label, pool_type:eng.pool_type, size:eng.size, material:eng.material,
-    spa:eng.spa, finish:eng.finish, debris:eng.debris,
-    has_robot:_qS.has_robot, high_sun_exposure:_qS.high_sun_exposure, has_pets:_qS.has_pets,
-    startup_chemical_work:_qS.startup_chemical, startup_programming:_qS.startup_programming,
-    startup_pool_school:_qS.startup_pool_school, startup_company:_qS.startup_company,
-    startup_company_email:_qS.startup_company_email,
-    sponsored_by_mcp:_qS.sponsored_by_mcp, startup_start_date:_qS.startup_start_date,
-    startup_total_days:_qS.sponsored_by_mcp ? 3 : 0,
-    repair_job_type:        _qS.service==='repair_job' ? _qS.repair_type    : '',
-    repair_company_name:    _qS.service==='repair_job' ? _qS.repair_company  : '',
-    repair_invoice_amount:  _qS.service==='repair_job' ? _qS.repair_amount   : 0,
-    repair_sku:             _qS.service==='repair_job' ? _qS.repair_sku      : '',
-    repair_job_name:        _qS.service==='repair_job' ? _qS.repair_job_name : '',
-    repair_priority:        _qS.service==='repair_job' ? _qS.repair_priority : '',
-    repair_equipment:       _qS.service==='repair_job' ? _qS.repair_equipment : '',
-    repair_issue:           _qS.service==='repair_job' ? _qS.repair_issue    : '',
-    repair_assigned_to:     _qS.service==='repair_job' ? _qS.repair_assigned_to : '',
-    repair_parts:           _qS.service==='repair_job' ? JSON.stringify((_qS.repair_parts || []).filter(p => (p.name || '').trim())) : '[]',
+    plan_options: _qS.proposal_plan_options || {},
+
+    // The service KEY. Sending only the display label is what silently killed
+    // repair work orders for every repair ever quoted.
+    service_key: c.service_key,
+    size: _qS.size, pool_type: _qS.pool_type, material: _qS.material,
+    spa: _qS.spa, finish: _qS.finish, debris: _qS.debris,
+    has_robot: _qS.has_robot, high_sun_exposure: _qS.high_sun_exposure, has_pets: _qS.has_pets,
+
+    first_name: _qS.first_name, last_name: _qS.last_name,
+    email: _qS.email, phone: _qS.phone,
+    address: _qS.address, city: _qS.city, zip_code: _qS.zip_code, area: _qS.area,
     ...qSelectedIdentityPayload_(),
-    travel_fee:tFee,
-    travel_one_way_miles:             (_qS.travel&&!_qS.void_travel)?_qS.travel.one_way_miles:0,
-    travel_round_trip_miles:          (_qS.travel&&!_qS.void_travel)?_qS.travel.round_trip_miles:0,
-    travel_billable_round_trip_miles: (_qS.travel&&!_qS.void_travel)?_qS.travel.billable_round_trip_miles:0,
-    distance_source: (_qS.travel&&!_qS.void_travel)?_qS.travel.distance_source:'none',
-    service_subtotal:eng.subtotal, discount_type:_qS.discount_type==='none'?'':_qS.discount_type,
-    discount_value:_qS.discount_value, discount_amount:da, discounted_service_subtotal:discounted,
-    quote_subtotal:sub, sales_tax:tax, total_with_tax:total,
-    chem_cost_est:eng.chem_cost, net_profit_est:net, margin_percent:margin,
-    specs_summary:eng.specs_summary, quickbooks_skus:eng.qb_skus.join(', '), quickbooks_item_names:eng.qb_names.join(', '),
-    created_by:(_s&&_s.name)||'portal', quote_source:'portal', quote_version:'2.0',
+
+    startup_chemical: _qS.startup_chemical,
+    startup_programming: _qS.startup_programming,
+    startup_pool_school: _qS.startup_pool_school,
+    startup_company: _qS.startup_company,
+    startup_company_email: _qS.startup_company_email,
+    sponsored_by_mcp: _qS.sponsored_by_mcp,
+    startup_start_date: _qS.startup_start_date,
+
+    repair_type: _qS.repair_type, repair_company: _qS.repair_company,
+    repair_job_name: _qS.repair_job_name, repair_priority: _qS.repair_priority,
+    repair_equipment: _qS.repair_equipment, repair_issue: _qS.repair_issue,
+    repair_assigned_to: _qS.repair_assigned_to,
+    repair_parts: JSON.stringify((_qS.repair_parts || []).filter(p => (p.name || '').trim())),
+
+    manual_price: _qS.manual_price,
+    adjustment_type: _qS.adjustment_type === 'none' ? '' : _qS.adjustment_type,
+    adjustment_value: _qS.adjustment_value,
+
+    travel_fee: c.travel_fee, void_travel: _qS.void_travel,
+    travel_one_way_miles:             (_qS.travel && !_qS.void_travel) ? _qS.travel.one_way_miles : 0,
+    travel_round_trip_miles:          (_qS.travel && !_qS.void_travel) ? _qS.travel.round_trip_miles : 0,
+    travel_billable_round_trip_miles: (_qS.travel && !_qS.void_travel) ? _qS.travel.billable_round_trip_miles : 0,
+    distance_source: (_qS.travel && !_qS.void_travel) ? _qS.travel.distance_source : 'none',
+
+    // ⚠️ Sent as a CLAIM, not as the price. The server recomputes from the inputs
+    // above with the same engine and stores its own figures; a mismatch is logged.
+    service_subtotal: c.service_subtotal, adjusted_service: c.adjusted_service,
+    quote_subtotal: c.quote_subtotal, sales_tax: c.sales_tax,
+    total_with_tax: c.total_with_tax,
+
     sales_flow: _qS.sales_flow,
-    signature_required: (_qS.signature_required && !autoOperational) ? 'TRUE' : 'FALSE',
-    activation_method: activationMethod,
-    status: (autoOperational || _qS.sales_flow === 'operational_override') ? 'ACTIVE_CUSTOMER' : 'UNSENT'
+    signature_required: (_qS.signature_required && c.service_key !== 'pool_startup' && c.service_key !== 'green_to_clean') ? 'TRUE' : 'FALSE',
+    quote_source: 'portal'
   };
 
   try {
-    const res = await api(payload);
+    const res = await apiLocalPost('/api/quotes/save', payload);
     _qS.saving = false;
-    const msg = document.getElementById('q-save-msg');
-    if (res.ok) {
-      _qS.saved_id = res.quote_id || '✓';
-      _qS.pool_id = res.pool_id || null;
-      _qS.agreement_id = res.agreement_id || null;
-      _qS.service_account_id = res.service_account_id || null;
-      _qS.gtc_visits = [];
-      _qS.gtc_operators = [];
-      _qS.gtc_scheduling = false;
-      // Load operator list for the scheduling dropdown (background, non-blocking)
-      if (res.pool_id && _qS.service === 'green_to_clean') {
+    if (!res.ok) {
+      msg.className = 'q-msg err';
+      msg.textContent = res.error || 'Save failed.';
+      qRenderSummary();
+      return;
+    }
+
+    _qS.saved_id = res.quote_id;
+    _qS.pool_id = res.pool_id || '';
+    _qS.agreement_id = res.agreement_id || null;
+    _qS.proposal_id = res.proposal_id || null;
+    _qS.proposal_number = res.proposal_number || '';
+    _qS.service_account_id = res.service_account_id || null;
+    _qS.gtc_visits = []; _qS.gtc_operators = []; _qS.gtc_scheduling = false;
+
+    msg.className = 'q-msg ok';
+    msg.textContent = res.replayed
+      ? `Already saved as ${res.quote_id}.`
+      : `Saved! Quote ID: ${res.quote_id}` + (res.ms ? ` (${(res.ms / 1000).toFixed(1)}s)` : '');
+    msg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    qRenderSavedCard();
+    qRenderSummary();
+
+    // ── Off the critical path ────────────────────────────────────────────────
+    // Routes placement, Maps geocoding, Scheduled_Visits and the repair work
+    // order need Google services, so they stay in Apps Script — but AFTER the
+    // operator has been told the quote is saved, not before.
+    if (!res.replayed) qProvisionSchedule_(res.quote_id);
+  } catch (e) {
+    _qS.saving = false;
+    msg.className = 'q-msg err';
+    msg.textContent = 'Network error — check connection. Saving again is safe; it will not duplicate.';
+    qRenderSummary();
+  }
+}
+
+// Fire-and-report. A failure here does not lose the quote — the record is already
+// written — so it is surfaced as something to retry rather than as a save failure.
+function qProvisionSchedule_(quoteId) {
+  _qS.provisioning = true;
+  qRenderSavedCard();
+  api({ action: 'provision_quote_schedule', token: _s ? _s.token : '', quote_id: quoteId })
+    .then(res => {
+      _qS.provisioning = false;
+      _qS.provision_error = (res && res.ok) ? '' : ((res && res.error) || 'Scheduling setup failed.');
+      if (res && res.ok && res.pool_id) _qS.pool_id = res.pool_id;
+      if (typeof _clearRouteCache === 'function') _clearRouteCache();
+      if (_qS.pool_id && _qS.service === 'green_to_clean') {
         apiGet({ action: 'route_data', token: _s ? _s.token : '' })
           .then(r => { _qS.gtc_operators = Array.isArray(r.all_operators) ? r.all_operators : []; qRenderSavedCard(); })
           .catch(() => {});
       }
-      msg.className = 'q-msg ok';
-      msg.textContent = `Saved! Quote ID: ${res.quote_id || '—'}`;
-      msg.scrollIntoView({ behavior:'smooth', block:'nearest' });
       qRenderSavedCard();
-    } else {
-      msg.className = 'q-msg err';
-      msg.textContent = `Error: ${res.error || 'Save failed — check Apps Script logs.'}`;
+    })
+    .catch(() => {
+      _qS.provisioning = false;
+      _qS.provision_error = 'Scheduling setup could not be reached. The quote is saved.';
+      qRenderSavedCard();
+    });
+}
+
+function qMissingRequiredFields_() {
+  const missing = [];
+  if (!(_qS.first_name || '').trim() && !(_qS.last_name || '').trim()) missing.push('customer name');
+  if (!(_qS.email || '').trim() && !(_qS.phone || '').trim()) missing.push('email or phone');
+  if (!(_qS.address || '').trim()) missing.push('property address');
+  return missing;
+}
+
+function qMarkInvalidFields_(missing) {
+  const map = {
+    'customer name': ['q-fname', 'q-lname'],
+    'email or phone': ['q-email', 'q-phone'],
+    'property address': ['q-address']
+  };
+  document.querySelectorAll('.q-inp.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+  missing.forEach(k => (map[k] || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.classList) el.classList.add('is-invalid');
+  }));
+}
+
+// ── Reopen a saved quote ──────────────────────────────────────────────────────
+// ⚠️ THIS WAS IMPOSSIBLE. There was no get_quote action anywhere, and saved_id was
+// set in exactly one place: right after a successful save. Scope chips, plan chips,
+// the pool photo, Generate Packet, Preview Agreement and Send for Signature all
+// lived only in the browser tab that created the quote. A reload lost them for good.
+async function qLoadQuote(quoteId) {
+  const id = String(quoteId || '').trim();
+  if (!id) return;
+  const msg = document.getElementById('q-save-msg');
+  if (msg) { msg.className = 'q-msg'; msg.textContent = 'Loading ' + id + '…'; }
+  try {
+    const res = await apiLocalGet('/api/quotes/get', { quote_id: id });
+    if (!res.ok) {
+      if (msg) { msg.className = 'q-msg err'; msg.textContent = res.error || 'Could not load that quote.'; }
+      return;
     }
-  } catch(e) {
-    _qS.saving = false;
-    const msg = document.getElementById('q-save-msg');
-    msg.className = 'q-msg err';
-    msg.textContent = 'Network error — check connection.';
+    qReset();
+    Object.assign(_qS, res.state || {});
+    _qS.saved_id = res.quote_id;
+    _qS.idempotency_key = '';          // a reopened quote is edited, never re-created
+    _qS.loaded_totals = res.totals || null;
+    _qS.editable = res.editable !== false;
+    _qS.edit_blocked_reason = res.edit_blocked_reason || '';
+    _qS.agreement = res.agreement || null;
+    _qS.line_items = res.items || [];
+    _qS.change_log = res.change_log || [];
+    if (res.state && res.state.proposal_image_url) _qS.proposal_image_preview = res.state.proposal_image_url;
+    if (res.state && Array.isArray(res.state.scope_items)) _qS.loaded_scope_items = res.state.scope_items;
+
+    qApplyStateToForm_();
+    qRecalc();
+    qRenderSavedCard();
+    if (msg) {
+      msg.className = 'q-msg ok';
+      msg.textContent = _qS.editable
+        ? 'Loaded ' + id + '. Changes are recorded with your name.'
+        : 'Loaded ' + id + ' (read-only). ' + _qS.edit_blocked_reason;
+    }
+  } catch (e) {
+    if (msg) { msg.className = 'q-msg err'; msg.textContent = 'Network error loading ' + id + '.'; }
   }
-  qRenderSummary();
+}
+
+// Push loaded state into the DOM. The form is not data-bound, so a value that
+// only exists in _qS shows an empty field and the operator overwrites it blind.
+function qApplyStateToForm_() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
+  set('q-fname', _qS.first_name); set('q-lname', _qS.last_name);
+  set('q-email', _qS.email); set('q-phone', _qS.phone);
+  set('q-address', _qS.address); set('q-city', _qS.city);
+  set('q-zip', _qS.zip_code); set('q-area', _qS.area);
+  set('q-adj-type', _qS.adjustment_type || 'none');
+  set('q-adj-val', _qS.adjustment_value);
+  set('q-manual-price', _qS.manual_price || '');
+  set('q-startup-co', _qS.startup_company);
+  set('q-startup-company-email', _qS.startup_company_email);
+  set('q-startup-date', _qS.startup_start_date);
+
+  if (typeof qSetService === 'function' && _qS.service) qSetService(_qS.service);
+  if (typeof qSetSalesFlow === 'function') qSetSalesFlow(_qS.sales_flow || 'proposal_first');
+
+  ['size', 'pool_type', 'material', 'finish', 'debris', 'repair_type'].forEach(grp => {
+    document.querySelectorAll(`.q-pill[data-grp="${grp}"]`).forEach(p =>
+      p.classList.toggle('active', p.dataset.val === String(_qS[grp])));
+  });
+  const chk = { spa: 'spa', robot: 'has_robot', sun: 'high_sun_exposure', pets: 'has_pets',
+                chem: 'startup_chemical', prog: 'startup_programming', school: 'startup_pool_school',
+                mcp: 'sponsored_by_mcp' };
+  Object.keys(chk).forEach(k => {
+    const el = document.getElementById('qchk-' + k);
+    if (el && el.classList) el.classList.toggle('active', !!_qS[chk[k]]);
+  });
+
+  const adjWrap = document.getElementById('q-adj-val-wrap');
+  if (adjWrap) adjWrap.style.display = (_qS.adjustment_type && _qS.adjustment_type !== 'none') ? '' : 'none';
+  if (_qS.adjustment_type && _qS.adjustment_type !== 'none') qAdjTypeChange(_qS.adjustment_type);
+  set('q-adj-val', _qS.adjustment_value);
+}
+
+// Save an edit to a quote that already exists.
+async function qSaveEdit() {
+  if (!_qS.saved_id) return;
+  if (_qS.editable === false) return;
+  const c = _qS._calc;
+  if (!c || !c.pricing_ready) return;
+  const msg = document.getElementById('q-save-msg');
+  if (msg) { msg.className = 'q-msg'; msg.textContent = 'Saving changes…'; }
+  try {
+    const res = await apiLocalPost('/api/quotes/update', {
+      quote_id: _qS.saved_id,
+      service_key: c.service_key,
+      size: _qS.size, pool_type: _qS.pool_type, material: _qS.material,
+      spa: _qS.spa, finish: _qS.finish, debris: _qS.debris,
+      has_robot: _qS.has_robot, high_sun_exposure: _qS.high_sun_exposure, has_pets: _qS.has_pets,
+      first_name: _qS.first_name, last_name: _qS.last_name,
+      email: _qS.email, phone: _qS.phone,
+      address: _qS.address, city: _qS.city, zip_code: _qS.zip_code, area: _qS.area,
+      manual_price: _qS.manual_price,
+      adjustment_type: _qS.adjustment_type === 'none' ? '' : _qS.adjustment_type,
+      adjustment_value: _qS.adjustment_value,
+      travel_fee: c.travel_fee, void_travel: _qS.void_travel,
+      repair_type: _qS.repair_type, repair_issue: _qS.repair_issue,
+      repair_parts: JSON.stringify((_qS.repair_parts || []).filter(p => (p.name || '').trim())),
+      scope_items: qResolvedScopeItems(),
+      plan_options: _qS.proposal_plan_options || {}
+    });
+    if (!res.ok) {
+      if (msg) { msg.className = 'q-msg err'; msg.textContent = res.error || 'Update failed.'; }
+      if (res.code === 'SIGNED') { _qS.editable = false; _qS.edit_blocked_reason = res.error; qRenderSavedCard(); }
+      return;
+    }
+    _qS.change_log = (_qS.change_log || []).concat([{ at: new Date().toISOString(), by: (_s && _s.name) || 'you', action: 'edited' }]);
+    if (msg) {
+      msg.className = 'q-msg ok';
+      msg.textContent = res.changed
+        ? `Updated. ${res.changes.length} change${res.changes.length === 1 ? '' : 's'} recorded.`
+        : 'Nothing changed.';
+    }
+    qRenderSavedCard();
+  } catch (e) {
+    if (msg) { msg.className = 'q-msg err'; msg.textContent = 'Network error saving changes.'; }
+  }
 }
 
 function qMoneyLabel_(amount) {
@@ -1108,6 +1336,16 @@ function qSyncStartupPriceLabels_() {
 
 function qInit() {
   qSyncStartupPriceLabels_();
+  // Deep link into a saved quote. Other screens set window._pendingQuoteId and
+  // navigate here, the same mechanism the Action Queue and Contracts already use
+  // to open the Sales Hub drawer.
+  const pending = window._pendingQuoteId ||
+    (typeof location !== 'undefined' && /[?&]quote=([^&]+)/.exec(location.hash || '') || [])[1];
+  if (pending) {
+    window._pendingQuoteId = null;
+    if (typeof qLoadQuote === 'function') qLoadQuote(decodeURIComponent(pending));
+    return;
+  }
   const contactSearchWrap = document.getElementById('q-contact-rep-search-wrap');
   if (contactSearchWrap) contactSearchWrap.style.display = '';
   if (!_qS._calc) qRecalc();
@@ -1126,17 +1364,15 @@ function qRenderSavedCard() {
   if (!_qS.saved_id) { el.innerHTML = ''; return; }
 
   const c = _qS._calc;
-  const eng = c ? c.eng : null;
-  const tFee  = c ? c.tFee  : 0;
-  const tax   = c ? c.tax   : 0;
-  const total = c ? c.total : 0;
-  const sub   = c ? c.sub   : 0;
+  const tFee  = c ? c.travel_fee     : 0;
+  const tax   = c ? c.sales_tax      : 0;
+  const total = c ? c.total_with_tax : 0;
+  const sub   = c ? c.adjusted_service : 0;
 
   const fullName = [_qS.first_name, _qS.last_name].filter(Boolean).join(' ') || '—';
-  const serviceLabel = eng ? eng.service_label : (_qS.service || '—');
-  const specs = eng ? (eng.specs_summary || '') : '';
-  const flowLabel = _qS.sales_flow === 'agreement_direct' ? 'Agreement direct'
-    : _qS.sales_flow === 'operational_override' ? 'Activated by override'
+  const serviceLabel = c ? c.service_label : (_qS.service || '—');
+  const specs = c ? MCPS_PRICING.buildSpecsSummary(qPricingInput(), c) : '';
+  const flowLabel = _qS.sales_flow === 'operational_override' ? 'Activated by override'
     : 'Quote + agreement';
 
   // Contract section
@@ -1222,42 +1458,10 @@ function qRenderSavedCard() {
     </div>`;
   }
 
-  // Contract section
-  let contractHtml = '';
-  if (_qS.sales_flow === 'agreement_direct' && _qS.contract_status === 'generating') {
-    contractHtml = `<div class="q-contract-section">
-      <span class="q-contract-status generating">Generating contract…</span>
-    </div>`;
-  } else if (_qS.sales_flow === 'agreement_direct' && _qS.contract_status === 'generated') {
-    const sendLabel = _qS.send_contract_status === 'sending' ? 'Sending…'
-                    : _qS.sent_at ? 'Resend Agreement'
-                    : 'Send Agreement';
-    const sentNote = _qS.sent_at
-      ? `<span style="font-size:.75rem;color:var(--muted)">Sent ${new Date(_qS.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>`
-      : '';
-    contractHtml = `<div class="q-contract-section">
-      <span class="q-contract-status ok">Contract ready</span>
-      <div class="q-contract-btns">
-        <a class="q-btn-outline" href="${_qS.contract_url}" target="_blank" rel="noopener">View PDF</a>
-        <a class="q-btn-outline" href="${_qS.contract_download_url}" target="_blank" rel="noopener">Download</a>
-        <button class="q-btn-ghost" onclick="qGenerateContract()">Regenerate</button>
-        <button class="q-btn-primary" onclick="qSendContract()" id="q-send-contract-btn"
-          ${_qS.send_contract_status === 'sending' ? 'disabled' : ''}>${sendLabel}</button>
-      </div>
-      ${sentNote}
-      <div id="q-send-msg" style="display:none;font-size:.8rem;margin-top:.35rem;color:var(--error)"></div>
-    </div>`;
-  } else if (_qS.sales_flow === 'agreement_direct') {
-    const errHtml = _qS.contract_error
-      ? `<span class="q-contract-err">${_qS.contract_error}</span>` : '';
-    contractHtml = `<div class="q-contract-section">
-      <span class="q-contract-status none">No service agreement yet</span>
-      ${errHtml}
-      <div class="q-contract-btns">
-        <button class="q-btn-primary" onclick="qGenerateContract()">Generate Service Agreement</button>
-      </div>
-    </div>`;
-  }
+  // RETIRED: the `agreement_direct` contract block lived here — Generate Service
+  // Agreement / View PDF / Download / Regenerate / Send Agreement. It was already
+  // unreachable (Sales Path only ever offers proposal_first and
+  // operational_override), and its backend routes are gone.
 
   // G2C scheduling section
   let gtcHtml = '';
@@ -1314,8 +1518,28 @@ function qRenderSavedCard() {
         <span class="q-id-badge">${_qS.saved_id}</span>
         <span class="q-saved-name">${esc(fullName)}</span>
       </div>
-      <button class="q-btn-ghost q-edit-btn" onclick="qToggleEditPanel(true)">Edit Info</button>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        ${_qS.editable === false
+          ? `<span class="q-contract-status none" title="${esc(_qS.edit_blocked_reason)}">Read-only \u2014 signed</span>`
+          : `<button class="q-btn-primary" onclick="qSaveEdit()" title="Re-price and record this change">Save Changes</button>`}
+        <button class="q-btn-ghost q-edit-btn" onclick="qToggleEditPanel(true)">Edit Info</button>
+      </div>
     </div>
+
+    ${_qS.provisioning
+      ? `<div class="q-msg" style="display:block">Setting up scheduling\u2026</div>`
+      : (_qS.provision_error
+          ? `<div class="q-msg err" style="display:block">${esc(_qS.provision_error)} <button class="q-btn-ghost" style="padding:.15rem .5rem;font-size:.72rem" onclick="qProvisionSchedule_('${esc(_qS.saved_id)}')">Retry</button></div>`
+          : '')}
+
+    ${(_qS.change_log && _qS.change_log.length > 1)
+      ? `<details class="q-changelog"><summary>${_qS.change_log.length} changes</summary>` +
+        _qS.change_log.slice().reverse().map(e =>
+          `<div class="q-changelog-row"><span>${esc(e.by || '')}</span>` +
+          `<span>${e.at ? new Date(e.at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}</span>` +
+          `<span>${esc((e.changes || []).join('; ') || e.action || '')}</span></div>`).join('') +
+        `</details>`
+      : ''}
 
     <div class="q-saved-card-fields">
       ${_qS.email    ? `<div class="q-scf"><span class="q-scf-lbl">Email</span><span>${esc(_qS.email)}</span></div>` : ''}
@@ -1342,7 +1566,6 @@ function qRenderSavedCard() {
     ${editPanel}
     ${proposalHtml}
     ${gtcHtml}
-    ${contractHtml}
   </div>`;
 }
 
@@ -1392,28 +1615,6 @@ async function qScheduleGtcVisit() {
   }
 }
 
-async function qGenerateContract() {
-  if (_qS.contract_status === 'generating') return;
-  _qS.contract_status = 'generating';
-  _qS.contract_error = '';
-  qRenderSavedCard();
-  try {
-    const res = await api({ action: 'generate_contract', token: _s ? _s.token : '', quote_id: _qS.saved_id });
-    if (res.ok) {
-      _qS.contract_status = 'generated';
-      _qS.contract_url = res.contract_url || '';
-      _qS.contract_download_url = res.contract_download_url || '';
-      _qS.agreement_id = res.agreement_id || _qS.agreement_id || null;
-    } else {
-      _qS.contract_status = 'none';
-      _qS.contract_error = res.error || 'Contract generation failed.';
-    }
-  } catch(e) {
-    _qS.contract_status = 'none';
-    _qS.contract_error = 'Network error — check connection.';
-  }
-  qRenderSavedCard();
-}
 
 function qProposalPhotoSelected(input) {
   const file = input && input.files && input.files[0];
@@ -1501,33 +1702,6 @@ async function qSendProposalApproval() {
   qRenderSavedCard();
 }
 
-async function qSendContract() {
-  if (!_qS.saved_id || _qS.send_contract_status === 'sending') return;
-  _qS.send_contract_status = 'sending';
-  qRenderSavedCard();
-  try {
-    const res = await api({ action: 'send_contract', token: _s ? _s.token : '', quote_id: _qS.saved_id });
-    if (res.ok) {
-      _qS.send_contract_status = 'sent';
-      _qS.sent_at = res.sent_at || new Date().toISOString();
-      // Keep CRM cache in sync
-      const idx = _crmCache.findIndex(i => i.quote_id === _qS.saved_id);
-      if (idx > -1) { _crmCache[idx].status = 'SENT'; _crmCache[idx].sent_at = _qS.sent_at; }
-    } else {
-      _qS.send_contract_status = 'error';
-      _qS.contract_error = res.error || 'Failed to send contract.';
-    }
-  } catch(e) {
-    _qS.send_contract_status = 'error';
-    _qS.contract_error = 'Network error — check connection.';
-  }
-  qRenderSavedCard();
-  const msgEl = document.getElementById('q-send-msg');
-  if (msgEl && _qS.send_contract_status === 'error') {
-    msgEl.textContent = _qS.contract_error;
-    msgEl.style.display = 'block';
-  }
-}
 
 function qToggleEditPanel(show) {
   const panel = document.getElementById('q-edit-panel');

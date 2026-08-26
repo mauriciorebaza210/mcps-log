@@ -432,3 +432,48 @@ export function sendJson(res, status, body, cacheSeconds = 0) {
   }
   res.status(status).send(JSON.stringify(body));
 }
+
+// ── Batched writes ────────────────────────────────────────────────────────────
+// values:batchUpdate takes many ranges in ONE request. Apps Script's softSetCell_
+// did the opposite: a getLastColumn(), a header read and a setValue() PER CELL,
+// three round trips each, ~200 call sites. A save that touched forty cells cost
+// well over a hundred Sheets operations; here it costs one.
+export async function writeSheetRanges(updates, spreadsheetId = crmSpreadsheetId()) {
+  const data = (updates || []).filter(u => u && u.range && Array.isArray(u.values));
+  if (!data.length) return { totalUpdatedCells: 0 };
+  const token = await getAccessToken();
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        valueInputOption: 'RAW',
+        data: data.map(u => ({ range: u.range, majorDimension: 'ROWS', values: u.values }))
+      })
+    }
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || 'Sheets API batch write failed');
+  return json;
+}
+
+// A1 column letter for a zero-based index. Needed beyond column Z: Proposals
+// carries 51 columns, so a full-row write range ends at AY.
+export function colLetter(index) {
+  let n = Number(index) + 1, out = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+// Quote a tab name for an A1 range. Sheet titles with spaces or apostrophes
+// break an unquoted range, and the failure is a confusing 400 rather than
+// anything that names the sheet.
+export function a1(sheetName, startCol, row, endCol) {
+  const safe = `'${String(sheetName).replace(/'/g, "''")}'`;
+  return `${safe}!${colLetter(startCol)}${row}:${colLetter(endCol)}${row}`;
+}

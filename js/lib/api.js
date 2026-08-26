@@ -102,6 +102,26 @@ function apiGet(params, options = {}) {
   return fetch(url.toString(), fetchOptions).then(parseApiResponse_);
 }
 
+/**
+ * POST to a same-origin Vercel function (api/*), bypassing Apps Script entirely.
+ * The quote write path uses this: api/quotes/save.js reads the whole relational
+ * model in one values:batchGet and writes it back in a handful of requests, where
+ * the Apps Script route spent 150-300 individual Sheets operations on the same work.
+ */
+function apiLocalPost(path, payload = {}, options = {}) {
+  const body = Object.assign({}, payload);
+  if (body.token === undefined) {
+    const token = currentSessionToken_();
+    if (token) body.token = token;
+  }
+  return fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    ...options
+  }).then(parseApiResponse_);
+}
+
 function apiLocalGet(path, params = {}, options = {}) {
   const url = new URL(path, window.location.origin);
   Object.entries(params).forEach(([k, v]) => {
