@@ -537,32 +537,12 @@ console.log('ACTIVATION from an AMENDMENT is refused');
   t('no pool id minted', s.calls.poolIdMinted === 0);
 }
 
-console.log('EXTERNAL service_agreement_signed refuses an amendment');
-{
-  const s = build({ agreements: [PARENT()] });
-  const created = s.ctx.handleCreateAmendment_({ parent_agreement_id: 'AGR-0001', total: '216.50' });
-  // Explicit amendment id, straight into the external callback.
-  const r = s.ctx.handleServiceAgreementSigned_({
-    agreement_id: created.amendment_id, quote_id: 'Q1', signed_at: iso(Date.now()) });
-  t('external callback refuses an amendment agreement_id',
-    r.ok === false && /amendment/i.test(r.error || ''), '(' + JSON.stringify(r).slice(0, 100) + ')');
-  t('no activation ran', s.calls.activate === 0 && s.calls.poolIdMinted === 0);
-
-  // Same via signrequest_id.
-  const agr = s.sheets.Service_Agreements;
-  const idx = agr.rows[0].indexOf('signrequest_id') === -1
-    ? (agr.rows[0].push('signrequest_id'), agr.rows.forEach((r2, i) => { if (i) r2.push(''); }), agr.rows[0].length - 1)
-    : agr.rows[0].indexOf('signrequest_id');
-  for (let i = 1; i < agr.rows.length; i++) {
-    if (String(agr.rows[i][agr.rows[0].indexOf('agreement_id')]) === created.amendment_id) {
-      agr.rows[i][idx] = 'SR-123';
-    }
-  }
-  const r2 = s.ctx.handleServiceAgreementSigned_({ signrequest_id: 'SR-123', signed_at: iso(Date.now()) });
-  t('external callback refuses an amendment signrequest_id',
-    r2.ok === false && /amendment/i.test(r2.error || ''), '(' + JSON.stringify(r2).slice(0, 100) + ')');
-  t('still no activation', s.calls.activate === 0);
-}
+// NOTE: three blocks were removed with the retirement of the SignRequest -> Zapier
+// callback (`service_agreement_signed` / handleServiceAgreementSigned_). They covered
+// that external, secret-authenticated entry point refusing amendment ids and rejecting
+// conflicting identifiers. The route is gone, so the failure modes are gone with it.
+// The in-portal guards (handleSignAgreement_, activate_service_account_from_agreement,
+// handleRespondToProposal_) are still covered below.
 
 console.log('STAFF activate_service_account_from_agreement refuses an amendment');
 {
@@ -626,52 +606,6 @@ console.log('\nACTIVATION requires the agreement to BELONG to the quote');
   const ok = s.ctx.activateQuoteServiceFromAgreement_('Q1', iso(Date.now()), 'IN_PORTAL_ESIGN', 'AGR-0001');
   t('the correct quote/agreement pair still activates', ok.ok === true,
     '(' + JSON.stringify(ok).slice(0, 90) + ')');
-}
-
-console.log('EXTERNAL callback cross-checks every identifier');
-{
-  // Two originals for two different quotes.
-  const s = build({ agreements: [
-    PARENT(),
-    ['AGR-0002','SA-002','C2','L2','P2','Q2','SIGNED','TRUE','IN_PORTAL_ESIGN','Weekly','Weekly',
-     '180','8.25','14.85','194.85', iso(Date.now()), iso(Date.now()), iso(Date.now()), '', '',
-     '','','','','','','','','','','','','', 'original','']
-  ]});
-  const r = s.ctx.handleServiceAgreementSigned_({
-    agreement_id: 'AGR-0002', quote_id: 'Q1', signed_at: iso(Date.now()) });
-  t('mismatched agreement_id + quote_id is REFUSED',
-    r.ok === false && /Conflicting identifiers/i.test(r.error || ''),
-    '(' + JSON.stringify(r).slice(0, 120) + ')');
-  t('no activation ran', s.calls.activate === 0 && s.calls.poolIdMinted === 0);
-}
-
-console.log('EXTERNAL callback: amendment signrequest_id beside a valid quote_id');
-{
-  const s = build({ agreements: [PARENT()] });
-  const created = s.ctx.handleCreateAmendment_({ parent_agreement_id: 'AGR-0001', total: '216.50' });
-
-  // Stamp a signrequest id onto the AMENDMENT row.
-  const agr = s.sheets.Service_Agreements, h = agr.rows[0];
-  if (h.indexOf('signrequest_id') === -1) {
-    h.push('signrequest_id');
-    for (let i = 1; i < agr.rows.length; i++) agr.rows[i].push('');
-  }
-  const si = h.indexOf('signrequest_id'), ai = h.indexOf('agreement_id');
-  for (let i = 1; i < agr.rows.length; i++) {
-    if (String(agr.rows[i][ai]) === created.amendment_id) agr.rows[i][si] = 'SR-ROGUE';
-  }
-
-  // The payload that used to slip through: quote_id resolved first and won, so
-  // the rogue amendment signrequest_id was never examined.
-  const r = s.ctx.handleServiceAgreementSigned_({
-    signrequest_id: 'SR-ROGUE', quote_id: 'Q1', signed_at: iso(Date.now()) });
-  t('amendment signrequest_id beside a valid quote_id is REFUSED',
-    r.ok === false && /amendment/i.test(r.error || ''),
-    '(' + JSON.stringify(r).slice(0, 120) + ')');
-  t('the error names which identifier was rogue', /signrequest_id/.test(r.error || ''));
-  t('no activation ran', s.calls.activate === 0 && s.calls.poolIdMinted === 0);
-  t('parent quote untouched',
-    s.quotes.rows[1][s.quotes.rows[0].indexOf('contract_url')] === 'https://drive/ORIGINAL.pdf');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

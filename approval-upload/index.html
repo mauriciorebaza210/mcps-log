@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCPS Approval Previews</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17212b;
+      --muted: #5c6977;
+      --line: #d9e1e8;
+      --blue: #0d5d8f;
+      --blue-dark: #0a4265;
+      --paper: #f7fafc;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    main {
+      width: min(680px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 42px 0;
+    }
+
+    .panel {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 28px;
+      box-shadow: 0 12px 30px rgba(23, 33, 43, 0.08);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 6vw, 42px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .links {
+      display: grid;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    a {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 58px;
+      padding: 15px 18px;
+      border-radius: 8px;
+      color: var(--white);
+      background: var(--blue);
+      text-decoration: none;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    a:hover,
+    a:focus {
+      background: var(--blue-dark);
+    }
+
+    .arrow {
+      flex: 0 0 auto;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .note {
+      margin-top: 18px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel" aria-labelledby="page-title">
+      <h1 id="page-title">MCPS Approval Previews</h1>
+      <p>Please review these four approval previews on desktop or mobile.</p>
+
+      <nav class="links" aria-label="Approval previews">
+        <a href="previews/agreement-a.html">Agreement A <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
+        <a href="previews/agreement-c.html">Agreement C <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
+        <a href="previews/email-agreement-link.html">Email: Agreement Link <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
+        <a href="previews/email-welcome.html">Email: Welcome <span class="arrow" aria-hidden="true">&rsaquo;</span></a>
+      </nav>
+
+      <p class="note">Shared for approval only.</p>
+    </section>
+  </main>
+</body>
+</html>

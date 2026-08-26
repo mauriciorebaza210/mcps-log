@@ -1522,14 +1522,11 @@ function doPost(e) {
       return jsonResponse_(handleEmployeeRegister(payload));
     }
 
-    // Zapier/SignRequest callback. Zapier may not have a portal session token,
-    // so allow either a valid portal token or the shared webhook secret.
-    if (payload.action === 'service_agreement_signed') {
-      const auth = payload.token ? validateToken(payload.token || '') : { ok: false };
-      const secretOk = payload.secret && String(payload.secret) === WEBHOOK_SECRET;
-      if (!auth.ok && !secretOk) return jsonResponse_({ ok: false, error: 'Unauthorized' });
-      return jsonResponse_(handleServiceAgreementSigned_(payload));
-    }
+    // RETIRED: `service_agreement_signed` was the SignRequest → Zapier callback.
+    // It authenticated with the shared webhook secret rather than a session, so it
+    // was an externally-reachable write that could activate a customer. Signing now
+    // happens only in-portal via `sign_agreement` → handleSignAgreement_, which
+    // writes the same columns plus a full ESIGN/UETA audit trail.
 
     if (payload.action === 'get_proposal_approval') {
       return jsonResponse_(handleGetProposalApproval_(payload));
@@ -2017,7 +2014,20 @@ function doPost(e) {
         payload.pool_id || "",
         payload.week_1_monday || "",
         payload.day_of_week || "",
-        payload.assigned_technician || ""
+        payload.assigned_technician || "",
+        payload.visit_count || ""
+      ));
+    }
+
+    if (payload.action === 'schedule_temporary_weekly_visits') {
+      return jsonResponse_(scheduleTemporaryWeeklyVisits(
+        payload.token || "",
+        payload.pool_id || "",
+        payload.week_1_monday || "",
+        payload.day_of_week || "",
+        payload.assigned_technician || "",
+        payload.visit_count || "",
+        { reason: payload.reason || "temporary_weekly", replace_existing: payload.replace_existing !== false }
       ));
     }
 
@@ -2140,7 +2150,17 @@ function doPost(e) {
     if (payload.action === 'update_lead') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
-      return jsonResponse_(handleUpdateLead_(payload));
+      // ⚠️ Was ANY valid session. This route can set a customer's status, write a
+      // pool_id and change billing — a technician's token was enough.
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager') && !hasRole(auth, 'office')) {
+        return jsonResponse_({ ok: false, error: 'Not permitted.' });
+      }
+      const ulRes = jsonResponse_(handleUpdateLead_(payload));
+      // ⚠️ Cleared nothing before, despite writing status and pool_id — the Sales
+      // Hub then served the pre-change state from cache for up to five minutes.
+      invalidateCrmCache_();
+      try { CacheService.getScriptCache().remove('unassigned_pools'); } catch (e) {}
+      return ulRes;
     }
 
     if (payload.action === 'import_leads') {
@@ -2190,7 +2210,6 @@ function doPost(e) {
       create_service_agreement_from_proposal: true,
       create_direct_service_agreement: true,
       update_service_agreement: true,
-      service_agreement_signed: true,
       activate_service_account_from_agreement: true,
       get_service_accounts: true,
       get_client_service_accounts: true,
@@ -2330,22 +2349,32 @@ function doPost(e) {
       return jsonResponse_(handleSaveScopeLibraryItem_(payload));
     }
 
-    if (payload.action === 'generate_contract') {
-      const auth = validateToken(payload.token || '');
-      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
-      return jsonResponse_(handleGenerateContract_(payload.quote_id || ''));
-    }
+    // RETIRED: `generate_contract` (Google Docs template → PDF) and `send_contract`
+    // (→ ZAPIER_CONTRACT_WEBHOOK → SignRequest). The agreement packet is now built by
+    // generate_proposal and signed in-portal. Legacy rows keep their contract_url /
+    // contract_file_id values and their Drive PDFs — only the generator is gone.
 
     if (payload.action === 'generate_proposal') {
       const auth = validateToken(payload.token || '');
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
-      return jsonResponse_(handleGenerateProposal_(payload));
+      const gpRes = jsonResponse_(handleGenerateProposal_(payload));
+      invalidateCrmCache_();
+      return gpRes;
     }
 
-    if (payload.action === 'send_contract') {
+    // Operational provisioning for a quote saved through api/quotes/save.js.
+    // Fired by the browser AFTER it has shown "Saved", so Maps geocoding and
+    // Routes placement no longer sit inside the operator's wait.
+    if (payload.action === 'provision_quote_schedule') {
       const auth = validateToken(payload.token || '');
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
-      return jsonResponse_(handleSendContract_(payload.quote_id || ''));
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) {
+        return jsonResponse_({ ok: false, error: 'Admins only.' });
+      }
+      const pqRes = jsonResponse_(handleProvisionQuoteSchedule_(payload.quote_id || ''));
+      invalidateCrmCache_();
+      try { CacheService.getScriptCache().remove('unassigned_pools'); } catch (e) {}
+      return pqRes;
     }
 
     if (payload.action === 'update_quote_info') {
@@ -2506,6 +2535,22 @@ function doPost(e) {
 
     if (payload.action === 'save_startup_checklist') {
       return handleSaveStartupChecklist_(payload);
+    }
+
+    // ─── Temporary visit series — admin/manager only ───────────────────────
+    if (payload.action && payload.action.indexOf('visit_series_') === 0) {
+      const vsAuth = validateToken(payload.token || '');
+      if (!vsAuth.ok) return jsonResponse_({ ok: false, error: vsAuth.error || 'Unauthorized' });
+      if (!hasRole(vsAuth, 'admin') && !hasRole(vsAuth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(handleVisitSeriesAction_(payload.action, vsAuth, payload));
+    }
+
+    // ─── Route rescheduling — admin/manager only ───────────────────────────
+    if (payload.action && payload.action.indexOf('reschedule_') === 0) {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error || 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(handleRescheduleAction_(payload.action, auth, payload));
     }
 
     // ─── Communications (mass email) — admin/manager only ──────────────────
