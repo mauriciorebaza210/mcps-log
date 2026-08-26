@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Offline-first field reliability · feature sketch</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+    --gray:#F3F5F6; --charcoal:#222; --muted:rgba(34,34,34,.6); --line:#E4EAEA;
+    --risk:#B3261E; --risk-bg:#FDECEA; --watch:#A9750C; --watch-bg:#FDF4E3;
+    --ok:#1FA7A8; --ok-bg:#E7F6F6;
+    --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1160px;margin:0 auto;}
+
+  .page-kicker{text-align:center;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--aqua);margin-bottom:10px;}
+  .page-title{font-family:var(--fh);font-weight:800;color:var(--teal);font-size:30px;text-align:center;margin:0 0 10px;line-height:1.2;}
+  .page-sub{max-width:660px;margin:0 auto 18px;text-align:center;color:#4a5656;font-size:14.5px;line-height:1.65;}
+  .page-note{max-width:760px;margin:0 auto 46px;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:14px 22px;color:#3a4645;font-size:12.5px;line-height:1.6;text-align:center;}
+  .page-note b{color:var(--teal);}
+
+  .section{margin:0 0 64px;}
+  .slabel{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 6px;}
+  .slabel .tag{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;flex:0 0 auto;}
+  .slabel .tag.red{background:var(--risk);}
+  .slabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:19px;}
+  .sdesc{color:#5a6666;font-size:13.5px;line-height:1.65;margin:0 0 22px;max-width:780px;}
+  .sdesc code{background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);}
+
+  .rowframes{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .cap{text-align:center;font-size:12px;color:#5a6666;margin-top:12px;max-width:310px;line-height:1.55;}
+  .cap b{font-family:var(--fh);color:var(--teal);display:block;font-size:12.5px;margin-bottom:3px;}
+
+  .phonewrap{display:flex;flex-direction:column;align-items:center;}
+  .phone{width:340px;max-width:100%;background:#0f1717;border-radius:36px;padding:10px;box-shadow:0 22px 54px rgba(13,61,62,.30);flex:0 0 auto;}
+  .phone .screen{background:#fff;border-radius:27px;overflow:hidden;min-height:400px;}
+  .statusbar{background:var(--teal);color:#fff;display:flex;justify-content:space-between;align-items:center;padding:9px 20px 7px;font-size:10.5px;font-family:var(--fh);font-weight:600;letter-spacing:.04em;}
+  .statusbar.off{background:#5a6666;}
+  .statusbar .sigs{display:flex;gap:5px;align-items:center;}
+  .statusbar .bar{display:inline-block;width:3px;background:rgba(255,255,255,.85);border-radius:1px;}
+  .statusbar .bar.dim{background:rgba(255,255,255,.28);}
+
+  /* ── code panel ────────────────────────────────────────────────────────── */
+  .codewrap{background:#0f1717;border-radius:14px;overflow:hidden;box-shadow:0 20px 52px rgba(13,61,62,.24);}
+  .codehead{background:#152121;padding:12px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #223030;}
+  .codehead i{width:10px;height:10px;border-radius:50%;background:#334444;display:block;}
+  .codehead .fn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#8fa3a3;margin-left:8px;}
+  .code{padding:20px 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:2;color:#cfe0e0;overflow-x:auto;}
+  .code .ln{color:#4d6363;user-select:none;display:inline-block;width:34px;}
+  .code .kw{color:#7FC4C4;} .code .st{color:#E0A76A;} .code .cm{color:#5b7373;font-style:italic;}
+  .code .bad{background:rgba(179,38,30,.20);display:block;margin:0 -22px;padding:0 22px;border-left:3px solid var(--risk);}
+  .code .note{color:#F0857D;font-style:italic;}
+
+  .impact{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px;}
+  .imp{background:#fff;border-radius:12px;padding:18px 20px;border-top:3px solid var(--risk);}
+  .imp .t{font-family:var(--fh);font-weight:800;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--risk);margin-bottom:9px;}
+  .imp p{margin:0;font-size:12.5px;line-height:1.65;color:#3a4645;}
+  .imp p b{font-family:var(--fh);color:var(--teal);}
+
+  /* ── queue UI ──────────────────────────────────────────────────────────── */
+  .hubhead{background:var(--teal);color:#fff;padding:16px 18px 14px;}
+  .hubhead .h{font-family:var(--fh);font-weight:800;font-size:16px;}
+  .hubhead .s{font-size:11.5px;color:rgba(255,255,255,.72);margin-top:2px;}
+  .body{padding:16px 15px 22px;background:var(--gray);min-height:300px;}
+
+  .qbanner{border-radius:12px;overflow:hidden;margin:0 0 14px;box-shadow:0 6px 18px rgba(13,61,62,.10);}
+  .qtop{padding:12px 15px;display:flex;justify-content:space-between;align-items:center;font-family:var(--fh);font-weight:800;font-size:11px;letter-spacing:.1em;text-transform:uppercase;}
+  .qtop.offline{background:#5a6666;color:#fff;}
+  .qtop.syncing{background:var(--aqua);color:#fff;}
+  .qtop.fail{background:var(--risk);color:#fff;}
+  .qtop.done{background:var(--ok-bg);color:#0d6b6c;}
+  .qbody{background:#fff;padding:6px 15px 14px;}
+  .qrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);}
+  .qrow:last-of-type{border-bottom:none;}
+  .qrow .who{font-family:var(--fh);font-weight:700;font-size:13px;color:var(--teal);}
+  .qrow .meta{font-size:11px;color:var(--muted);margin-top:2px;}
+  .qrow .stat{font-size:10.5px;font-family:var(--fh);font-weight:700;letter-spacing:.05em;white-space:nowrap;}
+  .qrow .stat.wait{color:var(--muted);} .qrow .stat.up{color:var(--aqua);} .qrow .stat.ok{color:#0d6b6c;} .qrow .stat.err{color:var(--risk);}
+  .qfoot{font-size:11.5px;color:var(--muted);line-height:1.55;padding-top:11px;border-top:1px solid var(--line);}
+  .qbtn{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:8px 13px;border-radius:7px;border:1.5px solid var(--line);color:var(--muted);background:#fff;display:inline-block;margin-top:10px;}
+  .qbtn.pri{background:var(--aqua);border-color:var(--aqua);color:#fff;}
+  .prog{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-top:7px;}
+  .prog b{display:block;height:100%;background:var(--aqua);}
+
+  .saved{text-align:center;padding:38px 26px 32px;background:#fff;}
+  .saved .ic{font-size:44px;margin-bottom:14px;}
+  .saved .h{font-family:var(--fh);font-weight:800;font-size:22px;letter-spacing:.06em;text-transform:uppercase;color:var(--teal);margin-bottom:12px;}
+  .saved p{font-size:13px;line-height:1.7;color:#3a4645;margin:0 auto 18px;max-width:250px;}
+  .saved .badge{background:var(--gray);border-radius:9px;padding:11px 14px;font-size:12px;color:#3a4645;margin-bottom:18px;text-align:left;}
+  .saved .badge b{font-family:var(--fh);color:var(--teal);display:block;font-size:12.5px;margin-bottom:5px;}
+  .saved .badge .li{display:flex;justify-content:space-between;padding:3px 0;font-size:11.5px;color:var(--muted);}
+  .bigbtn{display:block;width:100%;padding:14px;border-radius:10px;font-family:var(--fh);font-weight:700;font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;margin-bottom:10px;}
+  .bigbtn.solid{background:var(--teal);color:#fff;}
+  .bigbtn.ghost{background:transparent;color:var(--teal);border:2px solid var(--teal);}
+
+  .installsheet{background:#fff;border-radius:20px 20px 0 0;padding:24px 22px 26px;box-shadow:0 -10px 34px rgba(0,0,0,.16);}
+  .installsheet .grab{width:38px;height:4px;background:var(--line);border-radius:2px;margin:0 auto 20px;}
+  .installsheet .appicon{width:60px;height:60px;border-radius:14px;background:var(--teal);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 8px 20px rgba(13,61,62,.28);}
+  .installsheet h4{font-family:var(--fh);font-weight:800;font-size:16px;color:var(--teal);text-align:center;margin:0 0 8px;}
+  .installsheet p{font-size:12.5px;line-height:1.65;color:#3a4645;text-align:center;margin:0 auto 18px;max-width:250px;}
+  .benefits{margin:0 0 20px;}
+  .benefit{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:#3a4645;line-height:1.55;padding:7px 0;}
+  .benefit .ck{color:var(--aqua);font-weight:700;flex:0 0 auto;}
+
+  /* ── explainer ─────────────────────────────────────────────────────────── */
+  .explain{background:#fff;border-radius:14px;padding:26px 28px;box-shadow:0 10px 30px rgba(13,61,62,.09);}
+  .explain h3{font-family:var(--fh);font-weight:800;font-size:15px;color:var(--teal);margin:0 0 10px;}
+  .explain p{font-size:13.5px;line-height:1.7;color:#3a4645;margin:0 0 14px;}
+  .explain p:last-child{margin-bottom:0;}
+  .explain code{background:var(--gray);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);font-family:ui-monospace,Menlo,monospace;}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px;}
+  .bacol{border-radius:12px;padding:18px 20px;}
+  .bacol.b{background:var(--risk-bg);} .bacol.a{background:var(--ok-bg);}
+  .bacol .t{font-family:var(--fh);font-weight:800;font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;}
+  .bacol.b .t{color:var(--risk);} .bacol.a .t{color:#0d6b6c;}
+  .bacol ul{margin:0;padding-left:17px;}
+  .bacol li{font-size:12.5px;line-height:1.7;color:#3a4645;margin-bottom:7px;}
+  .bacol li:last-child{margin-bottom:0;}
+  .warnbox{background:var(--watch-bg);border:1px solid #EBD9AE;border-radius:10px;padding:14px 18px;font-size:12.5px;line-height:1.65;color:#6b5410;margin-top:18px;}
+  .warnbox b{font-family:var(--fh);color:#5a4409;}
+
+  .foot{max-width:760px;margin:70px auto 0;text-align:center;color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid #cdd8d8;padding-top:26px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+
+  @media(max-width:820px){ .impact,.ba{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-kicker">Feature sketch · 2 of 4</div>
+  <h1 class="page-title">Offline-first field reliability</h1>
+  <p class="page-sub">Not a new capability — a repair. The portal already claims to save logs offline and send them later. It does not reliably do either, and when it fails it fails silently.</p>
+  <div class="page-note"><b>These are mockups, not working screens.</b> The code panel below, however, is the real current implementation, quoted from <b>js/features/service-log.js</b>.</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 1 — the bug
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag red">Screen 1</span><span class="name">What happens today</span></div>
+    <p class="sdesc">This runs whenever a technician submits a visit with no signal, or when the request to Apps Script fails. It is eight lines long and it has two defects.</p>
+
+    <div class="codewrap">
+      <div class="codehead"><i></i><i></i><i></i><span class="fn">js/features/service-log.js — line 1798</span></div>
+      <div class="code"><span class="ln">1798</span><span class="kw">function</span> _svcQueueAndBail_(payload, photos) {
+<span class="ln">1799</span>  <span class="kw">try</span> {
+<span class="bad"><span class="ln">1800</span>    localStorage.setItem(<span class="st">'svc_queued_submit'</span>,   <span class="note">← one key. always the same key.</span>
+<span class="ln">1801</span>      JSON.stringify({ payload, photos, ts: Date.now() }));</span>
+<span class="ln">1802</span>  } <span class="kw">catch</span>(e) {
+<span class="bad"><span class="ln">1803</span>    <span class="cm">// quota exceeded — retry without the photos</span>
+<span class="ln">1804</span>    localStorage.setItem(<span class="st">'svc_queued_submit'</span>,
+<span class="ln">1805</span>      JSON.stringify({ payload, photos: [], ts: Date.now() }));  <span class="note">← photos discarded</span></span>
+<span class="ln">1806</span>  }
+<span class="ln">1807</span>  <span class="cm">// … then shows the tech a screen that says LOG SAVED</span>
+<span class="ln">1808</span>}</div>
+    </div>
+
+    <div class="impact">
+      <div class="imp">
+        <div class="t">Defect 1 · Overwrite</div>
+        <p>One fixed key. Log Mendoza with no signal, drive to Moczygemba and log that too — <b>Mendoza is gone.</b> No error, no warning. The tech was told both were saved.</p>
+      </div>
+      <div class="imp">
+        <div class="t">Defect 2 · Photos dropped</div>
+        <p>Photos travel as base64 inside the payload. <code style="font-family:ui-monospace,Menlo,monospace;font-size:11px">localStorage</code> caps near 5 MB. Five photos is roughly 7 MB, so the quota throws on a <b>normal</b> visit — and the catch block's answer is to save it with no photos at all.</p>
+      </div>
+      <div class="imp">
+        <div class="t">Defect 3 · Retry can duplicate</div>
+        <p>The log UID is minted server-side. A queued job that actually succeeded but timed out gets re-sent as a fresh row. The 5-minute same-pool dedup catches this <b>only inside that window</b> — a log flushed hours later is not protected.</p>
+      </div>
+    </div>
+
+    <div class="explain" style="margin-top:20px">
+      <h3>Why this matters more than it sounds</h3>
+      <p>The before/after photos are the evidence. They go into the customer's visit report email, they are what you reach for when someone disputes whether the pool was serviced, and under Phase 3 they would be what the customer sees in their own portal. They are also the one part of the record that cannot be reconstructed from memory — a tech can re-enter chemistry, they cannot re-photograph a pool they left an hour ago.</p>
+      <p style="margin-bottom:0">South Texas backyards, block walls, pool equipment pads behind the house. Dead zones are routine, not exceptional.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 2 + 3
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screens 2 &amp; 3</span><span class="name">The queue, made visible</span></div>
+    <p class="sdesc">A real durable queue in IndexedDB — many jobs, photos held as Blobs instead of base64 text, surviving a reload, a force-quit and a dead battery. And the technician can see it, which is most of the fix: the current design's worst property is that it is invisible.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar off"><span>11:58</span><span class="sigs"><span style="margin-right:6px">No signal</span><i class="bar dim" style="height:5px"></i><i class="bar dim" style="height:7px"></i><i class="bar dim" style="height:9px"></i><span style="margin-left:4px">71%</span></span></div>
+          <div class="hubhead"><div class="h">Technician Hub</div><div class="s">Thursday · 6 stops · Tony Siller</div></div>
+          <div class="body">
+            <div class="qbanner">
+              <div class="qtop offline"><span>⚡ Offline — 2 logs waiting</span><span>▾</span></div>
+              <div class="qbody">
+                <div class="qrow">
+                  <div><div class="who">MCPS-0012 · Mendoza</div><div class="meta">5 photos · queued 11:42a</div></div>
+                  <div class="stat wait">⏳ Waiting</div>
+                </div>
+                <div class="qrow">
+                  <div><div class="who">MCPS-0023 · Moczygemba</div><div class="meta">3 photos · queued 11:56a</div></div>
+                  <div class="stat wait">⏳ Waiting</div>
+                </div>
+                <div class="qfoot">Nothing is lost. These send themselves the moment you have signal.
+                <span class="qbtn">Try now</span></div>
+              </div>
+            </div>
+
+            <div style="background:#fff;border-radius:12px;padding:15px;font-size:12.5px;color:var(--muted);line-height:1.6">
+              <div style="font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:9px">Next stop</div>
+              Murray · 452 CR 257<br>
+              <span style="font-size:11.5px">14 min · Weekly Full Service</span>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Queue banner in the hub</b>Persistent, honest, and it names the pools. The tech can drive away knowing exactly what is still owed.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar off"><span>11:56</span><span class="sigs"><span style="margin-right:6px">No signal</span><i class="bar dim" style="height:5px"></i><i class="bar dim" style="height:7px"></i><i class="bar dim" style="height:9px"></i><span style="margin-left:4px">71%</span></span></div>
+          <div class="saved">
+            <div class="ic">💾</div>
+            <div class="h">Log saved</div>
+            <p>No signal right now. <b style="color:var(--teal)">Moczygemba</b> is saved on this phone with all 3 photos and sends automatically when you reconnect.</p>
+            <div class="badge">
+              <b>2 logs waiting to send</b>
+              <div class="li"><span>Mendoza</span><span>5 photos</span></div>
+              <div class="li"><span>Moczygemba</span><span>3 photos</span></div>
+            </div>
+            <div class="bigbtn solid">Log another pool</div>
+            <div class="bigbtn ghost">Back to hub</div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Offline save confirmation</b>Today this screen says only “your log is saved.” Now it names the pool, counts the photos, and shows the whole queue — so “saved” is a claim the tech can check.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 4 + 5
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screens 4 &amp; 5</span><span class="name">Coming back online</span></div>
+    <p class="sdesc">The flush runs one job at a time with backoff. Each job carries a client-generated UID, so re-sending something that already landed is answered with the original result instead of a duplicate row. Failures stay in the queue and say why.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>12:31</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i><span style="margin-left:4px">68%</span></span></div>
+          <div class="hubhead"><div class="h">Technician Hub</div><div class="s">Thursday · 6 stops · Tony Siller</div></div>
+          <div class="body">
+            <div class="qbanner">
+              <div class="qtop syncing"><span>↻ Sending 2 logs…</span><span>▾</span></div>
+              <div class="qbody">
+                <div class="qrow">
+                  <div><div class="who">MCPS-0012 · Mendoza</div><div class="meta">5 photos · sent 12:31p</div></div>
+                  <div class="stat ok">✓ Sent</div>
+                </div>
+                <div class="qrow">
+                  <div style="flex:1">
+                    <div class="who">MCPS-0023 · Moczygemba</div>
+                    <div class="meta">uploading photo 2 of 3</div>
+                    <div class="prog"><b style="width:62%"></b></div>
+                  </div>
+                  <div class="stat up">↻ Sending</div>
+                </div>
+                <div class="qfoot">Keep working — this finishes in the background.</div>
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:12px;padding:15px;font-size:12.5px;color:var(--muted);line-height:1.6">
+              <div style="font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:9px">Next stop</div>
+              Murray · 452 CR 257<br><span style="font-size:11.5px">14 min · Weekly Full Service</span>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Sync in progress</b>Per-job, per-photo progress. Nothing blocks the tech from continuing their route.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>12:33</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i><span style="margin-left:4px">68%</span></span></div>
+          <div class="hubhead"><div class="h">Technician Hub</div><div class="s">Thursday · 6 stops · Tony Siller</div></div>
+          <div class="body">
+            <div class="qbanner">
+              <div class="qtop fail"><span>⚠ 1 log couldn't send</span><span>▾</span></div>
+              <div class="qbody">
+                <div class="qrow">
+                  <div><div class="who">MCPS-0012 · Mendoza</div><div class="meta">5 photos · sent 12:31p</div></div>
+                  <div class="stat ok">✓ Sent</div>
+                </div>
+                <div class="qrow">
+                  <div><div class="who">MCPS-0023 · Moczygemba</div><div class="meta" style="color:var(--risk)">Server said: pool not found</div></div>
+                  <div class="stat err">⚠ Held</div>
+                </div>
+                <div class="qfoot">Your data is still saved on this phone. Nothing was thrown away.
+                  <div><span class="qbtn pri">Retry</span> <span class="qbtn">Edit &amp; resend</span></div>
+                </div>
+              </div>
+            </div>
+            <div style="background:#fff;border-radius:12px;padding:15px 16px;font-size:12px;color:#3a4645;line-height:1.65">
+              <div style="font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:8px">What likely happened</div>
+              The pool was logged as <b>Other / Pool not listed</b>, or its pool_id changed after this log was queued. Edit &amp; resend opens the log with everything you entered still filled in.
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Partial failure</b>A rejected job is held, explained, and editable — never dropped. Today a server rejection after a queue flush leaves nothing behind at all.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 6 — install
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 6</span><span class="name">Installable app</span></div>
+    <p class="sdesc">A service worker plus a web manifest turns the portal into something that opens from the home screen with no browser chrome, launches instantly, and renders today's route with no connection at all. Offered once, dismissible, never nagging.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone"><div class="screen" style="background:var(--gray);display:flex;flex-direction:column;justify-content:flex-end;min-height:520px">
+          <div class="statusbar"><span>6:48</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i><span style="margin-left:4px">100%</span></span></div>
+          <div style="flex:1;padding:18px 15px;opacity:.42">
+            <div class="hubhead" style="border-radius:12px 12px 0 0"><div class="h">Technician Hub</div><div class="s">Thursday · 6 stops</div></div>
+            <div style="background:#fff;border-radius:0 0 12px 12px;padding:15px;font-size:12px;color:var(--muted)">Pompa · 18538 Shadow Canyon Dr<br>Robbins · 2144 CR 419<br>Murray · 452 CR 257</div>
+          </div>
+          <div class="installsheet">
+            <div class="grab"></div>
+            <div class="appicon">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#5ED6D3" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.2 3.9 5.4 7.1 5.4 9.7A5.4 5.4 0 0 1 6.6 12.7C6.6 10.1 8.8 6.9 12 3z"/></svg>
+            </div>
+            <h4>Add MCPS to your home screen</h4>
+            <p>Opens like an app. Works in dead zones. No browser bar eating your screen.</p>
+            <div class="benefits">
+              <div class="benefit"><span class="ck">✓</span><span>Today's route loads with no signal</span></div>
+              <div class="benefit"><span class="ck">✓</span><span>Service log works fully offline, photos included</span></div>
+              <div class="benefit"><span class="ck">✓</span><span>Opens in about a second instead of five</span></div>
+            </div>
+            <div class="bigbtn solid">Add to home screen</div>
+            <div class="bigbtn ghost">Not now</div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Install prompt</b>Shown once per device after the tech's third successful log, so it lands on someone who already uses the thing.</div>
+      </div>
+
+      <div style="max-width:390px;padding-top:6px">
+        <div class="explain" style="padding:22px 24px">
+          <h3 style="font-size:14px">What has to be handled carefully</h3>
+          <p style="font-size:12.5px">There is no bundler and no content hashing in this project, so a service worker has nothing to cache-bust against. A careless one can pin every technician to a stale build until they clear site data — which in the field is unrecoverable.</p>
+          <p style="font-size:12.5px">The guard is a versioned cache name plus explicit <code>skipWaiting</code>, and a visible “update available — tap to reload” bar rather than a silent swap.</p>
+          <p style="font-size:12.5px;margin-bottom:0">Leaflet is currently pulled from a CDN at <code>index.html:13</code>. It has to be self-hosted or the map is blank the moment the tech is offline — which is exactly when they need it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       BEFORE / AFTER
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Under it</span><span class="name">Before and after</span></div>
+    <p class="sdesc">The whole change, stated plainly.</p>
+
+    <div class="explain">
+      <div class="ba">
+        <div class="bacol b">
+          <div class="t">Today</div>
+          <ul>
+            <li>One <code>localStorage</code> key — job two silently destroys job one</li>
+            <li>Quota failure is “handled” by discarding every photo</li>
+            <li>~5 MB ceiling, shared with all other portal caching</li>
+            <li>Queue is invisible — the tech has no way to confirm anything</li>
+            <li>Server-minted UID, so a timed-out retry can duplicate a row</li>
+            <li>Nothing loads at all without a connection</li>
+          </ul>
+        </div>
+        <div class="bacol a">
+          <div class="t">After</div>
+          <ul>
+            <li>IndexedDB queue, unlimited jobs, each independently tracked</li>
+            <li>Photos stored as Blobs — no base64 inflation, no quota wall</li>
+            <li>Hundreds of megabytes available, isolated from other caches</li>
+            <li>Queue visible in the hub with per-job status and retry</li>
+            <li>Client-minted UID — re-sending a landed job is a no-op</li>
+            <li>App shell and today's route render offline; installable</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="warnbox"><b>One migration detail.</b> Any technician's phone may be holding a log in the old <code>svc_queued_submit</code> key right now. First load after the update drains that key into the new queue before anything else runs, then clears it — so nothing in flight is lost on the way over.</div>
+
+      <p style="margin-top:20px;margin-bottom:0"><b style="font-family:var(--fh);color:var(--teal)">Where it touches the code:</b> a new <code>js/lib/offline-queue.js</code>; a rewrite of <code>_svcQueueAndBail_</code>, <code>_onSvcOnline_</code> and <code>_retrySvcNow_</code> in <code>service-log.js</code>; acceptance of <code>_client_uid</code> in the <code>submit_form</code> handler, checked against the <code>_log_uid</code> column that already exists; a new <code>sw.js</code> and <code>manifest.json</code>; and self-hosting Leaflet.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="m">Mission Custom Pool Solutions</div>
+    Feature sketch 2 of 4 · Offline-first field reliability<br>
+    Estimated build: 2–3 days · fixes active silent data loss · no new user-facing concepts<br><br>
+    <span style="font-family:var(--fh);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--teal)">Every pool matters.</span>
+  </div>
+
+</div>
+</body>
+</html>

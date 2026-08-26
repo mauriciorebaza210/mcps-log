@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS Action Center Enterprise Sketches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal: #0d4d44;
+    --teal-2: #12665b;
+    --teal-3: #1a7a6e;
+    --gold: #c8a84b;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #dbe3ea;
+    --soft: #f6f8fb;
+    --paper: #ffffff;
+    --bg: #f1f4f6;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --good: #16a34a;
+    --blue: #2563eb;
+    --shadow: 0 18px 45px rgba(15, 23, 42, .12);
+    --card-shadow: 0 4px 15px rgba(15, 23, 42, .06);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Barlow, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  button, input, select, textarea { font: inherit; }
+  .deck-shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+  .deck-top {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(255, 255, 255, .92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .deck-brand { display: flex; align-items: center; gap: 12px; min-width: 220px; }
+  .deck-brand img { width: 42px; height: 42px; object-fit: contain; }
+  .deck-title { font-family: Oswald, sans-serif; font-size: 19px; font-weight: 700; letter-spacing: .02em; }
+  .deck-sub { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .deck-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .deck-tab {
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 8px 11px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .deck-tab.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+  .deck-main { padding: 22px; }
+  .screen {
+    display: none;
+    max-width: 1440px;
+    margin: 0 auto 36px;
+  }
+  .screen.active { display: block; }
+  .screen-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+  .screen-kicker {
+    color: var(--teal);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .11em;
+    font-weight: 900;
+  }
+  .screen-title {
+    font-family: Oswald, sans-serif;
+    font-size: 30px;
+    line-height: 1.05;
+    margin: 4px 0;
+  }
+  .screen-desc {
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+  .screen-meta {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--muted);
+    text-align: right;
+    box-shadow: var(--card-shadow);
+  }
+
+  .app-frame {
+    height: 860px;
+    background: var(--paper);
+    border: 1px solid #cad5dd;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 250px 1fr;
+  }
+  .sidebar {
+    background: linear-gradient(180deg, #073b42 0%, #063139 100%);
+    color: #d8eff0;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .side-logo {
+    padding: 20px 18px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, .1);
+  }
+  .side-logo img { width: 170px; max-width: 100%; height: auto; display: block; }
+  .side-nav { padding: 10px 8px; display: flex; flex-direction: column; gap: 3px; }
+  .nav-item {
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, .73);
+    border-radius: 8px;
+    padding: 9px 10px;
+    text-align: left;
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    gap: 9px;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .nav-item.active { color: #fff; background: rgba(255, 255, 255, .13); }
+  .nav-item .badge { background: var(--gold); color: #2d2508; border-radius: 99px; padding: 2px 7px; font-size: 11px; font-weight: 900; }
+  .side-foot { margin-top: auto; padding: 15px; border-top: 1px solid rgba(255, 255, 255, .1); display: flex; align-items: center; gap: 9px; }
+  .avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #071f25;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: Oswald, sans-serif;
+    font-weight: 700;
+  }
+  .side-user { font-size: 13px; font-weight: 800; color: #fff; }
+  .side-role { font-size: 11px; color: rgba(255, 255, 255, .62); font-weight: 700; }
+
+  .app-main { min-width: 0; display: grid; grid-template-rows: 64px 1fr; background: #f7f9fb; }
+  .topbar {
+    background: rgba(255, 255, 255, .88);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    gap: 12px;
+  }
+  .date-pill, .user-pill, .filter-pill {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .bell { position: relative; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: grid; place-items: center; }
+  .bell-count { position: absolute; top: -7px; right: -7px; background: var(--danger); color: #fff; border-radius: 99px; padding: 1px 6px; font-size: 11px; font-weight: 900; }
+  .content { padding: 18px; overflow: auto; }
+  .content-title-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 14px; }
+  .content h1 { font-family: Oswald, sans-serif; margin: 0; font-size: 25px; }
+  .content p { margin: 4px 0 0; color: var(--muted); font-weight: 600; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .kpi-card, .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+  }
+  .kpi-card { padding: 14px; min-width: 0; }
+  .kpi-label { color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
+  .kpi-value { font-family: Oswald, sans-serif; font-size: 26px; font-weight: 700; line-height: 1; margin-top: 8px; }
+  .kpi-change { color: var(--good); font-size: 12px; font-weight: 800; margin-top: 7px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .grid-ops { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .card { padding: 15px; min-width: 0; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .card-title { font-family: "Barlow Condensed", sans-serif; font-size: 15px; color: var(--teal); text-transform: uppercase; letter-spacing: .07em; font-weight: 900; }
+  .link { color: var(--blue); font-size: 12px; font-weight: 900; }
+
+  .action-center { min-height: 334px; }
+  .action-list { display: flex; flex-direction: column; gap: 0; }
+  .action-row {
+    display: grid;
+    grid-template-columns: 76px 1fr 96px 18px;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px solid #edf1f4;
+  }
+  .action-row:first-child { border-top: 0; }
+  .priority {
+    width: fit-content;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .urgent { color: #991b1b; background: #fee2e2; }
+  .high { color: #9a3412; background: #ffedd5; }
+  .medium { color: #166534; background: #dcfce7; }
+  .low { color: #1d4ed8; background: #dbeafe; }
+  .action-title { font-size: 14px; font-weight: 900; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .action-sub { font-size: 12px; color: var(--muted); font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .due { font-size: 12px; color: var(--muted); font-weight: 800; text-align: right; }
+  .due.hot { color: var(--danger); }
+  .chev { color: var(--muted); font-weight: 900; }
+
+  .progress-bar { height: 12px; border-radius: 99px; overflow: hidden; background: #e8eef3; display: flex; margin: 18px 0 14px; }
+  .seg-green { background: var(--good); }
+  .seg-blue { background: #3b82f6; }
+  .seg-gold { background: var(--gold); }
+  .seg-gray { background: #94a3b8; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .legend-item strong { margin-left: auto; color: var(--ink); font-family: Oswald, sans-serif; font-size: 17px; }
+  .alert-stack { display: grid; gap: 11px; }
+  .alert-line { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 10px; border-bottom: 1px solid #edf1f4; padding-bottom: 10px; }
+  .alert-line:last-child { border-bottom: 0; padding-bottom: 0; }
+  .count-ball { width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 900; font-size: 13px; }
+
+  .chart-card { height: 215px; }
+  .line-chart { height: 140px; position: relative; border-left: 1px solid #d7e0e7; border-bottom: 1px solid #d7e0e7; margin-top: 18px; }
+  .line-chart:before {
+    content: "";
+    position: absolute;
+    inset: 10px 8px 12px 8px;
+    background:
+      linear-gradient(135deg, transparent 0 15%, rgba(37, 99, 235, .22) 15% 18%, transparent 18% 29%, rgba(37, 99, 235, .35) 29% 32%, transparent 32% 48%, rgba(37, 99, 235, .5) 48% 51%, transparent 51% 68%, rgba(37, 99, 235, .7) 68% 71%, transparent 71%);
+    clip-path: polygon(0 75%, 11% 54%, 19% 63%, 30% 37%, 41% 42%, 52% 28%, 65% 27%, 76% 18%, 89% 22%, 100% 8%, 100% 100%, 0 100%);
+  }
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 8px 6px; border-bottom: 1px solid #e8eef3; }
+  .table td { padding: 9px 6px; border-bottom: 1px solid #eef2f6; font-weight: 700; }
+  .table .right { text-align: right; }
+  .status { border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 900; display: inline-block; }
+  .status.new { color: #1d4ed8; background: #dbeafe; }
+  .status.assigned { color: #854d0e; background: #fef3c7; }
+  .status.done { color: #166534; background: #dcfce7; }
+  .status.risk { color: #991b1b; background: #fee2e2; }
+
+  .drawer-layout { position: relative; }
+  .drawer-backdrop { filter: brightness(.76); }
+  .drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 560px;
+    height: 100%;
+    background: #fff;
+    border-left: 1px solid var(--line);
+    box-shadow: -18px 0 40px rgba(15, 23, 42, .2);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+  .drawer-head { padding: 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; }
+  .drawer-title { font-family: Oswald, sans-serif; font-size: 24px; margin: 6px 0 4px; }
+  .drawer-id { color: var(--muted); font-size: 12px; font-weight: 800; }
+  .drawer-body { overflow: auto; }
+  .drawer-section { padding: 16px 20px; border-bottom: 1px solid #edf1f4; }
+  .section-label { font-family: "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: .07em; font-size: 14px; font-weight: 900; color: var(--teal); margin-bottom: 12px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { background: var(--soft); border: 1px solid #e6edf2; border-radius: 8px; padding: 10px; }
+  .field-label { color: var(--muted); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+  .field-value { font-size: 14px; font-weight: 800; margin-top: 5px; }
+  .step { display: grid; grid-template-columns: 28px 1fr; gap: 9px; align-items: start; padding: 7px 0; font-size: 13px; font-weight: 700; }
+  .step-num { width: 24px; height: 24px; border-radius: 50%; background: #e9f3f1; color: var(--teal); display: grid; place-items: center; font-weight: 900; }
+  .drawer-foot { padding: 14px 20px; border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 10px; background: #fbfcfd; }
+  .btn { border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); padding: 10px 12px; font-weight: 900; cursor: pointer; }
+  .btn.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+  .btn.gold { background: var(--gold); color: #221b05; border-color: var(--gold); }
+
+  .ops-score { display: grid; grid-template-columns: 120px 1fr; gap: 13px; align-items: center; }
+  .donut {
+    width: 104px;
+    height: 104px;
+    border-radius: 50%;
+    background: conic-gradient(var(--good) 0 84%, var(--gold) 84% 93%, var(--danger) 93% 100%);
+    position: relative;
+  }
+  .donut:after {
+    content: "84%";
+    position: absolute;
+    inset: 18px;
+    background: #fff;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: Oswald, sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .metric-list { display: grid; gap: 8px; font-size: 13px; font-weight: 800; color: var(--muted); }
+  .metric-line { display: flex; justify-content: space-between; gap: 10px; }
+  .metric-line strong { color: var(--ink); font-family: Oswald, sans-serif; font-size: 18px; }
+
+  .phone-stage { display: grid; grid-template-columns: minmax(320px, 410px) 1fr; gap: 24px; align-items: start; }
+  .phone {
+    width: 390px;
+    max-width: 100%;
+    height: 790px;
+    border: 13px solid #101820;
+    border-radius: 38px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: var(--shadow);
+  }
+  .phone-top { height: 58px; background: var(--teal); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font-weight: 900; }
+  .phone-tabs { height: 60px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5, 1fr); background: #fff; }
+  .phone-tab { display: grid; place-items: center; color: var(--muted); font-size: 11px; font-weight: 900; }
+  .phone-tab.active { color: var(--teal); }
+  .phone-content { height: calc(100% - 118px); overflow: hidden; background: #f8fafc; }
+  .mobile-head { background: #fff; padding: 13px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+  .mobile-title { font-family: Oswald, sans-serif; font-size: 20px; }
+  .mobile-card { background: #fff; border-bottom: 1px solid #e8eef3; padding: 13px 14px; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .mobile-priority { font-size: 11px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; }
+  .mobile-name { font-weight: 900; }
+  .mobile-sub { color: var(--muted); font-size: 12px; font-weight: 700; margin-top: 2px; }
+  .mobile-due { font-size: 11px; color: var(--danger); font-weight: 900; text-align: right; }
+  .phone-notes { display: grid; gap: 12px; }
+  .note-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px; box-shadow: var(--card-shadow); }
+  .note-card h3 { margin: 0 0 6px; font-family: Oswald, sans-serif; }
+  .note-card p, .note-card li { color: var(--muted); font-weight: 600; line-height: 1.45; }
+  .note-card ul { margin: 10px 0 0; padding-left: 18px; }
+
+  .workflow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .lane-card { min-height: 160px; }
+  .status-flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 14px; }
+  .flow-step { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 8px; text-align: center; box-shadow: var(--card-shadow); }
+  .flow-step strong { display: block; font-size: 13px; }
+  .flow-step span { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; font-weight: 800; }
+  .rule-list { display: grid; gap: 9px; }
+  .rule { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+  .rule-icon { width: 30px; height: 30px; border-radius: 8px; background: #e9f3f1; color: var(--teal); display: grid; place-items: center; font-weight: 900; }
+  .rule-title { font-weight: 900; font-size: 14px; }
+  .rule-sub { color: var(--muted); font-size: 12px; font-weight: 700; margin-top: 2px; line-height: 1.35; }
+
+  .spec-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .spec-card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; box-shadow: var(--card-shadow); }
+  .spec-card h3 { margin: 0 0 10px; font-family: Oswald, sans-serif; font-size: 20px; }
+  .spec-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-weight: 650; line-height: 1.55; }
+
+  @media (max-width: 1100px) {
+    .app-frame { grid-template-columns: 86px 1fr; }
+    .side-logo img, .nav-item span.label, .side-foot > div { display: none; }
+    .nav-item { grid-template-columns: 1fr; place-items: center; }
+    .kpi-grid, .grid-ops { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .grid-3, .workflow-grid, .phone-stage, .spec-grid { grid-template-columns: 1fr; }
+    .drawer { width: min(560px, calc(100% - 86px)); }
+  }
+  @media (max-width: 760px) {
+    .deck-top { align-items: flex-start; flex-direction: column; }
+    .deck-tabs { justify-content: flex-start; }
+    .deck-main { padding: 14px; }
+    .screen-head { align-items: flex-start; flex-direction: column; }
+    .app-frame { height: auto; min-height: 800px; grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .kpi-grid, .grid-ops, .status-flow { grid-template-columns: 1fr; }
+    .drawer { position: static; width: 100%; height: auto; }
+    .drawer-backdrop { filter: none; }
+  }
+</style>
+</head>
+<body>
+<div class="deck-shell">
+  <header class="deck-top">
+    <div class="deck-brand">
+      <img src="assets/mcps-pin-badge.png" alt="MCPS">
+      <div>
+        <div class="deck-title">MCPS Action Center</div>
+        <div class="deck-sub">Enterprise Product Sketches</div>
+      </div>
+    </div>
+    <nav class="deck-tabs" aria-label="Sketch screens">
+      <button class="deck-tab active" data-screen="dashboard">Admin Dashboard</button>
+      <button class="deck-tab" data-screen="drawer">Detail Drawer</button>
+      <button class="deck-tab" data-screen="ops">Ops Command</button>
+      <button class="deck-tab" data-screen="mobile">Mobile</button>
+      <button class="deck-tab" data-screen="workflow">Workflow</button>
+      <button class="deck-tab" data-screen="spec">Feature Spec</button>
+    </nav>
+  </header>
+
+  <main class="deck-main">
+    <section class="screen active" id="screen-dashboard">
+      <div class="screen-head">
+        <div>
+          <div class="screen-kicker">Screen 1</div>
+          <h1 class="screen-title">Admin Home Dashboard</h1>
+          <div class="screen-desc">The first screen leadership sees: KPIs, route progress, current risks, and a ranked action queue with due times.</div>
+        </div>
+        <div class="screen-meta">Built as a replacement for the current attention widget</div>
+      </div>
+      <div class="app-frame">
+        <aside class="sidebar">
+          <div class="side-logo"><img src="assets/mcps-header-logo.png" alt="Mission Custom Pool Solutions"></div>
+          <div class="side-nav">
+            <button class="nav-item active"><span>H</span><span class="label">Home</span></button>
+            <button class="nav-item"><span>A</span><span class="label">Action Center</span><span class="badge">18</span></button>
+            <button class="nav-item"><span>O</span><span class="label">Operations</span></button>
+            <button class="nav-item"><span>R</span><span class="label">Routes</span></button>
+            <button class="nav-item"><span>C</span><span class="label">Clients</span></button>
+            <button class="nav-item"><span>P</span><span class="label">Pools</span></button>
+            <button class="nav-item"><span>W</span><span class="label">Work Orders</span></button>
+            <button class="nav-item"><span>B</span><span class="label">Billing</span></button>
+            <button class="nav-item"><span>S</span><span class="label">Sales</span></button>
+            <button class="nav-item"><span>R</span><span class="label">Reports</span></button>
+            <button class="nav-item"><span>G</span><span class="label">Settings</span></button>
+          </div>
+          <div class="side-foot"><div class="avatar">AD</div><div><div class="side-user">Admin User</div><div class="side-role">Super Administrator</div></div></div>
+        </aside>
+        <div class="app-main">
+          <div class="topbar">
+            <div class="date-pill">Calendar&nbsp; May 16, 2026 Friday</div>
+            <div class="top-actions"><div class="bell">Bell<span class="bell-count">18</span></div><div class="user-pill">AD</div></div>
+          </div>
+          <div class="content">
+            <div class="content-title-row">
+              <div><h1>Good morning, Mauricio</h1><p>Here is what needs attention across MCPS today.</p></div>
+              <div class="filter-pill">All Teams</div>
+            </div>
+            <div class="kpi-grid">
+              <div class="kpi-card"><div class="kpi-label">Total Revenue MTD</div><div class="kpi-value">$1,248,753</div><div class="kpi-change">+18.6% vs prior month</div></div>
+              <div class="kpi-card"><div class="kpi-label">Gross Margin</div><div class="kpi-value">42.7%</div><div class="kpi-change">+3.2 points</div></div>
+              <div class="kpi-card"><div class="kpi-label">Active Clients</div><div class="kpi-value">1,263</div><div class="kpi-change">+4.6% prior 30 days</div></div>
+              <div class="kpi-card"><div class="kpi-label">Pools In Service</div><div class="kpi-value">2,157</div><div class="kpi-change">+5.3% prior 30 days</div></div>
+            </div>
+            <div class="grid-2">
+              <div class="card action-center">
+                <div class="card-head"><div class="card-title">Action Center <span class="priority urgent">18</span></div><span class="link">View all actions</span></div>
+                <div class="action-list">
+                  <div class="action-row"><span class="priority urgent">Urgent</span><div><div class="action-title">High pH Reading</div><div class="action-sub">Davidson Residence - Pool P-01387</div></div><div class="due hot">Due 9:30 AM</div><div class="chev">&gt;</div></div>
+                  <div class="action-row"><span class="priority high">High</span><div><div class="action-title">Equipment Offline</div><div class="action-sub">Smith Residence - Pool P-02145</div></div><div class="due hot">Due 10:00 AM</div><div class="chev">&gt;</div></div>
+                  <div class="action-row"><span class="priority high">High</span><div><div class="action-title">SLA At Risk</div><div class="action-sub">Parkside HOA - Route 7A</div></div><div class="due hot">Due 11:00 AM</div><div class="chev">&gt;</div></div>
+                  <div class="action-row"><span class="priority medium">Medium</span><div><div class="action-title">Proposal Follow-up</div><div class="action-sub">Jones Residence - Quote Q-10442</div></div><div class="due">Due 12:00 PM</div><div class="chev">&gt;</div></div>
+                  <div class="action-row"><span class="priority medium">Medium</span><div><div class="action-title">Payment Past Due</div><div class="action-sub">Thompson Residence - Invoice I-7762</div></div><div class="due">Due 1:00 PM</div><div class="chev">&gt;</div></div>
+                </div>
+              </div>
+              <div class="grid-2" style="grid-template-columns:1fr 1fr;margin:0;">
+                <div class="card">
+                  <div class="card-head"><div class="card-title">Route Progress Today</div><span class="link">All Routes</span></div>
+                  <div class="progress-bar"><div class="seg-green" style="width:28%"></div><div class="seg-blue" style="width:54%"></div><div class="seg-gold" style="width:14%"></div><div class="seg-gray" style="width:4%"></div></div>
+                  <div class="legend"><div class="legend-item"><span class="dot seg-green"></span>Completed <strong>28%</strong></div><div class="legend-item"><span class="dot seg-blue"></span>In Progress <strong>54%</strong></div><div class="legend-item"><span class="dot seg-gold"></span>Pending <strong>14%</strong></div><div class="legend-item"><span class="dot seg-gray"></span>Not Started <strong>4%</strong></div></div>
+                </div>
+                <div class="card">
+                  <div class="card-head"><div class="card-title">Alerts</div><span class="link">View all</span></div>
+                  <div class="alert-stack">
+                    <div class="alert-line"><span class="count-ball" style="background:var(--danger)">3</span><strong>SLA Breaches</strong></div>
+                    <div class="alert-line"><span class="count-ball" style="background:var(--danger)">7</span><strong>Billing At Risk</strong></div>
+                    <div class="alert-line"><span class="count-ball" style="background:var(--warn)">4</span><strong>Overdue Payments</strong></div>
+                    <div class="alert-line"><span class="count-ball" style="background:var(--warn)">4</span><strong>Equipment Offline</strong></div>
+                    <div class="alert-line"><span class="count-ball" style="background:var(--good)">2</span><strong>Chemistry Alerts</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="grid-3">
+              <div class="card chart-card"><div class="card-head"><div class="card-title">Revenue Trend</div><span class="link">MTD vs prior</span></div><div class="line-chart"></div></div>
+              <div class="card chart-card"><div class="card-head"><div class="card-title">Top Revenue Categories</div></div><table class="table"><tr><td>Monthly Pool Service</td><td class="right">$812,415</td><td class="right">65%</td></tr><tr><td>Repairs & Equipment</td><td class="right">$242,310</td><td class="right">19%</td></tr><tr><td>Renovations</td><td class="right">$146,880</td><td class="right">12%</td></tr><tr><td>Other</td><td class="right">$47,148</td><td class="right">4%</td></tr></table></div>
+              <div class="card chart-card"><div class="card-head"><div class="card-title">Active Clients</div></div><div class="ops-score"><div class="donut"></div><div class="metric-list"><div class="metric-line">Residential <strong>1,049</strong></div><div class="metric-line">HOA / Community <strong>154</strong></div><div class="metric-line">Commercial <strong>60</strong></div></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-drawer">
+      <div class="screen-head">
+        <div>
+          <div class="screen-kicker">Screen 2</div>
+          <h1 class="screen-title">Action Detail Drawer</h1>
+          <div class="screen-desc">The manager clicks an action and gets ownership, linked records, status, recommended steps, and audit-friendly notes.</div>
+        </div>
+        <div class="screen-meta">Designed for fast triage without leaving Home</div>
+      </div>
+      <div class="app-frame drawer-layout">
+        <aside class="sidebar drawer-backdrop">
+          <div class="side-logo"><img src="assets/mcps-header-logo.png" alt="Mission Custom Pool Solutions"></div>
+          <div class="side-nav">
+            <button class="nav-item active"><span>H</span><span class="label">Home</span></button>
+            <button class="nav-item"><span>A</span><span class="label">Action Center</span><span class="badge">18</span></button>
+            <button class="nav-item"><span>O</span><span class="label">Operations</span></button>
+            <button class="nav-item"><span>R</span><span class="label">Routes</span></button>
+            <button class="nav-item"><span>B</span><span class="label">Billing</span></button>
+          </div>
+        </aside>
+        <div class="app-main drawer-backdrop">
+          <div class="topbar"><div class="date-pill">Calendar&nbsp; May 16, 2026 Friday</div><div class="top-actions"><div class="bell">Bell<span class="bell-count">18</span></div><div class="user-pill">AD</div></div></div>
+          <div class="content">
+            <div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">Revenue MTD</div><div class="kpi-value">$1,248,753</div></div><div class="kpi-card"><div class="kpi-label">Active Clients</div><div class="kpi-value">1,263</div></div><div class="kpi-card"><div class="kpi-label">Pools In Service</div><div class="kpi-value">2,157</div></div><div class="kpi-card"><div class="kpi-label">Open Actions</div><div class="kpi-value">18</div></div></div>
+            <div class="card action-center"><div class="card-head"><div class="card-title">Action Center</div></div><div class="action-row"><span class="priority urgent">Urgent</span><div><div class="action-title">High pH Reading</div><div class="action-sub">Davidson Residence</div></div><div class="due hot">Due 9:30 AM</div><div class="chev">&gt;</div></div></div>
+          </div>
+        </div>
+        <aside class="drawer">
+          <div class="drawer-head">
+            <div>
+              <span class="priority urgent">Urgent</span>
+              <div class="drawer-title">High pH Reading</div>
+              <div class="drawer-id">Action ID: ACT-0008291</div>
+            </div>
+            <button class="btn" style="height:38px;">Close</button>
+          </div>
+          <div class="drawer-body">
+            <div class="drawer-section">
+              <div class="section-label">Details</div>
+              <div class="detail-grid">
+                <div class="field"><div class="field-label">Client / Pool</div><div class="field-value">Davidson Residence<br>Pool P-01387</div></div>
+                <div class="field"><div class="field-label">Owner</div><div class="field-value">Chris Martinez<br>Technician</div></div>
+                <div class="field"><div class="field-label">Location</div><div class="field-value">1234 Mission Hills Dr.<br>Austin, TX 78735</div></div>
+                <div class="field"><div class="field-label">Due</div><div class="field-value" style="color:var(--danger)">Today, 9:30 AM</div></div>
+                <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="status new">New</span></div></div>
+                <div class="field"><div class="field-label">Priority Source</div><div class="field-value">Sensor + SLA Rule</div></div>
+              </div>
+            </div>
+            <div class="drawer-section">
+              <div class="section-label">Linked Records</div>
+              <table class="table">
+                <tr><td>Work Order</td><td class="right"><span class="link">WO-045612</span></td></tr>
+                <tr><td>Service Route</td><td class="right"><span class="link">Route 7A</span></td></tr>
+                <tr><td>Recent Readings</td><td class="right"><span class="link">View History</span></td></tr>
+                <tr><td>Client Account</td><td class="right"><span class="link">C-001234</span></td></tr>
+              </table>
+            </div>
+            <div class="drawer-section">
+              <div class="section-label">Recommended Next Steps</div>
+              <div class="step"><span class="step-num">1</span><span>Acknowledge issue and contact homeowner if arrival window changes.</span></div>
+              <div class="step"><span class="step-num">2</span><span>Inspect system, rebalance water, and capture updated readings.</span></div>
+              <div class="step"><span class="step-num">3</span><span>Re-test and confirm pH is inside accepted range.</span></div>
+              <div class="step"><span class="step-num">4</span><span>Document service action and close linked work order.</span></div>
+            </div>
+            <div class="drawer-section">
+              <div class="section-label">Notes</div>
+              <textarea style="width:100%;height:96px;border:1px solid var(--line);border-radius:8px;padding:10px;resize:none;" placeholder="Add internal note..."></textarea>
+            </div>
+          </div>
+          <div class="drawer-foot"><button class="btn">Reassign</button><button class="btn">Snooze</button><button class="btn gold">Start Action</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-ops">
+      <div class="screen-head">
+        <div>
+          <div class="screen-kicker">Screen 3</div>
+          <h1 class="screen-title">Operations Command View</h1>
+          <div class="screen-desc">A fuller operating room for the office: route health, technician progress, routing backlog, SLA risk, billing risks, and sales follow-ups.</div>
+        </div>
+        <div class="screen-meta">Best for morning dispatch and weekly ops review</div>
+      </div>
+      <div class="app-frame">
+        <aside class="sidebar">
+          <div class="side-logo"><img src="assets/mcps-header-logo.png" alt="Mission Custom Pool Solutions"></div>
+          <div class="side-nav">
+            <button class="nav-item"><span>H</span><span class="label">Home</span></button>
+            <button class="nav-item"><span>A</span><span class="label">Action Center</span><span class="badge">18</span></button>
+            <button class="nav-item active"><span>O</span><span class="label">Operations</span></button>
+            <button class="nav-item"><span>R</span><span class="label">Routes</span></button>
+            <button class="nav-item"><span>B</span><span class="label">Billing</span></button>
+            <button class="nav-item"><span>S</span><span class="label">Sales</span></button>
+          </div>
+          <div class="side-foot"><div class="avatar">AD</div><div><div class="side-user">Admin User</div><div class="side-role">Super Administrator</div></div></div>
+        </aside>
+        <div class="app-main">
+          <div class="topbar"><div class="date-pill">Calendar&nbsp; May 16, 2026 Friday</div><div class="top-actions"><div class="filter-pill">All Technicians</div><div class="bell">Bell<span class="bell-count">18</span></div><div class="user-pill">AD</div></div></div>
+          <div class="content">
+            <div class="content-title-row"><div><h1>Operations Command</h1><p>Live routing, technician workload, customer risk, and back-office exceptions.</p></div><button class="btn primary">Create Work Order</button></div>
+            <div class="grid-ops">
+              <div class="card"><div class="card-head"><div class="card-title">Route Health Today</div></div><div class="ops-score"><div class="donut"></div><div class="metric-list"><div class="metric-line">On Track <strong>12</strong></div><div class="metric-line">At Risk <strong>3</strong></div><div class="metric-line">Off Track <strong>2</strong></div></div></div></div>
+              <div class="card"><div class="card-head"><div class="card-title">Technician Progress</div></div><div class="metric-list"><div class="metric-line">Technicians <strong>42</strong></div><div class="metric-line">On Route <strong>31</strong></div><div class="metric-line">Completed Stops <strong>128</strong></div><div class="metric-line">Avg Stops / Tech <strong>4.1</strong></div></div></div>
+              <div class="card"><div class="card-head"><div class="card-title">Unassigned Pools</div></div><div class="kpi-value">28</div><div class="metric-list" style="margin-top:12px;"><div class="metric-line">High Priority <strong>10</strong></div><div class="metric-line">Medium Priority <strong>12</strong></div><div class="metric-line">Low Priority <strong>6</strong></div></div></div>
+              <div class="card"><div class="card-head"><div class="card-title">SLA At Risk Next 24h</div></div><div class="kpi-value" style="color:var(--danger)">7</div><div class="metric-list" style="margin-top:12px;"><div class="metric-line">High <strong>3</strong></div><div class="metric-line">Medium <strong>3</strong></div><div class="metric-line">Low <strong>1</strong></div></div></div>
+            </div>
+            <div class="grid-2">
+              <div class="card"><div class="card-head"><div class="card-title">Top Billing Risks</div><span class="link">View all billing risks</span></div><table class="table"><thead><tr><th>Client</th><th>Risk Type</th><th>Amount</th><th>Due Date</th><th class="right">Days Past</th></tr></thead><tbody><tr><td>Parkside HOA</td><td>Pending Approval</td><td>$8,450</td><td>May 10</td><td class="right" style="color:var(--danger)">6</td></tr><tr><td>Thompson Residence</td><td>Past Due</td><td>$1,250</td><td>May 1</td><td class="right" style="color:var(--danger)">15</td></tr><tr><td>Crestview HOA</td><td>Past Due</td><td>$6,780</td><td>Apr 30</td><td class="right" style="color:var(--danger)">16</td></tr><tr><td>Barton Creek CC</td><td>Pending Approval</td><td>$3,125</td><td>May 12</td><td class="right" style="color:var(--warn)">4</td></tr></tbody></table></div>
+              <div class="card"><div class="card-head"><div class="card-title">Sales Follow-ups</div><span class="link">View CRM</span></div><table class="table"><thead><tr><th>Lead / Client</th><th>Type</th><th>Next Follow-up</th><th>Owner</th><th>Status</th></tr></thead><tbody><tr><td>Emily Carter</td><td>Renovation</td><td>May 16</td><td>Sarah J.</td><td><span class="status risk">Due Today</span></td></tr><tr><td>Westlake HOA</td><td>Service Expansion</td><td>May 19</td><td>Jordan P.</td><td><span class="status done">Scheduled</span></td></tr><tr><td>Mark Johnson</td><td>Equipment Upgrade</td><td>May 20</td><td>Sarah J.</td><td><span class="status done">Scheduled</span></td></tr><tr><td>Bella Vista HOA</td><td>New Account</td><td>May 21</td><td>Jordan P.</td><td><span class="status done">Scheduled</span></td></tr></tbody></table></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-mobile">
+      <div class="screen-head">
+        <div>
+          <div class="screen-kicker">Screen 4</div>
+          <h1 class="screen-title">Mobile Manager View</h1>
+          <div class="screen-desc">A phone-first queue for managers in the field: skim urgent work, filter, open details, assign, snooze, or start action.</div>
+        </div>
+        <div class="screen-meta">Same workflow, compact interaction model</div>
+      </div>
+      <div class="phone-stage">
+        <div class="phone">
+          <div class="phone-top"><span>Menu</span><span>MCPS</span><span>Bell 18</span></div>
+          <div class="phone-content">
+            <div class="mobile-head"><div><div class="mobile-title">Action Center</div><div style="color:var(--muted);font-size:12px;font-weight:800;">18 open actions</div></div><span class="link">Filter</span></div>
+            <div class="mobile-card"><div><div class="mobile-priority" style="color:var(--danger)">Urgent</div><div class="mobile-name">High pH Reading</div><div class="mobile-sub">Davidson Residence - Pool P-01387</div></div><div><div class="mobile-due">Due 9:30 AM</div><span class="status new">New</span></div></div>
+            <div class="mobile-card"><div><div class="mobile-priority" style="color:var(--warn)">High</div><div class="mobile-name">Equipment Offline</div><div class="mobile-sub">Smith Residence - Pool P-02145</div></div><div><div class="mobile-due">Due 10:00 AM</div><span class="status assigned">Assigned</span></div></div>
+            <div class="mobile-card"><div><div class="mobile-priority" style="color:var(--warn)">High</div><div class="mobile-name">SLA At Risk</div><div class="mobile-sub">Parkside HOA - Pool P-00911</div></div><div><div class="mobile-due">Due 11:00 AM</div><span class="status new">New</span></div></div>
+            <div class="mobile-card"><div><div class="mobile-priority" style="color:var(--good)">Medium</div><div class="mobile-name">Proposal Follow-up</div><div class="mobile-sub">Jones Residence</div></div><div><div class="mobile-due" style="color:var(--muted)">Due 12:00 PM</div><span class="status assigned">Pending</span></div></div>
+            <div class="mobile-card"><div><div class="mobile-priority" style="color:var(--good)">Medium</div><div class="mobile-name">Payment Past Due</div><div class="mobile-sub">Thompson Residence</div></div><div><div class="mobile-due" style="color:var(--muted)">Due 1:00 PM</div><span class="status new">New</span></div></div>
+          </div>
+          <div class="phone-tabs"><div class="phone-tab active">Home</div><div class="phone-tab">Actions</div><div class="phone-tab">Routes</div><div class="phone-tab">Clients</div><div class="phone-tab">More</div></div>
+        </div>
+        <div class="phone-notes">
+          <div class="note-card"><h3>Mobile Behavior</h3><p>Managers can process the same operating queue from the field. The phone view emphasizes priority, due time, owner, and status.</p></div>
+          <div class="note-card"><h3>Primary Actions</h3><ul><li>Tap a row to open the detail drawer as a full-screen sheet.</li><li>Assign or reassign owner.</li><li>Snooze with a required reason.</li><li>Start action and create linked work order when needed.</li></ul></div>
+          <div class="note-card"><h3>Filters</h3><ul><li>Priority</li><li>Department</li><li>Owner</li><li>Due today</li><li>Unassigned</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-workflow">
+      <div class="screen-head">
+        <div>
+          <div class="screen-kicker">Screen 5</div>
+          <h1 class="screen-title">Workflow, Governance, and Automation</h1>
+          <div class="screen-desc">The enterprise layer behind the UI: consistent statuses, routing rules, ownership, escalation, and audit history.</div>
+        </div>
+        <div class="screen-meta">Designed to scale beyond a simple alert list</div>
+      </div>
+      <div class="status-flow">
+        <div class="flow-step"><strong>New</strong><span>Detected by data rule</span></div>
+        <div class="flow-step"><strong>Assigned</strong><span>Owner selected</span></div>
+        <div class="flow-step"><strong>In Progress</strong><span>Work started</span></div>
+        <div class="flow-step"><strong>Snoozed</strong><span>Time-bound delay</span></div>
+        <div class="flow-step"><strong>Escalated</strong><span>Manager notified</span></div>
+        <div class="flow-step"><strong>Resolved</strong><span>Closed with record</span></div>
+      </div>
+      <div class="workflow-grid" style="margin-top:14px;">
+        <div class="card lane-card">
+          <div class="card-head"><div class="card-title">Priority Scoring Rules</div></div>
+          <div class="rule-list">
+            <div class="rule"><div class="rule-icon">1</div><div><div class="rule-title">Customer impact</div><div class="rule-sub">Open issue, route delay, chemistry risk, or missed service raises priority.</div></div></div>
+            <div class="rule"><div class="rule-icon">2</div><div><div class="rule-title">Time sensitivity</div><div class="rule-sub">Due soon, overdue, or SLA-at-risk actions automatically move up.</div></div></div>
+            <div class="rule"><div class="rule-icon">3</div><div><div class="rule-title">Financial exposure</div><div class="rule-sub">Past-due invoices, high-value quotes, and blocked billing are ranked higher.</div></div></div>
+            <div class="rule"><div class="rule-icon">4</div><div><div class="rule-title">Ownership gaps</div><div class="rule-sub">Unassigned work gets surfaced before it becomes invisible.</div></div></div>
+          </div>
+        </div>
+        <div class="card lane-card">
+          <div class="card-head"><div class="card-title">Automation Examples</div></div>
+          <div class="rule-list">
+            <div class="rule"><div class="rule-icon">A</div><div><div class="rule-title">Route behind schedule</div><div class="rule-sub">If completion rate trails expected progress, create an operations action.</div></div></div>
+            <div class="rule"><div class="rule-icon">B</div><div><div class="rule-title">Invoice due today</div><div class="rule-sub">If invoice day equals today and status is pending, create a billing action.</div></div></div>
+            <div class="rule"><div class="rule-icon">C</div><div><div class="rule-title">New quote aging</div><div class="rule-sub">If no follow-up exists after a set window, create a sales action.</div></div></div>
+            <div class="rule"><div class="rule-icon">D</div><div><div class="rule-title">Repeated issue</div><div class="rule-sub">If the same pool has recurring issues, escalate to manager review.</div></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-spec">
+      <div class="screen-head">
+        <div>
+          <div class="screen-kicker">Screen 6</div>
+          <h1 class="screen-title">Enterprise Feature Spec</h1>
+          <div class="screen-desc">A concise implementation-ready breakdown for presenting what gets built and how it works.</div>
+        </div>
+        <div class="screen-meta">Use this slide for stakeholder explanation</div>
+      </div>
+      <div class="spec-grid">
+        <div class="spec-card"><h3>Core Feature</h3><ul><li>Ranked action queue across alerts, routes, billing, CRM, and service logs.</li><li>Department, owner, priority, due time, and status on every item.</li><li>One-click navigation to linked portal records.</li><li>Detail drawer for context without losing dashboard position.</li></ul></div>
+        <div class="spec-card"><h3>Data Inputs</h3><ul><li>Issue alerts and technician-submitted reports.</li><li>Route data, scheduled visits, and service completions.</li><li>CRM leads, quotes, active customers, and follow-up dates.</li><li>Invoice day, payment status, and overdue billing risk.</li></ul></div>
+        <div class="spec-card"><h3>Workflow</h3><ul><li>New actions are generated from data rules.</li><li>Managers assign, snooze, escalate, or resolve.</li><li>Every action maintains status history and owner changes.</li><li>Resolved actions stay attached to the original record.</li></ul></div>
+        <div class="spec-card"><h3>Roles</h3><ul><li>Admin sees all departments and all owners.</li><li>Manager sees assigned teams and escalations.</li><li>Office sees billing, CRM, and customer actions.</li><li>Technicians see only assigned field actions.</li></ul></div>
+        <div class="spec-card"><h3>Business Value</h3><ul><li>Reduces missed follow-ups and invisible work.</li><li>Creates accountability by owner and due time.</li><li>Turns the home page into a command center.</li><li>Supports daily standups and weekly operational reviews.</li></ul></div>
+        <div class="spec-card"><h3>Build Phases</h3><ul><li>Phase 1: Client-side dashboard using existing data.</li><li>Phase 2: Persist action statuses and assignments.</li><li>Phase 3: Add automation rules and escalation thresholds.</li><li>Phase 4: Reporting, audit log, and SLA trend analytics.</li></ul></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  document.querySelectorAll('.deck-tab').forEach(button => {
+    button.addEventListener('click', () => {
+      const id = button.dataset.screen;
+      document.querySelectorAll('.deck-tab').forEach(tab => tab.classList.toggle('active', tab === button));
+      document.querySelectorAll('.screen').forEach(screen => screen.classList.toggle('active', screen.id === 'screen-' + id));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+</script>
+</body>
+</html>

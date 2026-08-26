@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Admin — Scope Library</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+      --gray:#F3F5F6; --gray-2:#EAEFEF; --charcoal:#222222; --white:#FFFFFF;
+      --muted:rgba(34,34,34,.58); --line:#E4EAEA;
+      --warn:#A9750C; --warn-bg:#FDF4E3;
+      --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--gray);color:var(--charcoal);font-family:var(--fb);
+      padding:0 0 90px;line-height:1.5;-webkit-font-smoothing:antialiased;font-size:14.5px;}
+    .wrap{max-width:980px;margin:0 auto;padding:0 24px;}
+
+    .topbar{background:var(--teal);color:#fff;padding:20px 0 0;}
+    .topbar .row{display:flex;align-items:center;gap:14px;}
+    .topbar img{height:30px;}
+    .topbar .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:2px;}
+    .topbar h1{font-family:var(--fh);font-weight:800;font-size:20px;margin:0;letter-spacing:-.01em;}
+    .tabs{display:flex;gap:2px;margin-top:18px;}
+    .tab{border:0;background:transparent;color:rgba(255,255,255,.6);padding:11px 18px;
+      font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;border-radius:8px 8px 0 0;}
+    .tab.active{background:var(--gray);color:var(--teal);}
+
+    main{padding-top:24px;}
+    .view{display:none;} .view.active{display:block;}
+
+    .card{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:18px;}
+    .card-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;
+      align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+    .card-head h2{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--teal);
+      margin:0 0 4px;letter-spacing:-.005em;}
+    .card-head p{margin:0;color:var(--muted);font-size:13px;max-width:56ch;}
+    .card-body{padding:20px 22px;}
+
+    .flabel{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--muted);margin:0 0 10px;display:flex;align-items:center;
+      justify-content:space-between;gap:10px;}
+    .flabel .count{color:var(--aqua);font-weight:700;}
+
+    /* Perf badge */
+    .perf{display:inline-flex;align-items:center;gap:7px;background:#EAF8F7;color:var(--teal);
+      border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;}
+    .perf .dot{width:7px;height:7px;border-radius:50%;background:var(--aqua);flex:0 0 auto;}
+    .perf b{font-family:var(--fh);font-weight:800;}
+
+    /* Chips */
+    .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+    .chip{border:1.5px solid var(--line);background:#fff;color:var(--muted);border-radius:9px;
+      padding:9px 13px;font-family:var(--fb);font-size:13px;cursor:pointer;
+      display:flex;align-items:center;gap:7px;transition:border-color .12s,background .12s,color .12s;}
+    .chip .box{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--line);flex:0 0 auto;
+      display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;transition:all .12s;}
+    .chip.active{border-color:var(--aqua);background:#EAF8F7;color:var(--teal);font-weight:600;}
+    .chip.active .box{background:var(--aqua);border-color:var(--aqua);}
+    .chip.active .box::after{content:"✓";}
+    .chip .tag{font-size:9.5px;font-family:var(--fh);font-weight:700;letter-spacing:.04em;
+      text-transform:uppercase;color:var(--muted);background:var(--gray);padding:2px 5px;border-radius:4px;}
+    .chip.active .tag{background:#fff;color:var(--aqua);}
+    .chip.one-off{border-style:dashed;}
+
+    /* Add / picker */
+    .picker-wrap{position:relative;}
+    .add-row{display:flex;gap:8px;}
+    .add-row input{flex:1;border:1.5px dashed var(--line);border-radius:9px;padding:10px 12px;
+      font:inherit;font-size:13.5px;background:#fff;}
+    .add-row input::placeholder{color:var(--muted);}
+    .add-row input:focus{outline:none;border-color:var(--aqua);border-style:solid;
+      box-shadow:0 0 0 3px rgba(31,167,168,.12);}
+    .picker{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#fff;
+      border:1px solid var(--line);border-radius:11px;box-shadow:0 16px 40px rgba(13,61,62,.16);
+      z-index:50;overflow:hidden;display:none;}
+    .picker.open{display:block;}
+    .picker-scroll{max-height:260px;overflow-y:auto;scrollbar-width:thin;
+      scrollbar-color:var(--line) transparent;}
+    .picker-scroll::-webkit-scrollbar{width:6px;}
+    .picker-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:10px;}
+    .picker-sec{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--muted);padding:11px 14px 6px;}
+    .picker-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:13.5px;}
+    .picker-item:hover{background:var(--gray);}
+    .picker-item .lbl{flex:1;min-width:0;}
+    .picker-item .meta{font-size:11px;color:var(--muted);}
+    .picker-item.added{opacity:.45;cursor:default;}
+    .picker-item.added:hover{background:transparent;}
+    .picker-item .added-tag{font-size:10px;color:var(--aqua);font-weight:700;}
+    .picker-create{border-top:1px solid var(--line);padding:11px 14px;cursor:pointer;
+      display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--teal);font-weight:600;}
+    .picker-create:hover{background:#EAF8F7;}
+    .picker-create .plus{width:18px;height:18px;border-radius:5px;background:var(--aqua);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto;}
+    .picker-empty{padding:16px 14px;color:var(--muted);font-size:13px;text-align:center;}
+
+    /* One-off list */
+    .oneoff-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+    .oneoff{display:flex;align-items:center;gap:9px;border:1px solid var(--line);
+      border-radius:9px;padding:9px 11px;background:var(--gray);}
+    .oneoff input{flex:1;border:0;background:transparent;font:inherit;font-size:13.5px;padding:2px 4px;}
+    .oneoff input:focus{outline:none;}
+    .oneoff .save-lib{border:1px solid var(--aqua);background:#fff;color:var(--teal);border-radius:7px;
+      padding:5px 10px;font-family:var(--fh);font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap;}
+    .oneoff .save-lib:hover{background:#EAF8F7;}
+    .oneoff .save-lib.saved{border-color:var(--line);color:var(--muted);cursor:default;}
+    .oneoff .rm{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;}
+    .oneoff .rm:hover{color:#B3261E;}
+
+    /* Preview */
+    .preview-list{list-style:none;margin:0;padding:0;}
+    .preview-list li{position:relative;padding:10px 0 10px 28px;font-size:15px;
+      border-bottom:1px solid var(--gray);}
+    .preview-list li:last-child{border-bottom:0;}
+    .preview-list li::before{content:"✓";position:absolute;left:0;top:12px;width:16px;height:16px;
+      border-radius:50%;background:var(--aqua-light);color:var(--teal);font-weight:800;font-size:10px;
+      text-align:center;line-height:16px;}
+    .preview-empty{color:var(--muted);font-size:13px;text-align:center;padding:20px 0;}
+
+    /* Library table */
+    table.lib{width:100%;border-collapse:collapse;font-size:13.5px;}
+    table.lib thead th{text-align:left;padding:0 12px 10px;font-family:var(--fh);font-weight:700;
+      font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+      border-bottom:2px solid var(--teal);}
+    table.lib td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+    table.lib tbody tr:last-child td{border-bottom:0;}
+    table.lib input.lbl-edit{width:100%;border:1px solid transparent;background:transparent;
+      font:inherit;font-size:13.5px;padding:6px 8px;border-radius:7px;}
+    table.lib input.lbl-edit:hover{border-color:var(--line);background:#fff;}
+    table.lib input.lbl-edit:focus{outline:none;border-color:var(--aqua);background:#fff;
+      box-shadow:0 0 0 3px rgba(31,167,168,.12);}
+    .svc-tags{display:flex;gap:4px;flex-wrap:wrap;}
+    .svc-tag{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.03em;
+      padding:4px 7px;border-radius:5px;background:var(--gray);color:var(--muted);cursor:pointer;
+      border:1px solid transparent;user-select:none;}
+    .svc-tag.on{background:#EAF8F7;color:var(--teal);border-color:var(--aqua-light);}
+    .switch-sm{position:relative;width:38px;height:22px;display:inline-block;cursor:pointer;}
+    .switch-sm input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+    .switch-sm .track{position:absolute;inset:0;background:var(--line);border-radius:14px;transition:background .15s;}
+    .switch-sm .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+      background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s;}
+    .switch-sm input:checked ~ .track{background:var(--aqua);}
+    .switch-sm input:checked ~ .knob{transform:translateX(16px);}
+    .row-rm{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px 6px;}
+    .row-rm:hover{color:#B3261E;}
+    .lib-add{display:flex;gap:8px;margin-top:16px;padding-top:16px;border-top:1px dashed var(--line);}
+    .lib-add input{flex:1;border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:13.5px;}
+    .lib-add input:focus{outline:none;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(31,167,168,.12);}
+    .lib-add button{border:0;background:var(--teal);color:#fff;border-radius:9px;padding:0 18px;
+      font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;}
+
+    .note{padding:13px 15px;border-radius:9px;background:var(--gray-2);font-size:12.5px;
+      color:var(--muted);display:flex;gap:9px;align-items:flex-start;margin-top:16px;}
+    .note .ic{flex:0 0 auto;color:var(--teal);font-weight:800;}
+    .note b{color:var(--teal);}
+
+    /* Save bar */
+    .savebar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+      box-shadow:0 -6px 20px rgba(13,61,62,.08);z-index:100;}
+    .savebar .row{max-width:980px;margin:0 auto;padding:14px 24px;display:flex;
+      align-items:center;justify-content:space-between;gap:16px;}
+    .savebar .msg{font-size:13px;color:var(--muted);}
+    .savebar .msg.dirty{color:var(--teal);font-weight:600;}
+    .savebar button{border:0;background:var(--aqua);color:#fff;border-radius:9px;padding:11px 22px;
+      font-family:var(--fh);font-weight:700;font-size:13.5px;cursor:pointer;
+      box-shadow:0 6px 16px rgba(31,167,168,.28);}
+    .savebar button:disabled{opacity:.45;box-shadow:none;cursor:not-allowed;}
+    .toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(8px);
+      background:var(--teal);color:#fff;padding:11px 20px;border-radius:9px;font-size:13px;
+      font-family:var(--fh);font-weight:600;opacity:0;pointer-events:none;
+      transition:opacity .18s,transform .18s;z-index:120;box-shadow:0 10px 26px rgba(13,61,62,.3);}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    @media(max-width:760px){
+      .wrap{padding:0 16px;}
+      .card-body{padding:16px;}
+      .card-head{padding:16px;}
+      table.lib thead{display:none;}
+      table.lib tbody tr{display:grid;grid-template-columns:1fr auto;gap:6px 12px;padding:12px 0;
+        border-bottom:1px solid var(--line);}
+      table.lib td{border-bottom:0;padding:3px 0;}
+      table.lib td.td-label{grid-column:1/3;}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="wrap">
+    <div class="row">
+      <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+      <div>
+        <div class="eyebrow">Quote Builder</div>
+        <h1>Scope of Work</h1>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tab-quote" onclick="showView('quote')">On a Quote</button>
+      <button class="tab" id="tab-lib" onclick="showView('lib')">Manage Library</button>
+    </div>
+  </div></div>
+
+  <main class="wrap">
+
+    <!-- ── QUOTE VIEW ── -->
+    <div class="view active" id="view-quote">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Scope for Jordan Rivera</h2>
+            <p>Weekly Full Service — defaults loaded from your library for this service type.</p>
+          </div>
+          <span class="perf"><span class="dot"></span>Loaded in <b id="load-ms">1ms</b> · from cache</span>
+        </div>
+        <div class="card-body">
+          <div class="flabel"><span>Included</span><span class="count" id="on-count"></span></div>
+          <div class="chips" id="quote-chips"></div>
+
+          <div class="flabel"><span>Add an item</span></div>
+          <div class="picker-wrap">
+            <div class="add-row">
+              <input type="text" id="picker-input" placeholder="Search your library, or type something new…"
+                oninput="onPickerInput()" onfocus="openPicker()">
+            </div>
+            <div class="picker" id="picker">
+              <div class="picker-scroll" id="picker-scroll"></div>
+              <div class="picker-create" id="picker-create" onclick="createFromInput()" style="display:none">
+                <span class="plus">+</span><span id="create-label"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="oneoff-list" id="oneoff-list"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div>
+          <h2>Customer Preview</h2>
+          <p>Exactly what appears on the signing page and the signed agreement.</p>
+        </div></div>
+        <div class="card-body">
+          <ul class="preview-list" id="preview-list"></ul>
+          <div class="note"><span class="ic">●</span><span><b>Locked at signature.</b> Once Jordan signs,
+            this exact list is stored with their agreement — later edits to the quote or the library
+            can't change what they already signed.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LIBRARY VIEW ── -->
+    <div class="view" id="view-lib">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Scope Library</h2>
+            <p>Reusable items across every quote. Set which service types each applies to, and whether
+              it's on by default for those types.</p>
+          </div>
+          <span class="perf"><span class="dot"></span>Cached <b>24h</b> · refreshes in background</span>
+        </div>
+        <div class="card-body">
+          <table class="lib">
+            <thead><tr>
+              <th style="width:38%">Item</th><th>Applies to</th><th style="width:90px">Default on</th><th style="width:40px"></th>
+            </tr></thead>
+            <tbody id="lib-tbody"></tbody>
+          </table>
+          <div class="lib-add">
+            <input type="text" id="lib-new" placeholder="Add a new library item…" onkeydown="if(event.key==='Enter')addLibItem()">
+            <button type="button" onclick="addLibItem()">+ Add to Library</button>
+          </div>
+          <div class="note"><span class="ic">●</span><span>Editing a library item changes it for
+            <b>future</b> quotes only. Quotes already signed keep the wording they were signed with.</span></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="savebar"><div class="row">
+    <span class="msg" id="save-msg">No unsaved changes</span>
+    <button type="button" id="save-btn" onclick="saveAll()" disabled>Save Changes</button>
+  </div></div>
+  <div class="toast" id="toast">Saved</div>
+
+  <script>
+  // ── Service types ─────────────────────────────────────────────────────
+  const SERVICES = [
+    {key:'weekly',  label:'Weekly'},
+    {key:'startup', label:'Startup'},
+    {key:'g2c',     label:'G2C'},
+    {key:'repair',  label:'Repair'}
+  ];
+  const CURRENT_SERVICE = 'weekly';
+
+  // ── The library (would arrive from Scope_Library sheet; bundled defaults
+  //    ship in constants.js so this renders even on a cold cache). ─────────
+  let LIBRARY = [
+    {id:'s1', label:'Equipment inspection',         services:['weekly','startup'],       def:true},
+    {id:'s2', label:'Weekly service report',        services:['weekly'],                 def:true},
+    {id:'s3', label:'Weekly pool service',          services:['weekly'],                 def:true},
+    {id:'s4', label:'Water testing and balancing',  services:['weekly','startup','g2c'], def:true},
+    {id:'s5', label:'Clean pool baskets',           services:['weekly','g2c'],           def:true},
+    {id:'s6', label:'24-hour emergency response',   services:['weekly'],                 def:false},
+    {id:'s7', label:'Filter cleaning and inspection',services:['weekly','g2c'],          def:false},
+    {id:'s8', label:'Robotic cleaner maintenance',  services:['weekly'],                 def:false},
+    {id:'s9', label:'Startup chemical work',        services:['startup'],                def:true},
+    {id:'s10',label:'Green-to-clean treatment',     services:['g2c'],                    def:true}
+  ];
+
+  // Selected library item ids on this quote + free-typed one-offs
+  let selected = new Set(LIBRARY.filter(i => i.services.includes(CURRENT_SERVICE) && i.def).map(i => i.id));
+  let oneOffs = [];
+  let dirty = false;
+  let nextId = 100;
+
+  // ── Confirmed text rule: standalone "and" → "&", Title Case, connectors
+  //    stay lowercase. Scope items only — never contract prose. ────────────
+  const CONNECTORS = new Set(['of','to','for','in','on','with','by','a','an','the']);
+  function formatScopeLabel(raw){
+    return raw.replace(/\band\b/gi,'&').split(/\s+/).map((w,i)=>{
+      if (w === '&') return w;
+      const lo = w.toLowerCase();
+      if (i > 0 && CONNECTORS.has(lo)) return lo;
+      return lo.charAt(0).toUpperCase() + lo.slice(1);
+    }).join(' ');
+  }
+  function esc(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showView(v){
+    document.getElementById('view-quote').classList.toggle('active', v==='quote');
+    document.getElementById('view-lib').classList.toggle('active', v==='lib');
+    document.getElementById('tab-quote').classList.toggle('active', v==='quote');
+    document.getElementById('tab-lib').classList.toggle('active', v==='lib');
+  }
+
+  // ── Quote view ────────────────────────────────────────────────────────
+  function forThisService(){
+    return LIBRARY.filter(i => i.services.includes(CURRENT_SERVICE));
+  }
+  function renderQuoteChips(){
+    const items = forThisService();
+    document.getElementById('on-count').textContent =
+      (selected.size + oneOffs.filter(o=>o.text.trim()).length) + ' on';
+    document.getElementById('quote-chips').innerHTML = items.map(i => `
+      <button type="button" class="chip${selected.has(i.id)?' active':''}" onclick="toggleItem('${i.id}')">
+        <span class="box"></span>${esc(i.label)}${i.def?'':'<span class="tag">Opt-in</span>'}
+      </button>`).join('');
+  }
+  function toggleItem(id){
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    renderQuoteChips(); renderPreview(); markDirty();
+  }
+
+  function openPicker(){ onPickerInput(); document.getElementById('picker').classList.add('open'); }
+  function closePicker(){ document.getElementById('picker').classList.remove('open'); }
+  function onPickerInput(){
+    const q = document.getElementById('picker-input').value.trim().toLowerCase();
+    const scroll = document.getElementById('picker-scroll');
+    const createRow = document.getElementById('picker-create');
+
+    // Library items matching the query — instant, no network.
+    const matches = LIBRARY.filter(i => !q || i.label.toLowerCase().includes(q));
+    let html = '';
+    if (matches.length){
+      html += '<div class="picker-sec">From your library</div>';
+      html += matches.map(i => {
+        const added = selected.has(i.id);
+        const inSvc = i.services.includes(CURRENT_SERVICE);
+        return `<div class="picker-item${added?' added':''}" ${added?'':`onclick="pickItem('${i.id}')"`}>
+          <span class="lbl">${esc(i.label)}</span>
+          ${added ? '<span class="added-tag">Added</span>'
+                  : `<span class="meta">${inSvc ? '' : 'other service type'}</span>`}
+        </div>`;
+      }).join('');
+    } else if (!q){
+      html = '<div class="picker-empty">Your library is empty.</div>';
+    }
+    scroll.innerHTML = html;
+
+    const exact = LIBRARY.some(i => i.label.toLowerCase() === q);
+    if (q && !exact){
+      createRow.style.display = 'flex';
+      document.getElementById('create-label').textContent = `Add “${document.getElementById('picker-input').value.trim()}” as a one-off`;
+    } else {
+      createRow.style.display = 'none';
+    }
+    if (!html && !q) scroll.innerHTML = '<div class="picker-empty">Start typing to search.</div>';
+  }
+  function pickItem(id){
+    selected.add(id);
+    document.getElementById('picker-input').value = '';
+    closePicker();
+    renderQuoteChips(); renderPreview(); markDirty();
+  }
+  function createFromInput(){
+    const input = document.getElementById('picker-input');
+    const val = input.value.trim();
+    if (!val) return;
+    oneOffs.push({id:'o'+(nextId++), text:val, savedToLib:false});
+    input.value = '';
+    closePicker();
+    renderOneOffs(); renderPreview(); markDirty();
+  }
+  function renderOneOffs(){
+    document.getElementById('oneoff-list').innerHTML = oneOffs.map((o,idx) => `
+      <div class="oneoff">
+        <input type="text" value="${esc(o.text)}" oninput="editOneOff(${idx}, this.value)">
+        <button type="button" class="save-lib${o.savedToLib?' saved':''}"
+          ${o.savedToLib?'disabled':`onclick="saveToLibrary(${idx})"`}>
+          ${o.savedToLib ? '✓ In library' : '+ Save to library'}
+        </button>
+        <button type="button" class="rm" onclick="removeOneOff(${idx})" aria-label="Remove">×</button>
+      </div>`).join('');
+  }
+  function editOneOff(i, v){ oneOffs[i].text = v; renderPreview(); markDirty(); }
+  function removeOneOff(i){ oneOffs.splice(i,1); renderOneOffs(); renderPreview(); markDirty(); }
+  function saveToLibrary(i){
+    const o = oneOffs[i];
+    const id = 'lib'+(nextId++);
+    LIBRARY.push({id, label:o.text.trim(), services:[CURRENT_SERVICE], def:false});
+    o.savedToLib = true;
+    selected.add(id);
+    oneOffs.splice(i,1);
+    renderOneOffs(); renderQuoteChips(); renderLibTable(); renderPreview(); markDirty();
+    flash('Added to your library — available on every quote now');
+  }
+
+  function renderPreview(){
+    const rows = [
+      ...forThisService().filter(i => selected.has(i.id)).map(i => i.label),
+      ...LIBRARY.filter(i => selected.has(i.id) && !i.services.includes(CURRENT_SERVICE)).map(i => i.label),
+      ...oneOffs.map(o => o.text).filter(t => t.trim())
+    ];
+    const el = document.getElementById('preview-list');
+    el.innerHTML = rows.length
+      ? rows.map(t => `<li>${esc(formatScopeLabel(t))}</li>`).join('')
+      : '<div class="preview-empty">No scope items selected yet.</div>';
+  }
+
+  // ── Library view ──────────────────────────────────────────────────────
+  function renderLibTable(){
+    document.getElementById('lib-tbody').innerHTML = LIBRARY.map((it, idx) => `
+      <tr>
+        <td class="td-label"><input class="lbl-edit" type="text" value="${esc(it.label)}"
+          oninput="editLibLabel(${idx}, this.value)"></td>
+        <td><div class="svc-tags">${SERVICES.map(s => `
+          <span class="svc-tag${it.services.includes(s.key)?' on':''}"
+            onclick="toggleLibService(${idx},'${s.key}')">${s.label}</span>`).join('')}</div></td>
+        <td><label class="switch-sm"><input type="checkbox" ${it.def?'checked':''}
+          onchange="toggleLibDefault(${idx})"><span class="track"></span><span class="knob"></span></label></td>
+        <td><button type="button" class="row-rm" onclick="removeLibItem(${idx})" aria-label="Remove">×</button></td>
+      </tr>`).join('');
+  }
+  function editLibLabel(i,v){ LIBRARY[i].label = v; renderQuoteChips(); renderPreview(); markDirty(); }
+  function toggleLibService(i,key){
+    const s = LIBRARY[i].services;
+    const at = s.indexOf(key);
+    at === -1 ? s.push(key) : s.splice(at,1);
+    renderLibTable(); renderQuoteChips(); markDirty();
+  }
+  function toggleLibDefault(i){ LIBRARY[i].def = !LIBRARY[i].def; renderQuoteChips(); markDirty(); }
+  function removeLibItem(i){
+    const id = LIBRARY[i].id;
+    LIBRARY.splice(i,1);
+    selected.delete(id);
+    renderLibTable(); renderQuoteChips(); renderPreview(); markDirty();
+  }
+  function addLibItem(){
+    const input = document.getElementById('lib-new');
+    const val = input.value.trim();
+    if (!val) return;
+    LIBRARY.push({id:'lib'+(nextId++), label:val, services:[CURRENT_SERVICE], def:false});
+    input.value = '';
+    renderLibTable(); renderQuoteChips(); markDirty();
+  }
+
+  // ── Shared ────────────────────────────────────────────────────────────
+  function markDirty(){
+    dirty = true;
+    const m = document.getElementById('save-msg');
+    m.textContent = 'Unsaved changes'; m.classList.add('dirty');
+    document.getElementById('save-btn').disabled = false;
+  }
+  function saveAll(){
+    if (!dirty) return;
+    dirty = false;
+    const m = document.getElementById('save-msg');
+    m.textContent = 'No unsaved changes'; m.classList.remove('dirty');
+    document.getElementById('save-btn').disabled = true;
+    flash('Saved');
+  }
+  function flash(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(()=>t.classList.remove('show'), 2400);
+  }
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.picker-wrap')) closePicker();
+  });
+
+  renderQuoteChips();
+  renderOneOffs();
+  renderPreview();
+  renderLibTable();
+  </script>
+</body>
+</html>

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Customer portal · feature sketch</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+    --gray:#F3F5F6; --charcoal:#222; --muted:rgba(34,34,34,.6); --line:#E4EAEA;
+    --risk:#B3261E; --risk-bg:#FDECEA; --watch:#A9750C; --watch-bg:#FDF4E3;
+    --ok-bg:#E7F6F6;
+    --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1160px;margin:0 auto;}
+
+  .page-kicker{text-align:center;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--aqua);margin-bottom:10px;}
+  .page-title{font-family:var(--fh);font-weight:800;color:var(--teal);font-size:30px;text-align:center;margin:0 0 10px;line-height:1.2;}
+  .page-sub{max-width:660px;margin:0 auto 18px;text-align:center;color:#4a5656;font-size:14.5px;line-height:1.65;}
+  .page-note{max-width:760px;margin:0 auto 46px;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:14px 22px;color:#3a4645;font-size:12.5px;line-height:1.6;text-align:center;}
+  .page-note b{color:var(--teal);}
+
+  .section{margin:0 0 64px;}
+  .slabel{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 6px;}
+  .slabel .tag{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;flex:0 0 auto;}
+  .slabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:19px;}
+  .sdesc{color:#5a6666;font-size:13.5px;line-height:1.65;margin:0 0 22px;max-width:780px;}
+  .sdesc code{background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);}
+
+  .rowframes{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .cap{text-align:center;font-size:12px;color:#5a6666;margin-top:12px;max-width:310px;line-height:1.55;}
+  .cap b{font-family:var(--fh);color:var(--teal);display:block;font-size:12.5px;margin-bottom:3px;}
+
+  .phonewrap{display:flex;flex-direction:column;align-items:center;}
+  .phone{width:352px;max-width:100%;background:#0f1717;border-radius:36px;padding:10px;box-shadow:0 22px 54px rgba(13,61,62,.30);flex:0 0 auto;}
+  .phone .screen{background:#fff;border-radius:27px;overflow:hidden;}
+  .statusbar{background:var(--teal);color:#fff;display:flex;justify-content:space-between;align-items:center;padding:9px 20px 7px;font-size:10.5px;font-family:var(--fh);font-weight:600;letter-spacing:.04em;}
+  .statusbar .sigs{display:flex;gap:5px;align-items:center;}
+  .statusbar .bar{display:inline-block;width:3px;background:rgba(255,255,255,.85);border-radius:1px;}
+
+  .browser{width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 52px rgba(13,61,62,.18);}
+  .bchrome{background:#e9eeee;padding:11px 16px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #dbe3e3;}
+  .bchrome i{width:11px;height:11px;border-radius:50%;background:#c9d3d3;display:block;}
+  .bchrome .url{flex:1;background:#fff;border-radius:7px;padding:5px 13px;font-size:11.5px;color:#6a7878;margin-left:8px;}
+  .bchrome .lock{color:#4c9c6a;font-size:10px;}
+
+  /* ── email ─────────────────────────────────────────────────────────────── */
+  .email{max-width:520px;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+  .em-top{background:var(--teal);padding:26px 32px;text-align:center;color:#fff;}
+  .em-top .logo{font-family:var(--fh);font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--aqua-light);}
+  .em-body{padding:28px 32px 8px;}
+  .em-body h2{font-family:var(--fh);font-weight:800;font-size:19px;color:var(--teal);margin:0 0 6px;}
+  .em-body .when{font-size:12.5px;color:var(--muted);margin:0 0 20px;}
+  .em-body p{font-size:13.5px;line-height:1.7;color:#3a4645;margin:0 0 18px;}
+  .newbadge{background:var(--watch-bg);border:1px dashed #D9BE7C;border-radius:8px;padding:5px 11px;font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#8a6a10;display:inline-block;margin-bottom:12px;}
+  .btn{display:block;text-align:center;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:13.5px;color:#fff;background:var(--aqua);padding:14px 26px;border-radius:10px;box-shadow:0 8px 20px rgba(31,167,168,.28);}
+  .em-foot{padding:20px 32px 26px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;line-height:1.7;margin-top:22px;}
+  .em-foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:9.5px;margin-bottom:7px;}
+
+  /* ── portal ────────────────────────────────────────────────────────────── */
+  .pt-head{background:var(--teal);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;}
+  .pt-head .lg{font-family:var(--fh);font-weight:800;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--aqua-light);}
+  .pt-head .acct{font-size:11px;color:rgba(255,255,255,.78);}
+  .pt-hero{background:var(--teal);color:#fff;padding:0 20px 26px;}
+  .pt-hero h1{font-family:var(--fh);font-weight:800;font-size:21px;margin:0 0 4px;line-height:1.25;}
+  .pt-hero .sub{font-size:12.5px;color:rgba(255,255,255,.75);}
+  .pt-body{background:var(--gray);padding:20px 16px 26px;}
+
+  .card{background:#fff;border-radius:14px;padding:20px 20px 22px;margin:0 0 14px;box-shadow:0 5px 16px rgba(13,61,62,.07);}
+  .card .ct{font-family:var(--fh);font-weight:800;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 13px;}
+
+  .done{display:flex;align-items:flex-start;gap:11px;margin:0 0 4px;}
+  .done .tick{width:26px;height:26px;border-radius:50%;background:var(--ok-bg);color:#0d6b6c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:0 0 auto;}
+  .done .h{font-family:var(--fh);font-weight:800;font-size:15.5px;color:var(--teal);line-height:1.35;}
+  .done .s{font-size:12px;color:var(--muted);margin-top:2px;}
+  .statusline{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 16px;}
+  .st{background:var(--ok-bg);color:#0d6b6c;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;border-radius:20px;}
+
+  .photos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 16px;}
+  .ph{border-radius:10px;overflow:hidden;position:relative;aspect-ratio:4/3;background:linear-gradient(160deg,#7fb8bd,#3d7f86);}
+  .ph.after{background:linear-gradient(160deg,#8fd6dd,#2f9aa4);}
+  .ph .lb{position:absolute;left:9px;bottom:9px;background:rgba(13,61,62,.82);color:#fff;font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:4px 9px;border-radius:20px;}
+  .ph .wv{position:absolute;inset:0;opacity:.35;}
+
+  .readings{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 16px;}
+  .rd{background:var(--gray);border-radius:9px;padding:11px 6px;text-align:center;}
+  .rd .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .rd .v{font-family:var(--fh);font-weight:800;font-size:16px;color:var(--teal);margin:4px 0 2px;}
+  .rd .g{font-size:9.5px;color:#0d6b6c;font-weight:600;}
+  .plain{background:var(--ok-bg);border-radius:9px;padding:12px 14px;font-size:12.5px;line-height:1.6;color:#0d5354;margin:0 0 16px;}
+  .plain b{font-family:var(--fh);}
+
+  .didlist{font-size:12.5px;line-height:1.9;color:#3a4645;margin:0 0 16px;}
+  .didlist .d{display:flex;gap:9px;align-items:flex-start;}
+  .didlist .d span:first-child{color:var(--aqua);font-weight:700;}
+  .technote{background:var(--gray);border-left:3px solid var(--aqua);border-radius:0 9px 9px 0;padding:13px 15px;font-size:12.5px;line-height:1.65;color:#3a4645;font-style:italic;}
+  .technote .by{font-style:normal;font-family:var(--fh);font-weight:700;font-size:11px;color:var(--teal);margin-top:8px;text-align:right;}
+
+  .next{display:flex;align-items:center;gap:13px;}
+  .next .cal{width:50px;height:50px;border-radius:11px;background:var(--teal);color:#fff;text-align:center;padding-top:6px;flex:0 0 auto;}
+  .next .cal .mo{font-family:var(--fh);font-weight:700;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--aqua-light);}
+  .next .cal .dy{font-family:var(--fh);font-weight:800;font-size:20px;line-height:1.1;}
+  .next .w{font-family:var(--fh);font-weight:700;font-size:14px;color:var(--teal);}
+  .next .x{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  .ctas{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .cta{text-align:center;padding:14px 10px;border-radius:11px;font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.05em;line-height:1.4;}
+  .cta.pri{background:var(--aqua);color:#fff;}
+  .cta.sec{background:#fff;color:var(--teal);border:1.5px solid var(--aqua);}
+
+  .trendrow{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid var(--line);}
+  .trendrow:last-of-type{border-bottom:none;}
+  .trendrow .n{font-family:var(--fh);font-weight:700;font-size:12.5px;color:var(--charcoal);}
+  .trendrow .n i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);font-family:var(--fb);font-weight:400;margin-top:1px;}
+  .trendrow .r{font-size:11px;color:#0d6b6c;font-family:var(--fh);font-weight:700;white-space:nowrap;}
+  .assure{background:var(--ok-bg);border-radius:9px;padding:13px 15px;font-size:12.5px;line-height:1.6;color:#0d5354;margin-top:14px;}
+
+  .vrow{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line);font-size:12.5px;}
+  .vrow:last-child{border-bottom:none;}
+  .vrow .dt{font-family:var(--fh);font-weight:700;color:var(--teal);}
+  .vrow .mid{color:var(--muted);font-size:11.5px;}
+  .vrow .go{color:var(--aqua);font-family:var(--fh);font-weight:700;font-size:11px;}
+  .wtag{font-size:10px;font-family:var(--fh);font-weight:700;letter-spacing:.06em;padding:3px 9px;border-radius:20px;background:var(--ok-bg);color:#0d6b6c;}
+  .wtag.cl{background:var(--watch-bg);color:var(--watch);}
+
+  .pt-foot{background:var(--teal);color:rgba(255,255,255,.75);padding:22px 20px 24px;text-align:center;font-size:11.5px;line-height:1.75;}
+  .pt-foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua-light);font-size:9.5px;margin-bottom:8px;}
+  .pt-foot a{color:#fff;text-decoration:none;}
+
+  /* modal */
+  .modalstage{background:rgba(13,61,62,.42);padding:26px 16px;display:flex;justify-content:center;}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:320px;overflow:hidden;box-shadow:0 20px 50px rgba(13,61,62,.32);}
+  .mo-head{padding:18px 20px 0;display:flex;justify-content:space-between;align-items:center;}
+  .mo-head h4{font-family:var(--fh);font-weight:800;font-size:15px;color:var(--teal);margin:0;}
+  .mo-head .x{color:var(--muted);}
+  .mo-body{padding:16px 20px 20px;}
+  .mo-body .lab{font-family:var(--fh);font-weight:700;font-size:11px;color:var(--charcoal);margin:0 0 8px;}
+  .opt{border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:12.5px;color:#3a4645;margin-bottom:8px;display:flex;align-items:center;gap:10px;}
+  .opt .rb{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);flex:0 0 auto;}
+  .opt.on{border-color:var(--aqua);background:var(--ok-bg);color:#0d5354;}
+  .opt.on .rb{border-color:var(--aqua);background:var(--aqua);box-shadow:inset 0 0 0 3px #fff;}
+  .ta{border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:12.5px;color:#b5c0c0;min-height:62px;margin-bottom:14px;}
+  .upl{border:1.5px dashed var(--line);border-radius:9px;padding:13px;text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px;}
+  .mo-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:11px;line-height:1.55;}
+
+  .expired{text-align:center;padding:42px 26px 34px;background:#fff;}
+  .expired .ic{width:52px;height:52px;border-radius:50%;background:var(--gray);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:22px;}
+  .expired h3{font-family:var(--fh);font-weight:800;font-size:18px;color:var(--teal);margin:0 0 10px;}
+  .expired p{font-size:13px;line-height:1.7;color:#3a4645;margin:0 auto 20px;max-width:245px;}
+  .inpf{border:1.5px solid var(--line);border-radius:9px;padding:12px 14px;font-size:13px;color:#b5c0c0;text-align:left;margin-bottom:11px;}
+
+  /* explainer */
+  .explain{background:#fff;border-radius:14px;padding:26px 28px;box-shadow:0 10px 30px rgba(13,61,62,.09);}
+  .explain h3{font-family:var(--fh);font-weight:800;font-size:15px;color:var(--teal);margin:0 0 10px;}
+  .explain p{font-size:13.5px;line-height:1.7;color:#3a4645;margin:0 0 14px;}
+  .explain p:last-child{margin-bottom:0;}
+  .explain code{background:var(--gray);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);font-family:ui-monospace,Menlo,monospace;}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .col{border-radius:12px;padding:18px 20px;}
+  .col.yes{background:var(--ok-bg);} .col.no{background:var(--risk-bg);}
+  .col .t{font-family:var(--fh);font-weight:800;font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px;}
+  .col.yes .t{color:#0d6b6c;} .col.no .t{color:var(--risk);}
+  .col ul{margin:0;padding-left:17px;}
+  .col li{font-size:12.5px;line-height:1.7;color:#3a4645;margin-bottom:6px;}
+  .col li:last-child{margin-bottom:0;}
+  .secgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+  .sec{background:var(--gray);border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.6;color:#3a4645;}
+  .sec b{display:block;font-family:var(--fh);font-size:12px;color:var(--teal);margin-bottom:4px;}
+  .warnbox{background:var(--watch-bg);border:1px solid #EBD9AE;border-radius:10px;padding:14px 18px;font-size:12.5px;line-height:1.65;color:#6b5410;margin-top:18px;}
+  .warnbox b{font-family:var(--fh);color:#5a4409;}
+
+  .foot{max-width:760px;margin:70px auto 0;text-align:center;color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid #cdd8d8;padding-top:26px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+
+  @media(max-width:820px){ .split,.secgrid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-kicker">Feature sketch · 3 of 4</div>
+  <h1 class="page-title">Customer portal</h1>
+  <p class="page-sub">A passwordless page where the customer can see their own pool — every visit, every photo, every reading — without calling the office to ask.</p>
+  <div class="page-note"><b>These are mockups, not working screens.</b> Copy follows the MCPS voice rules: readings are paired with what they mean, no jargon left bare, no hedging. Nothing in the portal codebase was modified to produce this file.</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 1 — email
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 1</span><span class="name">The way in</span></div>
+    <p class="sdesc">No password, no signup. The visit report email you already send after every service gets one new button carrying a signed token. That's the entire authentication story from the customer's side.</p>
+
+    <div class="rowframes">
+      <div class="email">
+        <div class="em-top"><div class="logo">Mission Custom Pool Solutions</div></div>
+        <div class="em-body">
+          <h2>Your pool service is complete</h2>
+          <div class="when">Thursday, July 30 · Tony Siller</div>
+          <p>Hi Mr. Pompa, your pool service has been completed. We cleaned the pool, checked the equipment, and balanced the water as needed.</p>
+          <div class="photos" style="margin-bottom:20px">
+            <div class="ph"><div class="lb">Before</div></div>
+            <div class="ph after"><div class="lb">After</div></div>
+          </div>
+          <div class="readings" style="margin-bottom:22px">
+            <div class="rd"><div class="k">Chlorine</div><div class="v">3.2</div><div class="g">In range</div></div>
+            <div class="rd"><div class="k">pH</div><div class="v">7.4</div><div class="g">In range</div></div>
+            <div class="rd"><div class="k">Alkalinity</div><div class="v">90</div><div class="g">In range</div></div>
+            <div class="rd"><div class="k">Hardness</div><div class="v">280</div><div class="g">In range</div></div>
+          </div>
+          <div class="newbadge">New — this button</div>
+          <a href="#" class="btn">View your pool dashboard</a>
+          <p style="font-size:12px;text-align:center;color:var(--muted);margin:14px 0 0">See every visit, photo, and reading any time — no password needed.</p>
+          <div class="em-foot">
+            <div class="m">Every pool matters.</div>
+            Questions? (210) 555-0142 · service@mcpoolsolutions.org<br>
+            Thank you for choosing Mission Custom Pool Solutions.
+          </div>
+        </div>
+      </div>
+
+      <div style="max-width:340px;padding-top:8px">
+        <div class="explain" style="padding:22px 24px">
+          <h3 style="font-size:14px">Almost all of this already exists</h3>
+          <p style="font-size:12.5px"><code>buildVisitReportPayload_()</code> in <code>VisitReportEmail.js</code> already assembles the photos, readings, actions and technician note into exactly this shape and sends it after every visit.</p>
+          <p style="font-size:12.5px">Photos are already written to Drive with link sharing, and their URLs are already stored in the <code>_photo_urls</code> column on <code>Chemical_Usage_Log</code>.</p>
+          <p style="font-size:12.5px;margin-bottom:0">The token-issuing and proxy pattern is already working in <code>api/agreement/sign.js</code> for the e-signature flow. This feature is mostly assembly, not invention.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 2 — portal home phone
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 2</span><span class="name">Portal home · phone</span></div>
+    <p class="sdesc">Where the customer lands. Everything above the fold answers the question they actually had: <i>was somebody at my pool, and is it OK?</i> Readings are never shown bare — each one is paired with what it means, per the voice rules.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>4:12</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i><span style="margin-left:4px">88%</span></span></div>
+          <div class="pt-head"><span class="lg">Mission Custom Pool Solutions</span><span class="acct">Pompa ⌄</span></div>
+          <div class="pt-hero">
+            <h1>18538 Shadow Canyon Dr</h1>
+            <div class="sub">Weekly Full Service · Thursdays</div>
+          </div>
+          <div class="pt-body">
+
+            <div class="card">
+              <div class="done">
+                <div class="tick">✓</div>
+                <div><div class="h">Serviced Thursday, July 30</div><div class="s">Tony Siller · 10:42a – 11:20a</div></div>
+              </div>
+              <div class="statusline"><span class="st">Water clear</span><span class="st">Chemistry balanced</span><span class="st">Equipment checked</span></div>
+
+              <div class="photos">
+                <div class="ph"><div class="lb">Before</div></div>
+                <div class="ph after"><div class="lb">After</div></div>
+              </div>
+
+              <div class="readings">
+                <div class="rd"><div class="k">Chlorine</div><div class="v">3.2</div><div class="g">In range</div></div>
+                <div class="rd"><div class="k">pH</div><div class="v">7.4</div><div class="g">In range</div></div>
+                <div class="rd"><div class="k">Alk.</div><div class="v">90</div><div class="g">In range</div></div>
+                <div class="rd"><div class="k">Hardness</div><div class="v">280</div><div class="g">In range</div></div>
+              </div>
+              <div class="plain"><b>What that means:</b> your water is sanitized and balanced. Nothing needs your attention.</div>
+
+              <div class="didlist">
+                <div class="d"><span>✓</span><span>Netted, brushed and vacuumed</span></div>
+                <div class="d"><span>✓</span><span>Skimmer and pump baskets cleaned</span></div>
+                <div class="d"><span>✓</span><span>Filter pressure normal · pump operating</span></div>
+              </div>
+
+              <div class="technote">
+                "Water looked great this week. The skimmer basket had heavy oak debris — cleared it out and it's draining normally again."
+                <div class="by">— Tony Siller</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="ct">Next visit</div>
+              <div class="next">
+                <div class="cal"><div class="mo">Aug</div><div class="dy">6</div></div>
+                <div><div class="w">Thursday, August 6</div><div class="x">Tony Siller · we'll text when he's on the way</div></div>
+              </div>
+            </div>
+
+            <div class="ctas">
+              <div class="cta pri">Request a<br>service call</div>
+              <div class="cta sec">Refer a friend<br>and save</div>
+            </div>
+
+          </div>
+          <div class="pt-foot">
+            <div class="m">Every pool matters.</div>
+            Questions? <a href="#">(210) 555-0142</a><br>service@mcpoolsolutions.org
+          </div>
+        </div></div>
+        <div class="cap"><b>Portal home</b>One screen, one scroll, no menu to learn. This is the whole product for 90% of visits.</div>
+      </div>
+
+      <div style="max-width:340px;padding-top:8px">
+        <div class="explain" style="padding:22px 24px">
+          <h3 style="font-size:14px">Voice decisions on this screen</h3>
+          <p style="font-size:12.5px">Readings show <b>“In range”</b> under the number, and the plain-language line says what the set of them means together. The voice rules are explicit that “free chlorine at 1.2” with no context is jargon that erodes trust.</p>
+          <p style="font-size:12.5px">The technician's note is attributed by name. A named person is what makes it feel like a service rather than a system.</p>
+          <p style="font-size:12.5px">“We'll text when he's on the way” is a promise the portal already keeps — <code>HeadsUp.js</code> sends that email today.</p>
+          <p style="font-size:12.5px;margin-bottom:0">No emoji, no exclamation marks, no hedging. Nothing says “should be fine.”</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 3 — desktop + trends
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 3</span><span class="name">Portal on desktop · the season summary</span></div>
+    <p class="sdesc">Same page, wider. The season summary is the retention argument made visible: it is the evidence that the money spent every month bought something. Notice what it does <b>not</b> contain — no risk score, no LSI, no internal note, no cost.</p>
+
+    <div class="browser">
+      <div class="bchrome"><i></i><i></i><i></i><span class="url"><span class="lock">🔒</span> mcps-log.vercel.app/portal</span></div>
+      <div>
+        <div class="pt-head" style="padding:16px 30px"><span class="lg">Mission Custom Pool Solutions</span><span class="acct">Pompa residence ⌄</span></div>
+        <div class="pt-hero" style="padding:0 30px 26px"><h1 style="font-size:24px">18538 Shadow Canyon Dr</h1><div class="sub">Weekly Full Service · Thursdays · Technician Tony Siller</div></div>
+        <div class="pt-body" style="padding:22px 30px 30px;display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start">
+
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <div class="done">
+                <div class="tick">✓</div>
+                <div><div class="h">Serviced Thursday, July 30</div><div class="s">Tony Siller · 10:42a – 11:20a</div></div>
+              </div>
+              <div class="statusline"><span class="st">Water clear</span><span class="st">Chemistry balanced</span><span class="st">Equipment checked</span></div>
+              <div class="photos" style="grid-template-columns:repeat(4,1fr)">
+                <div class="ph"><div class="lb">Before</div></div>
+                <div class="ph after"><div class="lb">After</div></div>
+                <div class="ph" style="background:linear-gradient(160deg,#9ab5a8,#4d7d70)"><div class="lb">Equipment</div></div>
+                <div class="ph" style="background:linear-gradient(160deg,#a9c3c6,#5d8b90)"><div class="lb">Deck</div></div>
+              </div>
+              <div class="readings">
+                <div class="rd"><div class="k">Chlorine</div><div class="v">3.2</div><div class="g">In range</div></div>
+                <div class="rd"><div class="k">pH</div><div class="v">7.4</div><div class="g">In range</div></div>
+                <div class="rd"><div class="k">Alkalinity</div><div class="v">90</div><div class="g">In range</div></div>
+                <div class="rd"><div class="k">Hardness</div><div class="v">280</div><div class="g">In range</div></div>
+              </div>
+              <div class="plain"><b>What that means:</b> your water is sanitized and balanced. Nothing needs your attention.</div>
+              <div class="technote">"Water looked great this week. The skimmer basket had heavy oak debris — cleared it out and it's draining normally again."<div class="by">— Tony Siller</div></div>
+            </div>
+
+            <div class="card">
+              <div class="ct">All visits · 2026</div>
+              <div class="vrow"><span class="dt">Jul 30</span><span class="wtag">Clear</span><span class="mid">Tony Siller · 4 photos</span><span class="go">View →</span></div>
+              <div class="vrow"><span class="dt">Jul 23</span><span class="wtag">Clear</span><span class="mid">Tony Siller · 4 photos</span><span class="go">View →</span></div>
+              <div class="vrow"><span class="dt">Jul 16</span><span class="wtag cl">Cloudy</span><span class="mid">Chuy Silva · 5 photos</span><span class="go">View →</span></div>
+              <div class="vrow"><span class="dt">Jul 09</span><span class="wtag">Clear</span><span class="mid">Tony Siller · 4 photos</span><span class="go">View →</span></div>
+              <div class="vrow"><span class="dt">Jul 02</span><span class="wtag">Clear</span><span class="mid">Tony Siller · 3 photos</span><span class="go">View →</span></div>
+              <p style="text-align:center;color:var(--aqua);font-family:var(--fh);font-weight:700;font-size:11.5px;margin:14px 0 0">Load more</p>
+            </div>
+          </div>
+
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <div class="ct">Next visit</div>
+              <div class="next">
+                <div class="cal"><div class="mo">Aug</div><div class="dy">6</div></div>
+                <div><div class="w">Thursday, August 6</div><div class="x">Tony Siller</div></div>
+              </div>
+              <div class="ctas" style="grid-template-columns:1fr;margin-top:16px">
+                <div class="cta pri">Request a service call</div>
+                <div class="cta sec">Refer a friend and save</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="ct">Your water · last 8 weeks</div>
+              <div class="trendrow">
+                <div class="n">Chlorine<i>Keeps the water sanitized</i></div>
+                <svg width="86" height="24" viewBox="0 0 86 24"><polyline points="2,13 14,10 26,12 38,9 50,11 62,10 74,12 84,11" fill="none" stroke="#1FA7A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div class="r">8 of 8</div>
+              </div>
+              <div class="trendrow">
+                <div class="n">pH<i>Comfort for skin and eyes</i></div>
+                <svg width="86" height="24" viewBox="0 0 86 24"><polyline points="2,12 14,13 26,11 38,12 50,13 62,11 74,12 84,12" fill="none" stroke="#1FA7A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div class="r">8 of 8</div>
+              </div>
+              <div class="trendrow">
+                <div class="n">Alkalinity<i>Keeps pH from swinging</i></div>
+                <svg width="86" height="24" viewBox="0 0 86 24"><polyline points="2,11 14,12 26,12 38,10 50,11 62,12 74,11 84,12" fill="none" stroke="#1FA7A8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div class="r">8 of 8</div>
+              </div>
+              <div class="assure">Your pool has been in balance on every visit this season. That is the goal, and it is what your service is doing.</div>
+            </div>
+          </div>
+
+        </div>
+        <div class="pt-foot" style="padding:22px 30px 24px">
+          <div class="m">Every pool matters.</div>
+          Questions? <a href="#">(210) 555-0142</a> · service@mcpoolsolutions.org<br>
+          Thank you for choosing Mission Custom Pool Solutions.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 4-6
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screens 4 – 6</span><span class="name">Service request, referral, expired link</span></div>
+    <p class="sdesc">The three interactions besides reading. The service request is the only thing on this portal that writes anything — and it writes into the <code>Issue_Alerts</code> sheet you already watch on the Alerts page, so there is no new inbox for anyone to remember to check.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone"><div class="screen" style="background:var(--gray)">
+          <div class="statusbar"><span>4:14</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i></span></div>
+          <div class="modalstage" style="min-height:520px;align-items:center">
+            <div class="modal">
+              <div class="mo-head"><h4>Request a service call</h4><span class="x">✕</span></div>
+              <div class="mo-body">
+                <div class="lab">What's going on?</div>
+                <div class="opt on"><span class="rb"></span><span>The water looks off</span></div>
+                <div class="opt"><span class="rb"></span><span>Equipment problem</span></div>
+                <div class="opt"><span class="rb"></span><span>Missed or late visit</span></div>
+                <div class="opt"><span class="rb"></span><span>Something else</span></div>
+                <div class="lab" style="margin-top:14px">Tell us more</div>
+                <div class="ta">It's gotten cloudy since Saturday and there's a green tint on the steps.</div>
+                <div class="upl">Add a photo &nbsp;·&nbsp; <span style="color:var(--aqua);font-family:var(--fh);font-weight:700">Choose</span></div>
+                <div class="cta pri" style="border-radius:10px">Send request</div>
+                <div class="mo-note">We answer same day, Monday through Saturday.</div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Request a service call</b>Lands in <code style="font-size:11px">Issue_Alerts</code> with <code style="font-size:11px">source=customer</code> and the pool linked — visible on the Alerts page within one refresh.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>4:15</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i></span></div>
+          <div class="pt-head"><span class="lg">Mission Custom Pool Solutions</span><span class="acct">Pompa ⌄</span></div>
+          <div class="pt-body" style="min-height:470px">
+            <div class="card" style="text-align:center;padding-top:28px">
+              <div style="width:54px;height:54px;border-radius:50%;background:var(--ok-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1FA7A8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+              </div>
+              <div style="font-family:var(--fh);font-weight:800;font-size:17px;color:var(--teal);margin-bottom:9px">Refer a friend</div>
+              <p style="font-size:12.5px;line-height:1.7;color:#3a4645;margin:0 0 18px">When someone you refer signs up for weekly service, you both get a month at half price. Share your link — we'll take care of the rest.</p>
+              <div style="background:var(--gray);border-radius:9px;padding:12px 14px;font-size:12px;color:var(--teal);font-family:ui-monospace,Menlo,monospace;margin-bottom:14px;word-break:break-all">mcpoolsolutions.org/r/POMPA-4417</div>
+              <div class="cta pri" style="border-radius:10px;margin-bottom:9px">Copy link</div>
+              <div class="cta sec" style="border-radius:10px">Text it to someone</div>
+              <p style="font-size:11.5px;color:var(--muted);margin:16px 0 0;line-height:1.55">Your referrals: <b style="font-family:var(--fh);color:var(--teal)">2 signed up</b> · one month credited</p>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Refer a friend</b>The cheapest lead source a service business has, currently with no surface to run on. Terms are illustrative — you'd set the actual offer.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>9:02</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i></span></div>
+          <div class="expired" style="min-height:520px;display:flex;flex-direction:column;justify-content:center">
+            <div class="ic">🔒</div>
+            <h3>This link has expired</h3>
+            <p>For your security, portal links last 30 days. Enter your email and we'll send a new one right away.</p>
+            <div class="inpf">you@example.com</div>
+            <div class="cta pri" style="border-radius:10px">Send me a new link</div>
+            <p style="font-size:11.5px;color:var(--muted);margin:18px auto 0;max-width:230px;line-height:1.6">Prefer to talk to someone? Call us at (210) 555-0142.</p>
+            <div style="font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);margin-top:26px">Every pool matters.</div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Expired link</b>Every dead end offers the next step. No error codes, no “something went wrong,” and a phone number for anyone who'd rather not deal with it.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       DATA BOUNDARY
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Under it</span><span class="name">The data boundary and the security posture</span></div>
+    <p class="sdesc">This is the first surface on the portal that anyone outside the company can reach, so what it can and cannot see is the design.</p>
+
+    <div class="explain">
+      <div class="split">
+        <div class="col yes">
+          <div class="t">The customer can see</div>
+          <ul>
+            <li>Their own visits, for one pool only</li>
+            <li>Photos from those visits</li>
+            <li>The six chemistry readings, paired with plain-language meaning</li>
+            <li>Actions performed and equipment status</li>
+            <li>The customer-facing <code>Notes</code> field</li>
+            <li>Their next scheduled visit and technician</li>
+          </ul>
+        </div>
+        <div class="col no">
+          <div class="t">Never reachable</div>
+          <ul>
+            <li><code>Internal Notes</code> — a separate column, never in the response</li>
+            <li>Chemical cost, margin, or any payroll figure</li>
+            <li>The internal risk score or LSI from sketch 1</li>
+            <li>Any other customer's pool, by any means</li>
+            <li>Route data, technician schedules, or staffing</li>
+            <li>Anything at all without a valid, unexpired token</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="secgrid">
+        <div class="sec"><b>Scoped to one pool</b>A token carries exactly one <code>pool_id</code>. There is no parameter a customer can change to reach another.</div>
+        <div class="sec"><b>Hashed at rest</b>Only a SHA-256 hash is stored in the <code>Customer_Sessions</code> sheet. The raw token exists only in the customer's link.</div>
+        <div class="sec"><b>30 days, revocable</b>Expiry is enforced server-side, and flipping one cell kills a link immediately.</div>
+        <div class="sec"><b>Read-only, with one exception</b>The service request is the only write, and it goes into a sheet you already monitor.</div>
+        <div class="sec"><b>Rate limited</b>Per token and per IP, on both issuance and validation, in the Vercel proxy layer.</div>
+        <div class="sec"><b>Whitelist, not blacklist</b>The GAS handler names the fields it returns. A new column added to the sheet later cannot leak by default.</div>
+      </div>
+
+      <div class="warnbox"><b>One thing to decide before this ships.</b> Visit photos are currently saved to Drive as <code>ANYONE_WITH_LINK</code>. The URLs are long and unguessable, so this is not an open door — but it does mean a photo URL forwarded by anyone stays viewable. If you want them locked to the portal, that's a change to <code>saveVisitPhotos_</code> and worth deciding now rather than after customers have links.</div>
+
+      <p style="margin-top:20px;margin-bottom:0"><b style="font-family:var(--fh);color:var(--teal)">Where it touches the code:</b> a new <code>Customer_Sessions</code> sheet; a new <code>appscript/CustomerPortal.js</code> reusing <code>buildVisitReportPayload_()</code> rather than re-deriving the visit shape; a new <code>api/portal/</code> proxy following the <code>api/agreement/sign.js</code> pattern; a standalone <code>portal.html</code> like <code>agreement.html</code>, outside the SPA; one button appended in <code>VisitReportEmail.js</code>; one rewrite in <code>vercel.json</code>.</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="m">Mission Custom Pool Solutions</div>
+    Feature sketch 3 of 4 · Customer portal<br>
+    Estimated build: 4–6 days · largest business upside, largest build, first public auth surface<br><br>
+    <span style="font-family:var(--fh);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--teal)">Every pool matters.</span>
+  </div>
+
+</div>
+</body>
+</html>

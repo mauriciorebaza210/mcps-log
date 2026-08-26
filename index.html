@@ -342,10 +342,15 @@
         </div><!-- /hub-tab-startup_checklists -->
 
       </div>
-    </div>
+	    </div>
 
-    <!-- Service Log -->
-    <div class="pf" id="page-service_log">
+	    <!-- Route Planner -->
+	    <div class="pf" id="page-route_planner">
+	      <div id="route-planner-root"></div>
+	    </div>
+
+	    <!-- Service Log -->
+	    <div class="pf" id="page-service_log">
       <div class="route-loading" id="svc-loading"><div class="spinner"></div></div>
       <div id="svc-root" style="display:none"></div>
     </div>
@@ -1036,16 +1041,16 @@
         <div class="q-sub-lbl">Finish &amp; Debris</div>
         <div class="q-pills">
           <button class="q-pill active" data-grp="finish" data-val="light" onclick="qPill(this,'finish')">Light Finish</button>
-          <button class="q-pill" data-grp="finish" data-val="dark" onclick="qPill(this,'finish')">Dark Finish <span style="font-size:.7rem;opacity:.7">+$10</span></button>
+          <button class="q-pill" data-grp="finish" data-val="dark" onclick="qPill(this,'finish')">Dark Finish <span id="q-mod-dark" style="font-size:.7rem;opacity:.7"></span></button>
           <button class="q-pill active" data-grp="debris" data-val="light" onclick="qPill(this,'debris')">Light Debris</button>
-          <button class="q-pill" data-grp="debris" data-val="heavy" onclick="qPill(this,'debris')">Heavy Debris <span style="font-size:.7rem;opacity:.7">+$10</span></button>
+          <button class="q-pill" data-grp="debris" data-val="heavy" onclick="qPill(this,'debris')">Heavy Debris <span id="q-mod-heavy" style="font-size:.7rem;opacity:.7"></span></button>
         </div>
         <div class="q-sub-lbl">Add-ons</div>
         <div class="q-checks">
-          <div class="q-chk" id="qchk-spa" onclick="qChk('spa')">🛁 Attached Spa <span style="font-size:.7rem;opacity:.7">+$25</span></div>
-          <div class="q-chk" id="qchk-robot" onclick="qChk('robot')">🤖 Cleaning Robot <span style="font-size:.7rem;opacity:.7">−$5</span></div>
-          <div class="q-chk" id="qchk-sun" onclick="qChk('sun')">☀️ High Sun Exposure <span style="font-size:.7rem;opacity:.7">+$10</span></div>
-          <div class="q-chk" id="qchk-pets" onclick="qChk('pets')">🐾 Pets on Property <span style="font-size:.7rem;opacity:.7">+$5</span></div>
+          <div class="q-chk" id="qchk-spa" onclick="qChk('spa')">🛁 Attached Spa <span id="q-mod-spa" style="font-size:.7rem;opacity:.7"></span></div>
+          <div class="q-chk" id="qchk-robot" onclick="qChk('robot')">🤖 Cleaning Robot <span id="q-mod-robot" style="font-size:.7rem;opacity:.7"></span></div>
+          <div class="q-chk" id="qchk-sun" onclick="qChk('sun')">☀️ High Sun Exposure <span id="q-mod-sun" style="font-size:.7rem;opacity:.7"></span></div>
+          <div class="q-chk" id="qchk-pets" onclick="qChk('pets')">🐾 Pets on Property <span id="q-mod-pets" style="font-size:.7rem;opacity:.7"></span></div>
         </div>
       </div>
 
@@ -1142,10 +1147,6 @@
             <button type="button" class="q-btn-ghost" style="white-space:nowrap" onclick="qRepOpenAddCompanyModal()">+ Add New</button>
           </div>
         </div>
-        <div class="q-1col" style="margin-bottom:0">
-          <label class="q-flabel">Job Price ($)</label>
-          <input class="q-inp" id="q-rep-amt" type="number" min="0" step="0.01" placeholder="0.00" oninput="qField('repair_amount',parseFloat(this.value)||0)">
-        </div>
 
       </div>
 
@@ -1224,23 +1225,32 @@
         </div>
       </div>
 
-      <!-- Discount -->
+      <!-- Price Adjustment -->
       <div class="q-sec">
-        <div class="q-sec-lbl">Discount <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(optional)</span></div>
+        <div class="q-sec-lbl">Price Adjustment <span style="font-weight:400;font-size:.7rem;font-family:'Barlow',sans-serif;color:var(--muted)">(optional)</span></div>
         <div class="q-2col" style="margin-bottom:0">
           <div>
-            <label for="q-disc-type" class="q-flabel">Discount Type</label>
-            <select class="q-inp" id="q-disc-type" onchange="qDiscTypeChange(this.value)">
-              <option value="none">No Discount</option>
-              <option value="Percentage">Percentage (%)</option>
-              <option value="Dollar Amount">Dollar Amount ($)</option>
-              <option value="Custom Price">Custom Price</option>
+            <label for="q-adj-type" class="q-flabel">Type</label>
+            <select class="q-inp" id="q-adj-type" onchange="qAdjTypeChange(this.value)">
+              <option value="none">No adjustment</option>
+              <option value="percentage">Discount (%)</option>
+              <option value="dollar">Discount ($)</option>
+              <option value="custom">Custom Price</option>
             </select>
           </div>
-          <div id="q-disc-val-wrap" style="display:none">
-            <label for="q-disc-val" class="q-flabel" id="q-disc-val-lbl">Discount Value</label>
-            <input class="q-inp" id="q-disc-val" type="number" min="0" step="0.01" placeholder="0" oninput="qDiscValChange(this.value)">
+          <div id="q-adj-val-wrap" style="display:none">
+            <label for="q-adj-val" class="q-flabel" id="q-adj-val-lbl">Value</label>
+            <input class="q-inp" id="q-adj-val" type="number" min="0" step="0.01" placeholder="0" oninput="qAdjValChange(this.value)">
+            <div id="q-adj-err" class="q-field-err" style="display:none"></div>
           </div>
+        </div>
+        <div class="q-adj-note">Custom Price can be <b>above</b> the rate card &mdash; it will be charged as a premium.</div>
+
+        <!-- Only shown for configurations with no rate card (repair jobs,
+             above-ground bi-weekly). qRenderSummary toggles it. -->
+        <div id="q-manual-price-wrap" style="display:none;margin-top:.75rem">
+          <label for="q-manual-price" class="q-flabel">Price for this job ($) <span style="font-weight:400;color:var(--muted)">&mdash; no rate card for this configuration</span></label>
+          <input class="q-inp" id="q-manual-price" type="number" min="0" step="0.01" placeholder="0.00" oninput="qManualPriceChange(this.value)">
         </div>
       </div>
 
@@ -1906,7 +1916,7 @@
   </div>
   <!-- Startup-specific actions (shown only for startup pools) -->
   <div class="pas-section" id="pas-startup-actions" style="display:none">
-    <div class="pas-section-label">🚀 Startup actions</div>
+    <div class="pas-section-label">🗓️ Visit scheduling</div>
     <div style="display:flex;flex-direction:column;gap:.5rem">
 
       <!-- Reschedule startup days -->
@@ -1939,19 +1949,27 @@
         </div>
       </div>
 
-      <!-- Path A: Sponsor first month — schedule 4 one-time Scheduled_Visits -->
+      <!-- Path A: Schedule temporary weekly Scheduled_Visits -->
       <div id="pas-fm-section">
-        <button id="pas-fm-btn" onclick="openFirstMonthPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#eff6ff;color:#1d4ed8;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📅 Sponsor first month — schedule 4 visits</button>
+        <button id="pas-fm-btn" onclick="openFirstMonthPanel()" style="width:100%;padding:.5rem .75rem;border-radius:7px;border:none;background:#eff6ff;color:#1d4ed8;font-weight:600;font-size:.83rem;cursor:pointer;text-align:left">📅 Schedule temporary weekly visits</button>
         <div id="pas-fm-picker" style="display:none;flex-direction:column;gap:.45rem;margin-top:.4rem;padding:.55rem .65rem;border-radius:7px;background:rgba(29,78,216,.06);border:1px solid rgba(29,78,216,.22)">
-          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Week 1 start date (Monday)</div>
+          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">First week start date</div>
           <input type="date" id="pas-fm-week1-input" oninput="_updateFmPreview_()" style="padding:.32rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.8rem;background:var(--card);color:var(--text);width:100%;box-sizing:border-box" />
-          <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Service day for the 4 weekly visits</div>
-          <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-fm-day-grid"></div>
+          <div style="display:grid;grid-template-columns:1fr 88px;gap:.45rem;align-items:end">
+            <div>
+              <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Service day</div>
+              <div style="display:flex;flex-wrap:wrap;gap:.3rem" id="pas-fm-day-grid"></div>
+            </div>
+            <div>
+              <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Weeks</div>
+              <input type="number" id="pas-fm-weeks-input" min="1" max="26" step="1" value="4" oninput="_updateFmPreview_()" style="padding:.32rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.8rem;background:var(--card);color:var(--text);width:100%;box-sizing:border-box" />
+            </div>
+          </div>
           <div id="pas-fm-preview" style="font-size:.74rem;color:var(--text-muted);line-height:1.7;margin-top:.1rem"></div>
           <div style="font-size:.78rem;font-weight:600;color:var(--text-muted)">Assign technician (optional)</div>
           <select id="pas-fm-tech-select" style="padding:.32rem .5rem;border-radius:6px;border:1.5px solid var(--border);font-size:.8rem;background:var(--card);color:var(--text)"><option value="">Unassigned</option></select>
           <div style="display:flex;gap:.4rem;margin-top:.1rem">
-            <button onclick="confirmFirstMonth()" id="pas-fm-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:#1d4ed8;color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Schedule 4 visits</button>
+            <button onclick="confirmFirstMonth()" id="pas-fm-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:#1d4ed8;color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Schedule visits</button>
             <button onclick="cancelFirstMonth()" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;font-size:.8rem;cursor:pointer">Cancel</button>
           </div>
         </div>
@@ -1966,7 +1984,7 @@
           <div style="font-size:.78rem;font-weight:600;color:var(--text-muted);margin-top:.2rem">When does recurring service start?</div>
           <div style="display:flex;gap:.4rem" id="pas-start-toggle">
             <button class="pas-start-btn" id="pas-start-now" onclick="pasSetRecurringStart('now',this)" style="flex:1;padding:.35rem .4rem;border-radius:6px;border:1.5px solid #15803d;background:#15803d;color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">Start now</button>
-            <button class="pas-start-btn" id="pas-start-after-fm" onclick="pasSetRecurringStart('after_fm',this)" style="flex:1;padding:.35rem .4rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.75rem;font-weight:600;cursor:pointer">After first month</button>
+            <button class="pas-start-btn" id="pas-start-after-fm" onclick="pasSetRecurringStart('after_fm',this)" style="flex:1;padding:.35rem .4rem;border-radius:6px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.75rem;font-weight:600;cursor:pointer">After temp visits</button>
           </div>
           <div style="display:flex;gap:.4rem;margin-top:.1rem">
             <button onclick="confirmConvertToWeekly()" id="pas-convert-confirm-btn" style="flex:1;padding:.4rem .5rem;border-radius:6px;border:none;background:var(--teal);color:#fff;font-weight:600;font-size:.8rem;cursor:pointer">Confirm</button>
@@ -2196,11 +2214,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="/js/lib/constants.js"></script>
+<script src="/js/lib/pricing.js"></script>
 <script src="/js/lib/status.js"></script>
 <script src="/js/lib/api.js"></script>
 <script src="/js/lib/auth.js"></script>
 <script src="/js/lib/router.js"></script>
 <script src="/js/features/routes.js"></script>
+<script src="/js/features/route-planner.js"></script>
 <!-- Service log format switch.
      Public default is the legacy format (service-log.js). The v2 rewrite is kept
      in the repo but only loads for whoever opts in with ?svc=v2 (sticky), and is

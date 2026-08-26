@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pool Startup Request — page snapshot</title>
+<style>
+  /* ── snapshot chrome only. Everything inside the frames below is the real
+       page's own CSS, loaded per-iframe so it can't leak into this shell. ── */
+  :root { --ink:#0D3D3E; --aqua:#1FA7A8; --line:#d8e2e4; --muted:#5c6b6b; }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:#eef2f3; color:#222;
+    font-family:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+  }
+  .gal-top { background:var(--ink); color:#fff; padding:20px 24px; }
+  .gal-top h1 { margin:0; font-size:17px; letter-spacing:.05em; text-transform:uppercase; font-weight:800; }
+  .gal-top p { margin:6px 0 0; font-size:13px; line-height:1.55; color:#a8d5d4; max-width:820px; }
+  .gal-top code { background:rgba(255,255,255,.12); padding:1px 5px; border-radius:4px; font-size:12px; }
+  .gal-nav {
+    position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid var(--line);
+    padding:10px 24px; display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .gal-nav a {
+    font-size:12px; font-weight:700; text-decoration:none; color:var(--ink);
+    border:1px solid var(--line); border-radius:999px; padding:5px 11px; background:#f7fafa;
+  }
+  .gal-nav a:hover { border-color:var(--aqua); color:var(--aqua); }
+  .gal-main { max-width:860px; margin:0 auto; padding:26px 24px 70px; }
+  .gal-screen { margin-bottom:34px; }
+  .gal-label { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .gal-num {
+    font-size:11px; font-weight:800; letter-spacing:.1em; color:#fff; background:var(--aqua);
+    border-radius:4px; padding:2px 7px;
+  }
+  .gal-name { font-size:15px; font-weight:800; color:var(--ink); }
+  .gal-note { font-size:12.5px; color:var(--muted); }
+  .gal-frame {
+    border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#F3F5F6;
+    box-shadow:0 6px 20px rgba(13,61,62,.07);
+  }
+  .gal-frame iframe { display:block; width:100%; border:0; }
+  .gal-stage { position:absolute; left:-10000px; top:0; width:900px; height:1px; overflow:hidden; }
+  .gal-foot { max-width:860px; margin:0 auto; padding:0 24px 50px; font-size:12.5px; color:var(--muted); line-height:1.6; }
+</style>
+</head>
+<body>
+
+<header class="gal-top">
+  <h1>Pool Startup Request — builder-facing page</h1>
+  <p>Static snapshot of <code>startup-request.html</code> as of 2026-08-03. The source file was not
+     modified: its stylesheet and its render functions are copied out verbatim and replayed here against
+     sample data, so every screen below is drawn by the page's own code. Live URL:
+     <code>/startup-request?t=&lt;company token&gt;</code></p>
+</header>
+
+<nav class="gal-nav" id="gal-nav"></nav>
+<main class="gal-main" id="gal-main"></main>
+<div class="gal-foot">
+  Sample customer, builder and pool values are invented for this snapshot. The only behavioral change is
+  that <code>init()</code> is not called (it would hit the live Apps Script backend) — no markup or styling
+  was altered.
+</div>
+
+<!-- Hidden staging DOM: mirrors the ids the real page's script expects, so it runs unmodified. -->
+<div class="gal-stage" aria-hidden="true">
+  <span id="hdr-company"></span>
+  <div id="app"></div>
+  <input type="file" id="file-camera">
+  <input type="file" id="file-library">
+</div>
+
+<script type="text/plain" id="page-css">
+    :root {
+      --teal: #0D3D3E;
+      --aqua: #1FA7A8;
+      --aqua-light: #5ED6D3;
+      --gray: #F3F5F6;
+      --ink: #222222;
+      --muted: #5c6b6b;
+      --line: #d8e2e4;
+      --danger: #b42318;
+      --ok-bg: #ecfdf3;
+      --ok-ink: #067647;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--gray);
+      color: var(--ink);
+      font-family: 'Open Sans', Arial, Helvetica, sans-serif;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px;
+    }
+    h1, h2, h3 { font-family: 'Montserrat', Arial, sans-serif; }
+    .card {
+      width: 100%;
+      max-width: 760px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(13, 61, 62, 0.12);
+      overflow: hidden;
+    }
+    .top {
+      background: var(--teal);
+      color: #fff;
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .top img { width: 48px; height: 48px; object-fit: contain; background: #fff; border-radius: 8px; }
+    .top h1 { margin: 0; font-size: 18px; letter-spacing: .04em; text-transform: uppercase; font-weight: 800; }
+    .top .co { font-size: 12px; color: var(--aqua-light); font-weight: 600; margin-top: 2px; }
+    .body { padding: 24px; }
+    .eyebrow { color: var(--aqua); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-family: 'Montserrat', Arial, sans-serif; }
+    h2 { margin: 8px 0 6px; font-size: 24px; color: var(--teal); }
+    p { line-height: 1.55; }
+    .muted { color: var(--muted); }
+    .steps { display: flex; gap: 6px; margin-bottom: 18px; }
+    .steps span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+    .steps span.on { background: var(--aqua); }
+    button, .btn {
+      border: 1px solid var(--aqua);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 14px;
+      font-family: 'Open Sans', Arial, sans-serif;
+      text-decoration: none;
+      cursor: pointer;
+      background: #fff;
+      color: var(--aqua);
+    }
+    button:disabled { opacity: .55; cursor: default; }
+    .primary { background: var(--aqua); color: #fff; }
+    .ghost { border-color: transparent; color: var(--muted); text-decoration: underline; background: transparent; padding: 8px 4px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .photo-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+    .photo-choice {
+      border: 2px dashed var(--line);
+      border-radius: 10px;
+      background: var(--gray);
+      padding: 26px 14px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--teal);
+    }
+    .photo-choice:hover { border-color: var(--aqua); }
+    .photo-choice .ic { font-size: 30px; display: block; margin-bottom: 8px; }
+    .thumb-wrap { margin: 14px 0; text-align: center; }
+    .thumb-wrap img { max-width: 100%; max-height: 320px; border-radius: 10px; border: 1px solid var(--line); }
+    .fgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .fgroup { margin: 20px 0 8px; }
+    .fgroup h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .07em; text-transform: uppercase; color: var(--teal); border-bottom: 2px solid var(--gray); padding-bottom: 6px; }
+    .fld { display: flex; flex-direction: column; gap: 4px; }
+    .fld.full { grid-column: 1 / -1; }
+    .fld label { font-size: 12px; font-weight: 700; color: var(--muted); }
+    .fld input, .fld select, .fld textarea {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      background: #fff;
+      color: var(--ink);
+      width: 100%;
+    }
+    .fld input:focus, .fld select:focus, .fld textarea:focus { outline: 2px solid var(--aqua-light); border-color: var(--aqua); }
+    .fld.warn input { border-color: #d97706; background: #fffbeb; }
+    .fld .warn-note { font-size: 11px; color: #b45309; font-weight: 600; }
+    textarea { min-height: 80px; resize: vertical; }
+    .msg { margin-top: 16px; border-radius: 8px; padding: 12px; background: var(--ok-bg); color: var(--ok-ink); display: none; font-weight: 600; }
+    .msg.err { background: #fef3f2; color: var(--danger); }
+    .notice { border: 1px solid var(--aqua-light); background: #f0fbfb; border-radius: 8px; padding: 12px 14px; margin: 14px 0; font-size: 14px; }
+    .spinner {
+      width: 44px; height: 44px; margin: 26px auto 14px;
+      border: 4px solid var(--gray); border-top-color: var(--aqua);
+      border-radius: 50%; animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ref { font-family: 'Montserrat', Arial, sans-serif; font-weight: 800; font-size: 22px; color: var(--teal); letter-spacing: .05em; }
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .body { padding: 18px; }
+      .fgrid, .photo-choices { grid-template-columns: 1fr; }
+      .actions button { width: 100%; }
+    }
+  </script>
+
+<script>
+  // The page calls api() from js/lib/api.js. Nothing here should reach the network,
+  // so it resolves never — the screens are captured from the synchronous render pass.
+  window.api = function () { return new Promise(function () {}); };
+</script>
+
+<!-- ══ VERBATIM from startup-request.html (only the trailing init() call removed) ══ -->
+<script>
+    const T = new URLSearchParams(location.search).get('t') || '';
+    const R = new URLSearchParams(location.search).get('r') || '';
+    const S = {
+      company: null,
+      photo: null,          // { base64, mimeType, name, dataUrl }
+      fields: null,         // current editable values
+      initialFields: null,  // untouched extraction (for "Send as-is")
+      illegible: [],
+      raw: '',
+      extractFailed: false
+    };
+
+    const FIELD_GROUPS = [
+      { title: 'Customer', fields: [
+        ['first_name', 'First name'], ['last_name', 'Last name'],
+        ['phone', 'Phone'], ['email', 'Email'],
+        ['address', 'Street address', 'full'], ['city', 'City'], ['zip_code', 'ZIP code']
+      ]},
+      { title: 'Pool', fields: [
+        ['pool_shape', 'Pool shape'], ['pool_dimensions', 'Pool dimensions'],
+        ['pool_length_ft', 'Length (ft)'], ['pool_width_ft', 'Width (ft)'],
+        ['pool_depth', 'Pool depth'], ['depth_min_ft', 'Min depth (ft)'], ['depth_max_ft', 'Max depth (ft)'],
+        ['spa', 'Spa', '', 'yesno'], ['water_features', 'Water features'], ['sheer_descents', 'Sheer descents']
+      ]},
+      { title: 'L-shape details', fields: [
+        ['l_leg_count', 'Leg count'], ['l_leg_length_ft', 'Leg length (ft)'],
+        ['l_leg_width_ft', 'Leg width (ft)'], ['l_overlap_assumption', 'Overlap assumption']
+      ]},
+      { title: 'Spa', fields: [
+        ['spa_shape', 'Spa shape'], ['spa_diameter_ft', 'Spa diameter (ft)'],
+        ['spa_length_ft', 'Spa length (ft)'], ['spa_width_ft', 'Spa width (ft)'],
+        ['spa_depth_ft', 'Spa depth (ft)'], ['spa_shared_circulation', 'Shared circulation']
+      ]},
+      { title: 'Gallons', fields: [
+        ['pool_area_sqft', 'Pool area sq ft'], ['pool_gallons_est', 'Pool gallons est'],
+        ['pool_gallons_low', 'Pool gallons low'], ['pool_gallons_high', 'Pool gallons high'],
+        ['pool_gallons_method', 'Pool gallons method'], ['pool_gallons_confidence', 'Pool gallons confidence'],
+        ['spa_gallons_est', 'Spa gallons est'], ['spa_gallons_low', 'Spa gallons low'],
+        ['spa_gallons_high', 'Spa gallons high'], ['total_gallons_est', 'Total gallons est'],
+        ['total_gallons_low', 'Total gallons low'], ['total_gallons_high', 'Total gallons high'],
+        ['pool_gallons_notes', 'Gallons notes', 'full', 'textarea']
+      ]},
+      { title: 'Surface', fields: [
+        ['plaster_type', 'Plaster / finish'], ['plaster_date', 'Plaster date', '', 'date']
+      ]},
+      { title: 'Equipment', fields: [
+        ['equip_filter', 'Filter'], ['equip_pump', 'Pump'],
+        ['equip_heater', 'Heater'], ['equip_chlorinator', 'Chlorinator'],
+        ['equip_salt_system', 'Salt system'], ['equip_booster', 'Booster pump']
+      ]},
+      { title: 'Startup', fields: [
+        ['requested_start_date', 'Requested startup date', '', 'date'],
+        ['notes', 'Notes for MCPS', 'full', 'textarea']
+      ]}
+    ];
+    const ALL_FIELDS = FIELD_GROUPS.flatMap(g => g.fields.map(f => f[0]));
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function app() { return document.getElementById('app'); }
+    function stepsBar(n) {
+      return '<div class="steps">' + [1,2,3].map(i => `<span class="${i <= n ? 'on' : ''}"></span>`).join('') + '</div>';
+    }
+
+    // ── Step 0: validate link ──────────────────────────────────────────────
+    async function init() {
+      if (!T) { renderBadLink('The request link is missing its access code.'); return; }
+      try {
+        const res = await api({ action: 'startup_request_lookup', t: T });
+        if (!res.ok) { renderBadLink(res.error); return; }
+        S.company = res;
+        document.getElementById('hdr-company').textContent = res.company_name || '';
+        if (R) { renderStatusView(); return; }
+        renderPhotoStep();
+      } catch (e) {
+        renderBadLink('We couldn\'t reach the server. Please check your connection and reload this page.');
+      }
+    }
+
+    function renderBadLink(message) {
+      app().innerHTML = `
+        <div class="eyebrow">Link unavailable</div>
+        <h2>This request link isn't active</h2>
+        <p class="muted">${esc(message || 'This link is invalid or no longer active.')}</p>
+        <p class="muted">Please contact Mission Custom Pool Solutions for a new link.</p>
+      `;
+    }
+
+    // ── Status view: check status / request a date change ─────────────────
+    async function renderStatusView() {
+      app().innerHTML = `
+        <div class="eyebrow">Checking status</div>
+        <h2>Loading your request...</h2>
+        <div class="spinner"></div>
+      `;
+      try {
+        const res = await api({ action: 'startup_request_status', t: T, request_id: R });
+        if (!res.ok) { renderBadLink(res.error); return; }
+        renderStatusDetail(res);
+      } catch (e) {
+        renderBadLink('We couldn\'t reach the server. Please check your connection and reload this page.');
+      }
+    }
+
+    function renderStatusDetail(res) {
+      const statusLabel = {
+        pending_review: 'Pending review',
+        approved: 'Approved',
+        rejected: 'Not approved'
+      }[res.status] || res.status;
+
+      let body = '';
+      if (res.status === 'pending_review') {
+        body = `<p>Your request (<b>${esc(res.request_id)}</b>) is waiting for MCPS to review it.</p>
+          ${res.requested_start_date ? `<p class="muted">Requested startup date: ${esc(res.requested_start_date)}</p>` : ''}`;
+      } else if (res.status === 'approved') {
+        body = `<p>Your pool startup is confirmed.</p>
+          <p class="muted">Scheduled startup date: <b>${esc(res.requested_start_date)}</b></p>`;
+      } else if (res.status === 'rejected') {
+        body = `<p>We were unable to move forward with this request.</p>
+          ${res.admin_notes ? `<div class="notice">${esc(res.admin_notes)}</div>` : ''}`;
+      } else {
+        body = `<p class="muted">Status: ${esc(res.status)}</p>`;
+      }
+
+      const canRequestChange = res.status === 'pending_review' || res.status === 'approved';
+      const flagged = !!res.change_requested_at;
+
+      app().innerHTML = `
+        <div class="eyebrow">Request status</div>
+        <h2>${esc(statusLabel)}</h2>
+        ${body}
+        ${flagged ? `<div class="notice">You requested a date change to ${esc(res.change_requested_date)}${res.change_requested_note ? ': ' + esc(res.change_requested_note) : ''}. MCPS is reviewing it.</div>` : ''}
+        ${canRequestChange && !flagged ? `
+          <div class="fgroup">
+            <h3>Request a date change</h3>
+            <div class="fld">
+              <label>New requested date</label>
+              <input type="date" id="cr-date">
+            </div>
+            <div class="fld" style="margin-top:8px">
+              <label>Note (optional)</label>
+              <textarea id="cr-note"></textarea>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="primary" onclick="submitChangeRequest()">Request date change</button>
+          </div>
+        ` : ''}
+        <div class="msg" id="cr-msg"></div>
+      `;
+    }
+
+    async function submitChangeRequest() {
+      const dateEl = document.getElementById('cr-date');
+      const noteEl = document.getElementById('cr-note');
+      const msg = document.getElementById('cr-msg');
+      if (!dateEl || !dateEl.value) {
+        msg.className = 'msg err'; msg.textContent = 'Please pick a date.'; msg.style.display = 'block';
+        return;
+      }
+      document.querySelectorAll('button').forEach(b => b.disabled = true);
+      msg.className = 'msg'; msg.textContent = 'Sending...'; msg.style.display = 'block';
+      try {
+        const res = await api({
+          action: 'startup_request_request_change', t: T, request_id: R,
+          requested_date: dateEl.value, note: (noteEl.value || '').trim()
+        });
+        if (!res.ok) {
+          msg.className = 'msg err';
+          msg.textContent = res.error || 'We couldn\'t send your request. Please try again.';
+          document.querySelectorAll('button').forEach(b => b.disabled = false);
+          return;
+        }
+        renderStatusView();
+      } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'We couldn\'t reach the server. Please check your connection and try again.';
+        document.querySelectorAll('button').forEach(b => b.disabled = false);
+      }
+    }
+
+    // ── Step 1: photo ──────────────────────────────────────────────────────
+    function renderPhotoStep() {
+      app().innerHTML = `
+        ${stepsBar(1)}
+        <div class="eyebrow">Step 1 of 3</div>
+        <h2>Add the construction sheet</h2>
+        <p class="muted">Take a photo of the handwritten construction record sheet for this pool.
+        A slightly angled or rotated photo is fine — we'll read it either way.</p>
+        <div class="photo-choices">
+          <div class="photo-choice" onclick="document.getElementById('file-camera').click()">
+            <span class="ic">📷</span>Take a photo
+          </div>
+          <div class="photo-choice" onclick="document.getElementById('file-library').click()">
+            <span class="ic">🖼️</span>Choose from library
+          </div>
+        </div>
+        ${S.photo ? `
+          <div class="thumb-wrap"><img src="${S.photo.dataUrl}" alt="Construction sheet"></div>
+          <div class="actions">
+            <button class="primary" onclick="runExtract()">Read sheet &amp; continue</button>
+          </div>
+        ` : ''}
+        <div class="actions" style="margin-top:8px">
+          <button class="ghost" onclick="startManualEntry()">Skip the photo — type the details in manually</button>
+        </div>
+        <div class="msg err" id="photo-msg"></div>
+      `;
+    }
+
+    function isUnsupportedPhoto(file) {
+      return /heic|heif/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
+    }
+
+    function compressPhoto(file) {
+      return new Promise(resolve => {
+        const MAX_DIM = 1400; // handwriting needs more resolution than pool photos
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          let w = img.width, h = img.height;
+          if (w > MAX_DIM || h > MAX_DIM) {
+            if (w >= h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+            else { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+          }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          c.toBlob(blob => {
+            if (!blob) { resolve(null); return; }
+            const r = new FileReader();
+            r.onload = e => resolve({
+              base64: e.target.result.split(',')[1],
+              dataUrl: e.target.result,
+              mimeType: 'image/jpeg',
+              name: (file.name || 'sheet').replace(/\.\w+$/, '') + '.jpg'
+            });
+            r.onerror = () => resolve(null);
+            r.readAsDataURL(blob);
+          }, 'image/jpeg', 0.8);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      });
+    }
+
+    async function handleFileChosen(input) {
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      const msg = document.getElementById('photo-msg');
+      if (isUnsupportedPhoto(file)) {
+        if (msg) { msg.textContent = 'That photo format isn\'t supported. Please use a JPEG or PNG photo.'; msg.style.display = 'block'; }
+        return;
+      }
+      const compressed = await compressPhoto(file);
+      if (!compressed) {
+        if (msg) { msg.textContent = 'We couldn\'t read that photo file. Please try a different one.'; msg.style.display = 'block'; }
+        return;
+      }
+      S.photo = compressed;
+      renderPhotoStep();
+    }
+    document.getElementById('file-camera').addEventListener('change', e => handleFileChosen(e.target));
+    document.getElementById('file-library').addEventListener('change', e => handleFileChosen(e.target));
+
+    function startManualEntry() {
+      S.fields = blankFields();
+      S.initialFields = null;
+      S.illegible = [];
+      S.raw = '';
+      renderReviewStep(false);
+    }
+
+    function blankFields() {
+      const f = {};
+      ALL_FIELDS.forEach(k => f[k] = '');
+      return f;
+    }
+
+    // ── Step 2: AI extraction ──────────────────────────────────────────────
+    async function runExtract() {
+      app().innerHTML = `
+        ${stepsBar(2)}
+        <div class="eyebrow">Step 2 of 3</div>
+        <h2>Reading your construction sheet</h2>
+        <div class="spinner"></div>
+        <p class="muted" style="text-align:center">This usually takes about 15 seconds.</p>
+      `;
+      try {
+        const res = await api({
+          action: 'startup_request_extract',
+          t: T,
+          photo: { base64: S.photo.base64, mimeType: S.photo.mimeType, name: S.photo.name }
+        });
+        if (res.ok && res.fields) {
+          const f = blankFields();
+          ALL_FIELDS.forEach(k => { if (res.fields[k] !== undefined && res.fields[k] !== null) f[k] = String(res.fields[k]); });
+          S.fields = f;
+          S.initialFields = Object.assign({}, f);
+          S.illegible = Array.isArray(res.fields.illegible_fields) ? res.fields.illegible_fields : [];
+          S.raw = res.raw || '';
+          S.extractFailed = false;
+          renderReviewStep(true);
+        } else if (res.ok && !res.fields) {
+          extractFallback(res.error);
+        } else {
+          // rate limited or rejected — surface the reason, keep the photo
+          extractFallback(res.error);
+        }
+      } catch (e) {
+        extractFallback(e && e.message ? e.message : '');
+      }
+    }
+
+    function extractFallback(reason) {
+      S.fields = blankFields();
+      S.initialFields = null;
+      S.illegible = [];
+      S.raw = '';
+      S.extractFailed = true;
+      S.extractFailReason = reason || '';
+      renderReviewStep(false);
+    }
+
+    // ── Step 3: review & submit ────────────────────────────────────────────
+    function fieldInput(key, label, type) {
+      const val = esc(S.fields[key]);
+      const isWarn = S.illegible.includes(key);
+      const warnNote = isWarn ? '<span class="warn-note">We couldn\'t read this clearly — please check it.</span>' : '';
+      if (type === 'yesno') {
+        const v = String(S.fields[key]).toLowerCase() === 'yes' ? 'Yes' : (String(S.fields[key]).toLowerCase() === 'no' ? 'No' : '');
+        return `<label>${label}</label><select id="f-${key}">
+          <option value=""${v === '' ? ' selected' : ''}>—</option>
+          <option value="Yes"${v === 'Yes' ? ' selected' : ''}>Yes</option>
+          <option value="No"${v === 'No' ? ' selected' : ''}>No</option>
+        </select>${warnNote}`;
+      }
+      if (type === 'textarea') {
+        return `<label>${label}</label><textarea id="f-${key}">${val}</textarea>${warnNote}`;
+      }
+      if (type === 'date') {
+        const dateVal = /^\d{4}-\d{2}-\d{2}$/.test(S.fields[key]) ? S.fields[key] : '';
+        const extra = (S.fields[key] && !dateVal) ? `<span class="warn-note">Written on the sheet as "${val}" — please pick the date.</span>` : warnNote;
+        return `<label>${label}</label><input type="date" id="f-${key}" value="${dateVal}">${extra}`;
+      }
+      return `<label>${label}</label><input type="text" id="f-${key}" value="${val}">${warnNote}`;
+    }
+
+    function renderReviewStep(fromExtraction) {
+      const groupsHtml = FIELD_GROUPS.map(g => `
+        <div class="fgroup">
+          <h3>${g.title}</h3>
+          <div class="fgrid">
+            ${g.fields.map(([key, label, span, type]) => `
+              <div class="fld ${span === 'full' ? 'full' : ''} ${S.illegible.includes(key) ? 'warn' : ''}">
+                ${fieldInput(key, label, type)}
+              </div>`).join('')}
+          </div>
+        </div>`).join('');
+
+      app().innerHTML = `
+        ${stepsBar(3)}
+        <div class="eyebrow">Step 3 of 3</div>
+        <h2>${fromExtraction ? 'Check the details' : 'Enter the details'}</h2>
+        ${S.extractFailed ? `<div class="notice">We couldn't read the sheet automatically${S.extractFailReason ? ' (' + esc(S.extractFailReason) + ')' : ''}. Please type the details below — your photo will still be included with the request.</div>` : ''}
+        ${fromExtraction ? `<p class="muted">We read these details from your sheet. Please correct anything that's off, or send it exactly as we read it — MCPS reviews every request before scheduling.</p>` : ''}
+        ${S.photo ? `<div class="thumb-wrap"><img src="${S.photo.dataUrl}" alt="Construction sheet" style="max-height:200px"></div>` : ''}
+        ${groupsHtml}
+        <div class="actions">
+          <button class="primary" onclick="submitRequest(true)">Review &amp; submit request</button>
+          ${fromExtraction ? `<button onclick="submitRequest(false)">Send as-is</button>` : ''}
+          ${S.photo ? '' : `<button class="ghost" onclick="renderPhotoStep()">Back to photo</button>`}
+        </div>
+        <div class="msg" id="submit-msg"></div>
+      `;
+    }
+
+    function readFormFields() {
+      const f = {};
+      ALL_FIELDS.forEach(k => {
+        const el = document.getElementById('f-' + k);
+        f[k] = el ? el.value.trim() : '';
+      });
+      return f;
+    }
+
+    async function submitRequest(reviewed) {
+      const fields = reviewed ? readFormFields() : Object.assign({}, S.initialFields || readFormFields());
+      const msg = document.getElementById('submit-msg');
+      if (!(fields.first_name || fields.last_name || fields.address)) {
+        msg.className = 'msg err';
+        msg.textContent = 'Please provide at least the customer name or address.';
+        msg.style.display = 'block';
+        return;
+      }
+      document.querySelectorAll('button').forEach(b => b.disabled = true);
+      msg.className = 'msg';
+      msg.textContent = 'Sending your request...';
+      msg.style.display = 'block';
+      try {
+        const res = await api({
+          action: 'startup_request_submit',
+          t: T,
+          fields: fields,
+          photos: S.photo ? [{ base64: S.photo.base64, mimeType: S.photo.mimeType, name: S.photo.name }] : [],
+          raw_extraction: S.raw,
+          reviewed_by_builder: !!reviewed
+        });
+        if (!res.ok) {
+          msg.className = 'msg err';
+          msg.textContent = res.error || 'We couldn\'t send your request. Please try again.';
+          document.querySelectorAll('button').forEach(b => b.disabled = false);
+          return;
+        }
+        renderDone(res.request_id, fields);
+      } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'We couldn\'t reach the server. Please check your connection and try again.';
+        document.querySelectorAll('button').forEach(b => b.disabled = false);
+      }
+    }
+
+    function renderDone(requestId, fields) {
+      const who = [fields.first_name, fields.last_name].filter(Boolean).join(' ') || fields.address;
+      app().innerHTML = `
+        <div class="eyebrow">Request received</div>
+        <h2>Thank you — we have it from here</h2>
+        <p>Your startup request${who ? ' for <b>' + esc(who) + '</b>' : ''} has been received and is pending review.</p>
+        <p class="muted">Reference number:</p>
+        <div class="ref">${esc(requestId)}</div>
+        <p class="muted" style="margin-top:18px">Mission Custom Pool Solutions will review the details and confirm the startup date shortly. You can close this page.</p>
+        <div class="actions">
+          <button onclick="resetForNext()">Submit another pool</button>
+        </div>
+      `;
+    }
+
+    function resetForNext() {
+      S.photo = null; S.fields = null; S.initialFields = null;
+      S.illegible = []; S.raw = ''; S.extractFailed = false;
+      renderPhotoStep();
+    }
+
+    /* init(); — disabled for the snapshot */
+</script>
+<!-- ══ end verbatim ══════════════════════════════════════════════════════════════ -->
+
+<script>
+  var LOGO = 'data:image/png;base64,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';
+  var COMPANY = 'Valley Custom Pools';
+
+  // Stand-in for the photographed handwritten construction sheet.
+  var SHEET_SVG = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="620" height="800" viewBox="0 0 620 800">',
+    '<rect width="620" height="800" fill="#efe9db"/>',
+    '<rect x="24" y="24" width="572" height="752" fill="#fdfcf7" stroke="#cfc6ae"/>',
+    '<text x="310" y="72" text-anchor="middle" font-family="Helvetica,Arial" font-size="19" font-weight="bold" letter-spacing="2" fill="#4a4436">POOL CONSTRUCTION RECORD</text>',
+    '<line x1="60" y1="88" x2="560" y2="88" stroke="#cfc6ae" stroke-width="2"/>',
+    (function () {
+      var rows = ['Customer','Address','Shape','Dimensions','Depth','Spa','Plaster','Plaster date','Filter','Pump','Heater','Chlorinator','Salt system','Gallons','Start date'];
+      var out = '';
+      rows.forEach(function (label, i) {
+        var y = 132 + i * 42;
+        out += '<text x="62" y="' + y + '" font-family="Helvetica,Arial" font-size="12" fill="#8a8270">' + label + '</text>';
+        out += '<line x1="180" y1="' + (y + 5) + '" x2="556" y2="' + (y + 5) + '" stroke="#dcd4c0"/>';
+        out += '<text x="190" y="' + y + '" font-family="Snell Roundhand,Bradley Hand,Segoe Script,cursive" font-size="19" fill="#2c3e6b" transform="rotate(-1 190 ' + y + ')">' + '~~~~~~~~~'.slice(0, 4 + (i * 3) % 9) + '</text>';
+      });
+      return out;
+    })(),
+    '<text x="62" y="770" font-family="Helvetica,Arial" font-size="10" fill="#a49b85">sample sheet — snapshot placeholder</text>',
+    '</svg>'
+  ].join('');
+  var SHEET_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(SHEET_SVG);
+  var PHOTO = { base64: '', dataUrl: SHEET_IMG, mimeType: 'image/jpeg', name: 'sheet.jpg' };
+
+  var EXTRACTED = {
+    first_name: 'Marisol', last_name: 'Trevino', phone: '956-555-0184',
+    email: 'marisol.trevino@example.com', address: '2418 Palm Ridge Dr', city: 'McAllen', zip_code: '78504',
+    pool_shape: 'Rectangle', pool_dimensions: "32' x 16'", pool_length_ft: '32', pool_width_ft: '16',
+    pool_depth: "3'6\" - 6'0\"", depth_min_ft: '3.5', depth_max_ft: '6',
+    spa: 'Yes', water_features: 'Bubblers (2)', sheer_descents: '1',
+    l_leg_count: '', l_leg_length_ft: '', l_leg_width_ft: '', l_overlap_assumption: '',
+    spa_shape: 'Round', spa_diameter_ft: '7', spa_length_ft: '', spa_width_ft: '',
+    spa_depth_ft: '3', spa_shared_circulation: 'Yes',
+    pool_area_sqft: '512', pool_gallons_est: '18200', pool_gallons_low: '17400', pool_gallons_high: '19000',
+    pool_gallons_method: 'Rectangle x avg depth x 7.5', pool_gallons_confidence: 'High',
+    spa_gallons_est: '860', spa_gallons_low: '800', spa_gallons_high: '920',
+    total_gallons_est: '19060', total_gallons_low: '18200', total_gallons_high: '19920',
+    pool_gallons_notes: 'Average depth taken as 4.75 ft from the sheet, tanning ledge not deducted.',
+    plaster_type: 'Pebble Sheen - Blue Surf', plaster_date: '8/6/26',
+    equip_filter: 'Pentair Clean & Clear 150', equip_pump: 'Pentair IntelliFlo VSF',
+    equip_heater: 'Raypak 266k BTU', equip_chlorinator: 'In-line', equip_salt_system: 'None',
+    equip_booster: 'None',
+    requested_start_date: '2026-08-12',
+    notes: 'Gate code 4417. Dogs in the yard on weekdays.'
+  };
+
+  function frameDoc(bodyHtml, company) {
+    var css = document.getElementById('page-css').textContent;
+    return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">' +
+      '<style>' + css + '</style></head><body>' +
+      '<main class="card">' +
+        '<div class="top">' +
+          '<img src="' + LOGO + '" alt="MCPS">' +
+          '<div><h1>Pool Startup Request</h1>' +
+          '<div class="co">' + (company || '') + '</div></div>' +
+        '</div>' +
+        '<div class="body">' + bodyHtml + '</div>' +
+      '</main></body></html>';
+  }
+
+  // Run one of the page's own render functions and take what it wrote into #app.
+  function capture(fn) {
+    var app = document.getElementById('app');
+    app.innerHTML = '';
+    fn();
+    return app.innerHTML;
+  }
+
+  function reset() {
+    S.company = { ok: true, company_name: COMPANY };
+    S.photo = null; S.fields = null; S.initialFields = null;
+    S.illegible = []; S.raw = ''; S.extractFailed = false; S.extractFailReason = '';
+  }
+
+  var SCREENS = [
+    {
+      name: 'Step 1 — Add the construction sheet',
+      note: 'What the builder lands on after opening their link.',
+      html: function () { reset(); return capture(renderPhotoStep); }
+    },
+    {
+      name: 'Step 1 — photo attached',
+      note: 'Same step once a photo is taken or picked; the compressed thumbnail and the read button appear.',
+      html: function () { reset(); S.photo = PHOTO; return capture(renderPhotoStep); }
+    },
+    {
+      name: 'Step 2 — reading the sheet',
+      note: 'Shown while the photo is at the AI extraction endpoint (~15s).',
+      html: function () {
+        reset(); S.photo = PHOTO;
+        var app = document.getElementById('app');
+        app.innerHTML = '';
+        runExtract();               // writes the spinner view synchronously, then awaits api()
+        return app.innerHTML;
+      }
+    },
+    {
+      name: 'Step 3 — Check the details (from extraction)',
+      note: 'Every field the extractor filled in, editable. Fields it could not read clearly are amber-flagged — here: phone and plaster date.',
+      html: function () {
+        reset();
+        S.photo = PHOTO;
+        S.fields = blankFields();
+        Object.keys(EXTRACTED).forEach(function (k) { if (k in S.fields) S.fields[k] = EXTRACTED[k]; });
+        S.initialFields = Object.assign({}, S.fields);
+        S.illegible = ['phone', 'plaster_date'];
+        return capture(function () { renderReviewStep(true); });
+      }
+    },
+    {
+      name: 'Step 3 — manual entry',
+      note: 'Reached by "Skip the photo — type the details in manually". Same form, empty, with a Back to photo button.',
+      html: function () { reset(); return capture(startManualEntry); }
+    },
+    {
+      name: 'Step 3 — extraction failed',
+      note: 'Fallback when the read fails or is rate-limited. The photo is kept and still submitted with the request.',
+      html: function () {
+        reset(); S.photo = PHOTO;
+        return capture(function () { extractFallback('daily extraction limit reached'); });
+      }
+    },
+    {
+      name: 'Confirmation — request received',
+      note: 'After submit. The reference number is what the builder quotes back to MCPS.',
+      html: function () {
+        reset();
+        return capture(function () { renderDone('SR-1042', EXTRACTED); });
+      }
+    },
+    {
+      name: 'Status — pending review',
+      note: 'The ?t=…&r=<request id> view. The date-change form shows while MCPS has not acted yet.',
+      html: function () {
+        reset();
+        return capture(function () {
+          renderStatusDetail({ ok: true, status: 'pending_review', request_id: 'SR-1042', requested_start_date: '2026-08-12' });
+        });
+      }
+    },
+    {
+      name: 'Status — approved',
+      note: 'Same view once the startup is scheduled; the builder can still ask for a different date.',
+      html: function () {
+        reset();
+        return capture(function () {
+          renderStatusDetail({ ok: true, status: 'approved', request_id: 'SR-1042', requested_start_date: '2026-08-12' });
+        });
+      }
+    },
+    {
+      name: 'Status — date change pending',
+      note: 'After the builder submits a change request; the form is replaced by a notice.',
+      html: function () {
+        reset();
+        return capture(function () {
+          renderStatusDetail({
+            ok: true, status: 'approved', request_id: 'SR-1042', requested_start_date: '2026-08-12',
+            change_requested_at: '2026-08-03T14:02:00Z', change_requested_date: '2026-08-17',
+            change_requested_note: 'Plaster crew pushed us back a week'
+          });
+        });
+      }
+    },
+    {
+      name: 'Link unavailable',
+      note: 'Bad, rotated or missing token. The header company name stays blank because the lookup never returned.',
+      company: '',
+      html: function () {
+        reset();
+        return capture(function () { renderBadLink('This link is invalid or no longer active.'); });
+      }
+    }
+  ];
+
+  function fit(ifr) {
+    try {
+      var d = ifr.contentDocument;
+      ifr.style.height = (d.documentElement.scrollHeight + 2) + 'px';
+    } catch (e) {}
+  }
+
+  var main = document.getElementById('gal-main');
+  var nav = document.getElementById('gal-nav');
+  var frames = [];
+
+  SCREENS.forEach(function (sc, i) {
+    var id = 'screen-' + (i + 1);
+
+    var a = document.createElement('a');
+    a.href = '#' + id;
+    a.textContent = (i + 1) + '. ' + sc.name;
+    nav.appendChild(a);
+
+    var wrap = document.createElement('section');
+    wrap.className = 'gal-screen';
+    wrap.id = id;
+    wrap.innerHTML =
+      '<div class="gal-label"><span class="gal-num">' + (i + 1) + '</span>' +
+      '<span class="gal-name"></span><span class="gal-note"></span></div>' +
+      '<div class="gal-frame"><iframe scrolling="no" title=""></iframe></div>';
+    wrap.querySelector('.gal-name').textContent = sc.name;
+    wrap.querySelector('.gal-note').textContent = sc.note;
+    wrap.querySelector('iframe').title = sc.name;
+    main.appendChild(wrap);
+
+    var ifr = wrap.querySelector('iframe');
+    var company = ('company' in sc) ? sc.company : COMPANY;
+    var doc = ifr.contentDocument;
+    doc.open();
+    doc.write(frameDoc(sc.html(), company));
+    doc.close();
+    frames.push(ifr);
+    fit(ifr);
+    ifr.contentWindow.addEventListener('load', function () { fit(ifr); });
+  });
+
+  function fitAll() { frames.forEach(fit); }
+  window.addEventListener('resize', fitAll);
+  window.addEventListener('load', fitAll);
+  [120, 400, 1000, 2200].forEach(function (t) { setTimeout(fitAll, t); });
+</script>
+</body>
+</html>

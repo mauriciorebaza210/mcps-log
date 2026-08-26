@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Visit Report Email · 3 mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;--warn:#8A5A00;--warn-bg:#FDF3E3;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;}
+  .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+  .page-sub{max-width:640px;margin:0 auto 40px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+  .variant{max-width:640px;margin:0 auto 60px;}
+  .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;}
+  .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+  .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+  .vlabel .desc{color:#5a6666;font-size:13px;}
+  .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+  .subject b{color:var(--teal);font-family:var(--fh);}
+  .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+  /* ---- shared components ---- */
+  .foot{padding:24px 32px 30px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+  .foot a{color:var(--teal);text-decoration:none;}
+  .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+
+  .eyebrow{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--aqua);display:inline-block;flex:0 0 auto;}
+
+  .wtable{width:100%;border-collapse:collapse;margin:0 0 28px;}
+  .wtable th{text-align:left;font-family:var(--fh);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 10px 10px;border-bottom:2px solid var(--line);}
+  .wtable th.r,.wtable td.stat{text-align:right;}
+  .wtable td{padding:12px 10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle;}
+  .wtable td.param{color:#5a6666;}
+  .wtable td.val{font-family:var(--fh);font-weight:700;color:var(--teal);white-space:nowrap;}
+  .wtable td.val .unit{font-family:var(--fb);font-weight:400;font-size:11px;color:var(--muted);margin-left:3px;}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700;font-family:var(--fh);white-space:nowrap;}
+  .badge.ok{background:#E4F5F0;color:var(--teal);}
+  .badge.warn{background:var(--warn-bg);color:var(--warn);}
+
+  .chem-pills{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 28px;}
+  .chem-pill{background:var(--gray);border-radius:10px;padding:10px 16px;font-size:13px;min-width:130px;}
+  .chem-pill .name{color:#3a4645;display:block;margin-bottom:3px;}
+  .chem-pill .qty{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+  .chem-pill .qty .u{font-family:var(--fb);font-weight:400;font-size:11px;color:var(--muted);margin-left:3px;}
+
+  .check-list{list-style:none;margin:0 0 28px;padding:0;}
+  .check-list li{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;color:#3a4645;}
+  .check-list li:last-child{border-bottom:0;}
+  .check-list .ico{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--aqua);display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .check-list .ico svg{width:11px;height:11px;}
+
+  .photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 28px;}
+  .photo-ph{aspect-ratio:4/3;border-radius:10px;background:linear-gradient(135deg,var(--aqua-light),var(--aqua) 75%);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:6px;}
+  .photo-ph svg{width:24px;height:24px;opacity:.95;}
+  .photo-ph span{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.95;}
+
+  .notes-card{background:var(--gray);border-left:4px solid var(--aqua);border-radius:0 10px 10px 0;padding:14px 18px;margin:0 0 30px;}
+  .notes-card .k{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin-bottom:6px;}
+  .notes-card .v{font-size:14px;color:#3a4645;line-height:1.55;}
+
+  .stat-row{display:flex;gap:10px;margin:0 0 28px;flex-wrap:wrap;}
+  .stat-tile{flex:1;min-width:105px;background:#fff;border:1px solid var(--line);border-top:3px solid var(--aqua);border-radius:10px;padding:14px 10px;text-align:center;}
+  .stat-tile.warn{border-top-color:var(--warn);}
+  .stat-tile .k{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+  .stat-tile .v{font-family:var(--fh);font-weight:800;font-size:19px;color:var(--teal);}
+  .stat-tile .v .u{font-family:var(--fb);font-weight:400;font-size:10px;color:var(--muted);margin-left:1px;}
+
+  .did-list{list-style:none;margin:0;padding:0;}
+  .did-list li{display:flex;align-items:flex-start;gap:10px;padding:8px 0;font-size:13.5px;color:#3a4645;}
+  .did-list .ico{flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .did-list .ico svg{width:10px;height:10px;}
+
+  /* ============ VARIANT A — Editorial ============ */
+  .v1 .top{padding:32px 44px 0;text-align:center;}
+  .v1 .top img{height:40px;margin-bottom:14px;}
+  .v1 .top .mantra{color:var(--aqua);font-size:10px;letter-spacing:.3em;}
+  .v1 .rule{height:3px;background:linear-gradient(90deg,var(--teal),var(--aqua));margin:22px 0 0;}
+  .v1 .body{padding:34px 44px 8px;}
+  .v1 h1{font-family:var(--fh);font-weight:700;font-size:24px;color:var(--teal);margin:0 0 6px;}
+  .v1 .lede{font-size:14px;color:#5a6666;margin:0 0 22px;}
+  .v1 .lede b{color:var(--charcoal);}
+  .v1 .detail{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 0 28px;padding:16px 0;display:flex;gap:36px;}
+  .v1 .detail .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .v1 .detail .val{font-family:var(--fh);font-weight:700;font-size:14px;color:var(--teal);}
+  .v1 .close{font-size:13.5px;color:#5a6666;line-height:1.6;margin:0 0 30px;}
+
+  /* ============ VARIANT B — Concierge ============ */
+  .v2 .top{background:linear-gradient(160deg,var(--teal),var(--teal-2));padding:36px 36px 30px;color:#fff;}
+  .v2 .top img{height:34px;margin-bottom:16px;}
+  .v2 .top .mantra{color:var(--aqua-light);font-size:9px;letter-spacing:.28em;margin-bottom:16px;display:block;}
+  .v2 .top .eyebrow2{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--aqua-light);margin-bottom:8px;}
+  .v2 .top h1{font-family:var(--fh);font-weight:700;font-size:23px;margin:0 0 10px;}
+  .v2 .top .meta{display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px;color:rgba(255,255,255,.78);}
+  .v2 .top .meta b{color:#fff;font-weight:600;}
+  .v2 .body{padding:32px 36px 8px;}
+  .v2 .eyebrow{margin-bottom:14px;}
+
+  /* ============ VARIANT C — Statement ============ */
+  .v3 .hero{background:var(--teal);color:#fff;padding:42px 40px 34px;position:relative;overflow:hidden;}
+  .v3 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 85% -10%,rgba(94,214,211,.22),transparent 55%);}
+  .v3 .hero>*{position:relative;}
+  .v3 .hero img{height:38px;margin-bottom:20px;}
+  .v3 .hero .mantra{color:var(--aqua-light);margin-bottom:14px;font-size:10px;letter-spacing:.28em;}
+  .v3 .hero h1{font-family:var(--fh);font-weight:800;font-size:32px;line-height:1.06;margin:0 0 10px;letter-spacing:-.01em;}
+  .v3 .hero .lede{color:rgba(255,255,255,.78);font-size:14px;max-width:420px;}
+  .v3 .strip{background:var(--aqua);color:#fff;padding:16px 40px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px 30px;}
+  .v3 .strip .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.85);margin-bottom:3px;}
+  .v3 .strip .v{font-family:var(--fh);font-weight:700;font-size:14px;}
+  .v3 .body{padding:34px 40px 8px;}
+
+  @media(max-width:560px){
+    .v1 .top,.v1 .body{padding-left:26px;padding-right:26px;}
+    .v1 .detail{gap:22px;flex-wrap:wrap;}
+    .v2 .top,.v2 .body{padding-left:24px;padding-right:24px;}
+    .v3 .hero,.v3 .strip,.v3 .body{padding-left:24px;padding-right:24px;}
+    .v3 .hero h1{font-size:26px;}
+    .stat-row{gap:8px;}
+  }
+</style>
+</head>
+<body>
+  <div class="page-title">Visit Report Email — 3 directions</div>
+  <div class="page-sub">Sent to the customer after every completed service visit. Replaces the current blue, off-brand template with three on-brand treatments — same data (technician, water chemistry, chemicals used, work performed, photos, tech notes), reskinned. Sample data shown for a Weekly Full Service visit.</div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT A — Editorial                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">A</span><span class="name">Editorial</span><span class="desc">Calm, clean, report-first.</span></div>
+    <div class="subject">Subject: <b>Your Pool Service Visit — July 27, 2026</b></div>
+    <div class="email v1">
+      <div class="top">
+        <img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions">
+        <div class="mantra">Every pool matters.</div>
+      </div>
+      <div class="rule"></div>
+      <div class="body">
+        <h1>Your pool was serviced today.</h1>
+        <p class="lede">Hi <b>Jordan</b>, here's a summary of what we did during your visit.</p>
+
+        <div class="detail">
+          <div><div class="k">Technician</div><div class="val">Carlos M.</div></div>
+          <div><div class="k">Date</div><div class="val">Jul 27, 2026</div></div>
+          <div><div class="k">Address</div><div class="val">123 Mission Creek Dr</div></div>
+        </div>
+
+        <div class="eyebrow">Water Test Results</div>
+        <table class="wtable">
+          <thead><tr><th>Parameter</th><th>Reading</th><th class="r">Status</th></tr></thead>
+          <tbody>
+            <tr><td class="param">Free Chlorine</td><td class="val">4.0 <span class="unit">ppm</span></td><td class="stat"><span class="badge ok">In range</span></td></tr>
+            <tr><td class="param">pH</td><td class="val">7.8</td><td class="stat"><span class="badge warn">Being monitored</span></td></tr>
+            <tr><td class="param">Total Alkalinity</td><td class="val">100 <span class="unit">ppm</span></td><td class="stat"><span class="badge ok">In range</span></td></tr>
+            <tr><td class="param">Calcium Hardness</td><td class="val">250 <span class="unit">ppm</span></td><td class="stat"><span class="badge ok">In range</span></td></tr>
+            <tr><td class="param">Chlorinator Tablet Level</td><td class="val">Half</td><td class="stat"></td></tr>
+          </tbody>
+        </table>
+
+        <div class="eyebrow">Chemicals Applied</div>
+        <div class="chem-pills">
+          <div class="chem-pill"><span class="name">Liquid Chlorine</span><span class="qty">1 <span class="u">gal</span></span></div>
+          <div class="chem-pill"><span class="name">Muriatic Acid</span><span class="qty">16 <span class="u">oz</span></span></div>
+        </div>
+
+        <div class="eyebrow">Service Performed</div>
+        <ul class="check-list">
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Skimmed &amp; vacuumed pool</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Brushed walls &amp; steps</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Emptied skimmer &amp; pump baskets</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Backwashed filter</li>
+        </ul>
+
+        <div class="eyebrow">Visit Photos</div>
+        <div class="photo-grid">
+          <div class="photo-ph"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.6"/></svg><span>Photo 1</span></div>
+          <div class="photo-ph"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.6"/></svg><span>Photo 2</span></div>
+        </div>
+
+        <div class="notes-card">
+          <div class="k">Tech Notes</div>
+          <div class="v">Noticed light algae forming near the steps — added extra shock to treat. We'll keep an eye on it next visit.</div>
+        </div>
+
+        <p class="close">Thank you for trusting Mission Custom Pool Solutions with your pool care. If you have any questions about this visit, please don't hesitate to reach out.</p>
+      </div>
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT B — Concierge                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">B</span><span class="name">Concierge</span><span class="desc">Status-card feel, glanceable chemistry.</span></div>
+    <div class="subject">Subject: <b>Your Pool Service Visit — July 27, 2026</b></div>
+    <div class="email v2">
+      <div class="top">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <span class="mantra">Every pool matters.</span>
+        <div class="eyebrow2">Visit Report</div>
+        <h1>Jordan Rivera</h1>
+        <div class="meta">
+          <div>Technician <b>Carlos M.</b></div>
+          <div>Date <b>Jul 27, 2026</b></div>
+          <div>Address <b>123 Mission Creek Dr</b></div>
+        </div>
+      </div>
+      <div class="body">
+        <div class="eyebrow">At a Glance</div>
+        <div class="stat-row">
+          <div class="stat-tile"><div class="k">Free Cl</div><div class="v">4.0<span class="u">ppm</span></div></div>
+          <div class="stat-tile warn"><div class="k">pH</div><div class="v">7.8</div></div>
+          <div class="stat-tile"><div class="k">Alkalinity</div><div class="v">100<span class="u">ppm</span></div></div>
+          <div class="stat-tile"><div class="k">Hardness</div><div class="v">250<span class="u">ppm</span></div></div>
+        </div>
+
+        <div class="eyebrow">What We Did</div>
+        <div style="background:var(--gray);border-radius:12px;padding:18px 20px;margin:0 0 28px">
+          <ul class="did-list">
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Skimmed &amp; vacuumed pool, brushed walls &amp; steps</li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Emptied skimmer &amp; pump baskets, backwashed filter</li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Applied 1 gal Liquid Chlorine, 16 oz Muriatic Acid</li>
+          </ul>
+        </div>
+
+        <div class="eyebrow">Visit Photos</div>
+        <div class="photo-grid">
+          <div class="photo-ph"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.6"/></svg><span>Photo 1</span></div>
+          <div class="photo-ph"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.6"/></svg><span>Photo 2</span></div>
+        </div>
+
+        <div class="notes-card">
+          <div class="k">Tech Notes</div>
+          <div class="v">Noticed light algae forming near the steps — added extra shock to treat. We'll keep an eye on it next visit.</div>
+        </div>
+
+        <p style="font-size:13.5px;color:#5a6666;line-height:1.6;margin:0 0 30px">Thank you for trusting Mission Custom Pool Solutions with your pool care. Questions about this visit? Just reply to this email.</p>
+      </div>
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT C — Statement                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">C</span><span class="name">Statement</span><span class="desc">Bold hero, confident summary strip.</span></div>
+    <div class="subject">Subject: <b>Pool: Handled. Your visit report from Jul 27, 2026</b></div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Pool: handled.</h1>
+        <div class="lede">Jordan, your Weekly Full Service visit at 123 Mission Creek Dr is complete.</div>
+      </div>
+      <div class="strip">
+        <div><div class="k">Technician</div><div class="v">Carlos M.</div></div>
+        <div><div class="k">Date</div><div class="v">Jul 27, 2026</div></div>
+        <div><div class="k">Status</div><div class="v">Completed ✓</div></div>
+      </div>
+      <div class="body">
+        <div class="eyebrow">Water Test Results</div>
+        <table class="wtable">
+          <thead><tr><th>Parameter</th><th>Reading</th><th class="r">Status</th></tr></thead>
+          <tbody>
+            <tr><td class="param">Free Chlorine</td><td class="val">4.0 <span class="unit">ppm</span></td><td class="stat"><span class="badge ok">In range</span></td></tr>
+            <tr><td class="param">pH</td><td class="val">7.8</td><td class="stat"><span class="badge warn">Being monitored</span></td></tr>
+            <tr><td class="param">Total Alkalinity</td><td class="val">100 <span class="unit">ppm</span></td><td class="stat"><span class="badge ok">In range</span></td></tr>
+            <tr><td class="param">Calcium Hardness</td><td class="val">250 <span class="unit">ppm</span></td><td class="stat"><span class="badge ok">In range</span></td></tr>
+          </tbody>
+        </table>
+
+        <div class="eyebrow">Chemicals Applied</div>
+        <div class="chem-pills">
+          <div class="chem-pill"><span class="name">Liquid Chlorine</span><span class="qty">1 <span class="u">gal</span></span></div>
+          <div class="chem-pill"><span class="name">Muriatic Acid</span><span class="qty">16 <span class="u">oz</span></span></div>
+        </div>
+
+        <div class="eyebrow">Service Performed</div>
+        <ul class="check-list">
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Skimmed &amp; vacuumed pool, brushed walls &amp; steps</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Emptied skimmer &amp; pump baskets, backwashed filter</li>
+        </ul>
+
+        <div class="eyebrow">Visit Photos</div>
+        <div class="photo-grid">
+          <div class="photo-ph"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.6"/></svg><span>Photo 1</span></div>
+          <div class="photo-ph"><svg viewBox="0 0 24 24" fill="none"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.3" stroke="#fff" stroke-width="1.6"/></svg><span>Photo 2</span></div>
+        </div>
+
+        <div class="notes-card">
+          <div class="k">Tech Notes</div>
+          <div class="v">Noticed light algae forming near the steps — added extra shock to treat. We'll keep an eye on it next visit.</div>
+        </div>
+
+        <p style="font-size:13.5px;color:#5a6666;line-height:1.6;margin:0 0 30px">Thank you for trusting Mission Custom Pool Solutions with your pool care. If you have any questions about this visit, please don't hesitate to reach out.</p>
+      </div>
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+</body>
+</html>

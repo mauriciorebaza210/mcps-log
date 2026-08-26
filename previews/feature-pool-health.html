@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Pool Health Radar · feature sketch</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+    --gray:#F3F5F6; --charcoal:#222; --muted:rgba(34,34,34,.6); --line:#E4EAEA;
+    --risk:#B3261E; --risk-bg:#FDECEA; --watch:#A9750C; --watch-bg:#FDF4E3;
+    --ok:#1FA7A8; --ok-bg:#E7F6F6;
+    --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;-webkit-font-smoothing:antialiased;}
+
+  /* ── page furniture (matches the email previews) ───────────────────────── */
+  .wrap{max-width:1160px;margin:0 auto;}
+  .page-kicker{text-align:center;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--aqua);margin-bottom:10px;}
+  .page-title{font-family:var(--fh);font-weight:800;color:var(--teal);font-size:30px;text-align:center;margin:0 0 10px;line-height:1.2;}
+  .page-sub{max-width:640px;margin:0 auto 18px;text-align:center;color:#4a5656;font-size:14.5px;line-height:1.65;}
+  .page-note{max-width:760px;margin:0 auto 46px;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:14px 22px;color:#3a4645;font-size:12.5px;line-height:1.6;text-align:center;}
+  .page-note b{color:var(--teal);}
+
+  .section{margin:0 0 64px;}
+  .slabel{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 6px;}
+  .slabel .tag{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;flex:0 0 auto;}
+  .slabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:19px;}
+  .sdesc{color:#5a6666;font-size:13.5px;line-height:1.65;margin:0 0 22px;max-width:760px;}
+  .sdesc code{background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);}
+
+  .rowframes{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .cap{text-align:center;font-size:12px;color:#5a6666;margin-top:12px;max-width:300px;line-height:1.55;}
+  .cap b{font-family:var(--fh);color:var(--teal);display:block;font-size:12.5px;margin-bottom:3px;}
+
+  /* ── device frames ─────────────────────────────────────────────────────── */
+  .phonewrap{display:flex;flex-direction:column;align-items:center;}
+  .phone{width:372px;max-width:100%;background:#0f1717;border-radius:38px;padding:11px;box-shadow:0 22px 54px rgba(13,61,62,.30);flex:0 0 auto;}
+  .phone .screen{background:#fff;border-radius:28px;overflow:hidden;}
+  .statusbar{background:var(--teal);color:#fff;display:flex;justify-content:space-between;align-items:center;padding:9px 20px 7px;font-size:10.5px;font-family:var(--fh);font-weight:600;letter-spacing:.04em;}
+  .statusbar .sigs{display:flex;gap:5px;align-items:center;}
+  .statusbar .bar{display:inline-block;width:3px;background:rgba(255,255,255,.85);border-radius:1px;}
+
+  .browser{width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 52px rgba(13,61,62,.18);}
+  .bchrome{background:#e9eeee;padding:11px 16px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #dbe3e3;}
+  .bchrome i{width:11px;height:11px;border-radius:50%;background:#c9d3d3;display:block;}
+  .bchrome .url{flex:1;background:#fff;border-radius:7px;padding:5px 13px;font-size:11.5px;color:#6a7878;margin-left:8px;font-family:var(--fb);}
+
+  /* ── service-log UI ────────────────────────────────────────────────────── */
+  .sl-top{background:var(--teal);color:#fff;padding:13px 18px 0;}
+  .sl-top .row1{display:flex;justify-content:space-between;align-items:center;font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;}
+  .sl-top .row1 .pid{color:var(--aqua-light);letter-spacing:.06em;}
+  .steprail{display:flex;gap:5px;padding:13px 0 12px;}
+  .steprail span{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.22);}
+  .steprail span.done{background:var(--aqua-light);}
+  .steprail span.now{background:#fff;}
+  .sl-body{padding:20px 18px 24px;background:#fff;}
+  .sl-h{font-family:var(--fh);font-weight:700;font-size:17px;color:var(--teal);margin:0 0 2px;}
+  .sl-sub{font-size:12px;color:var(--muted);margin:0 0 20px;}
+
+  .fld{margin:0 0 18px;}
+  .fld .lab{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px;}
+  .fld .lab .t{font-family:var(--fh);font-weight:700;font-size:12px;color:var(--charcoal);}
+  .fld .lab .t i{color:var(--risk);font-style:normal;}
+  .pill{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:20px;}
+  .pill.low{background:var(--watch-bg);color:var(--watch);}
+  .pill.ideal{background:var(--ok-bg);color:#0d6b6c;}
+  .pill.high{background:var(--watch-bg);color:var(--watch);}
+  .pill.vhigh{background:var(--risk-bg);color:var(--risk);}
+  .pill.opt{background:var(--gray);color:var(--muted);letter-spacing:.06em;text-transform:none;font-weight:600;}
+  .inp{border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-family:var(--fh);font-weight:700;color:var(--charcoal);background:#fff;}
+  .inp .u{font-family:var(--fb);font-weight:600;font-size:12px;color:var(--muted);}
+  .inp.flag{border-color:var(--risk);box-shadow:0 0 0 3px rgba(179,38,30,.08);}
+  .inp.empty{color:#c3cccc;}
+  .inp .est{font-family:var(--fb);font-weight:600;font-size:11.5px;color:var(--aqua);}
+
+  .meter{margin-top:8px;}
+  .meter .track{height:7px;border-radius:4px;overflow:hidden;display:flex;}
+  .meter .track b{display:block;height:100%;}
+  .meter .marks{position:relative;height:13px;}
+  .meter .marks .m{position:absolute;top:1px;transform:translateX(-50%);width:2px;height:8px;background:var(--charcoal);border-radius:1px;}
+  .meter .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);font-family:var(--fh);font-weight:600;letter-spacing:.06em;}
+
+  .trendnote{font-size:11.5px;color:var(--muted);margin-top:7px;display:flex;align-items:center;gap:5px;}
+  .trendnote b{color:var(--risk);font-family:var(--fh);}
+
+  /* the target callout — the core of the feature */
+  .target{border-radius:12px;padding:15px 16px;margin:11px 0 0;border:1.5px solid;}
+  .target.bad{background:var(--risk-bg);border-color:#F0BDB8;}
+  .target.good{background:var(--ok-bg);border-color:#B6E3E3;}
+  .target.none{background:var(--gray);border-color:var(--line);}
+  .target .th{font-family:var(--fh);font-weight:800;font-size:12.5px;letter-spacing:.04em;display:flex;align-items:center;gap:7px;margin:0 0 8px;}
+  .target.bad .th{color:var(--risk);}
+  .target.good .th{color:#0d6b6c;}
+  .target.none .th{color:var(--muted);}
+  .target p{margin:0 0 10px;font-size:12.5px;line-height:1.62;color:#3a4645;}
+  .target p:last-child{margin-bottom:0;}
+  .target .dose{background:#fff;border-radius:9px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .target .dose .d1{font-family:var(--fh);font-weight:700;font-size:13.5px;color:var(--teal);}
+  .target .dose .d2{font-size:10.5px;color:var(--muted);margin-top:2px;}
+  .usebtn{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--aqua);border:none;border-radius:7px;padding:9px 13px;white-space:nowrap;cursor:pointer;}
+
+  /* LSI gauge */
+  .lsi{border:1.5px solid var(--line);border-radius:12px;padding:15px 16px;margin:20px 0 0;background:#fff;}
+  .lsi .lh{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;}
+  .lsi .lh .t{font-family:var(--fh);font-weight:800;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);}
+  .lsi .lh .est{font-family:var(--fb);font-size:10px;color:var(--muted);background:var(--gray);padding:3px 8px;border-radius:20px;}
+  .lsi .val{text-align:center;font-family:var(--fh);font-weight:800;font-size:30px;line-height:1;margin:0 0 3px;}
+  .lsi .verd{text-align:center;font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 14px;}
+  .lsi .gauge{position:relative;height:9px;border-radius:5px;background:linear-gradient(90deg,#C9722A 0%,#E0A76A 22%,#1FA7A8 42%,#1FA7A8 58%,#E0A76A 78%,#C9722A 100%);}
+  .lsi .gauge .nub{position:absolute;top:-4px;width:4px;height:17px;background:var(--charcoal);border-radius:2px;transform:translateX(-50%);box-shadow:0 0 0 2.5px #fff;}
+  .lsi .scale{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);font-family:var(--fh);font-weight:600;margin-top:7px;}
+  .lsi .fix{margin:12px 0 0;font-size:12px;line-height:1.6;color:#3a4645;text-align:center;}
+  .lsi .fix b{color:var(--teal);font-family:var(--fh);}
+  .lsi.scaling .val,.lsi.scaling .verd{color:#C9722A;}
+  .lsi.balanced .val,.lsi.balanced .verd{color:#0d6b6c;}
+  .lsi.etching .val,.lsi.etching .verd{color:#C9722A;}
+
+  .navbtns{display:flex;gap:10px;margin-top:22px;}
+  .navbtns .b{flex:1;text-align:center;font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:13px;border-radius:10px;}
+  .navbtns .b.ghost{border:1.5px solid var(--line);color:var(--muted);}
+  .navbtns .b.solid{background:var(--teal);color:#fff;}
+
+  /* ── radar page ────────────────────────────────────────────────────────── */
+  .rp{background:#fff;}
+  .rp-head{background:var(--teal);color:#fff;padding:20px 26px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;}
+  .rp-head h2{font-family:var(--fh);font-weight:800;font-size:19px;margin:0 0 3px;letter-spacing:.02em;}
+  .rp-head .mantra{font-family:var(--fh);font-weight:600;font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--aqua-light);}
+  .rp-head .upd{font-size:11px;color:rgba(255,255,255,.7);}
+  .rp-body{padding:22px 26px 28px;background:var(--gray);}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 20px;}
+  .stat{background:#fff;border-radius:12px;padding:16px 14px;text-align:center;border-top:3px solid var(--line);}
+  .stat.risk{border-top-color:var(--risk);} .stat.watch{border-top-color:var(--watch);}
+  .stat.ok{border-top-color:var(--aqua);} .stat.all{border-top-color:var(--teal);}
+  .stat .n{font-family:var(--fh);font-weight:800;font-size:30px;line-height:1;color:var(--teal);}
+  .stat.risk .n{color:var(--risk);} .stat.watch .n{color:var(--watch);} .stat.ok .n{color:var(--aqua);}
+  .stat .l{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 18px;}
+  .chip{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.06em;padding:7px 14px;border-radius:20px;background:#fff;color:var(--muted);border:1px solid var(--line);}
+  .chip.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+  .filters .sp{flex:1;}
+  .sel{font-size:11.5px;color:#5a6666;background:#fff;border:1px solid var(--line);border-radius:7px;padding:7px 12px;font-family:var(--fb);}
+
+  .pcard{background:#fff;border-radius:12px;padding:18px 20px;margin:0 0 13px;border-left:4px solid var(--line);}
+  .pcard.risk{border-left-color:var(--risk);}
+  .pcard.watch{border-left-color:var(--watch);}
+  .pc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin:0 0 3px;}
+  .band{font-family:var(--fh);font-weight:800;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;padding:4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:6px;}
+  .band.risk{background:var(--risk-bg);color:var(--risk);} .band.watch{background:var(--watch-bg);color:var(--watch);} .band.ok{background:var(--ok-bg);color:#0d6b6c;}
+  .score{font-family:var(--fh);font-weight:700;font-size:11px;color:var(--muted);margin-left:9px;}
+  .pc-who{font-size:11.5px;color:var(--muted);text-align:right;}
+  .pc-name{font-family:var(--fh);font-weight:700;font-size:15.5px;color:var(--teal);margin:6px 0 1px;}
+  .pc-addr{font-size:12px;color:var(--muted);margin:0 0 13px;}
+  .reasons{margin:0 0 14px;}
+  .reason{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px dashed #eef2f2;font-size:12.5px;color:#3a4645;line-height:1.5;}
+  .reason:last-child{border-bottom:none;}
+  .reason .w{font-family:var(--fh);font-weight:700;font-size:11px;color:var(--risk);flex:0 0 auto;}
+  .reason.minor .w{color:var(--watch);}
+  .sparks{display:flex;gap:26px;flex-wrap:wrap;margin:0 0 15px;}
+  .spark .sk{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .spark .sv{font-size:10.5px;color:var(--muted);margin-top:3px;}
+  .spark .sv b{color:var(--risk);font-family:var(--fh);}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;}
+  .act{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;padding:9px 14px;border-radius:8px;border:1.5px solid var(--line);color:var(--muted);background:#fff;}
+  .act.pri{background:var(--aqua);border-color:var(--aqua);color:#fff;}
+  .collapsed{background:#fff;border-radius:12px;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);}
+  .collapsed b{font-family:var(--fh);color:var(--teal);}
+
+  /* ── drawer ────────────────────────────────────────────────────────────── */
+  .drawerstage{position:relative;background:var(--gray);padding:0;}
+  .scrim{background:rgba(13,61,62,.30);padding:26px;display:flex;justify-content:flex-end;}
+  .drawer{width:470px;max-width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 22px 60px rgba(13,61,62,.34);}
+  .dr-head{background:var(--teal);color:#fff;padding:20px 22px;}
+  .dr-head .x{float:right;opacity:.7;font-size:16px;}
+  .dr-head h3{font-family:var(--fh);font-weight:800;font-size:17px;margin:0 0 3px;}
+  .dr-head .m{font-size:11.5px;color:rgba(255,255,255,.75);margin-bottom:13px;}
+  .dr-sec{padding:18px 22px;border-bottom:1px solid var(--line);}
+  .dr-sec h4{font-family:var(--fh);font-weight:800;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 11px;}
+  .rx{counter-reset:s;margin:0;padding:0;list-style:none;}
+  .rx li{position:relative;padding:0 0 9px 27px;font-size:12.5px;line-height:1.6;color:#3a4645;}
+  .rx li:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:0;width:19px;height:19px;border-radius:50%;background:var(--aqua);color:#fff;font-family:var(--fh);font-weight:700;font-size:10.5px;display:flex;align-items:center;justify-content:center;}
+  .whyline{font-size:12.5px;line-height:1.65;color:#3a4645;padding:5px 0;border-bottom:1px dashed #eef2f2;}
+  .whyline:last-child{border-bottom:none;}
+  .htable{width:100%;border-collapse:collapse;font-size:12px;}
+  .htable th{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:0 8px 7px 0;}
+  .htable td{padding:7px 8px 7px 0;border-top:1px solid var(--line);color:#3a4645;}
+  .htable td.pid{font-family:var(--fh);font-weight:700;color:var(--teal);}
+
+  /* ── home card ─────────────────────────────────────────────────────────── */
+  .homecard{background:#fff;border-radius:14px;padding:20px 22px;width:330px;box-shadow:0 10px 30px rgba(13,61,62,.10);border-top:3px solid var(--aqua);}
+  .homecard .hh{font-family:var(--fh);font-weight:800;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);margin:0 0 16px;display:flex;align-items:center;gap:8px;}
+  .homecard .three{display:flex;justify-content:space-around;text-align:center;margin:0 0 16px;}
+  .homecard .three .n{font-family:var(--fh);font-weight:800;font-size:25px;line-height:1;}
+  .homecard .three .l{font-size:9.5px;color:var(--muted);font-family:var(--fh);font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:5px;}
+  .homecard .lead{font-size:12px;color:#3a4645;line-height:1.6;padding:9px 0;border-top:1px solid var(--line);}
+  .homecard .lead b{font-family:var(--fh);color:var(--teal);}
+  .homecard .go{text-align:right;font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--aqua);margin-top:8px;}
+
+  /* ── explainer blocks ──────────────────────────────────────────────────── */
+  .explain{background:#fff;border-radius:14px;padding:26px 28px;box-shadow:0 10px 30px rgba(13,61,62,.09);}
+  .explain h3{font-family:var(--fh);font-weight:800;font-size:15px;color:var(--teal);margin:0 0 10px;}
+  .explain p{font-size:13.5px;line-height:1.7;color:#3a4645;margin:0 0 14px;}
+  .formula{background:var(--teal);color:#dff0f0;border-radius:10px;padding:18px 20px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.9;overflow-x:auto;white-space:pre;}
+  .formula .hi{color:var(--aqua-light);font-weight:700;}
+  .cmp{width:100%;border-collapse:collapse;font-size:13px;margin-top:18px;}
+  .cmp th{background:var(--gray);font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px;text-align:left;}
+  .cmp td{padding:10px;border-top:1px solid var(--line);color:#3a4645;}
+  .cmp tr.bad td{background:var(--risk-bg);}
+  .cmp tr.bad td:last-child{color:var(--risk);font-weight:600;}
+  .cmp td.n{font-family:var(--fh);font-weight:700;color:var(--teal);}
+  .signoff{background:var(--watch-bg);border:1px solid #EBD9AE;border-radius:10px;padding:14px 18px;font-size:12.5px;line-height:1.65;color:#6b5410;margin-top:18px;}
+  .signoff b{font-family:var(--fh);color:#5a4409;}
+  .wtable{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .wtable th{background:var(--teal);color:#fff;font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;padding:11px 12px;text-align:left;}
+  .wtable td{padding:11px 12px;border-top:1px solid var(--line);color:#3a4645;line-height:1.55;}
+  .wtable td.w{font-family:var(--fh);font-weight:800;color:var(--risk);text-align:center;width:64px;}
+  .wtable tr:nth-child(even) td{background:#fafcfc;}
+  .bands{display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;}
+  .bandbox{flex:1;min-width:150px;border-radius:10px;padding:13px 15px;font-size:12px;line-height:1.5;}
+  .bandbox b{display:block;font-family:var(--fh);font-size:12.5px;margin-bottom:3px;}
+  .bandbox.r{background:var(--risk-bg);color:var(--risk);} .bandbox.w{background:var(--watch-bg);color:var(--watch);} .bandbox.o{background:var(--ok-bg);color:#0d6b6c;}
+
+  .foot{max-width:760px;margin:70px auto 0;text-align:center;color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid #cdd8d8;padding-top:26px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+
+  @media(max-width:820px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .rp-body,.rp-head{padding-left:16px;padding-right:16px;}
+    .scrim{padding:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-kicker">Feature sketch · 1 of 4</div>
+  <h1 class="page-title">Pool Health Radar</h1>
+  <p class="page-sub">Turns the chemistry you already log on every visit into a forward-looking read on which pools are about to fail — and tells the technician the right chlorine target for the pool they are standing next to.</p>
+  <div class="page-note"><b>These are mockups, not working screens.</b> Data shown is real client and technician names from the portal with representative chemistry. Nothing in <b>js/</b>, <b>appscript/</b>, <b>index.html</b> or <b>style.css</b> was modified to produce this file.</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       THE MECHANIC
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">The mechanic</span><span class="name">Why a pool on a paid weekly route still turns green</span></div>
+    <p class="sdesc">This is the part that needs your sign-off before anything ships, so it comes first.</p>
+
+    <div class="explain">
+      <h3>Chlorine is not measured against a fixed number. It is measured against stabilizer.</h3>
+      <p>Cyanuric acid protects chlorine from burning off in the sun, but it also binds it. The share of chlorine actually free to sanitize tracks the <b>FC-to-CYA ratio</b>, not the FC number by itself. Tab feeders add CYA continuously and it never leaves the water except by dilution — so a pool on tabs drifts upward all season, and the chlorine target has to rise with it.</p>
+
+      <div class="formula">minimum effective FC  =  CYA × 0.075        <span class="hi">salt / SWG pools: CYA × 0.05</span>
+target FC band        =  CYA × 0.075  →  CYA × 0.15
+shock threshold       =  CYA × 0.40</div>
+
+      <table class="cmp">
+        <tr><th>Pool's CYA</th><th>Minimum FC</th><th>Target band</th><th>What the portal shows today</th></tr>
+        <tr><td class="n">30</td><td>2.3 ppm</td><td>2.3 – 4.5</td><td>3 – 5 IDEAL</td></tr>
+        <tr><td class="n">50</td><td>3.8 ppm</td><td>3.8 – 7.5</td><td>3 – 5 IDEAL</td></tr>
+        <tr class="bad"><td class="n">90</td><td>6.8 ppm</td><td>6.8 – 13.5</td><td>3 – 5 IDEAL — reads “ideal” at 4 ppm while the pool is going green</td></tr>
+        <tr class="bad"><td class="n">110</td><td>8.3 ppm</td><td>dilution needed</td><td>3 – 5 IDEAL</td></tr>
+      </table>
+
+      <p style="margin-top:18px">Today <code>SVC_READING_BANDS</code> in <code>js/features/service-log.js</code> holds one fixed band — <code>{low:3, idealMax:5}</code> — for every pool on the route. A tech at Mendoza reading 4.0 ppm sees a green IDEAL pill on a pool that is not being sanitized.</p>
+
+      <div class="signoff"><b>Proposed, pending your sign-off.</b> The 7.5% / 15% / 40% ratios are the widely used industry figures, not MCPS policy. Every one of them would live in a single <code>PH_THRESHOLDS</code> block at the top of the new file so you can tune them without touching any logic. Tell me the numbers you want and those are the numbers that ship.</div>
+    </div>
+  </div>
+
+  <!-- LSI -->
+  <div class="section">
+    <div class="slabel"><span class="tag">The mechanic</span><span class="name">Whether the water is eating the plaster or coating the heater</span></div>
+    <p class="sdesc">The second calculation, using three readings already collected on every visit.</p>
+    <div class="explain">
+      <h3>Langelier Saturation Index</h3>
+      <p>LSI says which direction the water is pushing. Positive deposits scale on tile, plumbing and heater elements. Negative dissolves plaster and corrodes metal. Neither shows up in a single reading — both show up as a pool that sits slightly off for two months.</p>
+      <div class="formula">LSI  =  pH  +  TF  +  CF  +  AF  −  12.1
+
+  TF  temperature factor            <span class="hi">← the only input not currently logged</span>
+  CF  calcium hardness factor
+  AF  carbonate alkalinity factor   (TA corrected for CYA)
+
+  balanced:  −0.3  …  +0.3</div>
+      <p style="margin-top:16px">pH, CH and TA are already on every visit. Temperature is handled as you chose: a new <b>optional</b> Water Temp field in the Test Results step, and when it's left blank the value is estimated from the Open-Meteo forecast the route page already fetches — with the readout labelled <b>est.</b> so nobody mistakes it for a measurement. An estimated LSI is more than accurate enough to catch a pool sitting at +0.6 for two months quietly scaling the tile line.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 1
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 1</span><span class="name">Service log · Step 3 · Test</span></div>
+    <p class="sdesc">Where the feature earns its keep. The tech is at the pool, phone in hand, entering readings. The callout appears and updates live as they type — it rides the existing <code>runRecs()</code> recompute that every reading input already fires on <code>oninput</code>, so no new event wiring. This is the whole screen, top to bottom.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>10:42</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i><span style="margin-left:4px">86%</span></span></div>
+          <div class="sl-top">
+            <div class="row1"><span>‹ &nbsp;Service Log</span><span class="pid">MCPS-0012</span></div>
+            <div class="steprail"><span class="done"></span><span class="done"></span><span class="now"></span><span></span><span></span><span></span><span></span></div>
+          </div>
+          <div class="sl-body">
+            <div class="sl-h">Test Results</div>
+            <div class="sl-sub">Mendoza · 22088 Mathis Rd</div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">Free Chlorine (FC) <i>*</i></span><span class="pill vhigh">Below min</span></div>
+              <div class="inp flag"><span>1.5</span><span class="u">ppm</span></div>
+              <div class="meter">
+                <div class="track"><b style="width:85%;background:#E4B4AF"></b><b style="width:15%;background:#B6E3E3"></b></div>
+                <div class="marks"><span class="m" style="left:19%"></span></div>
+                <div class="ends"><span>0</span><span>Target 6.8 – 13.5</span><span>18</span></div>
+              </div>
+
+              <div class="target bad">
+                <div class="th">⚠ This pool needs 6.8 – 13.5 ppm</div>
+                <p>CYA here is <b>90</b>. Below 6.8 ppm the chlorine is stabilizer-locked and is not sanitizing this pool, even though 1.5 ppm would read fine on a pool with low CYA.</p>
+                <div class="dose">
+                  <div><div class="d1">Add ≈ 2.4 gal liquid chlorine</div><div class="d2">17,500 gal · plaster · summer +50%</div></div>
+                  <button class="usebtn">Use this</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">pH <i>*</i></span><span class="pill high">High</span></div>
+              <div class="inp"><span>7.8</span></div>
+            </div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">Total Alkalinity (TA) <i>*</i></span><span class="pill high">High</span></div>
+              <div class="inp"><span>130</span><span class="u">ppm</span></div>
+            </div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">Calcium Hardness (CH)</span><span class="pill ideal">Ideal</span></div>
+              <div class="inp"><span>280</span><span class="u">ppm</span></div>
+            </div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">Cyanuric Acid (CYA)</span><span class="pill vhigh">Very high</span></div>
+              <div class="inp flag"><span>90</span><span class="u">ppm</span></div>
+              <div class="trendnote">↗ <b>55 → 90</b> over the last 8 visits — tab feed</div>
+            </div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">Salt Level</span></div>
+              <div class="inp empty"><span>—</span><span class="u">ppm</span></div>
+            </div>
+
+            <div class="fld">
+              <div class="lab"><span class="t">Water Temp</span><span class="pill opt">optional</span></div>
+              <div class="inp empty"><span>—</span><span class="est">88 °F estimated →</span></div>
+            </div>
+
+            <div class="lsi scaling">
+              <div class="lh"><span class="t">Water balance</span><span class="est">LSI est.</span></div>
+              <div class="val">+0.42</div>
+              <div class="verd">Scaling</div>
+              <div class="gauge"><span class="nub" style="left:85%"></span></div>
+              <div class="scale"><span>−0.6</span><span>−0.3</span><span>0.0</span><span>+0.3</span><span>+0.6</span></div>
+              <div class="fix">Scale will form on tile and heater elements. Bring pH to <b>7.4</b> and this lands at <b>+0.02</b>.</div>
+            </div>
+
+            <div class="navbtns"><div class="b ghost">‹ Back</div><div class="b solid">Continue ›</div></div>
+          </div>
+        </div></div>
+        <div class="cap"><b>The full Test step</b>Everything above the Water balance panel exists today. The two boxed panels are what's new.</div>
+      </div>
+
+      <div style="max-width:330px;padding-top:10px">
+        <div class="explain" style="padding:22px 24px">
+          <h3 style="font-size:14px">What changed on this screen</h3>
+          <p style="font-size:12.5px">① The <b>LOW / IDEAL / HIGH</b> pill above FC is no longer fixed at 3–5. It reads against this pool's CYA, so it says <b>Below min</b> at 1.5 ppm instead of <b>Low</b>.</p>
+          <p style="font-size:12.5px">② The <b>target callout</b> explains the number rather than just flagging it, and offers the dose. <b>Use this</b> writes into the Treat step through the existing <code>_svcApplyTreatRecs_</code> prefill, which already refuses to overwrite anything the tech typed themselves.</p>
+          <p style="font-size:12.5px">③ The <b>CYA trend line</b> is the tell that the tab feeder is the root cause, not the tech.</p>
+          <p style="font-size:12.5px">④ <b>Water Temp</b> is optional and pre-filled from the forecast.</p>
+          <p style="font-size:12.5px;margin-bottom:0">⑤ The <b>Water balance</b> panel stays collapsed until pH, TA and CH are all entered — it can't compute without them.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 2 — states
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 2</span><span class="name">The callout in all three states</span></div>
+    <p class="sdesc">Most visits are healthy ones. The panel has to be quiet when the pool is fine, and honest when it doesn't know.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="phone" style="width:320px"><div class="screen"><div class="sl-body" style="padding:18px 16px">
+          <div class="fld" style="margin-bottom:0">
+            <div class="lab"><span class="t">Free Chlorine (FC) <i>*</i></span><span class="pill ideal">In band</span></div>
+            <div class="inp"><span>8.2</span><span class="u">ppm</span></div>
+            <div class="meter">
+              <div class="track"><b style="width:38%;background:#E4B4AF"></b><b style="width:37%;background:#B6E3E3"></b><b style="width:25%;background:#EFD9A8"></b></div>
+              <div class="marks"><span class="m" style="left:46%"></span></div>
+              <div class="ends"><span>0</span><span>Target 6.8 – 13.5</span><span>18</span></div>
+            </div>
+            <div class="target good">
+              <div class="th">✓ In band for CYA 90</div>
+              <p style="margin-bottom:0">8.2 ppm is holding above the 6.8 minimum this pool needs. Nothing to add.</p>
+            </div>
+          </div>
+        </div></div></div>
+        <div class="cap"><b>Healthy</b>Teal, one line, no dose. The panel gets out of the way.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone" style="width:320px"><div class="screen"><div class="sl-body" style="padding:18px 16px">
+          <div class="fld" style="margin-bottom:0">
+            <div class="lab"><span class="t">Free Chlorine (FC) <i>*</i></span><span class="pill low">Low</span></div>
+            <div class="inp"><span>1.5</span><span class="u">ppm</span></div>
+            <div class="meter">
+              <div class="track"><b style="width:37%;background:#E4B4AF"></b><b style="width:26%;background:#B6E3E3"></b><b style="width:37%;background:#EFD9A8"></b></div>
+              <div class="marks"><span class="m" style="left:19%"></span></div>
+              <div class="ends"><span>0</span><span>Default 3 – 5</span><span>8</span></div>
+            </div>
+            <div class="target none">
+              <div class="th">No CYA on file for this pool</div>
+              <p style="margin-bottom:0">Showing the default 3 – 5 ppm band. Test CYA to get a target that's right for this pool — it changes the answer a lot.</p>
+            </div>
+          </div>
+        </div></div></div>
+        <div class="cap"><b>Unknown</b>Falls back to today's behaviour and says so, rather than guessing.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone" style="width:320px"><div class="screen"><div class="sl-body" style="padding:18px 16px">
+          <div class="fld" style="margin-bottom:0">
+            <div class="lab"><span class="t">Free Chlorine (FC) <i>*</i></span><span class="pill vhigh">Below min</span></div>
+            <div class="inp flag"><span>2.0</span><span class="u">ppm</span></div>
+            <div class="meter">
+              <div class="track"><b style="width:92%;background:#E4B4AF"></b><b style="width:8%;background:#B6E3E3"></b></div>
+              <div class="marks"><span class="m" style="left:11%"></span></div>
+              <div class="ends"><span>0</span><span>Target 8.3 – 16.5</span><span>18</span></div>
+            </div>
+            <div class="target bad">
+              <div class="th">⚠ CYA 110 — chlorine is locked out</div>
+              <p>At CYA 110 this pool would need 8.3 ppm to sanitize. That is not a practical target.</p>
+              <p style="margin-bottom:0"><b>Partial drain of about 30% brings CYA to 77</b> and the target back to 5.8. Flagging this for the office.</p>
+            </div>
+          </div>
+        </div></div></div>
+        <div class="cap"><b>Past the point of dosing</b>When the answer is “more chlorine won't fix this,” it says that instead.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 3 — LSI states
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 3</span><span class="name">Water balance panel · three verdicts</span></div>
+    <p class="sdesc">Each one names the consequence in plain language and gives the single adjustment that fixes it. No index without an instruction.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div style="width:320px;background:#fff;border-radius:14px;padding:16px;box-shadow:0 10px 30px rgba(13,61,62,.10)">
+          <div class="lsi scaling" style="margin:0">
+            <div class="lh"><span class="t">Water balance</span><span class="est">LSI est.</span></div>
+            <div class="val">+0.42</div><div class="verd">Scaling</div>
+            <div class="gauge"><span class="nub" style="left:85%"></span></div>
+            <div class="scale"><span>−0.6</span><span>−0.3</span><span>0.0</span><span>+0.3</span><span>+0.6</span></div>
+            <div class="fix">Scale will form on tile and heater elements. Bring pH to <b>7.4</b> and this lands at <b>+0.02</b>.</div>
+          </div>
+        </div>
+        <div class="cap"><b>Scaling</b>Mendoza · pH 7.8, TA 130, CH 280</div>
+      </div>
+
+      <div class="phonewrap">
+        <div style="width:320px;background:#fff;border-radius:14px;padding:16px;box-shadow:0 10px 30px rgba(13,61,62,.10)">
+          <div class="lsi balanced" style="margin:0">
+            <div class="lh"><span class="t">Water balance</span><span class="est">LSI · 86 °F measured</span></div>
+            <div class="val">+0.04</div><div class="verd">Balanced</div>
+            <div class="gauge"><span class="nub" style="left:53%"></span></div>
+            <div class="scale"><span>−0.6</span><span>−0.3</span><span>0.0</span><span>+0.3</span><span>+0.6</span></div>
+            <div class="fix">Water is balanced. Nothing to correct.</div>
+          </div>
+        </div>
+        <div class="cap"><b>Balanced</b>Pompa · pH 7.4, TA 90, CH 280. Temp was entered, so no <i>est.</i> label.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div style="width:320px;background:#fff;border-radius:14px;padding:16px;box-shadow:0 10px 30px rgba(13,61,62,.10)">
+          <div class="lsi etching" style="margin:0">
+            <div class="lh"><span class="t">Water balance</span><span class="est">LSI est.</span></div>
+            <div class="val">−0.51</div><div class="verd">Etching</div>
+            <div class="gauge"><span class="nub" style="left:15%"></span></div>
+            <div class="scale"><span>−0.6</span><span>−0.3</span><span>0.0</span><span>+0.3</span><span>+0.6</span></div>
+            <div class="fix">Water is pulling calcium out of the plaster. Raise CH to <b>250</b> — about <b>18 lb</b> calcium chloride.</div>
+          </div>
+        </div>
+        <div class="cap"><b>Etching</b>New plaster with CH 150. This is the one that costs a resurface if it runs all season.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 4 — radar page
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 4</span><span class="name">Pool Health Radar · admin page</span></div>
+    <p class="sdesc">The desk-side view. Every active pool scored on one pass over <code>Chemical_Usage_Log</code>, ranked worst first, each with the reasons that produced the score. Visible to <b>admin</b> and <b>manager</b> only. Every number on a card is the sum of the weights listed under it — nothing is a black box.</p>
+
+    <div class="browser">
+      <div class="bchrome"><i></i><i></i><i></i><span class="url">mcps-log.vercel.app/#pool_health</span></div>
+      <div class="rp">
+        <div class="rp-head">
+          <div><h2>Pool Health Radar</h2><div class="mantra">Every pool matters.</div></div>
+          <div class="upd">updated 6 min ago · ⟳</div>
+        </div>
+        <div class="rp-body">
+
+          <div class="stats">
+            <div class="stat risk"><div class="n">3</div><div class="l">At risk</div></div>
+            <div class="stat watch"><div class="n">4</div><div class="l">Watch</div></div>
+            <div class="stat ok"><div class="n">9</div><div class="l">Healthy</div></div>
+            <div class="stat all"><div class="n">16</div><div class="l">Pools monitored</div></div>
+          </div>
+
+          <div class="filters">
+            <span class="chip on">All</span><span class="chip">At risk</span><span class="chip">Watch</span><span class="chip">Healthy</span>
+            <span class="sp"></span>
+            <span class="sel">Technician: All ▾</span><span class="sel">Day: All ▾</span><span class="sel">Sort: Score ▾</span>
+          </div>
+
+          <!-- Mendoza -->
+          <div class="pcard risk">
+            <div class="pc-top">
+              <div><span class="band risk">● At risk</span><span class="score">score 78</span></div>
+              <div class="pc-who">Tony Siller · logged 4 days ago<br>Weekly · Thursdays</div>
+            </div>
+            <div class="pc-name">MCPS-0012 · Mendoza</div>
+            <div class="pc-addr">22088 Mathis Rd, Elmendorf TX</div>
+            <div class="reasons">
+              <div class="reason"><span>FC 1.5 ppm — this pool needs 6.8+ at CYA 90</span><span class="w">35</span></div>
+              <div class="reason"><span>CYA climbed 55 → 90 across 8 visits (tab feed)</span><span class="w">15</span></div>
+              <div class="reason"><span>Algae: Slight on the last visit</span><span class="w">20</span></div>
+              <div class="reason minor"><span>LSI +0.42 est. — scaling</span><span class="w">8</span></div>
+            </div>
+            <div class="sparks">
+              <div class="spark"><div class="sk">Free chlorine</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><polyline points="2,6 20,10 38,19 56,22 74,24 92,26 110,27 128,28" fill="none" stroke="#B3261E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="28" r="3" fill="#B3261E"/></svg>
+                <div class="sv">4.2 → <b>1.5</b> · falling</div></div>
+              <div class="spark"><div class="sk">pH</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><polyline points="2,20 20,18 38,17 56,14 74,13 92,10 110,8 128,6" fill="none" stroke="#A9750C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="6" r="3" fill="#A9750C"/></svg>
+                <div class="sv">7.4 → 7.8 · rising</div></div>
+              <div class="spark"><div class="sk">Cyanuric acid</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><polyline points="2,24 20,22 38,19 56,16 74,13 92,9 110,6 128,4" fill="none" stroke="#B3261E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="4" r="3" fill="#B3261E"/></svg>
+                <div class="sv">55 → <b>90</b> · rising</div></div>
+            </div>
+            <div class="acts"><span class="act pri">Open pool</span><span class="act">Log a visit</span><span class="act">Raise alert</span><span class="act">Dismiss 30 days</span></div>
+          </div>
+
+          <!-- Valdez -->
+          <div class="pcard risk">
+            <div class="pc-top">
+              <div><span class="band risk">● At risk</span><span class="score">score 75</span></div>
+              <div class="pc-who">Ryan Willford · logged 3 days ago<br>Weekly · Tuesdays</div>
+            </div>
+            <div class="pc-name">MCPS-0009 · Valdez</div>
+            <div class="pc-addr">13355 Leeward Lane, San Antonio TX</div>
+            <div class="reasons">
+              <div class="reason"><span>FC 0.5 ppm — this pool needs 2.3+ at CYA 30</span><span class="w">35</span></div>
+              <div class="reason"><span>Algae: Moderate two visits running — doubled weight</span><span class="w">40</span></div>
+            </div>
+            <div class="sparks">
+              <div class="spark"><div class="sk">Free chlorine</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><polyline points="2,9 20,11 38,10 56,16 74,21 92,25 110,27 128,28" fill="none" stroke="#B3261E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="28" r="3" fill="#B3261E"/></svg>
+                <div class="sv">3.6 → <b>0.5</b> · falling fast</div></div>
+              <div class="spark"><div class="sk">Water color</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><rect x="2" y="9" width="14" height="14" rx="3" fill="#B6E3E3"/><rect x="20" y="9" width="14" height="14" rx="3" fill="#B6E3E3"/><rect x="38" y="9" width="14" height="14" rx="3" fill="#B6E3E3"/><rect x="56" y="9" width="14" height="14" rx="3" fill="#B6E3E3"/><rect x="74" y="9" width="14" height="14" rx="3" fill="#EFD9A8"/><rect x="92" y="9" width="14" height="14" rx="3" fill="#EFD9A8"/><rect x="110" y="9" width="14" height="14" rx="3" fill="#8DBF6A"/></svg>
+                <div class="sv">clear → cloudy → <b>green</b></div></div>
+            </div>
+            <div class="acts"><span class="act pri">Open pool</span><span class="act">Log a visit</span><span class="act">Raise alert</span><span class="act">Dismiss 30 days</span></div>
+          </div>
+
+          <!-- Libby -->
+          <div class="pcard risk">
+            <div class="pc-top">
+              <div><span class="band risk">● At risk</span><span class="score">score 70</span></div>
+              <div class="pc-who">Chuy Silva · logged 6 days ago<br>Weekly · Fridays</div>
+            </div>
+            <div class="pc-name">MCPS-0007 · Libby</div>
+            <div class="pc-addr">27121 Highland Crest, San Antonio TX</div>
+            <div class="reasons">
+              <div class="reason"><span>FC 2.0 ppm — this pool needs 8.3+ at CYA 110</span><span class="w">35</span></div>
+              <div class="reason"><span>CYA 110 — chlorine locked out, partial drain recommended</span><span class="w">25</span></div>
+              <div class="reason minor"><span>Filter high pressure two visits running</span><span class="w">10</span></div>
+            </div>
+            <div class="sparks">
+              <div class="spark"><div class="sk">Free chlorine</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><polyline points="2,17 20,20 38,21 56,24 74,26 92,25 110,26 128,26" fill="none" stroke="#B3261E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="26" r="3" fill="#B3261E"/></svg>
+                <div class="sv">3.0 → <b>2.0</b></div></div>
+              <div class="spark"><div class="sk">Cyanuric acid</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><line x1="2" y1="5" x2="130" y2="5" stroke="#B3261E" stroke-width="1" stroke-dasharray="3 3"/><polyline points="2,22 20,20 38,17 56,14 74,11 92,8 110,6 128,4" fill="none" stroke="#B3261E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="4" r="3" fill="#B3261E"/></svg>
+                <div class="sv">over the <b>100 drain line</b></div></div>
+              <div class="spark"><div class="sk">Filter pressure</div>
+                <svg width="132" height="30" viewBox="0 0 132 30"><polyline points="2,22 20,21 38,20 56,18 74,14 92,9 110,7 128,6" fill="none" stroke="#A9750C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="128" cy="6" r="3" fill="#A9750C"/></svg>
+                <div class="sv">normal → <b>high</b></div></div>
+            </div>
+            <div class="acts"><span class="act pri">Open pool</span><span class="act">Log a visit</span><span class="act">Raise alert</span><span class="act">Dismiss 30 days</span></div>
+          </div>
+
+          <!-- Pompa watch -->
+          <div class="pcard watch">
+            <div class="pc-top">
+              <div><span class="band watch">◐ Watch</span><span class="score">score 30</span></div>
+              <div class="pc-who">Tony Siller · logged 9 days ago<br>Weekly · Thursdays</div>
+            </div>
+            <div class="pc-name">MCPS-0001 · Pompa</div>
+            <div class="pc-addr">18538 Shadow Canyon Dr, Von Ormy TX</div>
+            <div class="reasons">
+              <div class="reason minor"><span>9 days since the last log — this is a weekly pool</span><span class="w">20</span></div>
+              <div class="reason minor"><span>Tablet level empty on the last visit</span><span class="w">10</span></div>
+            </div>
+            <div class="acts"><span class="act pri">Open pool</span><span class="act">Log a visit</span><span class="act">Raise alert</span><span class="act">Dismiss 30 days</span></div>
+          </div>
+
+          <!-- Casarez watch -->
+          <div class="pcard watch">
+            <div class="pc-top">
+              <div><span class="band watch">◐ Watch</span><span class="score">score 28</span></div>
+              <div class="pc-who">Tony Siller · logged 2 days ago<br>Weekly · Mondays</div>
+            </div>
+            <div class="pc-name">MCPS-0020 · Casarez</div>
+            <div class="pc-addr">25 Inwood Ridge Dr, San Antonio TX</div>
+            <div class="reasons">
+              <div class="reason minor"><span>pH 8.0 three visits running — TA 130 is driving it</span><span class="w">10</span></div>
+              <div class="reason minor"><span>Tablet level empty on the last visit</span><span class="w">10</span></div>
+              <div class="reason minor"><span>LSI +0.31 est. — just over the line</span><span class="w">8</span></div>
+            </div>
+            <div class="acts"><span class="act pri">Open pool</span><span class="act">Log a visit</span><span class="act">Raise alert</span><span class="act">Dismiss 30 days</span></div>
+          </div>
+
+          <div class="collapsed"><span><b>◐ Watch</b> · 2 more pools</span><span>show ▾</span></div>
+          <div class="collapsed" style="margin-top:10px"><span><b>○ Healthy</b> · 9 pools · nothing needs attention</span><span>show ▾</span></div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 5 — drawer
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 5</span><span class="name">Pool detail drawer</span></div>
+    <p class="sdesc">Opens over the radar, same drawer pattern the Sales Hub lead drawer already uses. The FC chart is the one worth studying: the shaded target band <b>rises as CYA rises</b>, so you can see the moment the pool's requirement outran what it was being given. Charts are inline SVG — no Chart.js, because a second CDN dependency would break the offline work in sketch 2.</p>
+
+    <div class="browser">
+      <div class="bchrome"><i></i><i></i><i></i><span class="url">mcps-log.vercel.app/#pool_health</span></div>
+      <div class="drawerstage"><div class="scrim">
+        <div class="drawer">
+          <div class="dr-head">
+            <span class="x">✕</span>
+            <h3>MCPS-0012 · Mendoza</h3>
+            <div class="m">22088 Mathis Rd · Weekly Full Service · Tony Siller</div>
+            <span class="band risk">● At risk</span><span class="score" style="color:rgba(255,255,255,.75)">score 78</span>
+          </div>
+
+          <div class="dr-sec">
+            <h4>Why</h4>
+            <div class="whyline">FC 1.5 ppm — this pool needs 6.8+ at CYA 90</div>
+            <div class="whyline">CYA climbed 55 → 90 across 8 visits (tab feed)</div>
+            <div class="whyline">Algae: Slight on the last visit</div>
+            <div class="whyline">LSI +0.42 est. — scaling</div>
+          </div>
+
+          <div class="dr-sec">
+            <h4>Recommended</h4>
+            <ol class="rx">
+              <li>Shock to <b>36 ppm</b> (CYA × 0.40) and hold it until it holds overnight.</li>
+              <li>Pull the tabs. Switch to liquid chlorine until CYA is back under 60.</li>
+              <li>Partial drain of about 30% brings CYA to <b>63</b> and the target back to 4.7.</li>
+              <li>Recheck in 3 days, not 7.</li>
+            </ol>
+          </div>
+
+          <div class="dr-sec">
+            <h4>Free chlorine · last 8 visits</h4>
+            <svg width="100%" height="150" viewBox="0 0 420 150" preserveAspectRatio="none" style="overflow:visible">
+              <rect x="34" y="8" width="378" height="52" fill="#E7F6F6"/>
+              <text x="404" y="22" font-size="9" fill="#0d6b6c" text-anchor="end" font-family="Montserrat,sans-serif" font-weight="700">TARGET BAND</text>
+              <line x1="34" y1="8" x2="412" y2="8" stroke="#B6E3E3" stroke-width="1"/>
+              <path d="M34,74 L88,71 L142,67 L196,64 L250,61 L304,57 L358,54 L412,52" fill="none" stroke="#B6E3E3" stroke-width="1.5" stroke-dasharray="4 3"/>
+              <text x="38" y="86" font-size="8.5" fill="#0d6b6c" font-family="Open Sans,sans-serif">minimum rises as CYA rises</text>
+              <g stroke="#E4EAEA" stroke-width="1">
+                <line x1="34" y1="120" x2="412" y2="120"/><line x1="34" y1="90" x2="412" y2="90"/><line x1="34" y1="60" x2="412" y2="60"/><line x1="34" y1="30" x2="412" y2="30"/>
+              </g>
+              <g font-size="9" fill="#8a9797" font-family="Open Sans,sans-serif" text-anchor="end">
+                <text x="28" y="123">0</text><text x="28" y="93">4</text><text x="28" y="63">8</text><text x="28" y="33">12</text>
+              </g>
+              <polyline points="34,88 88,91 142,101 196,104 250,105 304,107 358,108 412,109" fill="none" stroke="#B3261E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <g fill="#B3261E"><circle cx="34" cy="88" r="3.5"/><circle cx="88" cy="91" r="3.5"/><circle cx="142" cy="101" r="3.5"/><circle cx="196" cy="104" r="3.5"/><circle cx="250" cy="105" r="3.5"/><circle cx="304" cy="107" r="3.5"/><circle cx="358" cy="108" r="3.5"/><circle cx="412" cy="109" r="4.5"/></g>
+              <g font-size="8.5" fill="#8a9797" font-family="Open Sans,sans-serif" text-anchor="middle">
+                <text x="34" y="136">Jun 6</text><text x="142" y="136">Jun 20</text><text x="250" y="136">Jul 4</text><text x="358" y="136">Jul 18</text>
+              </g>
+            </svg>
+            <p style="font-size:11.5px;color:#5a6666;margin:8px 0 0;line-height:1.55">The pool has not been inside its own target band since <b>June 20</b>. Chlorine looked acceptable against the old fixed 3–5 band the whole time.</p>
+          </div>
+
+          <div class="dr-sec">
+            <h4>Cyanuric acid · last 8 visits</h4>
+            <svg width="100%" height="132" viewBox="0 0 420 132" preserveAspectRatio="none" style="overflow:visible">
+              <line x1="34" y1="18" x2="412" y2="18" stroke="#B3261E" stroke-width="1.5" stroke-dasharray="5 4"/>
+              <text x="404" y="14" font-size="8.5" fill="#B3261E" text-anchor="end" font-family="Montserrat,sans-serif" font-weight="700">100 — DRAIN LINE</text>
+              <g stroke="#E4EAEA" stroke-width="1"><line x1="34" y1="100" x2="412" y2="100"/><line x1="34" y1="72" x2="412" y2="72"/><line x1="34" y1="45" x2="412" y2="45"/></g>
+              <g font-size="9" fill="#8a9797" font-family="Open Sans,sans-serif" text-anchor="end"><text x="28" y="103">0</text><text x="28" y="75">40</text><text x="28" y="48">80</text></g>
+              <polyline points="34,63 88,60 142,56 196,51 250,46 304,40 358,34 412,32" fill="none" stroke="#A9750C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <g fill="#A9750C"><circle cx="34" cy="63" r="3.5"/><circle cx="142" cy="56" r="3.5"/><circle cx="250" cy="46" r="3.5"/><circle cx="358" cy="34" r="3.5"/><circle cx="412" cy="32" r="4.5"/></g>
+              <g font-size="8.5" fill="#8a9797" font-family="Open Sans,sans-serif" text-anchor="middle"><text x="34" y="118">Jun 6</text><text x="142" y="118">Jun 20</text><text x="250" y="118">Jul 4</text><text x="358" y="118">Jul 18</text></g>
+            </svg>
+            <p style="font-size:11.5px;color:#5a6666;margin:8px 0 0">pH · TA · CH · LSI &nbsp;<span style="color:var(--aqua);font-family:var(--fh);font-weight:700">expand ▾</span></p>
+          </div>
+
+          <div class="dr-sec">
+            <h4>Visit history</h4>
+            <table class="htable">
+              <tr><th>Date</th><th>Tech</th><th>FC</th><th>pH</th><th>CYA</th><th>Water</th></tr>
+              <tr><td class="pid">Jul 25</td><td>Tony S.</td><td>1.5</td><td>7.8</td><td>90</td><td>Slight algae</td></tr>
+              <tr><td class="pid">Jul 18</td><td>Tony S.</td><td>1.6</td><td>7.7</td><td>88</td><td>Clear</td></tr>
+              <tr><td class="pid">Jul 11</td><td>Chuy S.</td><td>1.8</td><td>7.7</td><td>82</td><td>Clear</td></tr>
+              <tr><td class="pid">Jul 04</td><td>Tony S.</td><td>2.0</td><td>7.6</td><td>75</td><td>Clear</td></tr>
+              <tr><td class="pid">Jun 27</td><td>Tony S.</td><td>2.2</td><td>7.6</td><td>70</td><td>Clear</td></tr>
+            </table>
+            <p style="font-size:11.5px;color:var(--aqua);margin:11px 0 0;font-family:var(--fh);font-weight:700">view all 8 ▾</p>
+          </div>
+
+          <div class="dr-sec" style="border-bottom:none">
+            <div class="acts"><span class="act pri">Log a visit</span><span class="act">Raise alert</span><span class="act">Dismiss 30 days</span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 6 + 7
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screens 6 &amp; 7</span><span class="name">Home card and the phone view</span></div>
+    <p class="sdesc">The radar has to reach you without you going looking for it, and it has to work on a phone — because half the time the person who needs it is in a truck.</p>
+
+    <div class="rowframes">
+      <div class="phonewrap">
+        <div class="homecard">
+          <div class="hh">🩺 Pool health</div>
+          <div class="three">
+            <div><div class="n" style="color:var(--risk)">3</div><div class="l">At risk</div></div>
+            <div><div class="n" style="color:var(--watch)">4</div><div class="l">Watch</div></div>
+            <div><div class="n" style="color:var(--aqua)">9</div><div class="l">Healthy</div></div>
+          </div>
+          <div class="lead"><b>Mendoza</b> — FC below target at CYA 90</div>
+          <div class="lead"><b>Valdez</b> — algae two visits running</div>
+          <div class="lead"><b>Libby</b> — CYA 110, drain needed</div>
+          <div class="go">View radar →</div>
+        </div>
+        <div class="cap"><b>Home dashboard card</b>Sits with the existing Home stat cards. Admin and manager only.</div>
+      </div>
+
+      <div class="phonewrap">
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>7:15</span><span class="sigs"><i class="bar" style="height:5px"></i><i class="bar" style="height:7px"></i><i class="bar" style="height:9px"></i><span style="margin-left:4px">94%</span></span></div>
+          <div class="rp-head" style="padding:16px 18px"><div><h2 style="font-size:16px">Pool Health Radar</h2><div class="mantra">Every pool matters.</div></div></div>
+          <div class="rp-body" style="padding:16px 14px 22px">
+            <div class="stats" style="grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px">
+              <div class="stat risk" style="padding:12px 8px"><div class="n" style="font-size:24px">3</div><div class="l" style="font-size:8.5px">At risk</div></div>
+              <div class="stat watch" style="padding:12px 8px"><div class="n" style="font-size:24px">4</div><div class="l" style="font-size:8.5px">Watch</div></div>
+              <div class="stat ok" style="padding:12px 8px"><div class="n" style="font-size:24px">9</div><div class="l" style="font-size:8.5px">Healthy</div></div>
+            </div>
+            <div class="pcard risk" style="padding:14px 15px;margin-bottom:10px">
+              <div><span class="band risk">● At risk</span><span class="score">78</span></div>
+              <div class="pc-name" style="font-size:14px">MCPS-0012 · Mendoza</div>
+              <div class="pc-addr" style="margin-bottom:9px">22088 Mathis Rd</div>
+              <div class="reason" style="border:none;padding:0 0 8px"><span>FC 1.5 — needs 6.8+ at CYA 90</span></div>
+              <svg width="100%" height="26" viewBox="0 0 300 26" preserveAspectRatio="none"><polyline points="2,5 44,8 86,16 128,19 170,21 212,23 254,24 296,25" fill="none" stroke="#B3261E" stroke-width="2" stroke-linecap="round"/></svg>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">3 more reasons · tap to expand</div>
+            </div>
+            <div class="pcard risk" style="padding:14px 15px;margin-bottom:10px">
+              <div><span class="band risk">● At risk</span><span class="score">75</span></div>
+              <div class="pc-name" style="font-size:14px">MCPS-0009 · Valdez</div>
+              <div class="pc-addr" style="margin-bottom:9px">13355 Leeward Lane</div>
+              <div class="reason" style="border:none;padding:0"><span>Algae two visits running</span></div>
+            </div>
+            <div class="pcard watch" style="padding:14px 15px;margin-bottom:0">
+              <div><span class="band watch">◐ Watch</span><span class="score">30</span></div>
+              <div class="pc-name" style="font-size:14px">MCPS-0001 · Pompa</div>
+              <div class="pc-addr" style="margin-bottom:0">9 days since last log</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="cap"><b>Radar on a phone</b>Cards collapse to badge, pool, top reason and one sparkline. Reasons expand on tap.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCORING
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Under it</span><span class="name">The scoring model, in full</span></div>
+    <p class="sdesc">One pass over the last 8 visits per pool. Weights add up; the total picks the band. Printed here so you can argue with the numbers before they ship — all of them live in one tunable block.</p>
+
+    <div class="explain" style="padding:0;overflow:hidden">
+      <table class="wtable">
+        <tr><th>Signal</th><th style="text-align:center">Weight</th><th>Fires when</th></tr>
+        <tr><td>FC below the CYA-adjusted minimum</td><td class="w">35</td><td>on the latest visit, or on 2 of the last 3</td></tr>
+        <tr><td>CYA at or above 100</td><td class="w">25</td><td>chlorine locked out — dilution is the only fix</td></tr>
+        <tr><td>Algae present, or water not clear</td><td class="w">20</td><td>latest visit · <b>doubled</b> if two consecutive</td></tr>
+        <tr><td>Overdue against the service interval</td><td class="w">20</td><td>days since last log exceeds the interval by 3+</td></tr>
+        <tr><td>CYA 80–99 and climbing</td><td class="w">15</td><td>rising across 3 or more consecutive visits</td></tr>
+        <tr><td>LSI outside −0.3 … +0.3</td><td class="w">15</td><td>latest visit · <b>halved to 8</b> when temp is estimated</td></tr>
+        <tr><td>pH at or above 7.8</td><td class="w">10</td><td>three consecutive visits</td></tr>
+        <tr><td>Filter reported high pressure</td><td class="w">10</td><td>two consecutive visits</td></tr>
+        <tr><td>Tablet level empty</td><td class="w">10</td><td>on the latest visit</td></tr>
+      </table>
+      <div style="padding:20px 28px 26px">
+        <div class="bands">
+          <div class="bandbox r"><b>● At risk — 50 and above</b>Something is actively wrong. Goes to the Home card and the top of the radar.</div>
+          <div class="bandbox w"><b>◐ Watch — 25 to 49</b>Drifting. Worth a look before it becomes a callback.</div>
+          <div class="bandbox o"><b>○ Healthy — under 25</b>Collapsed by default. No noise.</div>
+        </div>
+        <p style="font-size:12.5px;color:#5a6666;line-height:1.65;margin:18px 0 0">Every signal that fires returns a human-readable sentence, which is what the cards display. There is no screen anywhere that shows a bare score with no explanation. <b>Dismiss 30 days</b> exists so a pool you have already decided about stops nagging — for instance one that is scheduled for a drain next month.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="m">Mission Custom Pool Solutions</div>
+    Feature sketch 1 of 4 · Pool Health Radar<br>
+    Estimated build: 1.5–2 days · no new data entry for technicians · no new auth surface<br><br>
+    <span style="font-family:var(--fh);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--teal)">Every pool matters.</span>
+  </div>
+
+</div>
+</body>
+</html>

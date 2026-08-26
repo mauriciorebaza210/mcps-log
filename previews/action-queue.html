@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Admin — Action Queue</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+      --gray:#F3F5F6; --gray-2:#EAEFEF; --charcoal:#222222; --white:#FFFFFF;
+      --muted:rgba(34,34,34,.58); --line:#E4EAEA;
+      --warn:#A9750C; --warn-bg:#FDF4E3;
+      --risk:#B3261E; --risk-bg:#FDECEA;
+      --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--gray);color:var(--charcoal);font-family:var(--fb);
+      padding:0 0 60px;line-height:1.5;-webkit-font-smoothing:antialiased;font-size:14.5px;}
+    .wrap{max-width:940px;margin:0 auto;padding:0 24px;}
+
+    .topbar{background:var(--teal);color:#fff;padding:20px 0 0;}
+    .topbar .row{display:flex;align-items:center;gap:14px;}
+    .topbar img{height:30px;}
+    .topbar .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:2px;}
+    .topbar h1{font-family:var(--fh);font-weight:800;font-size:20px;margin:0;letter-spacing:-.01em;
+      display:flex;align-items:center;gap:11px;}
+    .topbar h1 .badge{background:var(--aqua);color:#fff;border-radius:20px;padding:3px 10px;
+      font-size:12px;font-weight:800;}
+    .filters{display:flex;gap:2px;margin-top:18px;overflow-x:auto;}
+    .filt{border:0;background:transparent;color:rgba(255,255,255,.62);padding:11px 15px;
+      font-family:var(--fh);font-weight:700;font-size:12.5px;cursor:pointer;border-radius:8px 8px 0 0;
+      white-space:nowrap;display:flex;align-items:center;gap:7px;}
+    .filt .n{background:rgba(255,255,255,.16);border-radius:10px;padding:1px 7px;font-size:11px;}
+    .filt.active{background:var(--gray);color:var(--teal);}
+    .filt.active .n{background:var(--aqua);color:#fff;}
+
+    main{padding-top:22px;}
+    .queue{display:flex;flex-direction:column;gap:12px;}
+
+    .item{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+      border-left:3px solid var(--line);}
+    .item.t-start{border-left-color:var(--aqua);}
+    .item.t-change{border-left-color:var(--warn);}
+    .item.t-exception{border-left-color:var(--risk);}
+    .item.t-expiring{border-left-color:var(--muted);}
+    .item.done{opacity:.5;}
+
+    .item-body{padding:16px 20px;display:flex;gap:16px;align-items:flex-start;}
+    .item-main{flex:1;min-width:0;}
+    .item-kind{display:flex;align-items:center;gap:9px;margin-bottom:7px;flex-wrap:wrap;}
+    .kind-tag{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.08em;
+      text-transform:uppercase;padding:3px 8px;border-radius:5px;}
+    .t-start .kind-tag{background:#EAF8F7;color:var(--teal);}
+    .t-change .kind-tag{background:var(--warn-bg);color:var(--warn);}
+    .t-exception .kind-tag{background:var(--risk-bg);color:var(--risk);}
+    .t-expiring .kind-tag{background:var(--gray-2);color:var(--muted);}
+    .item-when{font-size:11.5px;color:var(--muted);}
+    .item h3{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--charcoal);
+      margin:0 0 5px;letter-spacing:-.005em;}
+    .item .detail{font-size:13.5px;color:var(--muted);}
+    .item .detail b{color:var(--charcoal);font-weight:600;}
+    .quote-note{margin-top:10px;padding:11px 13px;background:var(--gray);border-radius:8px;
+      font-size:13px;color:var(--charcoal);border-left:2px solid var(--line);font-style:italic;}
+    .meta-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;}
+    .meta{font-size:12px;color:var(--muted);}
+    .meta b{color:var(--teal);font-family:var(--fh);font-weight:700;}
+
+    .item-actions{display:flex;flex-direction:column;gap:7px;flex:0 0 auto;align-items:stretch;min-width:150px;}
+    .btn{border:0;border-radius:8px;padding:9px 14px;font-family:var(--fh);font-weight:700;
+      font-size:12.5px;cursor:pointer;white-space:nowrap;text-align:center;}
+    .btn.primary{background:var(--aqua);color:#fff;}
+    .btn.primary:hover{background:#1b9596;}
+    .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--muted);}
+    .btn.ghost:hover{border-color:var(--aqua);color:var(--teal);}
+    .btn.link{background:none;color:var(--muted);text-decoration:underline;padding:4px;font-size:11.5px;}
+    .btn.link:hover{color:var(--teal);}
+
+    .resolved-note{padding:10px 20px;background:#EAF8F7;font-size:12.5px;color:var(--teal);
+      display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);}
+    .resolved-note .ic{font-weight:800;}
+
+    .empty{background:#fff;border:1px dashed var(--line);border-radius:12px;padding:50px 24px;
+      text-align:center;}
+    .empty .ic{width:46px;height:46px;border-radius:50%;background:#EAF8F7;color:var(--teal);
+      display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 14px;}
+    .empty h3{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--teal);margin:0 0 5px;}
+    .empty p{margin:0;color:var(--muted);font-size:13.5px;}
+
+    .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(8px);
+      background:var(--teal);color:#fff;padding:11px 20px;border-radius:9px;font-size:13px;
+      font-family:var(--fh);font-weight:600;opacity:0;pointer-events:none;
+      transition:opacity .18s,transform .18s;z-index:120;box-shadow:0 10px 26px rgba(13,61,62,.3);}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    @media(max-width:700px){
+      .wrap{padding:0 16px;}
+      .item-body{flex-direction:column;gap:14px;}
+      .item-actions{min-width:0;width:100%;flex-direction:row;flex-wrap:wrap;}
+      .item-actions .btn{flex:1 1 auto;}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="wrap">
+    <div class="row">
+      <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+      <div>
+        <div class="eyebrow">Admin</div>
+        <h1>Action Queue <span class="badge" id="hdr-count">0</span></h1>
+      </div>
+    </div>
+    <div class="filters" id="filters"></div>
+  </div></div>
+
+  <main class="wrap">
+    <div class="queue" id="queue"></div>
+  </main>
+
+  <div class="toast" id="toast">Done</div>
+
+  <script>
+  // Every event that needs a human decision lands here. Three of these four
+  // types currently have nowhere to surface in the portal at all.
+  let ITEMS = [
+    {
+      id:'a1', type:'change', kind:'Change Requested',
+      title:'Marcus Webb wants a change before signing',
+      detail:'Weekly Full Service · 4412 Ridgeview Dr · sent 2 days ago',
+      note:'Can we do every other week instead? Also curious if the spa is included in that price.',
+      when:'3 hours ago',
+      actions:[{label:'Open Quote', primary:true},{label:'Reply', ghost:true}]
+    },
+    {
+      id:'a2', type:'start', kind:'Start Date Requested',
+      title:'Jordan Rivera picked Wednesday, Aug 19',
+      detail:'Weekly Full Service · 123 Mission Creek Dr · signed 1 hour ago',
+      meta:[['Assigned','Chuy Silva · Wednesdays'],['Requested','Wed, Aug 19'],['Capacity that day','6 of 8']],
+      when:'1 hour ago',
+      actions:[{label:'Confirm Date', primary:true},{label:'Pick Another', ghost:true}]
+    },
+    {
+      id:'a3', type:'exception', kind:'Over Capacity',
+      title:'Dana Olmos assigned beyond capacity',
+      detail:'Weekly Full Service · 88 La Cantera Pkwy',
+      meta:[['Assigned','Tony Siller · Thursdays'],['Load','7 of 6'],['Reason','No slot under capacity']],
+      when:'Yesterday',
+      actions:[{label:'Open Route Board', primary:true},{label:'Accept Overflow', ghost:true}]
+    },
+    {
+      id:'a4', type:'expiring', kind:'Expiring Soon',
+      title:'Priya Raman\'s quote expires in 4 days',
+      detail:'Weekly Full Service · $310.00 / month · sent 26 days ago, never opened',
+      when:'Expires Aug 14',
+      actions:[{label:'Resend', primary:true},{label:'Extend 30 Days', ghost:true}]
+    },
+    {
+      id:'a5', type:'exception', kind:'Outside Preferred Area',
+      title:'Ken Alvarez assigned outside service area',
+      detail:'Weekly Full Service · 2201 Bulverde Rd',
+      meta:[['Assigned','Chuy Silva · Tuesdays'],['Area','North — no in-area capacity'],['Detour','+14 min']],
+      when:'2 days ago',
+      actions:[{label:'Open Route Board', primary:true},{label:'Accept', ghost:true}]
+    },
+    {
+      id:'a6', type:'expiring', kind:'Expired',
+      title:'Sam Whitfield asked for an updated quote',
+      detail:'Their signing link expired before they got to it · originally sent 34 days ago',
+      when:'5 hours ago',
+      actions:[{label:'Send Fresh Quote', primary:true},{label:'Dismiss', ghost:true}]
+    }
+  ];
+  const FILTERS = [
+    {key:'all',       label:'All'},
+    {key:'start',     label:'Start Dates'},
+    {key:'change',    label:'Change Requests'},
+    {key:'exception', label:'Exceptions'},
+    {key:'expiring',  label:'Expiring'}
+  ];
+  let active = 'all';
+  const resolved = new Set();
+
+  function esc(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function openCount(type){
+    return ITEMS.filter(i => !resolved.has(i.id) && (type==='all' || i.type===type)).length;
+  }
+  function renderFilters(){
+    document.getElementById('filters').innerHTML = FILTERS.map(f => `
+      <button class="filt${active===f.key?' active':''}" onclick="setFilter('${f.key}')">
+        ${f.label}<span class="n">${openCount(f.key)}</span>
+      </button>`).join('');
+    document.getElementById('hdr-count').textContent = openCount('all');
+  }
+  function setFilter(k){ active = k; renderFilters(); renderQueue(); }
+
+  function renderQueue(){
+    const list = ITEMS.filter(i => active==='all' || i.type===active);
+    const el = document.getElementById('queue');
+    if (!list.length){
+      el.innerHTML = `<div class="empty"><div class="ic">✓</div>
+        <h3>Nothing needs you right now</h3>
+        <p>Start-date requests, change requests, and scheduling exceptions all land here.</p></div>`;
+      return;
+    }
+    el.innerHTML = list.map(i => {
+      const isDone = resolved.has(i.id);
+      return `<div class="item t-${i.type}${isDone?' done':''}">
+        <div class="item-body">
+          <div class="item-main">
+            <div class="item-kind">
+              <span class="kind-tag">${esc(i.kind)}</span>
+              <span class="item-when">${esc(i.when)}</span>
+            </div>
+            <h3>${esc(i.title)}</h3>
+            <div class="detail">${esc(i.detail)}</div>
+            ${i.note ? `<div class="quote-note">“${esc(i.note)}”</div>` : ''}
+            ${i.meta ? `<div class="meta-row">${i.meta.map(([k,v]) =>
+              `<span class="meta">${esc(k)}: <b>${esc(v)}</b></span>`).join('')}</div>` : ''}
+          </div>
+          ${isDone ? '' : `<div class="item-actions">
+            ${i.actions.map(a => `<button class="btn ${a.primary?'primary':'ghost'}"
+              onclick="resolveItem('${i.id}','${esc(a.label)}')">${esc(a.label)}</button>`).join('')}
+            <button class="btn link" onclick="resolveItem('${i.id}','Dismissed')">Dismiss</button>
+          </div>`}
+        </div>
+        ${isDone ? `<div class="resolved-note"><span class="ic">✓</span>Resolved — ${esc(i._resolvedBy)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function resolveItem(id, action){
+    const item = ITEMS.find(i => i.id === id);
+    if (!item) return;
+    item._resolvedBy = action;
+    resolved.add(id);
+    renderFilters(); renderQueue();
+    const t = document.getElementById('toast');
+    t.textContent = action + ' — ' + item.title.split(' ').slice(0,2).join(' ');
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(()=>t.classList.remove('show'), 2400);
+  }
+
+  renderFilters();
+  renderQueue();
+  </script>
+</body>
+</html>

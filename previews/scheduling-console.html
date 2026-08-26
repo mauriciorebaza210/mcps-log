@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Admin — Scheduling Engine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+      --gray:#F3F5F6; --gray-2:#EAEFEF; --charcoal:#222222; --white:#FFFFFF;
+      --muted:rgba(34,34,34,.58); --line:#E4EAEA;
+      --danger:#B3261E; --danger-bg:#FDECEA;
+      --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--gray);color:var(--charcoal);font-family:var(--fb);
+      padding:0 0 90px;line-height:1.5;-webkit-font-smoothing:antialiased;font-size:14.5px;}
+    .wrap{max-width:920px;margin:0 auto;padding:0 24px;}
+
+    /* Top bar */
+    .topbar{background:var(--teal);color:#fff;padding:20px 0;}
+    .topbar .row{display:flex;align-items:center;gap:14px;}
+    .topbar img{height:30px;}
+    .topbar .titles{flex:1;min-width:0;}
+    .topbar .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:2px;}
+    .topbar h1{font-family:var(--fh);font-weight:800;font-size:20px;margin:0;letter-spacing:-.01em;}
+
+    main{padding-top:26px;}
+    section{margin-bottom:20px;}
+
+    .card{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+    .card-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;
+      align-items:flex-start;justify-content:space-between;gap:16px;}
+    .card-head h2{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--teal);
+      margin:0 0 4px;letter-spacing:-.005em;}
+    .card-head p{margin:0;color:var(--muted);font-size:13px;max-width:52ch;}
+    .card-body{padding:20px 22px;}
+
+    /* Master switch */
+    .master{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;}
+    .master-copy h2{margin-bottom:5px;}
+    .status-pill{font-family:var(--fh);font-weight:800;font-size:10px;letter-spacing:.1em;
+      text-transform:uppercase;padding:4px 10px;border-radius:20px;display:inline-block;}
+    .status-pill.off{background:var(--gray-2);color:var(--muted);}
+    .status-pill.on{background:#E2F5F3;color:var(--teal);}
+    .switch-lg{position:relative;width:52px;height:30px;flex:0 0 auto;cursor:pointer;}
+    .switch-lg input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+    .switch-lg .track{position:absolute;inset:0;background:var(--line);border-radius:20px;
+      transition:background .15s;}
+    .switch-lg .knob{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;
+      background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s;}
+    .switch-lg input:checked ~ .track{background:var(--aqua);}
+    .switch-lg input:checked ~ .knob{transform:translateX(22px);}
+    .switch-lg input:focus-visible ~ .track{outline:2px solid var(--teal);outline-offset:2px;}
+
+    .kill-note{margin-top:16px;padding:12px 14px;border-radius:8px;background:var(--gray);
+      font-size:12.5px;color:var(--muted);display:flex;gap:9px;align-items:flex-start;}
+    .kill-note .ic{flex:0 0 auto;color:var(--aqua);font-weight:800;}
+
+    /* Days row */
+    .days-row{display:flex;gap:8px;flex-wrap:wrap;}
+    .day-pill{position:relative;}
+    .day-pill input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;inset:0;}
+    .day-pill label{display:flex;flex-direction:column;align-items:center;gap:4px;width:80px;
+      padding:12px 8px;border-radius:10px;border:1.5px solid var(--line);cursor:pointer;
+      transition:border-color .12s,background .12s;}
+    .day-pill .d{font-family:var(--fh);font-weight:700;font-size:12.5px;color:var(--charcoal);}
+    .day-pill .s{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.06em;
+      text-transform:uppercase;color:var(--muted);}
+    .day-pill input:checked ~ label{border-color:var(--aqua);background:#EAF8F7;}
+    .day-pill input:checked ~ label .s{color:var(--teal);}
+    .day-pill input:checked ~ label .s::before{content:"On";}
+    .day-pill input:not(:checked) ~ label .s::before{content:"Off";}
+    .day-pill.flagged label{border-style:dashed;}
+    .flag-note{margin-top:14px;font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:flex-start;}
+    .flag-note b{color:var(--teal);}
+
+    /* Technician table */
+    table.tech{width:100%;border-collapse:collapse;font-size:13.5px;}
+    table.tech thead th{text-align:left;padding:0 10px 10px;font-family:var(--fh);font-weight:700;
+      font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+      border-bottom:2px solid var(--teal);}
+    table.tech td{padding:14px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+    table.tech tbody tr:last-child td{border-bottom:0;}
+    .tech-name{display:flex;align-items:center;gap:10px;}
+    .avatar{width:32px;height:32px;border-radius:50%;background:var(--teal);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;
+      font-size:12px;flex:0 0 auto;}
+    .tech-name .n{font-weight:600;color:var(--charcoal);}
+    .tech-name .u{display:block;font-size:11.5px;color:var(--muted);}
+    .switch-sm{position:relative;width:38px;height:22px;display:inline-block;cursor:pointer;}
+    .switch-sm input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+    .switch-sm .track{position:absolute;inset:0;background:var(--line);border-radius:14px;transition:background .15s;}
+    .switch-sm .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+      background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s;}
+    .switch-sm input:checked ~ .track{background:var(--aqua);}
+    .switch-sm input:checked ~ .knob{transform:translateX(16px);}
+    .cap-input{width:76px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;
+      font:inherit;font-size:13.5px;color:var(--charcoal);}
+    .cap-input::placeholder{color:var(--muted);}
+    .cap-input:focus{outline:none;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(31,167,168,.14);}
+    .cap-sub{display:block;font-size:11px;color:var(--muted);margin-top:3px;}
+    .wd-badges{display:flex;gap:4px;flex-wrap:wrap;max-width:180px;}
+    .wd-badge{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.03em;
+      padding:3px 6px;border-radius:5px;background:var(--gray);color:var(--muted);}
+    .wd-badge.on{background:var(--gray-2);color:var(--teal);}
+    tr.ineligible td:not(.td-eligible){opacity:.5;}
+    .edit-elsewhere{font-size:11px;color:var(--muted);margin-top:8px;}
+    .edit-elsewhere a{color:var(--aqua);text-decoration:none;font-weight:600;}
+    .edit-elsewhere a:hover{text-decoration:underline;}
+
+    /* Defaults note */
+    .defaults{display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:var(--muted);}
+    .defaults div{display:flex;gap:8px;}
+    .defaults b{color:var(--teal);flex:0 0 auto;}
+
+    /* Save bar */
+    .savebar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+      box-shadow:0 -6px 20px rgba(13,61,62,.08);z-index:100;}
+    .savebar .row{max-width:920px;margin:0 auto;padding:14px 24px;display:flex;
+      align-items:center;justify-content:space-between;gap:16px;}
+    .savebar .msg{font-size:13px;color:var(--muted);}
+    .savebar .msg.dirty{color:var(--teal);font-weight:600;}
+    .savebar button{border:0;background:var(--aqua);color:#fff;border-radius:9px;padding:11px 22px;
+      font-family:var(--fh);font-weight:700;font-size:13.5px;cursor:pointer;
+      box-shadow:0 6px 16px rgba(31,167,168,.28);}
+    .savebar button:disabled{opacity:.45;box-shadow:none;cursor:not-allowed;}
+    .toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(8px);
+      background:var(--teal);color:#fff;padding:11px 20px;border-radius:9px;font-size:13px;
+      font-family:var(--fh);font-weight:600;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;
+      z-index:120;box-shadow:0 10px 26px rgba(13,61,62,.3);}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    @media(max-width:640px){
+      .wrap{padding:0 16px;}
+      .card-body{padding:16px;}
+      .card-head{padding:16px;flex-direction:column;}
+      .days-row{gap:6px;}
+      .day-pill label{width:auto;flex:1 1 30%;min-width:70px;}
+      table.tech{display:block;overflow-x:auto;}
+      table.tech thead{display:none;}
+      table.tech tbody tr{display:grid;grid-template-columns:1fr auto;gap:8px 14px;
+        padding:14px 4px;border-bottom:1px solid var(--line);}
+      table.tech td{border-bottom:0;padding:2px 6px;}
+      .tech-name{grid-column:1/3;}
+      .td-eligible::before{content:"Eligible";display:block;font-family:var(--fh);font-weight:700;
+        font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+      .td-cap::before{content:"Max / day";display:block;font-family:var(--fh);font-weight:700;
+        font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+      .td-days::before{content:"Working days";display:block;font-family:var(--fh);font-weight:700;
+        font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+      .savebar .row{padding:12px 16px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="wrap row">
+    <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+    <div class="titles">
+      <div class="eyebrow">Admin · Routes</div>
+      <h1>Scheduling Engine</h1>
+    </div>
+  </div></div>
+
+  <main class="wrap">
+
+    <section class="card">
+      <div class="card-body master">
+        <div class="master-copy">
+          <h2>Automated Assignment</h2>
+          <p>When on, a new Weekly signup is given a real day and technician the moment they sign —
+            no more sitting in Unassigned. When off, everything works exactly as it does today.</p>
+          <div style="margin-top:10px"><span class="status-pill off" id="master-pill">Off</span></div>
+        </div>
+        <label class="switch-lg" title="Automated assignment master switch">
+          <input type="checkbox" id="master-switch" onchange="onMasterToggle()">
+          <span class="track"></span><span class="knob"></span>
+        </label>
+      </div>
+      <div class="card-body" style="padding-top:0">
+        <div class="kill-note"><span class="ic">●</span>
+          <span>This is the kill switch. Flip it off any time to stop automated assignment instantly —
+            no redeploy needed. New pools go back to the Unassigned queue for manual placement, exactly
+            like they do now.</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Schedulable Days</h2>
+          <p>Which days the engine is allowed to place a new customer on.</p></div>
+      </div>
+      <div class="card-body">
+        <div class="days-row" id="days-row"></div>
+        <div class="flag-note"><b>Saturday</b> isn't a fixed policy — it's yours to turn on when
+          capacity calls for it, off when it doesn't.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div><h2>Assignable Technicians</h2>
+          <p>Only eligible technicians are ever pulled from. New technicians start disabled here —
+            nobody is opted in silently.</p></div>
+      </div>
+      <div class="card-body">
+        <table class="tech">
+          <thead><tr>
+            <th>Technician</th><th class="td-eligible">Eligible</th><th class="td-cap">Max&nbsp;/&nbsp;day</th><th class="td-days">Working days</th>
+          </tr></thead>
+          <tbody id="tech-tbody"></tbody>
+        </table>
+        <div class="edit-elsewhere">Working days come from each technician's profile — <a href="#">edit in Admin → Users</a>.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><div><h2>How blanks behave</h2></div></div>
+      <div class="card-body defaults">
+        <div><b>Blank Max&nbsp;/&nbsp;day</b><span>Falls back to 4 — the same default the route planner already uses.</span></div>
+        <div><b>Blank working days</b><span>Treated as every schedulable day above — nothing is silently excluded.</span></div>
+        <div><b>Working days</b><span>Always a hard filter — the engine will never place someone on a day a technician doesn't work, regardless of capacity.</span></div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="savebar"><div class="row">
+    <span class="msg" id="save-msg">No unsaved changes</span>
+    <button type="button" id="save-btn" onclick="saveConsole()" disabled>Save Changes</button>
+  </div></div>
+  <div class="toast" id="toast">Scheduling settings saved</div>
+
+  <script>
+  const DAYS = [
+    {k:'mon', d:'Mon', full:'Monday', on:true},
+    {k:'tue', d:'Tue', full:'Tuesday', on:true},
+    {k:'wed', d:'Wed', full:'Wednesday', on:true},
+    {k:'thu', d:'Thu', full:'Thursday', on:true},
+    {k:'fri', d:'Fri', full:'Friday', on:true},
+    {k:'sat', d:'Sat', full:'Saturday', on:false, flagged:true}
+  ];
+  const TECHS = [
+    {username:'mau',  name:'Mauricio Rebaza', eligible:false, cap:null, days:['mon','tue','wed','thu','fri']},
+    {username:'tony', name:'Tony Siller',     eligible:false, cap:6,    days:['mon','tue','wed','thu','fri','sat']},
+    {username:'chuy', name:'Chuy Silva',      eligible:false, cap:8,    days:['mon','tue','wed','thu','fri']}
+  ];
+  let dirty = false;
+
+  function initials(name){
+    return name.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
+  }
+
+  function renderDays(){
+    const el = document.getElementById('days-row');
+    el.innerHTML = DAYS.map(day => `
+      <div class="day-pill${day.flagged ? ' flagged' : ''}">
+        <input type="checkbox" id="day-${day.k}" ${day.on?'checked':''} onchange="markDirty()">
+        <label for="day-${day.k}"><span class="d">${day.d}</span><span class="s"></span></label>
+      </div>`).join('');
+  }
+
+  function renderTechs(){
+    const tb = document.getElementById('tech-tbody');
+    tb.innerHTML = TECHS.map(t => `
+      <tr id="row-${t.username}" class="${t.eligible?'':'ineligible'}">
+        <td class="tech-name">
+          <div class="avatar">${initials(t.name)}</div>
+          <div><span class="n">${t.name}</span><span class="u">@${t.username}</span></div>
+        </td>
+        <td class="td-eligible">
+          <label class="switch-sm">
+            <input type="checkbox" id="elig-${t.username}" ${t.eligible?'checked':''} onchange="onEligToggle('${t.username}')">
+            <span class="track"></span><span class="knob"></span>
+          </label>
+        </td>
+        <td class="td-cap">
+          <input class="cap-input" type="number" min="1" placeholder="10" value="${t.cap ?? ''}"
+            oninput="markDirty()" aria-label="Max pools per day for ${t.name}">
+          <span class="cap-sub">${t.cap ? 'pools / day' : 'default: 4'}</span>
+        </td>
+        <td class="td-days">
+          <div class="wd-badges">${DAYS.map(d=>`<span class="wd-badge${t.days.includes(d.k)?' on':''}">${d.d}</span>`).join('')}</div>
+        </td>
+      </tr>`).join('');
+  }
+
+  function onMasterToggle(){
+    const on = document.getElementById('master-switch').checked;
+    const pill = document.getElementById('master-pill');
+    pill.textContent = on ? 'On' : 'Off';
+    pill.className = 'status-pill ' + (on ? 'on' : 'off');
+    markDirty();
+  }
+  function onEligToggle(username){
+    const checked = document.getElementById('elig-'+username).checked;
+    document.getElementById('row-'+username).className = checked ? '' : 'ineligible';
+    markDirty();
+  }
+  function markDirty(){
+    dirty = true;
+    document.getElementById('save-msg').textContent = 'Unsaved changes';
+    document.getElementById('save-msg').classList.add('dirty');
+    document.getElementById('save-btn').disabled = false;
+  }
+  function saveConsole(){
+    if (!dirty) return;
+    dirty = false;
+    document.getElementById('save-msg').textContent = 'No unsaved changes';
+    document.getElementById('save-msg').classList.remove('dirty');
+    document.getElementById('save-btn').disabled = true;
+    const toast = document.getElementById('toast');
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 2200);
+  }
+
+  renderDays();
+  renderTechs();
+  </script>
+</body>
+</html>

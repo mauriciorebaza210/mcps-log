@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — First Month Complete Email</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;}
+  .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+  .page-sub{max-width:640px;margin:0 auto 12px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+  .page-note{max-width:640px;margin:0 auto 40px;text-align:center;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:12px 18px;color:#3a4645;font-size:12.5px;line-height:1.55;}
+  .page-note b{color:var(--teal);}
+  .variant{max-width:640px;margin:0 auto 56px;}
+  .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+  .subject b{color:var(--teal);font-family:var(--fh);}
+  .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+  .foot{padding:24px 32px 30px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+  .foot a{color:var(--teal);text-decoration:none;}
+  .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+
+  .eyebrow{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--aqua);display:inline-block;flex:0 0 auto;}
+
+  .did-list{list-style:none;margin:0;padding:0;}
+  .did-list li{display:flex;align-items:flex-start;gap:10px;padding:9px 0;font-size:14px;color:#3a4645;}
+  .did-list .ico{flex:0 0 auto;width:19px;height:19px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .did-list .ico svg{width:10.5px;height:10.5px;}
+  .did-list li.free .ico{background:var(--aqua);}
+  .did-list li.free b{color:var(--teal);}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(94,214,211,.18);border:1px solid var(--aqua-light);color:var(--aqua-light);font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:6px 14px;border-radius:20px;margin-bottom:16px;}
+
+  .top{background:linear-gradient(160deg,var(--teal),var(--teal-2));padding:40px 36px 0;text-align:center;color:#fff;}
+  .top img{height:34px;margin-bottom:18px;}
+  .top h1{font-family:var(--fh);font-weight:800;font-size:27px;margin:0 0 22px;line-height:1.15;}
+  .meta{display:flex;justify-content:center;gap:14px 40px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,.16);padding:18px 0;margin:0;}
+  .meta .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:4px;}
+  .meta .v{font-family:var(--fh);font-weight:700;font-size:16px;}
+
+  .body{padding:32px 40px 8px;}
+  .body .lede{font-size:14.5px;line-height:1.65;color:#3a4645;margin:0 0 28px;}
+  .feature-card{background:var(--gray);border-radius:12px;padding:18px 20px;margin:0 0 28px;}
+  .next-card{border-left:4px solid var(--aqua);background:var(--gray);border-radius:0 10px 10px 0;padding:16px 20px;margin:0 0 28px;}
+  .next-card p{margin:0;font-size:14px;line-height:1.6;color:#3a4645;}
+  .close{font-size:13.5px;color:#5a6666;line-height:1.6;margin:0 0 30px;}
+  .close a{color:var(--teal);font-weight:600;text-decoration:none;}
+
+  @media(max-width:560px){
+    .top,.body{padding-left:24px;padding-right:24px;}
+    .meta{gap:12px 24px;}
+  }
+</style>
+</head>
+<body>
+  <div class="page-title">First Month Complete Email</div>
+  <div class="page-sub">Sent once a customer's complimentary first month of weekly service (startup → free month, MCPS covers the cost) has finished. Confirms nothing is owed for that month and that service continues as normal.</div>
+  <div class="page-note">This assumes weekly service <b>continues automatically</b> under the customer's existing signed agreement, with no action needed from them. If MCPS wants the customer to confirm or choose a plan before regular billing starts, this email needs a CTA button added — flag if that's the case.</div>
+
+  <div class="variant">
+    <div class="subject">Subject: <b>Your first month is complete — on us, Jordan</b></div>
+    <div class="email">
+      <div class="top">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="pill">✓ First Month Complete</div>
+        <h1>Your first month was on us.</h1>
+        <div class="meta">
+          <div><div class="k">Visits Completed</div><div class="v">4</div></div>
+          <div><div class="k">Your Cost</div><div class="v">$0</div></div>
+          <div><div class="k">Covered By</div><div class="v">MCPS</div></div>
+        </div>
+      </div>
+      <div class="body">
+        <p class="lede">Thank you for trusting Mission Custom Pool Solutions with your pool, Jordan. Your first month of weekly service is complete — completely complimentary, no charge to you.</p>
+
+        <div class="eyebrow">What We Completed This Month</div>
+        <div class="feature-card">
+          <ul class="did-list">
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>4 weekly visits — skimmed, brushed &amp; vacuumed</li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Equipment checked and confirmed running correctly</li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Water tested &amp; balanced every visit</li>
+            <li class="free"><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Total cost to you: <b>$0</b> — covered by Mission Custom Pool Solutions</li>
+          </ul>
+        </div>
+
+        <div class="eyebrow">What's Next</div>
+        <div class="next-card">
+          <p>Starting with your next scheduled visit, weekly service continues under your regular service agreement. There's nothing you need to do — we'll keep taking care of your pool exactly the way we have all month.</p>
+        </div>
+
+        <p class="close">Thank you again for trusting us with your pool. Questions about your service? Just reply to this email.</p>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+</body>
+</html>

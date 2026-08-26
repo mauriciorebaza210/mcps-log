@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS — Welcome Email · 3 mockups</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+      --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+      --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+    *{box-sizing:border-box;}
+    body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 80px;}
+    .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+    .page-sub{max-width:640px;margin:0 auto 40px;text-align:center;color:#4a5656;font-size:14px;}
+    .variant{max-width:640px;margin:0 auto 56px;}
+    .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;}
+    .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+    .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+    .vlabel .desc{color:#5a6666;font-size:13px;}
+    .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+    .subject b{color:var(--teal);font-family:var(--fh);}
+    .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+    .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:15px;color:#fff;background:var(--aqua);padding:15px 34px;border-radius:11px;box-shadow:0 8px 20px rgba(31,167,168,.3);}
+    .btn.ghost{background:#fff;color:var(--teal);border:1.5px solid var(--aqua);box-shadow:none;}
+    .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+    .foot{padding:24px 32px 30px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+    .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+    .foot a{color:var(--teal);text-decoration:none;}
+
+    /* steps list (shared) */
+    .steps{margin:22px 0;padding:0;list-style:none;}
+    .steps li{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
+    .steps li:last-child{border-bottom:0;}
+    .steps .n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;font-family:var(--fh);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;}
+    .steps .t{font-size:14px;line-height:1.5;color:#3a4645;}
+    .steps .t b{color:var(--teal);}
+
+    /* V1 Editorial */
+    .v1{padding:46px 44px 0;text-align:center;}
+    .v1 img{height:48px;margin-bottom:20px;}
+    .v1 .mantra{color:var(--aqua);margin-bottom:26px;font-size:10px;letter-spacing:.3em;font-weight:600;}
+    .v1 h1{font-family:var(--fh);font-weight:700;font-size:26px;color:var(--teal);margin:0 0 14px;}
+    .v1 p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 auto 18px;max-width:450px;}
+    .v1 .steps{text-align:left;max-width:430px;margin:26px auto;}
+    .v1 .cta{padding:6px 0 40px;}
+    .v1 .cta .btn{margin:5px;}
+
+
+    /* Tech-intro block (shared) */
+    .techcard{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:24px 0 8px;}
+    .techcard .day{background:var(--gray);padding:18px 22px;border-bottom:1px solid var(--line);}
+    .techcard .day .k{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--aqua);margin-bottom:4px;}
+    .techcard .day .v{font-family:var(--fh);font-weight:800;font-size:24px;color:var(--teal);letter-spacing:-.01em;}
+    .techcard .day .note{font-size:13px;color:var(--muted);margin-top:5px;line-height:1.5;}
+    .techcard .who{display:flex;align-items:center;gap:16px;padding:18px 22px;}
+    .techcard .avatar{width:56px;height:56px;border-radius:50%;flex:0 0 auto;object-fit:cover;
+      background:var(--gray);border:2px solid var(--aqua-light);}
+    .techcard .who .nm{font-family:var(--fh);font-weight:700;font-size:16px;color:var(--teal);}
+    .techcard .who .role{font-size:12px;color:var(--aqua);font-weight:600;letter-spacing:.04em;
+      text-transform:uppercase;margin-top:2px;}
+    .techcard .who .bio{font-size:13px;color:#3a4645;line-height:1.55;margin-top:6px;}
+    .statelabel{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.12em;
+      text-transform:uppercase;color:#8a9494;margin:0 4px 8px;}
+
+    /* V3 Statement */
+    .v3 .hero{background:var(--teal);color:#fff;padding:48px 40px 42px;text-align:center;position:relative;overflow:hidden;}
+    .v3 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% -20%,rgba(94,214,211,.24),transparent 60%);}
+    .v3 .hero>*{position:relative;}
+    .v3 .hero img{height:46px;margin-bottom:20px;}
+    .v3 .hero .mantra{color:var(--aqua-light);margin:0 0 12px;}
+    .v3 .hero h1{font-family:var(--fh);font-weight:800;font-size:34px;line-height:1.06;margin:0 0 10px;letter-spacing:-.01em;}
+    .v3 .hero .lede{color:rgba(255,255,255,.8);font-size:15px;max-width:400px;margin:0 auto;}
+    .v3 .body{padding:34px 40px 8px;}
+    .v3 .body p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 0 16px;}
+    .v3 .whatsnext{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:26px 0 6px;}
+    .v3 .cta{text-align:center;padding:10px 0 34px;}
+    .v3 .cta .btn{margin:5px;}
+
+    @media(max-width:560px){
+      .v1{padding:34px 22px 0;}
+      .v3 .hero,.v3 .body{padding-left:24px;padding-right:24px;}
+      .v3 .hero h1{font-size:28px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="page-title">Welcome Email — 2 directions</div>
+  <div class="page-sub">Sent right after the customer signs. Confirms the agreement, sets expectations, links the signed PDF.</div>
+
+  <!-- V1 Editorial -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">A</span><span class="name">Editorial</span><span class="desc">Warm, understated, personal.</span></div>
+    <div class="subject">Subject: <b>Welcome to Mission Custom Pool Solutions, Jordan</b></div>
+    <div class="email">
+      <div class="v1">
+        <img src="../assets/mcps-lockup.png" alt="MCPS">
+        <div class="mantra">Every Pool Matters</div>
+        <h1>Welcome to the Mission family, Jordan</h1>
+        <p>Your agreement is signed and you're officially a Mission Custom Pool Solutions customer. Here's what happens next.</p>
+        <ul class="steps">
+          <li><span class="n">1</span><span class="t"><b>We schedule your first visit.</b> Your service coordinator will be in touch to let you know your service day.</span></li>
+          <li><span class="n">2</span><span class="t"><b>Your tech arrives.</b> Weekly Full Service, with a service report after every visit.</span></li>
+          <li><span class="n">3</span><span class="t"><b>You relax.</b> Consistent care, transparent pricing, no surprises.</span></li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="#">Download Signed Agreement</a>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- V3 Statement -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">C</span><span class="name">Statement</span><span class="desc">Bold welcome moment, confident.</span></div>
+    <div class="subject">Subject: <b>Welcome aboard, Jordan</b></div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Welcome to the<br>Mission family.</h1>
+        <div class="lede">Your agreement is signed, Jordan — and your pool is officially in good hands.</div>
+      </div>
+      <div class="body">
+        <p>Thank you for trusting us with your pool. You're set up for <strong>Weekly Full Service</strong>:
+        the same technician every week, water tested and balanced on every visit, and a service report
+        sent to you each time so you always know exactly what was done.</p>
+
+        <div class="techcard">
+          <div class="day">
+            <div class="k">Your Service Day</div>
+            <div class="v">Wednesdays</div>
+            <div class="note">No need to be home — we'll text you when we're on the way.</div>
+          </div>
+          <div class="who">
+            <img class="avatar" src="../assets/mission-icon-transparent.png" alt="">
+            <div>
+              <div class="nm">Chuy Silva</div>
+              <div class="role">Your Pool Technician</div>
+              <div class="bio">Been keeping San Antonio pools swim-ready for nine years. Ask him anything about your equipment.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="whatsnext">What Happens Next</div>
+        <ul class="steps">
+          <li><span class="n">1</span><span class="t"><b>Chuy visits this Wednesday</b> to get your pool dialed in.</span></li>
+          <li><span class="n">2</span><span class="t"><b>You get a service report</b> after every visit — photos, readings, and what we did.</span></li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="#">Download Signed Agreement</a>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- Fallback state: no day/tech assigned yet (Startup & Green-to-Clean customers) -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">C</span><span class="name">Statement — fallback</span>
+      <span class="desc">Same email when no service day is assigned yet (Startup / Green-to-Clean).</span></div>
+    <div class="statelabel">This is the version that ships first, before auto-assignment is live</div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Welcome to the<br>Mission family.</h1>
+        <div class="lede">Your agreement is signed, Jordan — and your pool is officially in good hands.</div>
+      </div>
+      <div class="body">
+        <p>Thank you for trusting us with your pool. You're set up for <strong>Pool Startup Service</strong>
+        — water tested and balanced on every visit, and a service report sent to you each time so you always
+        know exactly what was done.</p>
+
+        <div class="techcard">
+          <div class="day">
+            <div class="k">Your Service Day</div>
+            <div class="v">Coming shortly</div>
+            <div class="note">Your service coordinator will be in touch to confirm your day and introduce
+              the technician who'll be caring for your pool.</div>
+          </div>
+        </div>
+
+        <div class="whatsnext">What Happens Next</div>
+        <ul class="steps">
+          <li><span class="n">1</span><span class="t"><b>We'll be in touch</b> to confirm your service day and your technician.</span></li>
+          <li><span class="n">2</span><span class="t"><b>You get a service report</b> after every visit — photos, readings, and what we did.</span></li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="#">Download Signed Agreement</a>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+</body>
+</html>

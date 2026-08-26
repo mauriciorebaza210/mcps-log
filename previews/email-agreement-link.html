@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS — Agreement Link Email · 3 mockups</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+      --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+      --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+    *{box-sizing:border-box;}
+    body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 80px;}
+    .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);
+      font-size:22px;text-align:center;}
+    .page-sub{max-width:640px;margin:0 auto 40px;text-align:center;color:#4a5656;font-size:14px;}
+    .variant{max-width:640px;margin:0 auto 56px;}
+    .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;}
+    .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;
+      text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+    .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+    .vlabel .desc{color:#5a6666;font-size:13px;}
+    .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+    .subject b{color:var(--teal);font-family:var(--fh);}
+    .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+    /* shared email bits */
+    .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:15px;
+      color:#fff;background:var(--aqua);padding:16px 40px;border-radius:11px;
+      box-shadow:0 8px 20px rgba(31,167,168,.3);}
+    .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+    .foot{padding:24px 32px 30px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+    .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+    .foot a{color:var(--teal);text-decoration:none;}
+
+    /* ---- V1 Editorial ---- */
+    .v1{padding:44px 44px 0;text-align:center;}
+    .v1 img{height:52px;margin-bottom:22px;}
+    .v1 .mantra{color:var(--aqua);margin-bottom:26px;font-size:10px;letter-spacing:.3em;font-weight:600;}
+    .v1 .eye{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+    .v1 h1{font-family:var(--fh);font-weight:700;font-size:26px;color:var(--teal);margin:0 0 18px;}
+    .v1 p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 auto 18px;max-width:440px;text-align:center;}
+    .v1 .detail{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:26px 0;padding:20px 0;
+      display:flex;justify-content:center;gap:50px;}
+    .v1 .detail .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+    .v1 .detail .val{font-family:var(--fh);font-weight:700;font-size:17px;color:var(--teal);}
+    .v1 .cta{padding:8px 0 40px;}
+    .v1 .fine{font-size:12px;color:var(--muted);margin-top:16px;}
+
+    /* ---- Detail summary (shared) ---- */
+    .summary{background:var(--gray);border-radius:12px;padding:18px 20px;margin:22px 0;}
+    .summary .row{display:flex;justify-content:space-between;gap:16px;padding:7px 0;font-size:14px;border-bottom:1px solid #e5eaea;}
+    .summary .row:last-child{border-bottom:0;}
+    .summary .k{color:var(--muted);}
+    .summary .v{font-weight:600;color:var(--teal);text-align:right;}
+
+    /* ---- V3 Statement ---- */
+    .v3 .hero{background:var(--teal);color:#fff;padding:44px 40px;position:relative;overflow:hidden;}
+    .v3 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 85% -10%,rgba(94,214,211,.22),transparent 55%);}
+    .v3 .hero>*{position:relative;}
+    .v3 .hero img{height:44px;margin-bottom:24px;}
+    .v3 .hero .mantra{color:var(--aqua-light);margin-bottom:14px;}
+    .v3 .hero h1{font-family:var(--fh);font-weight:800;font-size:32px;line-height:1.08;margin:0 0 10px;letter-spacing:-.01em;}
+    .v3 .hero .lede{color:rgba(255,255,255,.78);font-size:15px;max-width:400px;}
+    .v3 .invest{background:var(--aqua);color:#fff;padding:20px 40px;display:flex;justify-content:space-between;align-items:center;}
+    .v3 .invest .k{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.85);}
+    .v3 .invest .v{font-family:var(--fh);font-weight:800;font-size:26px;}
+    .v3 .body{padding:32px 40px 8px;}
+    .v3 .body p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 0 18px;}
+    .v3 .cta{text-align:center;padding:8px 0 36px;}
+    .v3 .btn{background:var(--teal);box-shadow:0 8px 20px rgba(13,61,62,.28);}
+    .v3 .fine{font-size:12px;color:var(--muted);text-align:center;margin-top:14px;}
+
+    @media(max-width:560px){
+      .v1{padding:32px 24px 0;} .v1 .detail{gap:28px;}
+      .v3 .hero,.v3 .invest,.v3 .body{padding-left:24px;padding-right:24px;}
+      .v3 .hero h1{font-size:26px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="page-title">Agreement-Link Email — 2 directions</div>
+  <div class="page-sub">The email a customer receives to review &amp; sign their agreement. Same content, three tones.</div>
+
+  <!-- V1 Editorial -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">A</span><span class="name">Editorial</span><span class="desc">Clean, calm, boutique.</span></div>
+    <div class="subject">Subject: <b>Your MCPS service agreement is ready to sign</b></div>
+    <div class="email">
+      <div class="v1">
+        <img src="../assets/mcps-lockup.png" alt="MCPS">
+        <div class="mantra">Every Pool Matters</div>
+        <div class="eye">Prepared For Jordan Rivera</div>
+        <h1>Your service agreement is ready</h1>
+        <p>Hi Jordan — thank you for choosing Mission Custom Pool Solutions. Your service agreement is prepared and ready for your review and signature. It only takes a minute.</p>
+        <div class="detail">
+          <div><div class="k">Service</div><div class="val">Weekly Full Service</div></div>
+          <div><div class="k">Investment</div><div class="val">$285.00 / mo</div></div>
+        </div>
+        <div class="cta">
+          <a class="btn" href="#">Review &amp; Sign Agreement</a>
+          <div class="fine">Secure signing · No account needed</div>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- V3 Statement -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">C</span><span class="name">Statement</span><span class="desc">Bold hero, details lead.</span></div>
+    <div class="subject">Subject: <b>Your service agreement is ready to sign, Jordan</b></div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Let's get your<br>pool handled.</h1>
+        <div class="lede">Your service agreement is ready, Jordan. One signature and we're on the schedule.</div>
+      </div>
+      <div class="invest"><span class="k">Prepared For</span><span class="v">Jordan Rivera</span></div>
+      <div class="body">
+        <p>Everything's prepared for your <strong>Weekly Full Service</strong> at 123 Mission Creek Dr.
+        Take a quick look at the scope, terms, and pricing, then sign securely — no account required.</p>
+        <div class="summary">
+          <div class="row"><span class="k">Service</span><span class="v">Weekly Full Service</span></div>
+          <div class="row"><span class="k">Property</span><span class="v">123 Mission Creek Dr</span></div>
+          <div class="row"><span class="k">Valid Until</span><span class="v">08/21/2026</span></div>
+        </div>
+        <div class="cta"><a class="btn" href="#">Review &amp; Sign Agreement</a>
+          <div class="fine">Prefer a change first? Request an adjustment from the same page.</div></div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+</body>
+</html>

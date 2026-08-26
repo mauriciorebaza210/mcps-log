@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS — Service Day Changed · Email</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+      --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+      --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+    *{box-sizing:border-box;}
+    body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 80px;}
+    .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);
+      font-size:22px;text-align:center;}
+    .page-sub{max-width:640px;margin:0 auto 36px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+    .variant{max-width:640px;margin:0 auto 46px;}
+    .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 12px;flex-wrap:wrap;}
+    .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;
+      text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+    .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+    .vlabel .desc{color:#5a6666;font-size:13px;}
+    .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+    .subject b{color:var(--teal);font-family:var(--fh);}
+    .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+    .hero{background:var(--teal);color:#fff;padding:38px 40px 34px;text-align:center;position:relative;overflow:hidden;}
+    .hero::before{content:"";position:absolute;inset:0;
+      background:radial-gradient(ellipse at 50% -20%,rgba(94,214,211,.24),transparent 60%);}
+    .hero>*{position:relative;}
+    .hero img{height:40px;margin-bottom:18px;}
+    .hero .mantra{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:14px;}
+    .hero h1{font-family:var(--fh);font-weight:800;font-size:27px;line-height:1.1;margin:0 0 9px;letter-spacing:-.01em;}
+    .hero .lede{color:rgba(255,255,255,.8);font-size:14.5px;max-width:390px;margin:0 auto;line-height:1.6;}
+
+    /* The change itself — the whole point of the email */
+    .change{padding:28px 40px 0;}
+    .change-row{display:flex;align-items:stretch;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+    .change-col{flex:1;padding:18px 20px;text-align:center;}
+    .change-col.was{background:var(--gray);}
+    .change-col.now{background:#EAF8F7;}
+    .change-col .k{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+    .change-col.now .k{color:var(--aqua);}
+    .change-col .v{font-family:var(--fh);font-weight:800;font-size:19px;color:var(--charcoal);letter-spacing:-.01em;}
+    .change-col.was .v{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1.5px;}
+    .change-col.now .v{color:var(--teal);}
+    .change-arrow{display:flex;align-items:center;justify-content:center;padding:0 4px;
+      background:var(--gray);color:var(--muted);font-size:18px;font-weight:700;}
+
+    .body{padding:26px 40px 8px;}
+    .body p{font-size:15px;line-height:1.65;color:#3a4645;margin:0 0 16px;}
+
+    /* Technician card — same component as the welcome email */
+    .techcard{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:4px 0 20px;
+      display:flex;align-items:center;gap:14px;background:#FBFCFC;}
+    .techcard .avatar{width:52px;height:52px;border-radius:50%;background:var(--teal);flex:0 0 auto;
+      display:flex;align-items:center;justify-content:center;overflow:hidden;}
+    .techcard .avatar img{width:34px;height:34px;object-fit:contain;}
+    .techcard .nm{font-family:var(--fh);font-weight:700;font-size:16px;color:var(--teal);}
+    .techcard .role{font-size:12.5px;color:var(--muted);margin-top:1px;}
+    .techcard .newtag{display:inline-block;font-family:var(--fh);font-weight:700;font-size:9px;
+      letter-spacing:.08em;text-transform:uppercase;background:#EAF8F7;color:var(--aqua);
+      padding:2px 7px;border-radius:4px;margin-top:6px;}
+
+    .reassure{background:var(--gray);border-radius:10px;padding:14px 16px;font-size:13.5px;
+      color:#3a4645;line-height:1.6;margin-bottom:6px;}
+    .reassure b{color:var(--teal);}
+
+    .cta{text-align:center;padding:14px 0 32px;}
+    .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:15px;
+      color:#fff;background:var(--aqua);padding:14px 30px;border-radius:11px;
+      box-shadow:0 8px 20px rgba(31,167,168,.3);}
+    .fine{font-size:12.5px;color:var(--muted);margin-top:14px;}
+
+    .foot{padding:22px 32px 28px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;line-height:1.7;}
+    .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+      color:var(--aqua);font-size:10px;margin-bottom:8px;}
+    .foot a{color:var(--teal);text-decoration:none;}
+
+    .note{max-width:640px;margin:0 auto 46px;background:#fff;border:1px solid var(--line);
+      border-left:3px solid var(--aqua);border-radius:10px;padding:18px 20px;}
+    .note h3{font-family:var(--fh);font-weight:700;font-size:13px;color:var(--teal);margin:0 0 8px;}
+    .note p{margin:0 0 8px;font-size:13.5px;color:#4a5656;line-height:1.65;}
+    .note p:last-child{margin-bottom:0;}
+    .note b{color:var(--teal);}
+
+    @media(max-width:560px){
+      .hero,.change,.body{padding-left:22px;padding-right:22px;}
+      .hero h1{font-size:23px;}
+      .change-col .v{font-size:16px;}
+      .techcard{flex-direction:column;text-align:center;}
+    }
+  </style>
+</head>
+<body>
+  <div class="page-title">Service Day Changed — Email</div>
+  <div class="page-sub">Sent automatically whenever a customer's promised service day or technician
+    changes. This is what lets the welcome email state a day with confidence.</div>
+
+  <div class="note">
+    <h3>Why this email exists</h3>
+    <p>The welcome email tells the customer <b>“Your service day is Wednesday.”</b> That promise has to
+      stay true — but today a pool can be moved on the route board and the customer is never told.</p>
+    <p>This closes that gap: any real change to a customer who was <b>already told a day</b> triggers this
+      automatically. Customers who were never given a day (startups, green-to-cleans) get nothing, and a
+      one-week shuffle doesn't trigger it either — only a permanent change does.</p>
+  </div>
+
+  <!-- Day changed -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">1</span><span class="name">Day changed</span>
+      <span class="desc">Same technician, different day.</span></div>
+    <div class="subject">Subject: <b>Your pool service day is changing to Thursday</b></div>
+    <div class="email">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Your service day<br>is changing.</h1>
+        <div class="lede">Nothing else about your service changes, Jordan — same technician, same plan.</div>
+      </div>
+
+      <div class="change">
+        <div class="change-row">
+          <div class="change-col was"><div class="k">Was</div><div class="v">Wednesdays</div></div>
+          <div class="change-arrow">→</div>
+          <div class="change-col now"><div class="k">Starting Aug 21</div><div class="v">Thursdays</div></div>
+        </div>
+      </div>
+
+      <div class="body">
+        <p>We've adjusted our routes in your area to keep visits consistent and cut down drive time
+          between pools. Your service moves to Thursdays from August 21 onward.</p>
+
+        <div class="techcard">
+          <div class="avatar"><img src="../assets/mission-icon-transparent.png" alt=""></div>
+          <div>
+            <div class="nm">Chuy Silva</div>
+            <div class="role">Still your technician</div>
+          </div>
+        </div>
+
+        <div class="reassure">
+          <b>Nothing you need to do.</b> No need to be home — we'll text you when we're on the way, same
+          as always. Your rate and service plan are unchanged.
+        </div>
+
+        <div class="cta">
+          <a class="btn" href="#">Questions? Reply to This Email</a>
+          <div class="fine">Or call us at (210) 559-2073</div>
+        </div>
+      </div>
+
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- Technician changed -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">2</span><span class="name">Technician changed</span>
+      <span class="desc">Same day, new person — reintroduce them.</span></div>
+    <div class="subject">Subject: <b>Meet Tony — your new pool technician</b></div>
+    <div class="email">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>You have a new<br>technician.</h1>
+        <div class="lede">Your service day isn't changing, Jordan — just the person you'll see.</div>
+      </div>
+
+      <div class="change">
+        <div class="change-row">
+          <div class="change-col was"><div class="k">Was</div><div class="v">Chuy Silva</div></div>
+          <div class="change-arrow">→</div>
+          <div class="change-col now"><div class="k">Starting Aug 21</div><div class="v">Tony Siller</div></div>
+        </div>
+      </div>
+
+      <div class="body">
+        <p>We've reorganized routes in your area, so Tony will be taking care of your pool from
+          August 21. Your service stays on <strong>Wednesdays</strong>.</p>
+
+        <div class="techcard">
+          <div class="avatar"><img src="../assets/mission-icon-transparent.png" alt=""></div>
+          <div>
+            <div class="nm">Tony Siller</div>
+            <div class="role">Your Pool Technician</div>
+            <div class="newtag">New to your pool</div>
+          </div>
+        </div>
+
+        <div class="reassure">
+          <b>Tony already has your pool's history.</b> Equipment notes, chemistry readings, and everything
+          Chuy logged carries over — he won't be starting from scratch.
+        </div>
+
+        <div class="cta">
+          <a class="btn" href="#">Questions? Reply to This Email</a>
+          <div class="fine">Or call us at (210) 559-2073</div>
+        </div>
+      </div>
+
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- Both changed -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">3</span><span class="name">Both changed</span>
+      <span class="desc">One email, not two.</span></div>
+    <div class="subject">Subject: <b>Your pool service is moving to Thursdays with Tony</b></div>
+    <div class="email">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Two small changes<br>to your service.</h1>
+        <div class="lede">Your day and technician are both changing, Jordan. Everything else stays put.</div>
+      </div>
+
+      <div class="change">
+        <div class="change-row">
+          <div class="change-col was"><div class="k">Was</div><div class="v">Wednesdays</div></div>
+          <div class="change-arrow">→</div>
+          <div class="change-col now"><div class="k">Starting Aug 21</div><div class="v">Thursdays</div></div>
+        </div>
+        <div class="change-row" style="margin-top:10px">
+          <div class="change-col was"><div class="k">Was</div><div class="v">Chuy Silva</div></div>
+          <div class="change-arrow">→</div>
+          <div class="change-col now"><div class="k">Starting Aug 21</div><div class="v">Tony Siller</div></div>
+        </div>
+      </div>
+
+      <div class="body">
+        <p>We've reorganized routes in your area to keep visits consistent and reduce drive time. From
+          August 21, Tony will service your pool on Thursdays.</p>
+
+        <div class="techcard">
+          <div class="avatar"><img src="../assets/mission-icon-transparent.png" alt=""></div>
+          <div>
+            <div class="nm">Tony Siller</div>
+            <div class="role">Your Pool Technician · Thursdays</div>
+            <div class="newtag">New to your pool</div>
+          </div>
+        </div>
+
+        <div class="reassure">
+          <b>Your rate and service plan are unchanged.</b> Tony has your pool's full history, and we'll
+          still text you when we're on the way.
+        </div>
+
+        <div class="cta">
+          <a class="btn" href="#">Questions? Reply to This Email</a>
+          <div class="fine">Or call us at (210) 559-2073</div>
+        </div>
+      </div>
+
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>When this does <em>not</em> send</h3>
+    <p><b>One-week shuffles.</b> Moving someone for a single week (holiday, weather) uses the existing
+      day-before and on-my-way texts — this email is only for permanent changes.</p>
+    <p><b>Customers never told a day.</b> Startups and green-to-cleans don't get a promised day in their
+      welcome email, so there's no promise to correct.</p>
+    <p><b>When you turn it off.</b> The route board's move dialog has a “tell the customer” toggle,
+      default on — flip it off for a correction the customer shouldn't be bothered with.</p>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCPS Admin — Technician Profile</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+      --gray:#F3F5F6; --gray-2:#EAEFEF; --charcoal:#222222; --white:#FFFFFF;
+      --muted:rgba(34,34,34,.58); --line:#E4EAEA;
+      --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;background:var(--gray);color:var(--charcoal);font-family:var(--fb);
+      padding:0;line-height:1.5;-webkit-font-smoothing:antialiased;font-size:14.5px;}
+    .wrap{max-width:920px;margin:0 auto;padding:0 24px;}
+
+    .topbar{background:var(--teal);color:#fff;padding:20px 0;}
+    .topbar .row{display:flex;align-items:center;gap:14px;}
+    .topbar img{height:30px;}
+    .topbar .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.16em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:2px;}
+    .topbar h1{font-family:var(--fh);font-weight:800;font-size:20px;margin:0;letter-spacing:-.01em;}
+
+    main{padding:26px 0 60px;}
+    .card{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+    .card-head{padding:18px 22px;border-bottom:1px solid var(--line);}
+    .card-head h2{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--teal);
+      margin:0 0 4px;letter-spacing:-.005em;}
+    .card-head p{margin:0;color:var(--muted);font-size:13px;}
+
+    table.tech{width:100%;border-collapse:collapse;font-size:13.5px;}
+    table.tech thead th{text-align:left;padding:14px 22px 10px;font-family:var(--fh);font-weight:700;
+      font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+      border-bottom:2px solid var(--teal);}
+    table.tech td{padding:14px 22px;border-bottom:1px solid var(--line);vertical-align:middle;}
+    table.tech tbody tr{cursor:pointer;transition:background .1s;}
+    table.tech tbody tr:hover{background:var(--gray);}
+    table.tech tbody tr:last-child td{border-bottom:0;}
+    .tech-name{display:flex;align-items:center;gap:10px;}
+    .avatar{width:34px;height:34px;border-radius:50%;background:var(--teal);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;
+      font-size:12px;flex:0 0 auto;overflow:hidden;}
+    .avatar img{width:100%;height:100%;object-fit:cover;}
+    .tech-name .n{font-weight:600;color:var(--charcoal);}
+    .tech-name .u{display:block;font-size:11.5px;color:var(--muted);}
+    .profile-badge{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.05em;
+      text-transform:uppercase;padding:3px 8px;border-radius:20px;display:inline-block;}
+    .profile-badge.name{background:var(--gray-2);color:var(--muted);}
+    .profile-badge.photo{background:#EAF8F7;color:var(--teal);}
+    .profile-badge.bio{background:var(--teal);color:#fff;}
+    .row-arrow{color:var(--muted);font-size:15px;}
+
+    /* Drawer */
+    .backdrop{position:fixed;inset:0;background:rgba(13,23,22,.44);display:none;z-index:200;}
+    .backdrop.open{display:block;}
+    .drawer{position:fixed;top:0;right:0;bottom:0;width:420px;max-width:92vw;background:#fff;
+      z-index:201;transform:translateX(100%);transition:transform .22s ease;
+      display:flex;flex-direction:column;box-shadow:-20px 0 50px rgba(13,61,62,.22);}
+    .backdrop.open + .drawer, .drawer.open{transform:translateX(0);}
+    .drawer-head{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;
+      align-items:flex-start;justify-content:space-between;gap:14px;background:var(--teal);color:#fff;}
+    .drawer-head .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.14em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:3px;}
+    .drawer-head h3{font-family:var(--fh);font-weight:800;font-size:18px;margin:0;letter-spacing:-.01em;}
+    .drawer-head .sub{font-size:12.5px;color:rgba(255,255,255,.68);margin-top:3px;}
+    .drawer-close{flex:0 0 auto;width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,255,255,.3);
+      background:rgba(255,255,255,.1);color:#fff;font-size:16px;line-height:1;cursor:pointer;}
+    .drawer-body{flex:1 1 auto;overflow-y:auto;padding:22px 24px;}
+    .drawer-foot{padding:16px 24px;border-top:1px solid var(--line);display:flex;
+      justify-content:flex-end;gap:10px;}
+
+    .fsec{margin-bottom:24px;}
+    .flabel{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--muted);margin:0 0 10px;}
+
+    .avatar-row{display:flex;align-items:center;gap:14px;}
+    .avatar-lg{width:64px;height:64px;border-radius:50%;background:var(--teal);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;
+      font-size:20px;flex:0 0 auto;overflow:hidden;}
+    .avatar-lg img{width:100%;height:100%;object-fit:cover;}
+    .avatar-actions button{border:1px solid var(--line);background:#fff;color:var(--teal);
+      border-radius:8px;padding:8px 13px;font-family:var(--fh);font-weight:700;font-size:12px;
+      cursor:pointer;}
+    .avatar-actions button:hover{border-color:var(--aqua);}
+    .avatar-actions .hint{display:block;font-size:11.5px;color:var(--muted);margin-top:6px;}
+
+    .bio-wrap textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 13px;
+      font:inherit;font-size:13.5px;color:var(--charcoal);resize:vertical;min-height:76px;}
+    .bio-wrap textarea:focus{outline:none;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(31,167,168,.12);}
+    .bio-count{text-align:right;font-size:11px;color:var(--muted);margin-top:5px;}
+    .bio-count.warn{color:#A9750C;}
+
+    .vis-row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+      padding:12px 0;border-bottom:1px solid var(--gray);}
+    .vis-row:last-child{border-bottom:0;}
+    .vis-copy .t{font-weight:600;color:var(--charcoal);font-size:13.5px;}
+    .vis-copy .d{font-size:12px;color:var(--muted);margin-top:2px;}
+    .vis-row.locked{opacity:.45;}
+    .vis-row.locked .switch-sm{cursor:not-allowed;}
+    .lock-hint{font-size:11px;color:var(--muted);font-style:italic;}
+
+    .switch-sm{position:relative;width:40px;height:23px;display:inline-block;cursor:pointer;flex:0 0 auto;}
+    .switch-sm input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+    .switch-sm .track{position:absolute;inset:0;background:var(--line);border-radius:14px;transition:background .15s;}
+    .switch-sm .knob{position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;
+      background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s;}
+    .switch-sm input:checked ~ .track{background:var(--aqua);}
+    .switch-sm input:checked ~ .knob{transform:translateX(17px);}
+    .switch-sm input:disabled ~ .track{background:var(--gray-2);}
+
+    /* Live preview — mirrors the real welcome-email tech-intro block */
+    .preview-wrap{background:var(--teal);border-radius:12px;padding:18px 20px;color:#fff;}
+    .preview-wrap .lab{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:12px;}
+    .intro-card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.08);
+      border-radius:10px;padding:12px 14px;}
+    .intro-card .av{width:44px;height:44px;border-radius:50%;background:var(--aqua);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-weight:700;
+      font-size:15px;flex:0 0 auto;overflow:hidden;}
+    .intro-card .av img{width:100%;height:100%;object-fit:cover;}
+    .intro-card .body{min-width:0;}
+    .intro-card .eyebrow-mini{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.08em;
+      text-transform:uppercase;color:var(--aqua-light);margin-bottom:2px;}
+    .intro-card .nm{font-family:var(--fh);font-weight:700;font-size:14.5px;}
+    .intro-card .bio-line{font-size:12px;color:rgba(255,255,255,.72);margin-top:4px;line-height:1.5;}
+
+    .savebar-inline{margin-top:6px;}
+    button.primary{border:0;background:var(--aqua);color:#fff;border-radius:9px;padding:10px 20px;
+      font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;
+      box-shadow:0 6px 16px rgba(31,167,168,.28);}
+    button.ghost{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:9px;
+      padding:10px 18px;font-family:var(--fh);font-weight:700;font-size:13px;cursor:pointer;}
+
+    @media(max-width:640px){
+      .wrap{padding:0 16px;}
+      table.tech thead{display:none;}
+      table.tech tbody tr{display:block;padding:12px 16px;}
+      table.tech td{display:block;padding:2px 0;border-bottom:0;}
+      table.tech tbody tr{border-bottom:1px solid var(--line);}
+      .drawer{width:100%;max-width:100%;}
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar"><div class="wrap row">
+    <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+    <div>
+      <div class="eyebrow">Admin · Users</div>
+      <h1>Technician Profiles</h1>
+    </div>
+  </div></div>
+
+  <main class="wrap">
+    <div class="card">
+      <div class="card-head">
+        <h2>Customer-Facing Profile</h2>
+        <p>Controls what a customer sees in the welcome email's technician introduction — separate from
+          the technician's account roles and availability.</p>
+      </div>
+      <table class="tech">
+        <thead><tr><th>Technician</th><th>Shown to customers as</th><th></th></tr></thead>
+        <tbody id="tech-tbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="backdrop" id="backdrop" onclick="closeDrawer()"></div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-head">
+      <div>
+        <div class="eyebrow">Customer-Facing Profile</div>
+        <h3 id="d-name">—</h3>
+        <div class="sub" id="d-username">—</div>
+      </div>
+      <button type="button" class="drawer-close" onclick="closeDrawer()" aria-label="Close">×</button>
+    </div>
+    <div class="drawer-body">
+
+      <div class="fsec">
+        <div class="flabel">Photo</div>
+        <div class="avatar-row">
+          <div class="avatar-lg" id="d-avatar-lg"></div>
+          <div class="avatar-actions">
+            <button type="button" onclick="markDirty()">Change Photo</button>
+            <span class="hint">Square, at least 200×200px</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fsec bio-wrap">
+        <div class="flabel">Short Bio</div>
+        <textarea id="d-bio" maxlength="160" placeholder="e.g. Been with MCPS since 2023. Specializes in saltwater systems and equipment troubleshooting." oninput="onBioInput()"></textarea>
+        <div class="bio-count" id="bio-count">0 / 160</div>
+      </div>
+
+      <div class="fsec">
+        <div class="flabel">What Customers See</div>
+        <div class="vis-row">
+          <div class="vis-copy"><div class="t">Name</div><div class="d">Always shown — it's the whole point of the introduction.</div></div>
+          <label class="switch-sm"><input type="checkbox" checked disabled><span class="track"></span><span class="knob"></span></label>
+        </div>
+        <div class="vis-row">
+          <div class="vis-copy"><div class="t">Photo</div><div class="d">Shows their profile photo alongside their name.</div></div>
+          <label class="switch-sm"><input type="checkbox" id="vis-photo" onchange="onVisChange()"><span class="track"></span><span class="knob"></span></label>
+        </div>
+        <div class="vis-row" id="vis-bio-row">
+          <div class="vis-copy"><div class="t">Bio</div><div class="d" id="bio-row-hint">Requires photo to be on.</div></div>
+          <label class="switch-sm"><input type="checkbox" id="vis-bio" disabled onchange="onVisChange()"><span class="track"></span><span class="knob"></span></label>
+        </div>
+      </div>
+
+      <div class="fsec">
+        <div class="flabel">Preview — Welcome Email</div>
+        <div class="preview-wrap">
+          <div class="lab">Meet Your Technician</div>
+          <div class="intro-card">
+            <div class="av" id="p-avatar"></div>
+            <div class="body">
+              <div class="eyebrow-mini">Your Technician</div>
+              <div class="nm" id="p-name">—</div>
+              <div class="bio-line" id="p-bio" style="display:none"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="drawer-foot">
+      <button type="button" class="ghost" onclick="closeDrawer()">Cancel</button>
+      <button type="button" class="primary" onclick="saveDrawer()">Save Profile</button>
+    </div>
+  </div>
+
+  <script>
+  const TECHS = [
+    {username:'mau',  name:'Mauricio Rebaza', bio:'', showPhoto:false, showBio:false},
+    {username:'tony', name:'Tony Siller',     bio:'Been with MCPS since day one. Loves talking pool chemistry more than anyone should.', showPhoto:true, showBio:true},
+    {username:'chuy', name:'Chuy Silva',      bio:'', showPhoto:true, showBio:false}
+  ];
+  let editing = null;
+
+  function initials(name){
+    return name.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
+  }
+  function levelLabel(t){
+    if (t.showBio) return {cls:'bio', text:'Name + Photo + Bio'};
+    if (t.showPhoto) return {cls:'photo', text:'Name + Photo'};
+    return {cls:'name', text:'Name Only'};
+  }
+
+  function renderTable(){
+    const tb = document.getElementById('tech-tbody');
+    tb.innerHTML = TECHS.map(t => {
+      const lvl = levelLabel(t);
+      return `<tr onclick="openDrawer('${t.username}')">
+        <td class="tech-name"><div class="avatar">${initials(t.name)}</div>
+          <div><span class="n">${t.name}</span><span class="u">@${t.username}</span></div></td>
+        <td><span class="profile-badge ${lvl.cls}">${lvl.text}</span></td>
+        <td><span class="row-arrow">›</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openDrawer(username){
+    editing = TECHS.find(t => t.username === username);
+    document.getElementById('d-name').textContent = editing.name;
+    document.getElementById('d-username').textContent = '@' + editing.username;
+    document.getElementById('d-avatar-lg').textContent = initials(editing.name);
+    document.getElementById('d-bio').value = editing.bio;
+    document.getElementById('vis-photo').checked = editing.showPhoto;
+    document.getElementById('vis-bio').checked = editing.showBio;
+    onBioInput();
+    onVisChange();
+    document.getElementById('backdrop').classList.add('open');
+    document.getElementById('drawer').classList.add('open');
+  }
+  function closeDrawer(){
+    document.getElementById('backdrop').classList.remove('open');
+    document.getElementById('drawer').classList.remove('open');
+  }
+
+  function onBioInput(){
+    const v = document.getElementById('d-bio').value;
+    const c = document.getElementById('bio-count');
+    c.textContent = v.length + ' / 160';
+    c.classList.toggle('warn', v.length > 140);
+    updatePreview();
+  }
+  function onVisChange(){
+    const photoOn = document.getElementById('vis-photo').checked;
+    const bioToggle = document.getElementById('vis-bio');
+    const bioRow = document.getElementById('vis-bio-row');
+    bioToggle.disabled = !photoOn;
+    if (!photoOn) bioToggle.checked = false;
+    bioRow.classList.toggle('locked', !photoOn);
+    document.getElementById('bio-row-hint').textContent = photoOn
+      ? 'Include their short bio underneath.'
+      : 'Requires photo to be on.';
+    markDirty();
+    updatePreview();
+  }
+
+  function updatePreview(){
+    const name = editing ? editing.name : '—';
+    const bio = document.getElementById('d-bio').value.trim();
+    const showPhoto = document.getElementById('vis-photo').checked;
+    const showBio = document.getElementById('vis-bio').checked;
+    document.getElementById('p-name').textContent = name;
+    document.getElementById('p-avatar').textContent = showPhoto ? initials(name) : '';
+    document.getElementById('p-avatar').style.opacity = showPhoto ? '1' : '.35';
+    const bioEl = document.getElementById('p-bio');
+    if (showBio && bio){
+      bioEl.style.display = 'block';
+      bioEl.textContent = bio;
+    } else {
+      bioEl.style.display = 'none';
+    }
+  }
+
+  function markDirty(){ /* mockup: no persistent dirty-state bar on the drawer, save is explicit */ }
+
+  function saveDrawer(){
+    if (!editing) return;
+    editing.bio = document.getElementById('d-bio').value.trim();
+    editing.showPhoto = document.getElementById('vis-photo').checked;
+    editing.showBio = document.getElementById('vis-bio').checked;
+    renderTable();
+    closeDrawer();
+  }
+
+  renderTable();
+  </script>
+</body>
+</html>

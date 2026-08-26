@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — On My Way Email · 3 mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;}
+  .page-title{max-width:600px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+  .page-sub{max-width:600px;margin:0 auto 12px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+  .page-note{max-width:600px;margin:0 auto 40px;text-align:center;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:12px 18px;color:#3a4645;font-size:12.5px;line-height:1.55;}
+  .page-note b{color:var(--teal);}
+  .variant{max-width:600px;margin:0 auto 56px;}
+  .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;}
+  .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+  .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+  .vlabel .desc{color:#5a6666;font-size:13px;}
+  .subject{max-width:600px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+  .subject b{color:var(--teal);font-family:var(--fh);}
+  .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+  .foot{padding:22px 32px 26px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+  .foot a{color:var(--teal);text-decoration:none;}
+  .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+
+  .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:14px;color:#fff;background:var(--aqua);padding:13px 30px;border-radius:10px;box-shadow:0 8px 20px rgba(31,167,168,.3);}
+  .btn.ghost{background:#fff;color:var(--teal);border:1.5px solid var(--aqua);box-shadow:none;}
+
+  .pin-badge{width:58px;height:58px;border-radius:50%;background:var(--aqua);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;box-shadow:0 8px 20px rgba(31,167,168,.32);}
+  .pin-badge svg{width:26px;height:26px;}
+
+  .detail-strip{background:var(--gray);border-radius:10px;padding:16px 20px;margin:0 0 26px;display:flex;gap:28px;flex-wrap:wrap;}
+  .detail-strip .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .detail-strip .v{font-family:var(--fh);font-weight:700;font-size:14px;color:var(--teal);}
+
+  .tech-row{display:flex;align-items:center;gap:12px;margin:0 0 22px;}
+  .tech-avatar{width:44px;height:44px;border-radius:50%;background:var(--teal);color:#fff;font-family:var(--fh);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .tech-row .who{font-size:13px;color:var(--muted);}
+  .tech-row .who b{display:block;font-family:var(--fh);font-weight:700;font-size:14.5px;color:var(--charcoal);}
+
+  /* ============ VARIANT A — Minimal Heads-Up ============ */
+  .v1{padding:40px 40px 0;text-align:center;}
+  .v1 img{height:36px;margin-bottom:20px;}
+  .v1 h1{font-family:var(--fh);font-weight:700;font-size:22px;color:var(--teal);margin:0 0 10px;}
+  .v1 p.lede{font-size:14.5px;line-height:1.65;color:#3a4645;margin:0 auto 22px;max-width:420px;}
+  .v1 .tech-row{justify-content:center;}
+  .v1 .tech-row .who{text-align:left;}
+  .v1 .detail-strip{text-align:left;justify-content:center;}
+  .v1 .cta{padding:4px 0 34px;}
+  .v1 .cta .btn{margin:4px;}
+
+  /* ============ VARIANT B — Concierge Status ============ */
+  .v2 .top{background:linear-gradient(160deg,var(--teal),var(--teal-2));padding:32px 36px;text-align:center;color:#fff;}
+  .v2 .top img{height:32px;margin-bottom:16px;}
+  .v2 .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(94,214,211,.18);border:1px solid var(--aqua-light);color:var(--aqua-light);font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:6px 14px;border-radius:20px;margin-bottom:14px;}
+  .v2 .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--aqua-light);display:inline-block;animation:pulse 1.8s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .v2 .top h1{font-family:var(--fh);font-weight:700;font-size:24px;margin:0;}
+  .v2 .body{padding:30px 36px 8px;}
+  .v2 .body p.lede{font-size:14.5px;line-height:1.65;color:#3a4645;margin:0 0 22px;}
+  .v2 .cta{text-align:center;padding:4px 0 32px;}
+  .v2 .cta .btn{margin:4px;}
+  .v2 .cta .fine{font-size:12px;color:var(--muted);margin-top:12px;}
+
+  /* ============ VARIANT C — Statement ============ */
+  .v3 .hero{background:var(--teal);color:#fff;padding:44px 40px 36px;text-align:center;position:relative;overflow:hidden;}
+  .v3 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% -20%,rgba(94,214,211,.24),transparent 60%);}
+  .v3 .hero>*{position:relative;}
+  .v3 .hero img{height:56px;margin-bottom:20px;}
+  .v3 .hero .pin-badge{background:var(--aqua-light);}
+  .v3 .hero .pin-badge svg path,.v3 .hero .pin-badge svg circle{fill:var(--teal);}
+  .v3 .hero h1{font-family:var(--fh);font-weight:800;font-size:30px;line-height:1.1;margin:0 0 8px;letter-spacing:-.01em;}
+  .v3 .hero .lede{color:rgba(255,255,255,.78);font-size:14px;max-width:380px;margin:0 auto;}
+  .v3 .strip{background:var(--aqua);color:#fff;padding:16px 40px;text-align:center;}
+  .v3 .strip .v{font-family:var(--fh);font-weight:700;font-size:14.5px;}
+  .v3 .body{padding:32px 40px 34px;text-align:center;}
+  .v3 .body p.lede{font-size:14px;line-height:1.6;color:#3a4645;margin:0 auto;max-width:400px;}
+  .v3 .cta{padding:4px 0 32px;}
+  .v3 .cta .btn{margin:4px;}
+
+  @media(max-width:520px){
+    .v1{padding:30px 24px 0;}
+    .v2 .top,.v2 .body{padding-left:24px;padding-right:24px;}
+    .v3 .hero,.v3 .strip,.v3 .body{padding-left:24px;padding-right:24px;}
+    .v3 .hero h1{font-size:25px;}
+    .detail-strip{gap:18px;}
+  }
+</style>
+</head>
+<body>
+  <div class="page-title">"On My Way" Email — 3 directions</div>
+  <div class="page-sub">A short heads-up the customer receives the moment their technician taps "On My Way" in the portal.</div>
+  <div class="page-note">Today this moment is handled by <b>text message</b> — the portal sends an internal email to Mau/Antonio with a pre-filled SMS link they tap to text the customer. There is no customer-facing email for this yet. These three mockups design that new email as a companion to (or replacement for) the SMS, using the same "on the way" wording already approved in the brand voice guide.</div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT A — Minimal Heads-Up                                 -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">A</span><span class="name">Minimal</span><span class="desc">Quick, glanceable, gets out of the way.</span></div>
+    <div class="subject">Subject: <b>Carlos is on the way to your pool</b></div>
+    <div class="email v1">
+      <img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions">
+      <div class="pin-badge">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s7-7.6 7-12.5A7 7 0 0 0 5 9.5C5 14.4 12 22 12 22z" fill="#fff"/><circle cx="12" cy="9.5" r="2.6" fill="#1FA7A8"/></svg>
+      </div>
+      <h1>We're on the way, Jordan.</h1>
+      <p class="lede">Your technician, Carlos M., is heading to your property now for your scheduled service and should arrive within the next 30 minutes.</p>
+
+      <div class="tech-row">
+        <div class="tech-avatar">C</div>
+        <div class="who">Your technician<b>Carlos M.</b></div>
+      </div>
+
+      <div class="detail-strip">
+        <div><div class="k">Arriving at</div><div class="v">123 Mission Creek Dr</div></div>
+        <div><div class="k">Estimated arrival</div><div class="v">~30 minutes</div></div>
+      </div>
+
+      <div class="cta">
+        <a class="btn ghost" href="#">Call (210) 559-2073</a>
+      </div>
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a></div>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT B — Concierge Status                                 -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">B</span><span class="name">Concierge</span><span class="desc">Live-status feel, teal banner.</span></div>
+    <div class="subject">Subject: <b>Your technician is en route</b></div>
+    <div class="email v2">
+      <div class="top">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="pill">En Route</div>
+        <h1>Carlos is on the way</h1>
+      </div>
+      <div class="body">
+        <p class="lede">Hi Jordan, your technician Carlos M. is on the way for your scheduled service and should arrive within the next 30 minutes. Please let us know if you need anything before they arrive.</p>
+
+        <div class="detail-strip">
+          <div><div class="k">Technician</div><div class="v">Carlos M.</div></div>
+          <div><div class="k">Address</div><div class="v">123 Mission Creek Dr</div></div>
+          <div><div class="k">ETA</div><div class="v">~30 min</div></div>
+        </div>
+
+        <div class="cta">
+          <a class="btn" href="#">Text Us</a>
+          <a class="btn ghost" href="#">Call Us</a>
+          <div class="fine">(210) 559-2073</div>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a></div>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT C — Statement                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">C</span><span class="name">Statement</span><span class="desc">Bold hero moment, confident tone.</span></div>
+    <div class="subject">Subject: <b>We're on our way, Jordan</b></div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="pin-badge">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s7-7.6 7-12.5A7 7 0 0 0 5 9.5C5 14.4 12 22 12 22z"/><circle cx="12" cy="9.5" r="2.6"/></svg>
+        </div>
+        <h1>We're on our way.</h1>
+        <div class="lede">Carlos is heading to 123 Mission Creek Dr and will be arriving soon.</div>
+      </div>
+      <div class="strip"><span class="v">Our technician will be arriving soon</span></div>
+      <div class="body">
+        <div class="tech-row" style="justify-content:center;margin:2px 0 26px">
+          <div class="who" style="text-align:center">Your technician<b>Carlos M.</b></div>
+        </div>
+        <p class="lede">Please let us know if you need anything before they arrive — otherwise, we'll take it from here.</p>
+      </div>
+      <div class="foot"><div class="m">Every pool matters.</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Route drive-time optimization · feature sketch</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+    --gray:#F3F5F6; --charcoal:#222; --muted:rgba(34,34,34,.6); --line:#E4EAEA;
+    --risk:#B3261E; --risk-bg:#FDECEA; --watch:#A9750C; --watch-bg:#FDF4E3;
+    --ok-bg:#E7F6F6;
+    --fh:'Montserrat',sans-serif; --fb:'Open Sans',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1160px;margin:0 auto;}
+
+  .page-kicker{text-align:center;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--aqua);margin-bottom:10px;}
+  .page-title{font-family:var(--fh);font-weight:800;color:var(--teal);font-size:30px;text-align:center;margin:0 0 10px;line-height:1.2;}
+  .page-sub{max-width:660px;margin:0 auto 18px;text-align:center;color:#4a5656;font-size:14.5px;line-height:1.65;}
+  .page-note{max-width:800px;margin:0 auto 46px;background:#fff;border:1px dashed var(--watch);border-radius:10px;padding:16px 24px;color:#3a4645;font-size:12.5px;line-height:1.65;text-align:center;}
+  .page-note b{color:var(--teal);}
+
+  .section{margin:0 0 64px;}
+  .slabel{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 6px;}
+  .slabel .tag{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;flex:0 0 auto;}
+  .slabel .tag.grey{background:#7d8b8b;}
+  .slabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:19px;}
+  .sdesc{color:#5a6666;font-size:13.5px;line-height:1.65;margin:0 0 22px;max-width:790px;}
+  .sdesc code{background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);}
+
+  .browser{width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 52px rgba(13,61,62,.18);}
+  .bchrome{background:#e9eeee;padding:11px 16px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #dbe3e3;}
+  .bchrome i{width:11px;height:11px;border-radius:50%;background:#c9d3d3;display:block;}
+  .bchrome .url{flex:1;background:#fff;border-radius:7px;padding:5px 13px;font-size:11.5px;color:#6a7878;margin-left:8px;}
+
+  .rhead{background:var(--teal);color:#fff;padding:18px 26px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;}
+  .rhead h2{font-family:var(--fh);font-weight:800;font-size:18px;margin:0 0 3px;}
+  .rhead .s{font-size:11.5px;color:rgba(255,255,255,.72);}
+  .rhead .tot{text-align:right;}
+  .rhead .tot .n{font-family:var(--fh);font-weight:800;font-size:22px;color:var(--aqua-light);line-height:1;}
+  .rhead .tot .l{font-size:9.5px;font-family:var(--fh);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-top:4px;}
+  .rbody{background:var(--gray);padding:20px 26px 26px;}
+
+  .daytabs{display:flex;gap:6px;margin:0 0 18px;flex-wrap:wrap;}
+  .dt{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.06em;padding:8px 15px;border-radius:8px;background:#fff;color:var(--muted);border:1px solid var(--line);}
+  .dt.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+
+  /* stop list */
+  .stops{background:#fff;border-radius:12px;overflow:hidden;}
+  .stop{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);}
+  .stop:last-child{border-bottom:none;}
+  .stop .num{width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;font-family:var(--fh);font-weight:700;font-size:11.5px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .stop.office .num{background:var(--muted);}
+  .stop .who{flex:1;min-width:0;}
+  .stop .who b{font-family:var(--fh);font-weight:700;font-size:13.5px;color:var(--teal);display:block;}
+  .stop .who span{font-size:11.5px;color:var(--muted);}
+  .stop .leg{font-family:var(--fh);font-weight:700;font-size:12px;color:var(--muted);white-space:nowrap;text-align:right;}
+  .stop .leg i{display:block;font-style:normal;font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#a3b0b0;margin-top:2px;}
+  .stop.flag{background:var(--watch-bg);}
+  .stop .pin{font-size:11px;font-family:var(--fh);font-weight:700;letter-spacing:.06em;color:var(--watch);background:#fff;border:1px solid #E4D3A8;border-radius:20px;padding:4px 11px;white-space:nowrap;}
+  .stop .pin.set{background:var(--teal);color:#fff;border-color:var(--teal);}
+
+  .sugg{background:var(--ok-bg);border:1.5px solid #B6E3E3;border-radius:12px;padding:16px 20px;margin:14px 0 0;}
+  .sugg .st{font-family:var(--fh);font-weight:800;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#0d6b6c;margin-bottom:9px;}
+  .sugg p{font-size:12.5px;line-height:1.65;color:#3a4645;margin:0 0 13px;}
+  .sugg p b{font-family:var(--fh);color:var(--teal);}
+  .sbtns{display:flex;gap:9px;flex-wrap:wrap;}
+  .sbtn{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:9px 15px;border-radius:8px;border:1.5px solid var(--line);color:var(--muted);background:#fff;}
+  .sbtn.pri{background:var(--aqua);border-color:var(--aqua);color:#fff;}
+
+  .swapviz{display:flex;gap:20px;align-items:center;margin:0 0 13px;flex-wrap:wrap;}
+  .swapcol{flex:1;min-width:180px;background:#fff;border-radius:9px;padding:12px 14px;}
+  .swapcol .t{font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+  .swapcol .r{font-size:12px;color:#3a4645;padding:3px 0;display:flex;justify-content:space-between;}
+  .swapcol .r.mv{color:var(--aqua);font-weight:600;}
+  .swapcol .tt{border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-family:var(--fh);font-weight:700;font-size:12px;color:var(--teal);display:flex;justify-content:space-between;}
+  .swaparrow{font-size:22px;color:var(--aqua);flex:0 0 auto;}
+
+  .banner{background:#fff;border-radius:12px;padding:16px 20px;margin:0 0 16px;display:flex;gap:14px;align-items:flex-start;border-left:4px solid var(--aqua);}
+  .banner .ic{font-size:20px;flex:0 0 auto;}
+  .banner .t{font-family:var(--fh);font-weight:800;font-size:12.5px;color:var(--teal);margin-bottom:4px;}
+  .banner p{margin:0;font-size:12.5px;line-height:1.65;color:#3a4645;}
+  .banner code{background:var(--gray);border-radius:4px;padding:1px 5px;font-size:11.5px;color:var(--teal);font-family:ui-monospace,Menlo,monospace;}
+
+  /* code panel */
+  .codewrap{background:#0f1717;border-radius:14px;overflow:hidden;box-shadow:0 20px 52px rgba(13,61,62,.24);}
+  .codehead{background:#152121;padding:12px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #223030;}
+  .codehead i{width:10px;height:10px;border-radius:50%;background:#334444;display:block;}
+  .codehead .fn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#8fa3a3;margin-left:8px;}
+  .code{padding:20px 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:2;color:#cfe0e0;overflow-x:auto;}
+  .code .ln{color:#4d6363;user-select:none;display:inline-block;width:34px;}
+  .code .kw{color:#7FC4C4;} .code .st{color:#E0A76A;} .code .cm{color:#5b7373;font-style:italic;}
+  .code .good{background:rgba(31,167,168,.16);display:block;margin:0 -22px;padding:0 22px;border-left:3px solid var(--aqua);}
+  .code .note{color:#5ED6D3;font-style:italic;}
+
+  .explain{background:#fff;border-radius:14px;padding:26px 28px;box-shadow:0 10px 30px rgba(13,61,62,.09);}
+  .explain h3{font-family:var(--fh);font-weight:800;font-size:15px;color:var(--teal);margin:0 0 10px;}
+  .explain p{font-size:13.5px;line-height:1.7;color:#3a4645;margin:0 0 14px;}
+  .explain p:last-child{margin-bottom:0;}
+  .explain code{background:var(--gray);border-radius:4px;padding:1px 5px;font-size:12px;color:var(--teal);font-family:ui-monospace,Menlo,monospace;}
+  .verdict{background:var(--watch-bg);border:1px solid #EBD9AE;border-radius:10px;padding:16px 20px;font-size:13px;line-height:1.7;color:#6b5410;margin-top:18px;}
+  .verdict b{font-family:var(--fh);color:#5a4409;}
+  .mathrow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+  .mth{background:var(--gray);border-radius:10px;padding:15px 17px;}
+  .mth .n{font-family:var(--fh);font-weight:800;font-size:22px;color:var(--teal);line-height:1;}
+  .mth .l{font-size:11.5px;color:#3a4645;line-height:1.55;margin-top:7px;}
+
+  .foot{max-width:760px;margin:70px auto 0;text-align:center;color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid #cdd8d8;padding-top:26px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+
+  @media(max-width:820px){ .mathrow{grid-template-columns:1fr;} .rbody,.rhead{padding-left:16px;padding-right:16px;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-kicker">Feature sketch · 4 of 4</div>
+  <h1 class="page-title">Route drive-time optimization</h1>
+  <p class="page-sub">Included for completeness, with an honest caveat: most of this is already running in production today.</p>
+  <div class="page-note"><b>Read this first.</b> When I went looking for what to build here, I found the optimizer already shipped. <b>getRouteData()</b> in <b>appscript/RouteData.js</b> builds a driving-distance context and nearest-neighbor orders every operator's day before the schedule ever reaches the browser. What follows separates what exists from what would actually be new — because the new part is thin.</div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 1 — what exists
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag grey">Screen 1</span><span class="name">What ships today</span></div>
+    <p class="sdesc">This is not a proposal. This is the code path that runs every time anyone opens the schedule.</p>
+
+    <div class="codewrap">
+      <div class="codehead"><i></i><i></i><i></i><span class="fn">appscript/RouteData.js — line 196</span></div>
+      <div class="code"><span class="ln">196</span>  <span class="kw">const</span> distCtx = buildDistanceContext_();       <span class="cm">// cached driving minutes</span>
+<span class="ln">197</span>
+<span class="good"><span class="ln">198</span>  <span class="kw">const</span> pools = orderDayPoolsByOperator_(dayPools[dayName], distCtx);
+<span class="ln">199</span>                 <span class="note">↑ groups by operator, nearest-neighbor orders each group</span></span></div>
+    </div>
+
+    <div class="explain" style="margin-top:20px">
+      <h3>Which means the following already works</h3>
+      <p><code>orderStopsNearestNeighbor_</code> in <code>appscript/RouteOrdering.js</code> walks each technician's day picking the closest unvisited stop, using real driving minutes from <code>drivingMinutes_</code>, backed by the <code>Geocode_Cache</code> sheet so it isn't re-geocoding on every load. Stops are already sequenced sensibly before the technician ever sees them.</p>
+      <p style="margin-bottom:0">The honest gap is not the ordering. It is that <b>nobody can see the number</b> — there is no drive time anywhere in the interface, so there is no way to tell a good route day from a bad one, and no way to notice when a new pool has made someone's Tuesday twenty minutes worse.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 2 — drive time visible
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 2</span><span class="name">Make the drive time visible</span></div>
+    <p class="sdesc">The cheapest genuine improvement here. The numbers already exist in <code>distCtx</code> — they are computed and then thrown away. Surfacing them costs almost nothing and turns route quality into something you can actually manage.</p>
+
+    <div class="browser">
+      <div class="bchrome"><i></i><i></i><i></i><span class="url">mcps-log.vercel.app/#technicianhub/schedule</span></div>
+      <div>
+        <div class="rhead">
+          <div><h2>Monday · Tony Siller</h2><div class="s">6 stops · Weekly Full Service</div></div>
+          <div class="tot"><div class="n">1h 12m</div><div class="l">Driving today</div></div>
+        </div>
+        <div class="rbody">
+          <div class="daytabs">
+            <span class="dt on">Mon · 1h 12m</span><span class="dt">Tue · 58m</span><span class="dt">Wed · 1h 34m</span><span class="dt">Thu · 1h 06m</span><span class="dt">Fri · 47m</span><span class="dt">Sat · 22m</span>
+          </div>
+
+          <div class="stops">
+            <div class="stop office">
+              <div class="num">▲</div>
+              <div class="who"><b>Shop</b><span>4640 S Flores Rd, Elmendorf</span></div>
+              <div class="leg">—<i>Start</i></div>
+            </div>
+            <div class="stop">
+              <div class="num">1</div>
+              <div class="who"><b>Pompa · MCPS-0001</b><span>18538 Shadow Canyon Dr, Von Ormy</span></div>
+              <div class="leg">18 min<i>Drive</i></div>
+            </div>
+            <div class="stop">
+              <div class="num">2</div>
+              <div class="who"><b>Robbins · MCPS-0018</b><span>2144 County Road 419, Elmendorf</span></div>
+              <div class="leg">9 min<i>Drive</i></div>
+            </div>
+            <div class="stop">
+              <div class="num">3</div>
+              <div class="who"><b>Murray · MCPS-0025</b><span>452 CR 257, Elmendorf</span></div>
+              <div class="leg">14 min<i>Drive</i></div>
+            </div>
+            <div class="stop">
+              <div class="num">4</div>
+              <div class="who"><b>Saldaña · MCPS-0024</b><span>306 Sligo St, San Antonio</span></div>
+              <div class="leg">11 min<i>Drive</i></div>
+            </div>
+            <div class="stop">
+              <div class="num">5</div>
+              <div class="who"><b>Casarez · MCPS-0020</b><span>25 Inwood Ridge Dr, San Antonio</span></div>
+              <div class="leg">7 min<i>Drive</i></div>
+            </div>
+            <div class="stop">
+              <div class="num">6</div>
+              <div class="who"><b>Moczygemba · MCPS-0023</b><span>108 Elk Run, San Antonio</span></div>
+              <div class="leg">13 min<i>Drive</i></div>
+            </div>
+          </div>
+
+          <div class="banner" style="margin-top:16px">
+            <span class="ic">📊</span>
+            <div><div class="t">Why this is worth having</div>
+            <p>Right now a day that quietly grew from 50 minutes of driving to 95 looks identical in the interface. With the number visible you can see it happen, and you can see which new pool caused it — which is the input to deciding whether a customer on the far side of town is worth taking on at the quoted price.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 3 — 2-opt
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 3</span><span class="name">2-opt refinement, offered rather than applied</span></div>
+    <p class="sdesc">Nearest-neighbor is fast but it makes a classic mistake: it takes the closest next stop and paints itself into a corner, then has to drive back across everything. A 2-opt pass looks for pairs of stops that could be swapped to shorten the total. Typical gain over nearest-neighbor is 5–12%.</p>
+
+    <div class="browser">
+      <div class="bchrome"><i></i><i></i><i></i><span class="url">mcps-log.vercel.app/#technicianhub/schedule</span></div>
+      <div>
+        <div class="rhead">
+          <div><h2>Wednesday · Chuy Silva</h2><div class="s">7 stops · mixed service types</div></div>
+          <div class="tot"><div class="n">1h 34m</div><div class="l">Driving today</div></div>
+        </div>
+        <div class="rbody">
+          <div class="stops">
+            <div class="stop office"><div class="num">▲</div><div class="who"><b>Shop</b><span>4640 S Flores Rd</span></div><div class="leg">—<i>Start</i></div></div>
+            <div class="stop"><div class="num">1</div><div class="who"><b>Libby · MCPS-0007</b><span>27121 Highland Crest</span></div><div class="leg">22 min<i>Drive</i></div></div>
+            <div class="stop"><div class="num">2</div><div class="who"><b>Menezes · MCPS-0026</b><span>4202 Coriander</span></div><div class="leg">8 min<i>Drive</i></div></div>
+            <div class="stop" style="background:#fbfdfd"><div class="num">3</div><div class="who"><b>Bullock · MCPS-0017</b><span>24102 Shelton Spring</span></div><div class="leg" style="color:var(--watch)">19 min<i>Drive</i></div></div>
+            <div class="stop" style="background:#fbfdfd"><div class="num">4</div><div class="who"><b>Lopez · MCPS-0021</b><span>307 Parkside Dr</span></div><div class="leg" style="color:var(--watch)">17 min<i>Drive</i></div></div>
+            <div class="stop"><div class="num">5</div><div class="who"><b>Chapa · MCPS-0026</b><span>1090 North Trail</span></div><div class="leg">11 min<i>Drive</i></div></div>
+            <div class="stop"><div class="num">6</div><div class="who"><b>Startz · MCPS-0019</b><span>3431 County Rd 136</span></div><div class="leg">17 min<i>Drive</i></div></div>
+          </div>
+
+          <div class="sugg">
+            <div class="st">✦ A shorter order is available</div>
+            <div class="swapviz">
+              <div class="swapcol">
+                <div class="t">Current</div>
+                <div class="r"><span>3 · Bullock</span><span>19 min</span></div>
+                <div class="r"><span>4 · Lopez</span><span>17 min</span></div>
+                <div class="r"><span>5 · Chapa</span><span>11 min</span></div>
+                <div class="tt"><span>Day total</span><span>1h 34m</span></div>
+              </div>
+              <div class="swaparrow">→</div>
+              <div class="swapcol">
+                <div class="t">Suggested</div>
+                <div class="r mv"><span>3 · Lopez</span><span>14 min</span></div>
+                <div class="r mv"><span>4 · Bullock</span><span>12 min</span></div>
+                <div class="r"><span>5 · Chapa</span><span>15 min</span></div>
+                <div class="tt" style="color:#0d6b6c"><span>Day total</span><span>1h 28m</span></div>
+              </div>
+            </div>
+            <p>Swapping stops <b>3 and 4</b> saves <b>6 minutes</b> on Wednesday — about <b>5 hours a year</b> on this day alone.</p>
+            <div class="sbtns"><span class="sbtn pri">Apply to this week</span><span class="sbtn">Apply every Wednesday</span><span class="sbtn">Dismiss</span></div>
+          </div>
+
+          <div class="banner" style="margin-top:16px">
+            <span class="ic">🙋</span>
+            <div><div class="t">Offered, never forced</div>
+            <p>This is the part that decides whether the feature succeeds. Technicians build a rhythm — which house has the dog, which gate sticks, which customer is always home at ten. Silently reshuffling their day loses trust fast, and they will route around the software rather than with it. So the optimizer proposes, shows its arithmetic, and waits.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SCREEN 4 — pins
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag">Screen 4</span><span class="name">Pinned stops — the human constraints</span></div>
+    <p class="sdesc">The reason pure distance optimization disappoints in real service businesses: distance is not the only constraint, and the others are not in the data. Pins let a human write them down once so the optimizer has to respect them.</p>
+
+    <div class="browser">
+      <div class="bchrome"><i></i><i></i><i></i><span class="url">mcps-log.vercel.app/#technicianhub/schedule</span></div>
+      <div>
+        <div class="rhead">
+          <div><h2>Thursday · Tony Siller</h2><div class="s">5 stops · 2 pinned</div></div>
+          <div class="tot"><div class="n">1h 06m</div><div class="l">Driving today</div></div>
+        </div>
+        <div class="rbody">
+          <div class="stops">
+            <div class="stop office"><div class="num">▲</div><div class="who"><b>Shop</b><span>4640 S Flores Rd</span></div><div class="leg">—<i>Start</i></div></div>
+            <div class="stop flag">
+              <div class="num">1</div>
+              <div class="who"><b>Saldaña · MCPS-0024</b><span>306 Sligo St · gate code 4471 · customer asks for mornings</span></div>
+              <div class="leg">14 min<i>Drive</i></div>
+              <div class="pin set">📌 Pinned first</div>
+            </div>
+            <div class="stop"><div class="num">2</div><div class="who"><b>Pompa · MCPS-0001</b><span>18538 Shadow Canyon Dr</span></div><div class="leg">16 min<i>Drive</i></div></div>
+            <div class="stop"><div class="num">3</div><div class="who"><b>Valdez · MCPS-0009</b><span>13355 Leeward Lane</span></div><div class="leg">12 min<i>Drive</i></div></div>
+            <div class="stop"><div class="num">4</div><div class="who"><b>Mendoza · MCPS-0012</b><span>22088 Mathis Rd</span></div><div class="leg">15 min<i>Drive</i></div></div>
+            <div class="stop flag">
+              <div class="num">5</div>
+              <div class="who"><b>Moczygemba · MCPS-0023</b><span>108 Elk Run · dog is out before 4pm</span></div>
+              <div class="leg">9 min<i>Drive</i></div>
+              <div class="pin set">📌 Pinned last</div>
+            </div>
+          </div>
+
+          <div class="banner" style="margin-top:16px">
+            <span class="ic">📌</span>
+            <div><div class="t">What a pin is</div>
+            <p>A stop locked to a position — first, last, or before/after a given time — with a one-line reason attached. The optimizer orders everything around the pins instead of ignoring the constraint and being overruled by hand every week. The reason is visible to whoever covers the route when the regular technician is out, which is when this knowledge normally gets lost.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       VERDICT
+  ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="slabel"><span class="tag grey">Assessment</span><span class="name">The honest case for and against</span></div>
+    <p class="sdesc">You asked for the best feature. This one is in the deck because you asked to see all four, not because I would pick it.</p>
+
+    <div class="explain">
+      <h3>The arithmetic</h3>
+      <div class="mathrow">
+        <div class="mth"><div class="n">~6%</div><div class="l">Realistic 2-opt gain over the nearest-neighbor ordering already running</div></div>
+        <div class="mth"><div class="n">~20m</div><div class="l">Saved across a full week at current route sizes</div></div>
+        <div class="mth"><div class="n">1–1.5d</div><div class="l">Build time, mostly in the accept/dismiss interface rather than the algorithm</div></div>
+      </div>
+
+      <p style="margin-top:20px">Twenty minutes a week is real, and it compounds. But it is a smaller number than it looks, because the expensive part of the ordering problem was already solved. The optimizer is not being added — it is being tuned.</p>
+
+      <p>Meanwhile sketch 1 addresses green pools, which cost a re-clean, a chemical burn, an apology and sometimes the customer. Sketch 2 addresses photos being deleted right now, today, on visits already completed. Both are larger numbers than twenty minutes of driving.</p>
+
+      <div class="verdict"><b>Recommendation: don't build this yet — with one exception.</b> The drive-time readout from Screen 2 is worth pulling out on its own. The numbers are already computed and discarded; surfacing them is a couple of hours, and it gives you a way to see route quality degrading and to price distant pools correctly. That's the piece with genuine leverage. The 2-opt pass and pinning can wait until the routes are big enough that 6% is a number worth chasing.</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="m">Mission Custom Pool Solutions</div>
+    Feature sketch 4 of 4 · Route drive-time optimization<br>
+    Estimated build: 1–1.5 days · refinement of a shipped feature · lowest expected return of the four<br><br>
+    <span style="font-family:var(--fh);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--teal)">Every pool matters.</span>
+  </div>
+
+</div>
+</body>
+</html>

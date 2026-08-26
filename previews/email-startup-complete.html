@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Startup Complete Email · 3 mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;}
+  .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+  .page-sub{max-width:640px;margin:0 auto 12px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+  .page-note{max-width:640px;margin:0 auto 40px;text-align:center;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:12px 18px;color:#3a4645;font-size:12.5px;line-height:1.55;}
+  .page-note b{color:var(--teal);}
+  .variant{max-width:640px;margin:0 auto 56px;}
+  .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;}
+  .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+  .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+  .vlabel .desc{color:#5a6666;font-size:13px;}
+  .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+  .subject b{color:var(--teal);font-family:var(--fh);}
+  .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+  /* ---- shared components ---- */
+  .foot{padding:24px 32px 30px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+  .foot a{color:var(--teal);text-decoration:none;}
+  .mantra{font-family:var(--fh);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;}
+
+  .eyebrow{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--aqua);display:inline-block;flex:0 0 auto;}
+
+  .check-list{list-style:none;margin:0 0 28px;padding:0;}
+  .check-list li{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;color:#3a4645;}
+  .check-list li:last-child{border-bottom:0;}
+  .check-list .ico{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--aqua);display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .check-list .ico svg{width:11px;height:11px;}
+
+  .did-list{list-style:none;margin:0;padding:0;}
+  .did-list li{display:flex;align-items:flex-start;gap:10px;padding:8px 0;font-size:13.5px;color:#3a4645;}
+  .did-list .ico{flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .did-list .ico svg{width:10px;height:10px;}
+
+  .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:14px;color:#fff;background:var(--aqua);padding:13px 30px;border-radius:10px;box-shadow:0 8px 20px rgba(31,167,168,.3);}
+  .btn.ghost{background:#fff;color:var(--teal);border:1.5px solid var(--aqua);box-shadow:none;}
+  .fine{font-size:12px;color:var(--muted);margin-top:12px;}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(94,214,211,.18);border:1px solid var(--aqua-light);color:var(--aqua-light);font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:6px 14px;border-radius:20px;margin-bottom:14px;}
+
+  /* ============ VARIANT A — Editorial ============ */
+  .v1{padding:44px 44px 0;text-align:center;}
+  .v1 img{height:44px;margin-bottom:18px;}
+  .v1 .mantra{color:var(--aqua);margin-bottom:24px;font-size:10px;letter-spacing:.3em;}
+  .v1 h1{font-family:var(--fh);font-weight:700;font-size:26px;color:var(--teal);margin:0 0 14px;}
+  .v1 .lede{font-size:15px;line-height:1.65;color:#3a4645;margin:0 auto 30px;max-width:440px;}
+  .v1 .body-left{text-align:left;}
+  .v1 .lede2{font-size:14px;line-height:1.6;color:#5a6666;margin:0 0 30px;}
+  .v1 .cta{text-align:center;padding:4px 0 40px;}
+
+  /* ============ VARIANT B — Concierge ============ */
+  .v2 .top{background:linear-gradient(160deg,var(--teal),var(--teal-2));padding:38px 36px 34px;text-align:center;color:#fff;}
+  .v2 .top img{height:34px;margin-bottom:16px;}
+  .v2 .top h1{font-family:var(--fh);font-weight:700;font-size:25px;margin:0;}
+  .v2 .body{padding:32px 36px 8px;}
+  .v2 .body .lede{font-size:14.5px;line-height:1.65;color:#3a4645;margin:0 0 26px;}
+  .v2 .feature-card{background:var(--gray);border-radius:12px;padding:18px 20px;margin:0 0 28px;}
+  .v2 .cta{text-align:center;padding:4px 0 32px;}
+
+  /* ============ VARIANT C — Statement ============ */
+  .v3 .hero{background:var(--teal);color:#fff;padding:46px 40px 36px;text-align:center;position:relative;overflow:hidden;}
+  .v3 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% -20%,rgba(94,214,211,.24),transparent 60%);}
+  .v3 .hero>*{position:relative;}
+  .v3 .hero img{height:40px;margin-bottom:20px;}
+  .v3 .hero .mantra{color:var(--aqua-light);margin-bottom:14px;font-size:10px;letter-spacing:.28em;}
+  .v3 .hero h1{font-family:var(--fh);font-weight:800;font-size:33px;line-height:1.08;margin:0 0 10px;letter-spacing:-.01em;}
+  .v3 .hero .lede{color:rgba(255,255,255,.8);font-size:15px;max-width:400px;margin:0 auto;}
+  .v3 .strip{background:var(--aqua);color:#fff;padding:16px 40px;display:flex;justify-content:center;gap:14px 44px;flex-wrap:wrap;}
+  .v3 .strip .k{font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.85);margin-bottom:3px;}
+  .v3 .strip .v{font-family:var(--fh);font-weight:700;font-size:14px;}
+  .v3 .body{padding:34px 40px 8px;}
+  .v3 .cta{text-align:center;padding:6px 0 34px;}
+  .v3 .close{font-size:13.5px;color:#5a6666;line-height:1.6;margin:20px 0 30px;text-align:center;}
+
+  @media(max-width:560px){
+    .v1{padding:34px 24px 0;}
+    .v2 .top,.v2 .body{padding-left:24px;padding-right:24px;}
+    .v3 .hero,.v3 .strip,.v3 .body{padding-left:24px;padding-right:24px;}
+    .v3 .hero h1{font-size:27px;}
+    .v3 .strip{gap:12px 26px;}
+  }
+</style>
+</head>
+<body>
+  <div class="page-title">Startup Complete Email — 3 directions</div>
+  <div class="page-sub">Sent once a pool startup is finished. Thanks the customer, recaps what was done, and points them toward weekly service.</div>
+  <div class="page-note">The <b>"Weekly Quote" button links to a placeholder (<code>href="#"</code>)</b>. There's no public self-serve form for this today — <code>/startup-request</code> only covers the initial startup quote, and converting to weekly is currently an admin action inside the CRM. Before sending, wire the button to a real destination: a short public form, or simply a <code>mailto:</code>/call-to-action to the sales inbox.</div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT A — Editorial                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">A</span><span class="name">Editorial</span><span class="desc">Calm, personal, checklist-led.</span></div>
+    <div class="subject">Subject: <b>Your pool startup is complete, Jordan</b></div>
+    <div class="email v1">
+      <img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions">
+      <div class="mantra">Every Pool Matters</div>
+      <h1>Your pool is ready, Jordan.</h1>
+      <p class="lede">Thank you for choosing Mission Custom Pool Solutions for your pool startup. We drained, refilled, balanced, and inspected your pool — it's ready to enjoy.</p>
+
+      <div class="body-left">
+        <div class="eyebrow">What We Completed</div>
+        <ul class="check-list">
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Full startup clean, brush &amp; vacuum</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Equipment inspected &amp; tested — pump, filter, heater</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Water balanced &amp; chemically corrected</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Pool ready for regular use</li>
+        </ul>
+
+        <div class="eyebrow">Keep It This Clean, Every Week</div>
+        <p class="lede2">Water chemistry drifts fast in San Antonio heat. Weekly service keeps your pool balanced, keeps equipment running, and catches small problems before they become expensive ones.</p>
+      </div>
+
+      <div class="cta">
+        <a class="btn" href="#">Request My Weekly Quote</a>
+        <div class="fine">No obligation — we'll follow up with pricing for your pool within 1–2 business days.</div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT B — Concierge                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">B</span><span class="name">Concierge</span><span class="desc">Status banner, benefit-led.</span></div>
+    <div class="subject">Subject: <b>Startup's done. Here's how we keep it that way.</b></div>
+    <div class="email v2">
+      <div class="top">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="pill">✓ Startup Complete</div>
+        <h1>Your pool is ready, Jordan</h1>
+      </div>
+      <div class="body">
+        <p class="lede">Your pool has been started, balanced, and inspected. If you'd like it to stay this way, weekly service keeps it consistently clean, balanced, and protected — all year.</p>
+
+        <div class="eyebrow">Weekly Service Includes</div>
+        <div class="feature-card">
+          <ul class="did-list">
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Water tested &amp; balanced every visit</li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Equipment checked for early warning signs</li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Skimmed, brushed &amp; vacuumed weekly</li>
+          </ul>
+        </div>
+
+        <div class="cta">
+          <a class="btn" href="#">Get My Weekly Quote</a>
+          <div class="fine">Takes 60 seconds. We'll follow up with pricing for your pool.</div>
+        </div>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+
+  <!-- =========================================================== -->
+  <!-- VARIANT C — Statement                                        -->
+  <!-- =========================================================== -->
+  <div class="variant">
+    <div class="vlabel"><span class="tag">C</span><span class="name">Statement</span><span class="desc">Bold hero, confident close.</span></div>
+    <div class="subject">Subject: <b>Startup: handled. Let's keep it that way.</b></div>
+    <div class="email v3">
+      <div class="hero">
+        <img src="../assets/mission-icon-transparent.png" alt="MCPS">
+        <div class="mantra">Mission Custom Pool Solutions</div>
+        <h1>Startup: handled.</h1>
+        <div class="lede">Jordan, your pool has been started, balanced, and inspected — it's ready to enjoy.</div>
+      </div>
+      <div class="strip">
+        <div><div class="k">Status</div><div class="v">Complete ✓</div></div>
+        <div><div class="k">Recommended</div><div class="v">Weekly Service</div></div>
+      </div>
+      <div class="body">
+        <div class="eyebrow">Why Weekly Service</div>
+        <ul class="check-list">
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Consistent balance, all year</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Problems caught early, not after they're expensive</li>
+          <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>One less thing on your list</li>
+        </ul>
+        <div class="cta">
+          <a class="btn" href="#">Request a Weekly Quote</a>
+        </div>
+        <p class="close">Thank you for trusting Mission Custom Pool Solutions with your pool startup.</p>
+      </div>
+      <div class="foot"><div class="m">Every Pool Matters</div>
+        Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+        <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+    </div>
+  </div>
+</body>
+</html>
