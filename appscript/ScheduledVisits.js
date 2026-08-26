@@ -9,8 +9,8 @@
 //
 // visit_type enum:
 //   startup_day_1 | startup_day_2 | startup_day_3
-//   first_month_week_2 | first_month_week_3 | first_month_week_4
-//   weekly_service | monthly_service | one_time
+//   first_month_week_1..26
+//   temporary_week_1..26 | weekly_service | monthly_service | one_time
 //
 // status enum:
 //   scheduled | completed | skipped | cancelled

@@ -535,18 +535,21 @@ function recordScheduleNotified_(poolId, day, operator) {
     if (typeof ensureColumn_ === 'function') {
       ensureColumn_(sheet, 'schedule_notified_day');
       ensureColumn_(sheet, 'schedule_notified_operator');
+      ensureColumn_(sheet, 'schedule_notified_at');
     }
     var data = sheet.getDataRange().getValues();
     var h = data[0].map(function (x) { return String(x || '').trim().toLowerCase().replace(/ /g, '_'); });
     var pidCol = h.indexOf('pool_id');
     var dayCol = h.indexOf('schedule_notified_day');
     var opCol = h.indexOf('schedule_notified_operator');
+    var atCol = h.indexOf('schedule_notified_at');
     if (pidCol === -1 || dayCol === -1 || opCol === -1) return;
 
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][pidCol] || '').trim().toUpperCase() !== String(poolId).trim().toUpperCase()) continue;
       sheet.getRange(i + 1, dayCol + 1).setValue(day);
       sheet.getRange(i + 1, opCol + 1).setValue(operator || '');
+      if (atCol !== -1) sheet.getRange(i + 1, atCol + 1).setValue(new Date().toISOString());
       return;
     }
   } catch (e) {
@@ -565,6 +568,7 @@ function getScheduleNotified_(poolId) {
     var pidCol = h.indexOf('pool_id');
     var dayCol = h.indexOf('schedule_notified_day');
     var opCol = h.indexOf('schedule_notified_operator');
+    var atCol = h.indexOf('schedule_notified_at');
     if (pidCol === -1 || dayCol === -1) return null;
 
     for (var i = 1; i < data.length; i++) {
@@ -574,6 +578,7 @@ function getScheduleNotified_(poolId) {
       return {
         day: day,
         operator: opCol !== -1 ? String(data[i][opCol] || '').trim() : '',
+        notified_at: atCol !== -1 ? String(data[i][atCol] || '').trim() : '',
         rowNum: i + 1,
         email: aaFieldFromRow_(data, h, i, 'email'),
         firstName: aaFieldFromRow_(data, h, i, 'first_name'),

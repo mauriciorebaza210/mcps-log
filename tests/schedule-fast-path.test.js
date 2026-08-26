@@ -50,6 +50,18 @@ t('Schedule endpoint reads route-specific Sheets tabs',
   /Route_Distance_Cache/.test(endpoint) &&
   /Job_Completions/.test(endpoint));
 
+// The day-lock concept is gone end to end. Nothing writes Route_Lock,
+// autoRecalculateRoutes() is a no-op, and the "Route locked — no changes will be
+// made" banner disabled nothing while claiming it did.
+t('Schedule endpoint sends no lock state',
+  !/lockedDays/.test(endpoint) &&
+  !/locked_days/.test(endpoint) &&
+  !/'Route_Lock'/.test(endpoint) &&
+  !/lockRows/.test(endpoint));
+
+t('Schedule page has no lock UI',
+  !/locked/.test(routes));
+
 t('Schedule endpoint returns route data with scheduled visits already merged',
   /scheduled_visits_merged:\s*true/.test(endpoint) &&
   /mergeScheduledVisits\(dayPools,\s*visits,\s*weekStart\)/.test(endpoint) &&

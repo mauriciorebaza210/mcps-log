@@ -256,7 +256,7 @@ function ensureWeeklyOverridesSheet_(ss) {
     sheet.appendRow(["week_start", "pool_id", "override_day", "override_operator", "created_at"]);
     sheet.setFrozenRows(1);
   }
-  const wanted = ["week_start", "pool_id", "override_day", "override_operator", "created_at"];
+  const wanted = ["week_start", "pool_id", "override_day", "override_operator", "created_at", "batch_id"];
   const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0]
     .map(h => String(h || "").trim().toLowerCase().replace(/ /g, "_"));
   wanted.forEach(name => {
@@ -618,12 +618,11 @@ function markStartupPending(token, poolId) {
   }
 }
 
-// ─── Schedule First Month Visits (4 weekly one-time Scheduled_Visits) ────────
+// ─── Schedule temporary weekly visits for a specific pool ────────────────────
 //
-// Creates first_month_week_1 through _4 rows in Scheduled_Visits starting on
-// week1Monday (the Monday of the first service week after startup ends).
-// dayOfWeek specifies which day within each week the visit falls.
-function scheduleFirstMonthVisits(token, poolId, week1Monday, dayOfWeek, assignedTechnician) {
+// Creates an explicit Scheduled_Visits series for N weeks. This powers the old
+// "first month" workflow too, but it is not hardcoded to four visits anymore.
+function scheduleTemporaryWeeklyVisits(token, poolId, week1Monday, dayOfWeek, assignedTechnician, visitCount, options) {
   const auth = validateToken(token);
   if (!auth.ok) return { ok: false, error: auth.error };
   if (!hasRole(auth, "admin") && !hasRole(auth, "manager")) return { ok: false, error: "Not authorized" };
@@ -632,55 +631,88 @@ function scheduleFirstMonthVisits(token, poolId, week1Monday, dayOfWeek, assigne
   if (!dayOfWeek)   return { ok: false, error: "day_of_week required" };
 
   try {
-    // Get customer name from Routes sheet
+    options = options || {};
+    const count = Math.max(1, Math.min(26, Math.floor(Number(visitCount) || 4)));
+    const startWeek = getWeekStartForDate_(week1Monday);
+    const day = String(dayOfWeek || "").trim();
+    const validDays = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    if (!startWeek) return { ok: false, error: "week_1_monday must be a valid date" };
+    if (validDays.indexOf(day) === -1) return { ok: false, error: "day_of_week must be Monday-Saturday" };
+
     const ss = SpreadsheetApp.openById(RD_ROUTES_SS_ID);
-    const routeSheet = ss.getSheetByName("Routes");
-    let customerName = "";
-    if (routeSheet && routeSheet.getLastRow() > 1) {
-      const rData = routeSheet.getDataRange().getValues();
-      const rH = rData[0].map(h => String(h || "").trim().toLowerCase().replace(/ /g, "_"));
-      const rPid = rH.indexOf("pool_id"), rName = rH.indexOf("customer_name");
-      for (let i = 1; i < rData.length; i++) {
-        if (rPid !== -1 && String(rData[i][rPid] || "").trim() === String(poolId).trim()) {
-          customerName = rName !== -1 ? String(rData[i][rName] || "").trim() : "";
-          break;
+    const routeInfo = getRouteInfoByPoolId_(ss, poolId);
+    const customerName = routeInfo.customer_name || "";
+    const serviceType = routeInfo.service || "Weekly Full Service";
+    const tech = String(assignedTechnician || "").trim();
+    const creator = auth.user && auth.user.username ? auth.user.username : "unknown";
+    const reason = String(options.reason || "temporary_weekly").trim();
+    const typePrefix = String(options.visit_type_prefix || "temporary_week_").trim();
+    const noteKey = "temporary_weekly:" + startWeek + ":" + count;
+
+    let cancelled = 0;
+    if (options.replace_existing !== false) {
+      const svSheet = ensureScheduledVisitsSheet_();
+      if (svSheet && svSheet.getLastRow() >= 2) {
+        const data = svSheet.getDataRange().getValues();
+        const h = data[0].map(col => String(col || "").trim().toLowerCase().replace(/ /g, "_"));
+        const pidCol = h.indexOf("pool_id");
+        const vtCol = h.indexOf("visit_type");
+        const stCol = h.indexOf("status");
+        const sdCol = h.indexOf("scheduled_date");
+        for (let i = 1; i < data.length; i++) {
+          const pid = String(pidCol !== -1 ? data[i][pidCol] : "").trim();
+          const vt = String(vtCol !== -1 ? data[i][vtCol] : "").trim();
+          const st = String(stCol !== -1 ? data[i][stCol] : "").trim().toLowerCase();
+          const isTemporary = vt.indexOf("temporary_week_") === 0 || vt.indexOf("first_month_week_") === 0;
+          if (pid === String(poolId).trim() && isTemporary && (!st || st === "scheduled")) {
+            if (stCol !== -1) svSheet.getRange(i + 1, stCol + 1).setValue("cancelled");
+            if (sdCol !== -1 && typeof bustScheduledVisitRouteCache_ === "function") {
+              bustScheduledVisitRouteCache_(data[i][sdCol]);
+            }
+            cancelled++;
+          }
         }
       }
     }
 
-    // Compute one date per week for 4 weeks
-    const visits = [1, 2, 3, 4].map(function(n) {
-      const weekMonday = addDaysToDate_(week1Monday, (n - 1) * 7);
-      return { visit_type: "first_month_week_" + n, scheduled_date: getDayDate_(dayOfWeek, weekMonday) };
-    });
-
-    const tech    = String(assignedTechnician || "").trim();
-    const creator = auth.user && auth.user.username ? auth.user.username : "unknown";
+    const visits = [];
+    for (let n = 1; n <= count; n++) {
+      const weekMonday = addDaysToDate_(startWeek, (n - 1) * 7);
+      visits.push({ visit_type: typePrefix + n, scheduled_date: getDayDate_(day, weekMonday), week_start: weekMonday });
+    }
 
     for (const v of visits) {
       if (!v.scheduled_date) {
-        Logger.log("scheduleFirstMonthVisits: could not compute date for " + v.visit_type);
+        Logger.log("scheduleTemporaryWeeklyVisits: could not compute date for " + v.visit_type);
         continue;
       }
       createScheduledVisit_({
         pool_id:             poolId,
         customer_name:       customerName,
-        service_type:        "Weekly Full Service",
+        service_type:        serviceType,
         visit_type:          v.visit_type,
         scheduled_date:      v.scheduled_date,
         assigned_technician: tech,
         status:              "scheduled",
-        notes:               "First month sponsored visit",
+        notes:               noteKey + " " + reason,
         created_by:          creator
       });
     }
 
-    Logger.log("scheduleFirstMonthVisits: " + poolId + " → 4 visits from " + (visits[0].scheduled_date || "?"));
-    return { ok: true, visits: visits };
+    Logger.log("scheduleTemporaryWeeklyVisits: " + poolId + " → " + count + " visits from " + (visits[0].scheduled_date || "?"));
+    return { ok: true, visits: visits, visit_count: count, cancelled_count: cancelled, start_week: startWeek };
   } catch(e) {
-    Logger.log("scheduleFirstMonthVisits error: " + e);
+    Logger.log("scheduleTemporaryWeeklyVisits error: " + e);
     return { ok: false, error: String(e) };
   }
+}
+
+function scheduleFirstMonthVisits(token, poolId, week1Monday, dayOfWeek, assignedTechnician, visitCount) {
+  return scheduleTemporaryWeeklyVisits(token, poolId, week1Monday, dayOfWeek, assignedTechnician, visitCount || 4, {
+    reason: "first_month_sponsored",
+    visit_type_prefix: "first_month_week_",
+    replace_existing: true
+  });
 }
 
 // ─── Convert startup → Weekly Full Service (recurring route) ─────────────────
@@ -1198,23 +1230,24 @@ function getCalendarData(token, month, year, operatorFilter) {
   const ss      = SpreadsheetApp.openById(RD_ROUTES_SS_ID);
   const sheet   = ss.getSheetByName("Routes");
   const rdData  = sheet.getDataRange().getValues();
-  let weekliesTemplate = { 'Monday':[], 'Tuesday':[], 'Wednesday':[], 'Thursday':[], 'Friday':[], 'Saturday':[], 'Sunday':[] };
+  const routeRows = [];
 
   if (rdData.length > 1) {
     const headers = rdData[0].map(h => String(h).trim().toLowerCase().replace(/ /g,"_"));
     const col     = (name) => headers.indexOf(name);
     
     for (let i = 1; i < rdData.length; i++) {
-        const row = rdData[i];
-        const day = String(row[col("day_of_week")] || "").trim();
-        if (!weekliesTemplate[day]) continue;
+      const row = rdData[i];
+      const day = String(row[col("day_of_week")] || "").trim();
+      if (["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].indexOf(day) === -1) continue;
+      const poolId = String(row[col("pool_id")] || "").trim();
+      if (!poolId) continue;
 
-        const opRowVal = String(row[col("operator")] || "").trim();
-        const matchesFilter = !operatorFilter || operatorFilter === 'all' || opRowVal.toLowerCase() === operatorFilter.toLowerCase();
-        if (!matchesFilter) continue;
-
-        weekliesTemplate[day].push({
-        pool_id:       row[col("pool_id")],
+      routeRows.push({
+        raw:           row,
+        col:           col,
+        base_day:      day,
+        pool_id:       poolId,
         customer_name: row[col("customer_name")],
         address:       row[col("address")],
         city:          row[col("city")],
@@ -1222,10 +1255,11 @@ function getCalendarData(token, month, year, operatorFilter) {
         maps_url:      row[col("maps_link")],
         lat:           row[col("lat")],
         lng:           row[col("lng")],
-        operator:      opRowVal,
+        operator:      String(row[col("operator")] || "").trim(),
         pinned:        String(row[col("pinned")] || "").toUpperCase() === "TRUE",
+        monthly_week:  col("monthly_week") !== -1 ? String(row[col("monthly_week")] || "").trim() : "",
         type:          "Weekly"
-        });
+      });
     }
   }
 
@@ -1294,14 +1328,81 @@ function getCalendarData(token, month, year, operatorFilter) {
   const daysArray = [];
   let current = new Date(calStart);
   
+  // Scheduled_Visits, bucketed by date. The week board merges these (see
+  // _mergeScheduledVisits_ in routes.js) but the month view never read them, so
+  // startups, first-month/temporary series and one-off G2C visits were invisible
+  // here — the two views disagreed about the same schedule.
+  const visitsByDate = {};
+  try {
+    const svSheet = ss.getSheetByName("Scheduled_Visits");
+    if (svSheet && svSheet.getLastRow() > 1) {
+      const svData = svSheet.getDataRange().getValues();
+      const svH = svData[0].map(h => String(h).trim().toLowerCase().replace(/ /g, "_"));
+      const svCol = (name) => svH.indexOf(name);
+      for (let i = 1; i < svData.length; i++) {
+        const row = svData[i];
+        const status = String(row[svCol("status")] || "").trim().toLowerCase();
+        if (status && status !== "scheduled") continue;   // hide cancelled/completed/skipped
+        const rawDate = row[svCol("scheduled_date")];
+        const dateStr = rawDate instanceof Date
+          ? Utilities.formatDate(rawDate, RD_TZ, "yyyy-MM-dd")
+          : String(rawDate || "").trim().slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+        const tech = String(row[svCol("assigned_technician")] || "").trim();
+        if (operatorFilter && operatorFilter !== 'all' && tech.toLowerCase() !== operatorFilter.toLowerCase()) continue;
+        if (!visitsByDate[dateStr]) visitsByDate[dateStr] = [];
+        visitsByDate[dateStr].push({
+          scheduled_visit_id: String(row[svCol("scheduled_visit_id")] || ""),
+          pool_id:            String(row[svCol("pool_id")] || ""),
+          customer_name:      String(row[svCol("customer_name")] || ""),
+          service:            String(row[svCol("service_type")] || ""),
+          visit_type:         String(row[svCol("visit_type")] || ""),
+          operator:           tech,
+          notes:              svCol("notes") !== -1 ? String(row[svCol("notes")] || "") : ""
+        });
+      }
+    }
+  } catch (svErr) {
+    // A visits problem must never blank the calendar.
+    Logger.log("getCalendarData: Scheduled_Visits read failed (non-blocking): " + svErr);
+  }
+
   const weekdayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   while(current <= calEnd) {
       const dStr = Utilities.formatDate(current, RD_TZ, "yyyy-MM-dd");
       const dMonth = current.getMonth() + 1;
       const wDay = weekdayNames[current.getDay()];
-      
-      const dayWeeklies = weekliesTemplate[wDay] || [];
+      const weekStart = getWeekStartForDate_(dStr);
+      const overrides = getWeeklyOverrides_(weekStart);
+      const dayWeeklies = routeRows.reduce((list, r) => {
+        if (!isPoolVisibleForWeek_(r.raw, r.col, weekStart)) return list;
+        const ov = overrides[r.pool_id] || {};
+        const effectiveDay = ov.day || r.base_day;
+        const effectiveOperator = ov.operator || r.operator;
+        if (effectiveDay !== wDay) return list;
+        const matchesFilter = !operatorFilter || operatorFilter === 'all' || effectiveOperator.toLowerCase() === operatorFilter.toLowerCase();
+        if (!matchesFilter) return list;
+        if (String(r.service || "").toLowerCase().includes("monthly")) {
+          if (!r.monthly_week) return list;
+          if (!monthlyMatchesWeek_(effectiveDay, r.monthly_week, weekStart)) return list;
+        }
+        list.push({
+          pool_id:       r.pool_id,
+          customer_name: r.customer_name,
+          address:       r.address,
+          city:          r.city,
+          service:       r.service,
+          maps_url:      r.maps_url,
+          lat:           r.lat,
+          lng:           r.lng,
+          operator:      effectiveOperator,
+          pinned:        r.pinned,
+          type:          r.type,
+          week_override: effectiveDay !== r.base_day || effectiveOperator !== r.operator
+        });
+        return list;
+      }, []);
       const dayAdHocs = adHocEvents.filter(e => e.dateStr === dStr);
       
       daysArray.push({
@@ -1309,7 +1410,8 @@ function getCalendarData(token, month, year, operatorFilter) {
          dayNum: current.getDate(),
          isCurrentMonth: (dMonth === month),
          weeklies: dayWeeklies,
-         adhocs: dayAdHocs
+         adhocs: dayAdHocs,
+         visits: visitsByDate[dStr] || []
       });
       
       current.setDate(current.getDate() + 1);

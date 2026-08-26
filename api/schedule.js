@@ -83,10 +83,6 @@ function todayIso() {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
-function todayHour() {
-  return Number(centralParts().hour || 0);
-}
-
 function weekdayName(iso) {
   const parsed = parseDateIso(iso);
   if (!parsed) return '';
@@ -421,27 +417,6 @@ function buildMapsUrl(pools) {
   return `https://www.google.com/maps/dir/${encodeURIComponent(OFFICE_ADDR)}/${
     stops.map(stop => encodeURIComponent(stop)).join('/')
   }/${encodeURIComponent(OFFICE_ADDR)}`;
-}
-
-function lockedDays(lockRows, weekStart) {
-  const today = todayIso();
-  const currentHour = todayHour();
-  const manual = new Set();
-
-  (lockRows || []).forEach(row => {
-    const rowWeek = parseDateIso(row.week_start) || clean(row.week_start);
-    const day = clean(row.day);
-    if (rowWeek === weekStart && WEEKDAYS.includes(day)) manual.add(day);
-  });
-
-  WEEKDAYS.forEach(day => {
-    const date = dayDate(day, weekStart);
-    if (!date) return;
-    if (date < today) manual.add(day);
-    if (date === today && currentHour >= 6) manual.add(day);
-  });
-
-  return manual;
 }
 
 function buildCompletionsByDate(rows, weekStart) {

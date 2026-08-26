@@ -704,9 +704,18 @@ function renderMapCalendar() {
   _calData.forEach((day, idx) => {
     let pillsHtml = '';
 
-    // Summarize weeklies
+    // Summarize weeklies. Pools moved by a weekly override get their own count so
+    // a temporarily-shuffled day is visibly different from a normal one.
     if (day.weeklies && day.weeklies.length > 0) {
+      const moved = day.weeklies.filter(w => w.week_override).length;
       pillsHtml += `<div class="cal-pill weekly">${day.weeklies.length} Weeklies</div>`;
+      if (moved) pillsHtml += `<div class="cal-pill moved" title="Moved by a weekly override">${moved} moved</div>`;
+    }
+
+    // One-time work from Scheduled_Visits: startups, first-month/temporary
+    // series, G2C. The week board has always shown these; the month view now does too.
+    if (day.visits && day.visits.length > 0) {
+      pillsHtml += `<div class="cal-pill visit">${day.visits.length} ${day.visits.length === 1 ? 'Visit' : 'Visits'}</div>`;
     }
 
     // Adhocs (already filtered softly by backend for technicians, though we enforce admin only on adHoc sheet)
@@ -733,6 +742,25 @@ function renderMapCalendar() {
   document.getElementById('cal-detail-card').style.display = 'none';
 }
 
+// Scheduled_Visits visit_type → something a human reads. The enum is open-ended
+// (startup_day_N, first_month_week_N, temporary_week_N, weekly_override, …), so
+// unknown values fall back to a de-underscored version rather than vanishing.
+function _visitTypeLabel_(visitType) {
+  const t = String(visitType || '').trim().toLowerCase();
+  if (!t) return 'Visit';
+  let m = t.match(/^startup_day_(\d+)$/);
+  if (m) return 'Startup day ' + m[1];
+  m = t.match(/^first_month_week_(\d+)$/);
+  if (m) return 'First month wk ' + m[1];
+  m = t.match(/^temporary_week_(\d+)$/);
+  if (m) return 'Temporary wk ' + m[1];
+  if (t === 'weekly_override') return 'Moved this week';
+  if (t === 'weekly_service') return 'Weekly';
+  if (t === 'monthly_service') return 'Monthly';
+  if (t === 'one_time') return 'One-time';
+  return t.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+}
+
 function showCalDayDetails(idx) {
   const day = _calData[idx];
   if (!day) return;
@@ -741,9 +769,26 @@ function showCalDayDetails(idx) {
 
   let html = `<div style="font-family:'Oswald',sans-serif;font-size:1.1rem;color:var(--teal);border-bottom:1px solid var(--border);padding-bottom:0.5rem;margin-bottom:1rem;">Details for ${day.date}</div>`;
 
-  if ((!day.weeklies || !day.weeklies.length) && (!day.adhocs || !day.adhocs.length)) {
+  if ((!day.weeklies || !day.weeklies.length) && (!day.adhocs || !day.adhocs.length) &&
+      (!day.visits || !day.visits.length)) {
     html += `<div style="color:var(--muted);font-size:0.9rem;">No services scheduled.</div>`;
   } else {
+    // Scheduled visits first — they are the exceptions, and the reason someone
+    // opened this day.
+    if (day.visits && day.visits.length > 0) {
+      html += `<div style="font-weight:600;margin-bottom:0.5rem;font-size:0.85rem;color:var(--muted);text-transform:uppercase;">Scheduled Visits (${day.visits.length})</div>`;
+      day.visits.forEach(v => {
+        html += `<div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface);">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+             <span style="font-weight:600;font-size:0.9rem;">${escHtml(v.customer_name || v.pool_id)}</span>
+             <span class="cal-pill visit">${escHtml(_visitTypeLabel_(v.visit_type))}</span>
+          </div>
+          <div style="font-size:0.8rem;color:var(--muted);margin-top:0.25rem;">
+            👤 Op: ${escHtml(v.operator || 'Unassigned')}${v.service ? ' · ' + escHtml(v.service) : ''}
+          </div>
+        </div>`;
+      });
+    }
     // Adhocs First
     if (day.adhocs && day.adhocs.length > 0) {
       html += `<div style="font-weight:600;margin-bottom:0.5rem;font-size:0.85rem;color:var(--muted);text-transform:uppercase;">Special Services & Proposals</div>`;
@@ -772,9 +817,9 @@ function showCalDayDetails(idx) {
       html += `<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(250px, 1fr));gap:0.5rem;">`;
       day.weeklies.forEach(w => {
         html += `<div style="padding:0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.85rem;">
-            <div style="font-weight:600;">${w.customer_name || w.pool_id}</div>
-            <div style="color:var(--muted);font-size:0.75rem;">${w.address}, ${w.city}</div>
-            <div style="color:var(--teal-mid);font-size:0.75rem;margin-top:0.2rem;font-weight:600;">Op: ${w.operator || 'Unassigned'}</div>
+            <div style="font-weight:600;">${escHtml(w.customer_name || w.pool_id)}${w.week_override ? ' <span class="cal-pill moved" title="Moved for this week only">moved</span>' : ''}</div>
+            <div style="color:var(--muted);font-size:0.75rem;">${escHtml([w.address, w.city].filter(Boolean).join(', '))}</div>
+            <div style="color:var(--teal-mid);font-size:0.75rem;margin-top:0.2rem;font-weight:600;">Op: ${escHtml(w.operator || 'Unassigned')}</div>
          </div>`;
       });
       html += `</div>`;
@@ -1221,13 +1266,12 @@ function renderRoutePage() {
     const doneCount = isAdmin()
       ? realPools.filter((p, i) => _isPoolCompleted_(serverDone, p, i)).length
       : 0;
-    const locked = d.locked;
     const _dp = parseDateStr_(d.date);
     const _dObj = _dp ? new Date(_dp.y, _dp.m - 1, _dp.d) : dayDateFromWeekStart_(d.day);
     const dateStr = _dObj
       ? _dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : d.day.slice(0, 3);
-    return `<div class="day-tab${isToday ? ' today' : ''}${locked ? ' locked' : ''}" id="tab-${d.day}" onclick="selectDay('${d.day}')">
+    return `<div class="day-tab${isToday ? ' today' : ''}" id="tab-${d.day}" onclick="selectDay('${d.day}')">
       <span class="dt-day">${d.day.slice(0, 3)}</span>
       <span class="dt-date">${dateStr}</span>
       <span class="dt-weather" id="dtw-${d.day}">--</span>
@@ -1292,7 +1336,6 @@ function renderDayCard(dayData) {
 
   const today = _routeData.today;
   const isToday = dayData.day === today;
-  const locked = dayData.locked;
   const pools = dayData.pools || [];
   const _ddp = parseDateStr_(dayData.date);
   const _ddObj = _ddp ? new Date(_ddp.y, _ddp.m - 1, _ddp.d) : dayDateFromWeekStart_(dayData.day);
@@ -1326,7 +1369,7 @@ function renderDayCard(dayData) {
   const allDone = totalCount > 0 && doneCount === totalCount;
 
   // Header
-  html += `<div class="rdc-header${locked ? ' locked-day' : ''}">
+  html += `<div class="rdc-header">
     <div class="rdc-header-main">
       <div class="rdc-day-name">
         ${dateStr} <span class="rdc-weather-chip" id="rdc-w-${dayData.day}">${weatherHtml || '<i style="font-style:normal;opacity:.6">--°</i>'}</span>
@@ -1334,7 +1377,6 @@ function renderDayCard(dayData) {
     </div>
     <div class="rdc-badges">
       ${isToday ? '<span class="rdc-badge today-badge">Today</span>' : ''}
-      ${locked ? '<span class="rdc-badge locked">Locked 🔒</span>' : ''}
       ${totalCount > 0 ? `<span class="rdc-progress-badge${allDone ? ' all-done' : ''}" id="rdc-progress-badge">${doneCount}/${totalCount} Logged</span>` : ''}
       <button class="pin-all-btn" onclick="refreshRouteCompletions()" title="Re-check submitted service logs">Refresh</button><span id="route-completion-status" style="font-size:.75rem;opacity:0;transition:opacity .2s"></span>
       ${isAdmin() ? '<button class="pin-all-btn" onclick="pinAllDay(\'' + dayData.day + '\')" title="Pin all pools on this day">📌 Pin All</button>' : ''}
@@ -1348,14 +1390,6 @@ function renderDayCard(dayData) {
     html += '<div class="route-empty" style="padding:2.5rem 1rem"><div class="route-empty-icon">😎</div><div class="route-empty-text">No pools scheduled for this day. Enjoy the break!</div></div>';
     card.innerHTML = html;
     return;
-  }
-
-  // Locked notice
-  if (locked) {
-    html += `<div class="locked-notice">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      Route locked — no changes will be made to today's schedule. See you next week!
-    </div>`;
   }
 
   // Maps launch buttons
@@ -1948,6 +1982,19 @@ function getSvcLabel_(svc) {
 // ROUTE MANAGEMENT (Admin portal controls)
 // ══════════════════════════════════════════════════════════════════════════════
 
+function pasUpdateSchedulingSections_(isStartup) {
+  const wrap = document.getElementById('pas-startup-actions');
+  const reschedule = document.getElementById('pas-reschedule-section');
+  const tech = document.getElementById('pas-startup-tech-section');
+  const recurring = document.getElementById('pas-recurring-section');
+  const temp = document.getElementById('pas-fm-section');
+  if (wrap) wrap.style.display = 'block';
+  if (reschedule) reschedule.style.display = isStartup ? '' : 'none';
+  if (tech) tech.style.display = isStartup ? '' : 'none';
+  if (recurring) recurring.style.display = isStartup ? '' : 'none';
+  if (temp) temp.style.display = '';
+}
+
 function openPoolAction(poolId, day, operator, pinned) {
   if (!isAdmin()) return;
   const pool = findPool_(poolId);
@@ -2004,9 +2051,9 @@ function openPoolAction(poolId, day, operator, pinned) {
   pasSetScope('permanent');
   // Startup span preview
   _updateStartupSpanPreview_();
-  // Startup actions section
-  const startupActionsEl = document.getElementById('pas-startup-actions');
-  if (startupActionsEl) startupActionsEl.style.display = isStartup ? 'block' : 'none';
+  // Visit scheduling section: temporary weekly visits are available to any pool;
+  // startup-only controls stay hidden for regular recurring pools.
+  pasUpdateSchedulingSections_(isStartup);
   // Show
   document.getElementById('pas-backdrop').classList.add('open');
   document.getElementById('pas-sheet').classList.add('open');
@@ -2039,7 +2086,7 @@ function closePoolAction() {
   // Reset first-month picker
   const fmBtn = document.getElementById('pas-fm-btn');
   const fmPicker = document.getElementById('pas-fm-picker');
-  if (fmBtn) { fmBtn.style.display = ''; fmBtn.textContent = '📅 Sponsor first month — schedule 4 visits'; fmBtn.style.background = '#eff6ff'; fmBtn.style.color = '#1d4ed8'; fmBtn.disabled = false; }
+  if (fmBtn) { fmBtn.style.display = ''; fmBtn.textContent = '📅 Schedule temporary weekly visits'; fmBtn.style.background = '#eff6ff'; fmBtn.style.color = '#1d4ed8'; fmBtn.disabled = false; }
   if (fmPicker) fmPicker.style.display = 'none';
   pasSetScope('permanent');
 }
@@ -2216,8 +2263,7 @@ function openPlacePool(poolId) {
   updatePasPin_(true);
   pasSetScope('permanent');
   _updateStartupSpanPreview_();
-  const startupActionsEl = document.getElementById('pas-startup-actions');
-  if (startupActionsEl) startupActionsEl.style.display = isStartup ? 'block' : 'none';
+  pasUpdateSchedulingSections_(isStartup);
   document.getElementById('pas-backdrop').classList.add('open');
   document.getElementById('pas-sheet').classList.add('open');
 }
@@ -2450,18 +2496,26 @@ function _calcFirstMonthWeek1_(startupStartDate) {
   } catch(e) { return ''; }
 }
 
-// Returns Monday (yyyy-MM-dd) of week 5 — first recurring week after first month.
-function _firstMonthWeek5Monday_(startupStartDate) {
+// Returns Monday (yyyy-MM-dd) after the temporary visit span.
+function _tempVisitsEndMonday_(startupStartDate, weekCount) {
   const w1 = _calcFirstMonthWeek1_(startupStartDate);
   if (!w1) return '';
   const [y, m, d] = w1.split('-').map(Number);
-  const w5 = new Date(y, m - 1, d + 28);
+  const w5 = new Date(y, m - 1, d + Math.max(1, Number(weekCount) || 4) * 7);
   const pad = n => String(n).padStart(2, '0');
   return `${w5.getFullYear()}-${pad(w5.getMonth() + 1)}-${pad(w5.getDate())}`;
 }
 
-// Returns array of 4 display strings like "Thu May 28".
-function _previewFmDates_(week1Monday, dayOfWeek) {
+function _pasTempWeeks_() {
+  const input = document.getElementById('pas-fm-weeks-input');
+  const n = Math.max(1, Math.min(26, Math.floor(Number(input && input.value) || (_pasState && _pasState._fmWeeks) || 4)));
+  if (input && String(input.value) !== String(n)) input.value = String(n);
+  if (_pasState) _pasState._fmWeeks = n;
+  return n;
+}
+
+// Returns display strings like "Thu May 28" for the requested span.
+function _previewFmDates_(week1Monday, dayOfWeek, weekCount) {
   const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const dayIdx = DAYS.indexOf(dayOfWeek);
   if (dayIdx === -1 || !week1Monday) return [];
@@ -2469,7 +2523,8 @@ function _previewFmDates_(week1Monday, dayOfWeek) {
     const [y, m, d] = week1Monday.split('-').map(Number);
     const base = new Date(y, m - 1, d + dayIdx);
     const out = [];
-    for (let i = 0; i < 4; i++) {
+    const count = Math.max(1, Math.min(26, Number(weekCount) || 4));
+    for (let i = 0; i < count; i++) {
       const dt = new Date(base);
       dt.setDate(dt.getDate() + i * 7);
       out.push(dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
@@ -2484,7 +2539,8 @@ function _updateFmPreview_() {
   const week1Input = document.getElementById('pas-fm-week1-input');
   const week1 = (week1Input && week1Input.value) ? week1Input.value : _calcFirstMonthWeek1_(_pasState.startup_start_date);
   const day = _pasState._fmDay;
-  const dates = week1 && day ? _previewFmDates_(week1, day) : [];
+  const count = _pasTempWeeks_();
+  const dates = week1 && day ? _previewFmDates_(week1, day, count) : [];
   if (!dates.length) { preview.innerHTML = ''; return; }
   preview.innerHTML = dates.map((dt, i) =>
     `<span style="white-space:nowrap">Wk ${i + 1}: <strong>${dt}</strong></span>`
@@ -2506,8 +2562,10 @@ function openFirstMonthPanel() {
   const week1Input = document.getElementById('pas-fm-week1-input');
   if (week1Input) {
     const computed = _calcFirstMonthWeek1_(_pasState.startup_start_date);
-    week1Input.value = computed || '';
+    week1Input.value = computed || (_routeData && _routeData.week_start) || '';
   }
+  const weeksInput = document.getElementById('pas-fm-weeks-input');
+  if (weeksInput) weeksInput.value = String(_pasState._fmWeeks || 4);
 
   document.getElementById('pas-fm-day-grid').innerHTML =
     ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(d =>
@@ -2554,30 +2612,32 @@ function confirmFirstMonth() {
   const week1Input = document.getElementById('pas-fm-week1-input');
   const week1Monday = (week1Input && week1Input.value) ? week1Input.value
     : _calcFirstMonthWeek1_(_pasState.startup_start_date);
-  if (!week1Monday) { alert('Please enter the first visit week start date (Monday).'); return; }
+  if (!week1Monday) { alert('Please enter the first visit week start date.'); return; }
 
+  const visitCount = _pasTempWeeks_();
   const tech = (document.getElementById('pas-fm-tech-select') || {}).value || '';
   const btn  = document.getElementById('pas-fm-confirm-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Scheduling…'; }
 
-  api({ secret: SEC, action: 'schedule_first_month_visits', token: _s.token,
+  api({ secret: SEC, action: 'schedule_temporary_weekly_visits', token: _s.token,
         pool_id: _pasState.pool_id, week_1_monday: week1Monday,
-        day_of_week: day, assigned_technician: tech })
+        day_of_week: day, assigned_technician: tech,
+        visit_count: visitCount, reason: 'temporary_weekly', replace_existing: true })
     .then(res => {
-      if (btn) { btn.disabled = false; btn.textContent = 'Schedule 4 visits'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Schedule visits'; }
       if (res.ok) {
         const fmPicker = document.getElementById('pas-fm-picker');
         const fmBtn    = document.getElementById('pas-fm-btn');
         if (fmPicker) fmPicker.style.display = 'none';
         if (fmBtn) {
-          fmBtn.textContent = '✓ First month visits scheduled';
+          fmBtn.textContent = '✓ ' + (res.visit_count || visitCount) + ' visits scheduled';
           fmBtn.style.background = '#dbeafe'; fmBtn.style.color = '#1e40af';
           fmBtn.disabled = true;
         }
       } else { alert('Error: ' + (res.error || 'Unknown')); }
     })
     .catch(e => {
-      if (btn) { btn.disabled = false; btn.textContent = 'Schedule 4 visits'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Schedule visits'; }
       alert('Network error: ' + e.message);
     });
 }
@@ -2629,16 +2689,16 @@ function confirmConvertToWeekly() {
   const newDay = _pasState._convertDay;
   if (!newDay) { alert('Please select the weekly service day first.'); return; }
 
-  // If "after first month" chosen, push service_start_date 4 weeks out
+  // If "after temp visits" chosen, push service_start_date past that span.
   let serviceStartDate = '';
   if (_pasState._recurringStart === 'after_fm') {
-    // Use the week-1 date input if available (set when FM panel was opened)
+    const visitCount = _pasTempWeeks_();
     const week1Input = document.getElementById('pas-fm-week1-input');
     const week1 = (week1Input && week1Input.value) ? week1Input.value
       : _calcFirstMonthWeek1_(_pasState.startup_start_date);
     if (week1) {
       const [y, m, d] = week1.split('-').map(Number);
-      const w5 = new Date(y, m - 1, d + 28);
+      const w5 = new Date(y, m - 1, d + visitCount * 7);
       const pad = n => String(n).padStart(2, '0');
       serviceStartDate = `${w5.getFullYear()}-${pad(w5.getMonth() + 1)}-${pad(w5.getDate())}`;
     }

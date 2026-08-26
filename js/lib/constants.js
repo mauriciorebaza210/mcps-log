@@ -39,14 +39,14 @@ const PAGE_META = {
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
   contracts:'Contracts', action_queue:'Action Queue',
   onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues',
-  comms:'Communications'
+  comms:'Communications', route_planner:'Route Planner'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
 const PAGE_ICONS = {
   home:'🏠', jobs:'🧰', live_map:'🛟', service_log:'📝', inventory:'📦',
   quotes:'📄', crm:'📊', training:'🎓', admin:'🔒', onboarding:'📋', financial_hub:'💰',
-  comms:'📣'
+  comms:'📣', route_planner:'🗓️'
 };
 
 // ── Sidebar SVG icon strings (16×16, stroke-based Heroicons) ─────────────────
@@ -150,6 +150,7 @@ const SIDEBAR_GROUPS = [
     children: [
       { page:'jobs',        label:'Jobs',                  icon:SVG_CLIP     },
       { page:'live_map',    label:'Schedule',              icon:SVG_CALENDAR },
+      { page:'route_planner', label:'Route Planner',       icon:SVG_CALENDAR },
       { page:'live_map',    label:'My Jobs',               icon:SVG_CHART, hubTab:'myjobs',              id:'sb-child-myjobs' },
       { page:'live_map',    label:'Training',              icon:SVG_PLAY,  hubTab:'training',            id:'sb-child-training' },
       { page:'live_map',    label:'Startup Checklists',    icon:SVG_CLIP,  hubTab:'startup_checklists',  id:'sb-child-startup_checklists', adminOnly:true },
@@ -188,8 +189,8 @@ const ROLE_PAGES = {
   // role lacks — office would get an inbox whose every button silently did nothing.
   // 'contracts' is admin/manager only for the same reason the GAS route is:
   // executed agreements carry pricing, signer IPs and signature images.
-  manager:['home','crm','comms','live_map','service_log','inventory','quotes','financial_hub','alerts','action_queue','contracts'],
-  admin:['home','crm','comms','live_map','service_log','inventory','quotes','admin','financial_hub','alerts','action_queue','contracts'],
+  manager:['home','crm','comms','route_planner','live_map','service_log','inventory','quotes','financial_hub','alerts','action_queue','contracts'],
+  admin:['home','crm','comms','route_planner','live_map','service_log','inventory','quotes','admin','financial_hub','alerts','action_queue','contracts'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];
