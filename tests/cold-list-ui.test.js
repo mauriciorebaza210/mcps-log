@@ -42,6 +42,7 @@ const EXPORTS = `
   isCurated: () => _commsIsCurated(),
   audiencesHtml: (a, s) => _commsAudiencesHtml(a, s),
   pacingNote: c => _commsPacingNote(c),
+  performanceHtml: r => _commsPerformanceHtml(r),
   setWindowOpen: v => { _commsWindowOpen = v; },
   tab: () => _commsTab
 };`;
@@ -237,6 +238,62 @@ console.log('\nA paced campaign explains why it is not finished');
     api.pacingNote(C({ sent_count: 500, sent_today: 500 })) === '');
   t('a single remaining day is not described in days',
     !/more day/.test(api.pacingNote(C({ sendable_count: 150, sent_count: 100, sent_today: 100 }))));
+}
+
+
+console.log('\nThe performance number carries its own caveat');
+{
+  const { api } = buildUI();
+  const REPORT = {
+    ok: true,
+    totals: { revenue: 4200, signings: 3, signings_outside_window: 1 },
+    model: { basis: 'last-touch', window_days: 30, join: 'email',
+             scope: 'marketing and announcement campaigns only',
+             caveat: 'Influenced, not incremental — there is no holdout group.' },
+    campaigns: [
+      { campaign_id: 'C1', name: 'Spring reactivation', attributable: true, sent: 100,
+        clicked: 12, click_rate: 12, bounced: 2, bounce_rate: 2, quotes_after: 5,
+        signings: 3, revenue: 4200 },
+      { campaign_id: 'C2', name: 'Day change notice', attributable: false, sent: 40,
+        clicked: 0, click_rate: 0, bounced: 8, bounce_rate: 20, quotes_after: 0,
+        signings: 0, revenue: 0 },
+      { campaign_id: 'C3', name: 'Never sent', attributable: true, sent: 0,
+        clicked: 0, click_rate: 0, bounced: 0, bounce_rate: 0, quotes_after: 0,
+        signings: 0, revenue: 0 }
+    ]
+  };
+  const html = api.performanceHtml(REPORT);
+
+  t('the revenue headline renders', /\$4,200/.test(html));
+  t('click rate is shown', /12 clicked \(12%\)/.test(html));
+  t('quotes raised after the send are shown', /5 quotes raised after/.test(html));
+
+  // The caveat is the difference between a useful figure and a vanity metric.
+  t('the attribution basis is printed next to the number', /last-touch/.test(html));
+  t('so is the window', /30-day window/.test(html));
+  t('and the honest limitation', /not incremental/.test(html));
+  t('opens are explained as deliberately absent', /Apple Mail/.test(html));
+
+  // Operational mail must be visibly excluded, not silently zeroed.
+  t('an uncredited campaign is labelled', /not credited/.test(html));
+  // A 20% bounce rate is the number that decides whether the domain stays healthy.
+  t('a high bounce rate is flagged', /comms-tag err">8 bounced \(20%\)/.test(html), html.slice(0,0));
+  t('a low bounce rate is not flagged', /<span class="">2 bounced \(2%\)/.test(html));
+
+  t('a never-sent campaign is not listed as a result', !/Never sent/.test(html));
+  t('signings that missed the window are surfaced', /signed too late to credit/.test(html));
+
+  const empty = api.performanceHtml({ ok: true, totals: {}, model: {}, campaigns: [] });
+  t('an empty report renders without crashing', /Nothing has been sent yet/.test(empty));
+  t('and shows a zero rather than a blank', /\$0/.test(empty));
+
+  // Campaign names come from user input.
+  const evil = api.performanceHtml({ ok: true, totals: {}, model: {},
+    campaigns: [{ campaign_id: 'X', name: '<img src=x onerror=alert(1)>', attributable: true,
+                  sent: 1, clicked: 0, click_rate: 0, bounced: 0, bounce_rate: 0,
+                  quotes_after: 0, signings: 0, revenue: 0 }] });
+  t('a hostile campaign name cannot inject markup',
+    !/<img src=x/.test(evil) && /&lt;img/.test(evil));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -30,15 +30,10 @@ var COMMS_SENDER_TIMEOUT_TAG = 'sender_script';
 // The signature covers the EXACT transmitted body and travels in the query
 // string, so neither side has to agree on a canonical field order — the raw
 // string is the message.
-function commsHmacHex_(secret, message) {
-  var raw = Utilities.computeHmacSha256Signature(String(message), String(secret));
-  var out = '';
-  for (var i = 0; i < raw.length; i++) {
-    var b = raw[i] < 0 ? raw[i] + 256 : raw[i];
-    out += (b < 16 ? '0' : '') + b.toString(16);
-  }
-  return out;
-}
+// commsHmacHex_ lives in Comms.js. It is shared with click-link signing, and
+// Comms.js must not depend on this file — that direction is what made a clasp
+// push able to take campaign sending offline. Senders extends comms, not the
+// other way round.
 
 // ─── Registry ────────────────────────────────────────────────────────────────
 // One row per staff member who may send. A person with no active row cannot

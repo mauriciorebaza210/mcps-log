@@ -3023,6 +3023,13 @@ function doGet(e) {
       return handleCommsUnsubscribePage_(e);
     }
 
+    // Public by design: the HMAC in the query string is the authentication, and a
+    // reader clicking a link in their inbox has no session. Returns HTML rather
+    // than JSON because it is a browser navigation, not an XHR.
+    if (e && e.parameter && e.parameter.action === 'comms_click') {
+      return handleCommsClick_(e);
+    }
+
     if (e && e.parameter && e.parameter.action === 'onboarding_get_status') {
       const auth = validateToken(e.parameter.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: "Unauthorized" });

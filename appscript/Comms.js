@@ -315,7 +315,11 @@ var COMMS_SHEETS = {
   senders: { name: 'Comms_Senders', headers:
     ['username','sender_email','sender_name','sender_script_url','active','added_at','notes'] },
   optouts: { name: 'Comms_Optouts', headers:
-    ['email','scope','opted_out_at','source','recipient_id'] }
+    ['email','scope','opted_out_at','source','recipient_id','removed_at','removed_by'] },
+  // Every parsed delivery failure, including ones this parser could not read —
+  // an unrecognised bounce format is a gap worth seeing, not something to drop.
+  bounces: { name: 'Comms_Bounces', headers:
+    ['bounce_id','email','kind','code','reason','detected_at','suppressed'] }
 };
 
 // Returns the sheet, creating it (frozen header row) if missing. Also appends
@@ -384,6 +388,11 @@ function commsOptOutSet_(category) {
   for (var i = 1; i < data.length; i++) {
     var email = commsNorm_(data[i][h.email]).toLowerCase();
     if (!email) continue;
+    // A tombstoned row is a record that the block WAS lifted, so it must stop
+    // blocking. Without this, "Remove" would appear to succeed while the address
+    // stayed suppressed forever — the worst kind of bug, because the UI agrees
+    // with the user and the system quietly disagrees.
+    if (h.removed_at != null && commsNorm_(data[i][h.removed_at])) continue;
     var scope = h.scope != null ? data[i][h.scope] : 'all';
     if (commsScopeBlocks_(scope, category)) set[email] = true;
   }
@@ -777,6 +786,69 @@ function commsEscapeHtml_(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Reverses commsEscapeHtml_. Needed because link rewriting happens AFTER the
+// escape pass, so a URL arrives here as https://x/a?b=1&amp;c=2 — encoding that
+// verbatim would send the reader to a destination containing a literal "&amp;".
+// Order matters: &amp; must be undone LAST or it re-creates the other entities.
+function commsUnescapeHtml_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// Click tracking is the only reliable engagement signal available on Gmail —
+// opens are inflated by Apple Mail Privacy Protection to the point of being
+// noise. Absent a provider webhook, we redirect through our own endpoint.
+//
+// ⚠️ The destination is HMAC-signed. An endpoint that redirects to whatever
+// arrives in a query parameter is an open redirect on your own domain, which is
+// exactly what a phisher goes looking for. Signing costs nothing and closes it.
+//
+// Fails OPEN: with no secret configured, links are returned untouched and simply
+// go untracked. A missing setting must never break a customer's link.
+// Shared by click-link signing and by the per-person sender transport in
+// CommsSenders.js. Defined HERE so Comms.js is self-sufficient: a Comms.js that
+// needed a function from CommsSenders.js is precisely what could take campaign
+// creation down on a partial deploy.
+function commsHmacHex_(secret, message) {
+  var raw = Utilities.computeHmacSha256Signature(String(message), String(secret));
+  var out = '';
+  for (var i = 0; i < raw.length; i++) {
+    var b = raw[i] < 0 ? raw[i] + 256 : raw[i];
+    out += (b < 16 ? '0' : '') + b.toString(16);
+  }
+  return out;
+}
+
+function commsClickSecret_() {
+  return commsProps_().getProperty('COMMS_CLICK_SECRET') || '';
+}
+
+function commsClickSig_(secret, recipientId, url) {
+  return commsHmacHex_(secret, String(recipientId || '') + '|' + String(url || '')).slice(0, 32);
+}
+
+// Takes the ESCAPED url as it appears mid-render; returns a value ready to drop
+// straight into an href attribute (i.e. escaped again).
+function commsTrackedHref_(escapedUrl, track) {
+  var secret = commsClickSecret_();
+  var rid = track && track.recipientId;
+  if (!secret || !rid) return escapedUrl;
+
+  var raw = commsUnescapeHtml_(escapedUrl);
+  var low = raw.toLowerCase();
+  // mailto: and tel: cannot be redirected through a web endpoint, and a reader
+  // clicking "call us" should get their dialler, not a round trip.
+  if (low.indexOf('http:') !== 0 && low.indexOf('https:') !== 0) return escapedUrl;
+
+  var target = commsExecUrl_() + '?action=comms_click' +
+    '&r=' + encodeURIComponent(rid) +
+    '&u=' + encodeURIComponent(raw) +
+    '&sig=' + commsClickSig_(secret, rid, raw);
+  return commsEscapeHtml_(target);
+}
+
 // Placeholder values for a recipient. properties_list is handled separately.
 function commsPlaceholderMap_(recipient) {
   var r = recipient || {};
@@ -811,13 +883,16 @@ function commsPropertiesListHtml_(recipient) {
 
 // Limited markup on an ALREADY-ESCAPED string: **bold**, [text](url) with a
 // strict protocol allowlist, blank-line paragraphs, single-newline <br>.
-function commsMarkupToHtml_(escaped) {
+function commsMarkupToHtml_(escaped, track) {
   var s = String(escaped || '');
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, text, url) {
     var low = url.toLowerCase();
     if (low.indexOf('https:') === 0 || low.indexOf('http:') === 0 ||
         low.indexOf('mailto:') === 0 || low.indexOf('tel:') === 0) {
-      return '<a href="' + url + '" style="color:#1FA7A8;text-decoration:underline;">' + text + '</a>';
+      // The protocol allowlist is checked on the ORIGINAL url, before any
+      // rewriting, so tracking can never be used to smuggle a protocol past it.
+      var href = commsTrackedHref_(url, track);
+      return '<a href="' + href + '" style="color:#1FA7A8;text-decoration:underline;">' + text + '</a>';
     }
     return text; // disallowed protocol → drop the link, keep the visible text
   });
@@ -829,11 +904,11 @@ function commsMarkupToHtml_(escaped) {
 
 // Full body render: substitute placeholders (raw) → escape (inert) → markup →
 // inject properties_list. Script injection is structurally impossible.
-function commsRenderBody_(markup, recipient) {
+function commsRenderBody_(markup, recipient, track) {
   var map = commsPlaceholderMap_(recipient);
   var text = String(markup || '');
   Object.keys(map).forEach(function (k) { text = text.split('{{' + k + '}}').join(map[k]); });
-  var html = commsMarkupToHtml_(commsEscapeHtml_(text));
+  var html = commsMarkupToHtml_(commsEscapeHtml_(text), track);
   return html.split('{{properties_list}}').join(commsPropertiesListHtml_(recipient));
 }
 
@@ -1057,6 +1132,9 @@ function handleCommsAction_(action, auth, payload) {
     case 'comms_add_optout':       return handleCommsAddOptout_(payload);
     case 'comms_remove_optout':    return handleCommsRemoveOptout_(payload);
     case 'comms_list_optouts':     return handleCommsListOptouts_();
+    case 'comms_list_bounces':     return handleCommsListBounces_(payload);
+    case 'comms_campaign_report':  return handleCommsCampaignReport_(payload);
+    case 'comms_bounce_sweep':     return commsBounceSweep_();
     // Cold-list segmentation (appscript/LeadSegments.js). The comms_ prefix means
     // these inherit the existing admin/manager gate with no routing changes.
     case 'comms_cold_audit':       return handleLeadColdAudit_(payload);
@@ -1350,7 +1428,8 @@ function commsSweep_() {
       var recipient = {};
       try { recipient = JSON.parse(r.recipient_json || '{}'); } catch (e) {}
       var subject = commsRenderSubject_(camp.subject, recipient);
-      var innerHtml = commsRenderBody_(camp.body_markup, recipient);
+      var innerHtml = commsRenderBody_(camp.body_markup, recipient,
+        { recipientId: r.recipient_id, campaignId: r.campaign_id });
       var html = buildCommsEmailHtml_(innerHtml,
         { unsubscribeUrl: commsUnsubscribeUrl_(r.unsubscribe_token), preheader: subject,
           category: camp.category });
@@ -1956,6 +2035,56 @@ function commsUpsertOptOut_(email, scope, source, token) {
   }
 }
 
+// ─── Click redirect (public, unauthenticated — the signature IS the auth) ────
+// Verifies the HMAC, records the first click, then forwards. A browser navigation
+// rather than an XHR, so the CORS rules that govern doGet JSON handlers do not
+// apply and HtmlService is the right tool.
+//
+// The click is recorded on a best-effort basis: a reader who clicked must reach
+// their destination whether or not the sheet write succeeds. Losing one analytics
+// row is nothing; a dead link in a customer's inbox is a real failure.
+function handleCommsClick_(e) {
+  var p = (e && e.parameter) || {};
+  var rid = commsNorm_(p.r);
+  var url = commsNorm_(p.u);
+  var sig = commsNorm_(p.sig);
+  var secret = commsClickSecret_();
+
+  if (!secret || !rid || !url || !sig || sig !== commsClickSig_(secret, rid, url)) {
+    // Deliberately does NOT redirect. Forwarding an unverified destination is the
+    // open-redirect this endpoint exists to avoid, so a bad signature is a dead end.
+    return commsUnsubPage_('Link expired',
+      'This link could not be verified. It may have been altered in transit. ' +
+      'Please open the link from the original email, or contact us.', '');
+  }
+
+  try { commsRecordClick_(rid); } catch (err) { Logger.log('click record failed: ' + err); }
+
+  var safe = commsEscapeHtml_(url);
+  return HtmlService.createHtmlOutput(
+    '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<meta http-equiv="refresh" content="0;url=' + safe + '">' +
+    '<title>Redirecting…</title></head><body>' +
+    '<p>Taking you to <a href="' + safe + '">' + safe + '</a>…</p>' +
+    '<script>location.replace(' + JSON.stringify(url) + ');</script>' +
+    '</body></html>');
+}
+
+// First click only. A second click is the same person, and overwriting would turn
+// "when did this campaign land" into "when did somebody last re-read it".
+function commsRecordClick_(recipientId) {
+  var sheet = commsSheet_('log');
+  var headers = commsActualHeaders_(sheet);
+  var rows = commsSheetRows_('log');
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].recipient_id) !== String(recipientId)) continue;
+    if (commsNorm_(rows[i].clicked_at)) return false;   // already counted
+    commsPatchRow_(sheet, headers, rows[i]._row, { clicked_at: new Date().toISOString() });
+    return true;
+  }
+  return false;
+}
+
 // Branded standalone HTML page for the unsubscribe flow (HtmlService).
 function commsUnsubPage_(heading, message, formHtml) {
   var b = commsBrandCfg_();
@@ -2029,25 +2158,55 @@ function handleCommsAddOptout_(payload) {
   commsUpsertOptOut_(email, scope, 'manual', '');
   return { ok: true };
 }
+// Two deliberate changes from a plain delete:
+//
+// 1. A row created by a hard bounce is NOT removable. The address is gone; the
+//    only thing "Remove" could achieve is mailing it again forever, and the
+//    resulting failures land on the domain that sends agreements.
+// 2. Removal tombstones instead of deleting the row, because consent state has
+//    to be provable after the fact — a hard delete destroys the evidence that
+//    someone was suppressed and when.
 function handleCommsRemoveOptout_(payload) {
   commsEnsureSheets_();
   var email = commsNorm_(payload.email).toLowerCase();
   if (!email) return { ok: false, error: 'email required' };
   var sheet = commsSheet_('optouts');
   var headers = commsActualHeaders_(sheet);
-  var idx = headers.indexOf('email');
-  var last = sheet.getLastRow();
-  var removed = false;
-  for (var i = last; i >= 2; i--) {
-    if (String(sheet.getRange(i, idx + 1).getValue()).trim().toLowerCase() === email) { sheet.deleteRow(i); removed = true; }
+  var by = commsNorm_(payload.removed_by);
+  var now = new Date().toISOString();
+  var removed = false, blocked = false;
+
+  commsSheetRows_('optouts').forEach(function (r) {
+    if (String(r.email || '').trim().toLowerCase() !== email) return;
+    if (String(r.removed_at || '')) return;               // already tombstoned
+    if (commsIsSuppression_(r.source)) { blocked = true; return; }
+    commsPatchRow_(sheet, headers, r._row, { removed_at: now, removed_by: by });
+    removed = true;
+  });
+
+  if (blocked && !removed) {
+    return { ok: false, error: 'This address is suppressed because mail to it bounced. ' +
+      'It cannot be re-subscribed — sending to a dead address damages deliverability for everyone else.' };
   }
   return { ok: removed, error: removed ? '' : 'Not found' };
 }
+
+// A suppression is a fact about the mailbox, not a preference a person expressed.
+function commsIsSuppression_(source) {
+  return /^bounce/i.test(String(source || ''));
+}
+// Lists LIVE blocks only. A tombstone is history, not a current state, and
+// showing both would make the list disagree with who actually gets mail.
 function handleCommsListOptouts_() {
   commsEnsureSheets_();
-  var rows = commsSheetRows_('optouts').map(function (r) {
-    return { email: r.email, scope: r.scope, opted_out_at: r.opted_out_at, source: r.source };
-  });
+  var rows = commsSheetRows_('optouts')
+    .filter(function (r) { return !commsNorm_(r.removed_at); })
+    .map(function (r) {
+      return { email: r.email, scope: r.scope, opted_out_at: r.opted_out_at, source: r.source,
+               // Lets the UI show why it cannot be removed, rather than only
+               // refusing when the button is pressed.
+               suppression: commsIsSuppression_(r.source) };
+    });
   return { ok: true, optouts: rows };
 }
 

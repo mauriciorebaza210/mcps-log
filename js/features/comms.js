@@ -40,14 +40,14 @@ function loadCommsPage(sub) {
   const root = document.getElementById('comms-root');
   if (!root) return;
   _commsInjectStyles();
-  if (sub && ['audiences','compose','templates','history','optouts'].includes(sub)) _commsTab = sub;
+  if (sub && ['audiences','compose','templates','history','performance','optouts'].includes(sub)) _commsTab = sub;
   root.innerHTML = _commsShell();
   _commsRenderTab();
 }
 
 function _commsShell() {
   const tabs = [['audiences','Audiences'],['compose','Compose'],['templates','Templates'],
-                ['history','History'],['optouts','Opt-outs']];
+                ['history','History'],['performance','Performance'],['optouts','Opt-outs']];
   return `
     <div class="comms-wrap">
       <div class="comms-head">
@@ -83,6 +83,7 @@ function _commsRenderTab() {
   else if (_commsTab==='compose')   _commsRenderCompose(body);
   else if (_commsTab==='templates') _commsRenderTemplates(body);
   else if (_commsTab==='history')   _commsRenderHistory(body);
+  else if (_commsTab==='performance') _commsRenderPerformance(body);
   else if (_commsTab==='optouts')   _commsRenderOptouts(body);
 }
 
@@ -901,6 +902,76 @@ function _commsPacingNote(c) {
         : `Sending up to ${c.daily_cap} a day.`);
   return `<div class="comms-muted">⏳ ${escHtml(why)} ${left} to go${
     days > 1 ? `, about ${days} more day${days === 1 ? '' : 's'}` : ''}.</div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PERFORMANCE — did any of this make money?
+//
+// Deliberately spare. Click rate is the only engagement number on Gmail worth
+// trusting (opens are Apple-MPP noise and are not collected at all), and the
+// revenue figure is printed with its model attached: an unlabelled number gets
+// quoted in a budget conversation and defended long after anyone remembers how
+// it was computed.
+// ══════════════════════════════════════════════════════════════════════════════
+async function _commsRenderPerformance(body) {
+  body.innerHTML = _commsLoading();
+  const res = await api({ action:'comms_campaign_report', token:_s.token });
+  if (!res || !res.ok) {
+    body.innerHTML = `<div class="comms-card"><div class="comms-msg error">${
+      escHtml((res && res.error) || 'Could not build the report.')}</div></div>`;
+    return;
+  }
+  body.innerHTML = _commsPerformanceHtml(res);
+}
+
+function _commsPerformanceHtml(r) {
+  const money = n => '$' + Math.round(Number(n) || 0).toLocaleString();
+  const m = r.model || {};
+  const totals = r.totals || {};
+  const shown = (r.campaigns || []).filter(c => c.sent > 0);
+
+  const rows = shown.length ? shown.map(c => {
+    // A bounce rate worth acting on, flagged where it will be seen. On Gmail this
+    // is the number that decides whether the sending domain stays healthy.
+    const hot = c.bounce_rate >= 5;
+    return `<div class="comms-camp">
+      <div class="comms-camp-main">
+        <div><b>${escHtml(c.name || '(untitled)')}</b>
+          ${c.attributable ? '' : '<span class="comms-tag" title="Operational mail is not credited with revenue.">not credited</span>'}
+        </div>
+        <div class="comms-muted">${c.sent} sent · ${c.clicked} clicked (${c.click_rate}%)
+          · <span class="${hot ? 'comms-tag err' : ''}">${c.bounced} bounced${c.bounce_rate ? ` (${c.bounce_rate}%)` : ''}</span></div>
+        <div class="comms-muted">${c.quotes_after} quote${c.quotes_after === 1 ? '' : 's'} raised after ·
+          ${c.signings} signed</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:var(--teal)">${money(c.revenue)}</div>
+        <div class="comms-muted">influenced</div>
+      </div>
+    </div>`;
+  }).join('') : `<div class="comms-hint">Nothing has been sent yet.</div>`;
+
+  return `
+    <div class="comms-card">
+      <div><strong>Campaign performance</strong>
+        <div class="comms-muted">Clicks are the only engagement signal collected — opens are
+          not tracked, because Apple Mail pre-fetches images and makes them meaningless.</div></div>
+      <div class="comms-stats">
+        <div class="comms-stat"><div class="comms-stat-n">${money(totals.revenue)}</div>
+          <div class="comms-stat-l">influenced revenue</div></div>
+        <div class="comms-stat"><div class="comms-stat-n">${totals.signings || 0}</div>
+          <div class="comms-stat-l">signed after a campaign</div></div>
+        <div class="comms-stat"><div class="comms-stat-n">${totals.signings_outside_window || 0}</div>
+          <div class="comms-stat-l">signed too late to credit</div>
+          <div class="comms-muted">mailed, then signed outside the window</div></div>
+      </div>
+      <div class="comms-muted" style="margin-top:10px">
+        ${escHtml(m.basis || 'last-touch')} attribution, ${m.window_days || 30}-day window,
+        matched on ${escHtml(m.join || 'email')}, ${escHtml(m.scope || '')}.
+        <b>${escHtml(m.caveat || '')}</b>
+      </div>
+    </div>
+    <div class="comms-card">${rows}</div>`;
 }
 
 function _commsStatusClass(s){ return s==='done'?'ok':(s==='done_with_errors'?'warn':(s==='cancelled'?'err':'')); }
