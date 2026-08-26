@@ -13,12 +13,41 @@ function commsProps_()    { return PropertiesService.getScriptProperties(); }
 function commsSendMode_()  { return commsProps_().getProperty('COMMS_SEND_MODE') || 'gmail'; }
 var COMMS_FROM_NAME = 'Mission Custom Pool Solutions';
 
+// ─── Lanes: transport is chosen by CATEGORY, not by one global mode ──────────
+// Marketing and announcements are bulk mail. They must not leave from an
+// individual's mailbox: a cold list's bounces and complaints would land on the
+// reputation of the person whose 1:1 sales mail needs to arrive, and GmailApp
+// cannot set the List-Unsubscribe header bulk senders are expected to provide.
+// Service updates stay 'personal' — a reschedule notice should read as coming
+// from the human who owns that route.
+function commsLaneForCategory_(category) {
+  var c = String(category || '').toLowerCase();
+  return (c === 'marketing' || c === 'announcement') ? 'bulk' : 'personal';
+}
+
+// The bulk lane may use a different transport than the rest of the system, so a
+// cold-list send can move to a dedicated sending domain without touching how
+// service updates go out. Falls back to COMMS_SEND_MODE when unset.
+function commsTransportForLane_(lane) {
+  if (lane === 'bulk') {
+    return commsProps_().getProperty('COMMS_SEND_MODE_BULK') || commsSendMode_();
+  }
+  return commsSendMode_();
+}
+
 // ─── Send abstraction: the ONLY place comms email leaves the system ──────────
 // msg: { to, subject, htmlBody, plainBody, recipientId }
 // returns { ok, provider, providerMessageId, error }
 function sendCommsEmail_(msg) {
-  var mode = commsSendMode_();
+  // Transport is pinned by the caller where one exists: campaigns resolve it once
+  // at creation and pass it back in, so flipping COMMS_SEND_MODE while a campaign
+  // is draining cannot split it across two transports mid-flight.
+  var mode = (msg && msg.transport) || commsSendMode_();
   try {
+    // A campaign locked to a per-person sender always goes through that person's
+    // sender script, whatever the mode — the mode picks the shared transport, and
+    // this message has already been assigned a specific mailbox.
+    if (msg && msg.senderScriptUrl) return commsSendViaSenderScript_(msg);
     if (mode === 'resend') return commsSendViaResend_(msg);
     if (mode === 'zapier') return commsSendViaZapier_(msg);
     return commsSendViaGmail_(msg);
@@ -86,6 +115,9 @@ function commsConfigStatus_() {
   var missing = [];
   if (mode === 'resend' && !p.getProperty('RESEND_API_KEY'))     missing.push('RESEND_API_KEY');
   if (mode === 'zapier' && !p.getProperty('COMMS_ZAPIER_WEBHOOK')) missing.push('COMMS_ZAPIER_WEBHOOK');
+  // Renders in every campaign footer. Unset used to mean customers saw a debug
+  // string; now it means the line is missing, which is still worth fixing.
+  if (!p.getProperty('COMMS_BUSINESS_ADDRESS')) missing.push('COMMS_BUSINESS_ADDRESS');
   var quota = -1;
   try { quota = MailApp.getRemainingDailyQuota(); } catch (e) {}
   return {
@@ -96,6 +128,108 @@ function commsConfigStatus_() {
     // Phase 0 safety check: confirm the migrated visit-report webhook is readable.
     visit_report_webhook_set: !!p.getProperty('VISIT_REPORT_ZAPIER_WEBHOOK')
   };
+}
+
+// ─── Sender identity diagnostic (read-only — sends nothing) ──────────────────
+// Answers "whose Gmail account actually sends?" without a test send.
+//
+// Two facts do the work:
+//   1. Session.getEffectiveUser() is the account GmailApp sends as. Under the
+//      manifest's executeAs=USER_DEPLOYING this is the deploying account for
+//      every web-app call, regardless of which portal user is logged in.
+//   2. ScriptApp.getProjectTriggers() only ever returns triggers owned by the
+//      EFFECTIVE user. Triggers installed by a different account are invisible
+//      here. So "guard trigger not visible while campaigns still finish" is
+//      proof that some other account owns the sweeper — and therefore sends the
+//      queued remainder of every campaign from its own mailbox and quota.
+//
+// Run it both ways and compare: commsWhoSends() in the editor reports the
+// EDITOR user; the comms_sender_identity action reports the DEPLOYING user.
+function commsSenderIdentity_() {
+  var out = {
+    send_mode: commsSendMode_(),
+    effective_user: '',
+    active_user: '',
+    gmail_remaining_quota: -1,
+    gmail_aliases: [],
+    gmail_aliases_error: '',
+    sweep_triggers_visible: [],
+    guard_trigger_visible: false,
+    guard_owner: '',
+    guard_beat_age_ms: null,
+    guard_conflict: '',
+    triggers_error: '',
+    interpretation: ''
+  };
+  // Recorded in script properties (shared across accounts) precisely because
+  // triggers are not — this is the only cross-account view of who sweeps.
+  try {
+    out.guard_owner = commsGuardOwner_();
+    out.guard_beat_age_ms = commsGuardBeatAge_();
+    out.guard_conflict = String(commsProps_().getProperty(COMMS_GUARD_CONFLICT_PROP) || '');
+  } catch (e) {}
+  // The identity Gmail sends as. This is the answer to the sender question.
+  try { out.effective_user = String(Session.getEffectiveUser().getEmail() || ''); }
+  catch (e) { out.effective_user = 'unavailable: ' + String((e && e.message) || e); }
+  // Blank under ANYONE_ANONYMOUS access — expected, and itself confirms that the
+  // caller's Google identity never reaches the send path.
+  try { out.active_user = String(Session.getActiveUser().getEmail() || ''); } catch (e) {}
+  // Per-account daily cap: differing numbers across runs prove differing senders.
+  try { out.gmail_remaining_quota = MailApp.getRemainingDailyQuota(); } catch (e) {}
+  // Available send-as aliases price the "visible staff sender" option: GmailApp
+  // accepts a `from` only for addresses listed here. An error means the alias
+  // route needs an extra Gmail scope (and so a re-authorization by every user).
+  try { out.gmail_aliases = GmailApp.getAliases() || []; }
+  catch (e) { out.gmail_aliases_error = String((e && e.message) || e); }
+
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) {
+      var handler = t.getHandlerFunction();
+      if (handler !== 'commsSweep_' && handler !== 'commsSweepGuard_') return;
+      if (handler === 'commsSweepGuard_') out.guard_trigger_visible = true;
+      out.sweep_triggers_visible.push({
+        handler: handler,
+        unique_id: t.getUniqueId(),
+        event_type: String(t.getEventType())
+      });
+    });
+  } catch (e) {
+    out.triggers_error = String((e && e.message) || e);
+  }
+
+  if (out.guard_conflict) {
+    out.interpretation = 'CONFLICT: hourly sweep guards are held by two accounts (' + out.guard_conflict
+      + '). Whichever fires first sends queued campaign mail, so the From address is not deterministic. '
+      + 'Delete the surplus guard from the account that should not be sending.';
+  } else if (out.guard_trigger_visible) {
+    out.interpretation = 'This account (' + out.effective_user
+      + ') owns the hourly sweep guard, so it sends queued campaign mail.';
+  } else if (out.guard_owner) {
+    out.interpretation = 'The hourly sweep guard is owned by ' + out.guard_owner
+      + ', not by ' + out.effective_user + ', so that account sends queued campaign mail '
+      + 'from its own mailbox and quota.';
+  } else {
+    out.interpretation = 'No sweep guard visible to ' + out.effective_user + ' and none recorded. '
+      + 'If campaigns still complete after their first pass, another account owns the sweeper '
+      + 'and sends the remainder from its own mailbox and quota.';
+  }
+  return out;
+}
+
+// Editor-runnable: reports the identity of whoever clicks Run.
+function commsWhoSends() {
+  var info = commsSenderIdentity_();
+  Logger.log(JSON.stringify(info, null, 2));
+  return info;
+}
+
+// doPost action: reports the deploying identity (executeAs=USER_DEPLOYING).
+function handleCommsSenderIdentity_(auth) {
+  var info = commsSenderIdentity_();
+  info.ok = true;
+  info.requested_by = (auth && (auth.username || auth.email)) ? String(auth.username || auth.email) : '';
+  info.requested_by_email = (auth && auth.email) ? String(auth.email) : '';
+  return info;
 }
 
 // ─── Diagnostic: send one email to a fixed recipient, report result + config ──
@@ -156,14 +290,30 @@ var COMMS_EMAIL_RE     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 var COMMS_SHEETS = {
   templates: { name: 'Comms_Templates', headers:
     ['template_id','name','subject','body_markup','category','created_by','created_at','updated_at'] },
+  // A segment stores a FILTER (definition_json), never a member list. That is what
+  // keeps the compose screen's late-binding contract intact: an uncurated segment
+  // send re-resolves at send time, so a campaign scheduled for next Tuesday reaches
+  // whoever has gone cold by then. last_count is a cached display value only —
+  // never the thing that gets mailed. See appscript/LeadSegments.js.
+  segments: { name: 'Comms_Segments', headers:
+    ['segment_id','name','definition_json','created_by','created_at','updated_at',
+     'last_count','last_counted_at'] },
+  // sender_* on campaigns is the LOCKED sender: resolved once at creation and
+  // never recomputed, so a registry edit mid-flight cannot change who the
+  // remaining recipients hear from.
   campaigns: { name: 'Comms_Campaigns', headers:
-    ['campaign_id','name','category','subject','body_markup','audience_json','status','send_at','provider',
+    ['campaign_id','name','category','subject','body_markup','audience_json','status','send_at','provider','lane',
      'created_by','created_at','started_at','finished_at',
-     'total_recipients','sendable_count','sent_count','failed_count','skipped_count'] },
+     'total_recipients','sendable_count','sent_count','failed_count','skipped_count','daily_cap',
+     'sender_key','sender_email','sender_script_url'] },
+  // sender_email on the log is what ACTUALLY sent that row, as reported back by
+  // the sender script — deliberately separate from the campaign's intent.
   log: { name: 'Comms_Log', headers:
     ['recipient_id','unsubscribe_token','campaign_id','email','name','quote_id','pool_id','recipient_json',
-     'status','error','attempt_started_at','attempt_count','provider','provider_message_id','sent_at',
-     'bounce_reason','complaint_at','opened_at','clicked_at'] },
+     'status','error','attempt_started_at','attempt_count','next_attempt_at','provider','provider_message_id','sent_at',
+     'bounce_reason','complaint_at','opened_at','clicked_at','sender_email'] },
+  senders: { name: 'Comms_Senders', headers:
+    ['username','sender_email','sender_name','sender_script_url','active','added_at','notes'] },
   optouts: { name: 'Comms_Optouts', headers:
     ['email','scope','opted_out_at','source','recipient_id'] }
 };
@@ -198,7 +348,8 @@ function commsActualHeaders_(sheet) {
   return sheet.getRange(1, 1, 1, lc).getValues()[0].map(function (h) { return huHeader_(h); });
 }
 
-// Ensures all four comms sheets exist. Safe to call repeatedly.
+// Ensures every comms sheet exists. Safe to call repeatedly, and additive:
+// adding a key to COMMS_SHEETS is all a new sheet needs.
 function commsEnsureSheets_() {
   Object.keys(COMMS_SHEETS).forEach(function (k) { commsSheet_(k); });
 }
@@ -375,6 +526,14 @@ function commsRowMatchesAudience_(r, type, audience) {
     var ids = (audience.quote_ids || []).map(function (q) { return commsNorm_(q); });
     return ids.indexOf(commsNorm_(r.quote_id)) !== -1;
   }
+  if (type === 'segment') {
+    // Evaluated against the definition carried ON THE AUDIENCE, not re-read from
+    // the segments sheet. Editing a saved segment must not silently redefine what
+    // an already-scheduled campaign means — the population is late-bound, the
+    // definition is snapshotted at send. See LeadSegments.js.
+    if (typeof leadSegmentMatches_ !== 'function') return false;
+    return leadSegmentMatches_(r, audience.definition || {});
+  }
   return false;
 }
 
@@ -390,7 +549,10 @@ function commsDedupeAndFlag_(raw, category) {
     var prop = {
       quote_id: rec.quote_id || '', pool_id: rec.pool_id || '',
       address: rec.address || '', city: rec.city || '',
-      day: rec.day || '', operator: rec.operator || ''
+      day: rec.day || '', operator: rec.operator || '',
+      old_day: rec.old_day || '', new_day: rec.new_day || '',
+      effective_date: rec.effective_date || '',
+      effective_label: rec.effective_label || ''
     };
     var name = [commsNorm_(rec.first_name), commsNorm_(rec.last_name)].filter(String).join(' ')
              || commsNorm_(rec.customer_name);
@@ -429,6 +591,18 @@ function resolveCommsAudience_(audience, category) {
   var type = audience.type || 'all_active';
   var raw = [];
 
+  // Refused rather than silently resolved: an empty segment definition is valid
+  // set logic that means "every lead with an email address", so one unselected
+  // dropdown would otherwise send a cold campaign to the entire CRM.
+  if (type === 'segment') {
+    if (typeof leadSegmentHasPredicate_ !== 'function') {
+      return { ok: false, error: 'Segment support is unavailable (LeadSegments.js is not deployed).' };
+    }
+    if (!leadSegmentHasPredicate_(audience.definition)) {
+      return { ok: false, error: 'Choose a segment first — an empty one would match every lead with an email address.' };
+    }
+  }
+
   if (type === 'test') {
     // Explicit test addresses — flows through the whole pipeline without touching
     // the CRM. Admin-only (the whole comms surface is admin/manager gated).
@@ -437,8 +611,34 @@ function resolveCommsAudience_(audience, category) {
                area: '', quote_id: '', pool_id: '', address: '123 Test St', city: 'San Antonio',
                day: 'Tuesday', operator: 'Tony' };
     });
+  } else if (type === 'selected') {
+    // A hand-built list accumulated in the UI across several different filters.
+    // The client sends back the recipient records it collected; they are expanded
+    // to one raw row per property and run through commsDedupeAndFlag_ like any
+    // other source, so dedupe, opt-out and invalid-address checks stay server-side
+    // and authoritative — the client can choose WHO, never whether the rules apply.
+    (audience.recipients || []).forEach(function (r) {
+      if (!r) return;
+      var props = (r.properties && r.properties.length) ? r.properties : [{}];
+      props.forEach(function (p) {
+        p = p || {};
+        raw.push({
+          email: r.email, first_name: r.first_name, last_name: r.last_name,
+          customer_name: r.name, area: r.area,
+          quote_id: p.quote_id || r.quote_id || '', pool_id: p.pool_id || r.pool_id || '',
+          address: p.address || '', city: p.city || '',
+          day: p.day || '', operator: p.operator || '',
+          old_day: p.old_day || '', new_day: p.new_day || '',
+          effective_date: p.effective_date || '', effective_label: p.effective_label || ''
+        });
+      });
+    });
   } else if (type === 'route_day') {
     raw = commsRouteDayRecipients_(audience.day, audience.week_start, audience.operator);
+  } else if (type === 'reschedule_batch') {
+    raw = (typeof rsResolveCommsAudience_ === 'function')
+      ? rsResolveCommsAudience_(audience)
+      : [];
   } else {
     var crm = handleGetCRMData();
     var rows = (crm && crm.ok && crm.data) ? crm.data : [];
@@ -464,9 +664,16 @@ function handleCommsPreviewAudience_(payload) {
   var recips = res.recipients;
   var sendable = recips.filter(function (r) { return !r.invalid && !r.opted_out; });
   var PREVIEW_CAP = 500;
+  // The full record goes back, not just display fields: the compose UI lets you
+  // accumulate recipients across several different filters into one list, and it
+  // can only send that list back intact if it received it intact. `pools` stays
+  // for the existing display code.
   var list = recips.slice(0, PREVIEW_CAP).map(function (r) {
     return {
       email: r.email, name: r.name, area: r.area,
+      first_name: r.first_name, last_name: r.last_name,
+      quote_id: r.quote_id, pool_id: r.pool_id,
+      properties: r.properties,
       pools: r.properties.length,
       invalid: r.invalid, opted_out: r.opted_out
     };
@@ -583,6 +790,9 @@ function commsPlaceholderMap_(recipient) {
     city: commsNorm_(p0.city),
     area: commsNorm_(r.area),
     day: commsNorm_(p0.day),
+    old_day: commsNorm_(p0.old_day),
+    new_day: commsNorm_(p0.new_day || p0.day),
+    effective_date: commsNorm_(p0.effective_label || p0.effective_date),
     technician: commsNorm_(p0.operator)
   };
 }
@@ -647,6 +857,18 @@ function commsRenderPlain_(markup, recipient) {
   return text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
 }
 
+// Why this is a property and not a constant: how a lead ended up on the list is
+// a business fact that varies by how the list was built, and getting it wrong is
+// a compliance problem. Staff can correct the wording without a deploy.
+function commsPermissionLine_(category, businessName) {
+  var c = String(category || '').toLowerCase();
+  if (c === 'marketing' || c === 'announcement') {
+    return commsProps_().getProperty('COMMS_MARKETING_PERMISSION_TEXT')
+      || 'You are receiving this because you asked us about pool service or joined our San Antonio mailing list.';
+  }
+  return 'You are receiving this because you are a ' + businessName + ' customer.';
+}
+
 // ─── Branded email wrapper (MCPS brand: Primary Teal / Aqua, logo, footer) ───
 function commsBrandCfg_() {
   var p = commsProps_();
@@ -663,10 +885,19 @@ function buildCommsEmailHtml_(innerHtml, opts) {
   opts = opts || {};
   var b = commsBrandCfg_();
   var unsub = opts.unsubscribeUrl || '#';
-  var addressLine = b.address ? commsEscapeHtml_(b.address)
-                              : '[Business mailing address not set — set COMMS_BUSINESS_ADDRESS]';
+  // An unset address must NEVER leak a debug string into a customer's inbox.
+  // Omitting the line leaves a footer that reads normally; staff are told instead
+  // by commsConfigStatus_ / comms_my_sender, i.e. before a send rather than after.
+  // Note this leaves commercial email without the postal address CAN-SPAM wants,
+  // so the property still needs setting — it is just no longer the customer's problem.
+  var addressLine = b.address ? (commsEscapeHtml_(b.address) + '<br>') : '';
   var preheader = opts.preheader ? commsEscapeHtml_(opts.preheader) : '';
   var name = commsEscapeHtml_(b.name);
+  // The permission reminder has to be TRUE for whoever receives it. Service
+  // updates go to active customers; marketing and announcements go to leads who
+  // never bought anything, so telling them they are customers is both false and
+  // the fastest way to earn a spam complaint.
+  var permission = commsPermissionLine_(opts.category, b.name);
   return '' +
 '<!DOCTYPE html><html><head><meta charset="utf-8">' +
 '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
@@ -691,11 +922,11 @@ innerHtml +
 '<div style="font-size:15px;font-weight:bold;color:#FFFFFF;margin-bottom:4px;">' + name + '</div>' +
 '<div style="font-size:12px;color:#B9CDCD;line-height:1.5;">' +
 'Pool service in San Antonio, TX<br>' +
-addressLine + '<br>' +
+addressLine +
 commsEscapeHtml_(b.phone) + ' &nbsp;&bull;&nbsp; ' + commsEscapeHtml_(b.website) +
 '</div>' +
 '<div style="font-size:12px;color:#B9CDCD;margin-top:12px;">' +
-'You are receiving this because you are a ' + name + ' customer. ' +
+commsEscapeHtml_(permission) + ' ' +
 '<a href="' + unsub + '" style="color:#5ED6D3;text-decoration:underline;">Unsubscribe</a>.' +
 '</div>' +
 '</td></tr>' +
@@ -734,10 +965,15 @@ function handleCommsSendTestDraft_(auth, payload) {
   var sample = payload.sample || commsSampleRecipient_(auth);
   var subject = commsRenderSubject_(payload.subject || '(no subject)', sample);
   var innerHtml = commsRenderBody_(payload.body_markup || '', sample);
-  var html = buildCommsEmailHtml_(innerHtml, { unsubscribeUrl: '#unsubscribe-preview', preheader: subject });
+  // Category matters here: the footer's permission line differs between a service
+  // update and marketing, and a test that shows the wrong one is not a test.
+  var testCategory = commsNorm_(payload.category) || 'service_update';
+  var html = buildCommsEmailHtml_(innerHtml,
+    { unsubscribeUrl: '#unsubscribe-preview', preheader: subject, category: testCategory });
   var plain = commsRenderPlain_(payload.body_markup || '', sample);
   var send = sendCommsEmail_({ to: to, subject: '[TEST] ' + subject, htmlBody: html, plainBody: plain,
-                               recipientId: Utilities.getUuid() });
+                               recipientId: Utilities.getUuid(),
+                               transport: commsTransportForLane_(commsLaneForCategory_(testCategory)) });
   var now = new Date().toISOString();
   commsAppendRow_('log', {
     recipient_id: Utilities.getUuid(), unsubscribe_token: '', campaign_id: 'TEST_DRAFT',
@@ -755,7 +991,8 @@ function handleCommsPreviewRender_(payload) {
   return {
     ok: true,
     subject: commsRenderSubject_(payload.subject || '', sample),
-    html: buildCommsEmailHtml_(innerHtml, { unsubscribeUrl: '#unsubscribe-preview' })
+    html: buildCommsEmailHtml_(innerHtml,
+      { unsubscribeUrl: '#unsubscribe-preview', category: commsNorm_(payload.category) || 'service_update' })
   };
 }
 
@@ -803,6 +1040,10 @@ function handleCommsListTemplates_() {
 function handleCommsAction_(action, auth, payload) {
   switch (action) {
     case 'comms_test_send':        return handleCommsTestSend_(auth);
+    case 'comms_sender_identity':  return handleCommsSenderIdentity_(auth);
+    case 'comms_sender_probe':     return handleCommsSenderProbe_(auth, payload);
+    case 'comms_list_senders':     return handleCommsListSenders_();
+    case 'comms_my_sender':        return handleCommsMySender_(auth);
     case 'comms_preview_audience': return handleCommsPreviewAudience_(payload);
     case 'comms_preview_render':   return handleCommsPreviewRender_(payload);
     case 'comms_send_test_draft':  return handleCommsSendTestDraft_(auth, payload);
@@ -816,6 +1057,13 @@ function handleCommsAction_(action, auth, payload) {
     case 'comms_add_optout':       return handleCommsAddOptout_(payload);
     case 'comms_remove_optout':    return handleCommsRemoveOptout_(payload);
     case 'comms_list_optouts':     return handleCommsListOptouts_();
+    // Cold-list segmentation (appscript/LeadSegments.js). The comms_ prefix means
+    // these inherit the existing admin/manager gate with no routing changes.
+    case 'comms_cold_audit':       return handleLeadColdAudit_(payload);
+    case 'comms_list_segments':    return handleLeadListSegments_();
+    case 'comms_save_segment':     return handleLeadSaveSegment_(auth, payload);
+    case 'comms_delete_segment':   return handleLeadDeleteSegment_(payload);
+    case 'comms_count_segment':    return handleLeadCountSegment_(payload);
     case 'comms_selftest_crash':   return handleCommsSelftestCrash_(payload);
     case 'comms_selftest_schedule': return handleCommsSelftestSchedule_(payload);
     case 'comms_selftest_unsub':   return handleCommsSelftestUnsub_(payload);
@@ -845,6 +1093,23 @@ var COMMS_SWEEP_MAX_PER_RUN = 50;      // sends per sweep run (all engines)
 var COMMS_SWEEP_MAX_MS      = 270000;  // ~4.5 min (GAS hard limit is 6 min)
 var COMMS_SWEEP_STALE_MS    = 600000;  // 10 min: a 'sending' row older than this crashed
 var COMMS_SWEEP_INTERVAL_MS = 45000;   // gap between sweep runs while work remains
+// The Gmail send quota was previously folklore: commsConfigStatus_ reported the
+// remaining figure and nothing ever acted on it, so a large campaign could quietly
+// consume the allowance a signature request or visit report needed later the same
+// day — and the only symptom would be transactional mail failing hours afterwards.
+var COMMS_GMAIL_DAILY_QUOTA = 1500;    // Workspace; a consumer account is 500
+var COMMS_QUOTA_RESERVE     = 200;     // kept back for agreements/visit reports/follow-ups
+var COMMS_QUOTA_RETRY_MS    = 1800000; // 30 min: how often to re-check once blocked
+// Retry applies ONLY to a row the provider explicitly rejected — see the due-row
+// logic in commsSweep_ for why a crashed lease is deliberately excluded.
+var COMMS_MAX_ATTEMPTS      = 3;
+var COMMS_RETRY_BACKOFF_MS  = [300000, 1800000, 7200000];  // 5 min, 30 min, 2 h
+// Bulk pacing. Spreading a cold send over days is not throughput management: it
+// is the only way to still have a domain reputation on day three, and it is what
+// makes "stop, the bounce rate is 20%" a decision you can still take.
+var COMMS_BULK_DAILY_CAP_DEFAULT = 100;
+var COMMS_BULK_HOUR_START   = 9;
+var COMMS_BULK_HOUR_END     = 17;
 
 function commsExecUrl_() {
   // The portal's pinned web-app /exec (same URL across redeploys). Overridable
@@ -878,6 +1143,13 @@ function handleCommsSendCampaign_(auth, payload) {
   var audience = payload.audience || {};
   if (!subject) return { ok: false, error: 'Subject is required.' };
   if (!body)    return { ok: false, error: 'Message body is required.' };
+  // CAN-SPAM requires a postal address on commercial email and penalties accrue
+  // PER MESSAGE, so a 500-recipient send with no address is 500 violations rather
+  // than one. Refusing to create the campaign is the correct failure mode.
+  if (commsLaneForCategory_(category) === 'bulk' && !commsBrandCfg_().address) {
+    return { ok: false, error: 'Set the COMMS_BUSINESS_ADDRESS script property before sending ' +
+      'marketing or announcement email — commercial mail legally requires a postal address in the footer.' };
+  }
 
   var res = resolveCommsAudience_(audience, category);
   if (!res.ok) return res;
@@ -901,16 +1173,50 @@ function handleCommsSendCampaign_(auth, payload) {
   var campaignId = Utilities.getUuid();
   var now = new Date().toISOString();
   var by = (auth && (auth.name || auth.username)) || '';
-  var provider = commsSendMode_();
+  var lane = commsLaneForCategory_(category);
+  var provider = commsTransportForLane_(lane);
+
+  // Sender is resolved ONCE, here, and written onto the campaign row. The sweeper
+  // reads it back rather than re-resolving, so a registry edit (or a staff member
+  // deactivated) part-way through a send cannot switch who the remaining
+  // recipients hear from. No mapping means no campaign: falling back to the
+  // shared mailbox would put customer mail out under the wrong name silently.
+  //
+  // Only in gmail mode — under resend/zapier the provider is the sender, and a
+  // per-person Gmail script has nothing to do with it.
+  //
+  // Gated on the PERSONAL lane, not merely on gmail mode: bulk marketing has no
+  // business borrowing a staff member's mailbox, so it must never be blocked by
+  // (or contribute to) the per-person registry.
+  var sender = null;
+  if (lane === 'personal' && provider === 'gmail') {
+    // An explicit refusal beats a ReferenceError. commsResolveSender_ lives in
+    // CommsSenders.js, which is a separate file that can lag a deploy.
+    if (typeof commsResolveSender_ !== 'function') {
+      return { ok: false, error: 'Per-person sender registry is unavailable (CommsSenders.js is not deployed). ' +
+        'Deploy it, or send this as a marketing/announcement category to use the bulk lane.' };
+    }
+    var resolved = commsResolveSender_(auth);
+    if (!resolved.ok) return resolved;
+    sender = resolved.sender;
+  }
 
   commsAppendRow_('campaigns', {
     campaign_id: campaignId, name: name, category: category, subject: subject,
     body_markup: body, audience_json: JSON.stringify(audience),
     status: scheduled ? 'scheduled' : 'sending',
-    send_at: scheduled ? sendAt : '', provider: provider, created_by: by, created_at: now,
+    send_at: scheduled ? sendAt : '', provider: provider, lane: lane, created_by: by, created_at: now,
     started_at: scheduled ? '' : now, finished_at: '',
     total_recipients: recipients.length, sendable_count: sendable.length,
-    sent_count: 0, failed_count: 0, skipped_count: skipped
+    sent_count: 0, failed_count: 0, skipped_count: skipped,
+    // Bulk sends are paced by default. Operational mail is not: a reschedule
+    // notice that arrives in four days' time is worse than useless.
+    daily_cap: lane === 'bulk'
+      ? (Number(commsProps_().getProperty('COMMS_BULK_DAILY_CAP')) || COMMS_BULK_DAILY_CAP_DEFAULT)
+      : 0,
+    sender_key: sender ? sender.username : '',
+    sender_email: sender ? sender.sender_email : '',
+    sender_script_url: sender ? sender.sender_script_url : ''
   });
 
   var logObjs = recipients.map(function (r) {
@@ -921,8 +1227,9 @@ function handleCommsSendCampaign_(auth, payload) {
       campaign_id: campaignId, email: r.email || '', name: r.name || '',
       quote_id: p0.quote_id || '', pool_id: p0.pool_id || '', recipient_json: JSON.stringify(r),
       status: status, error: r.invalid ? 'blank or invalid email' : (r.opted_out ? 'opted out' : ''),
-      attempt_started_at: '', attempt_count: 0, provider: '', provider_message_id: '', sent_at: '',
-      bounce_reason: '', complaint_at: '', opened_at: '', clicked_at: ''
+      attempt_started_at: '', attempt_count: 0, next_attempt_at: '',
+      provider: '', provider_message_id: '', sent_at: '',
+      bounce_reason: '', complaint_at: '', opened_at: '', clicked_at: '', sender_email: ''
     };
   });
   commsAppendRows_('log', logObjs);
@@ -980,6 +1287,16 @@ function commsSweep_() {
     var rows = commsSheetRows_('log');
     var start = Date.now();
     var sentThisRun = 0;
+    // Checked once per run, not per row: it is an API call, and the figure cannot
+    // move mid-run in any way that changes the decision.
+    var remaining = commsRemainingQuota_();
+    var quotaBlocked = (remaining >= 0 && remaining <= COMMS_QUOTA_RESERVE);
+    var quotaSkipped = 0;
+    var windowOk = commsBulkWindowOk_();
+    var dayCounter = commsReadDayCounter_();
+    var heldByWindow = 0, heldByCap = 0;
+    // Collected here and written once after the loop — see leadRecordEmailed_.
+    var emailedQuoteIds = [];
 
     for (var i = 0; i < rows.length; i++) {
       if (sentThisRun >= COMMS_SWEEP_MAX_PER_RUN) break;
@@ -987,6 +1304,18 @@ function commsSweep_() {
       var r = rows[i];
       var camp = sending[r.campaign_id];
       if (!camp) continue;
+      // Leave the row queued rather than failing it: the allowance returns on a
+      // rolling 24h basis, so this is a pause, not an error, and marking it failed
+      // would drop the recipient permanently.
+      if (quotaBlocked && commsUsesGmailQuota_(camp)) { quotaSkipped++; continue; }
+
+      // Both gates leave the row QUEUED. This is a pause, not a failure — marking
+      // it failed would drop the recipient permanently for a timing reason.
+      var isBulk = String(camp.lane || '') === 'bulk';
+      if (isBulk && !windowOk) { heldByWindow++; continue; }
+      var cap = Number(camp.daily_cap) || 0;
+      if (cap > 0 && (dayCounter.campaigns[r.campaign_id] || 0) >= cap) { heldByCap++; continue; }
+
       var status = String(r.status);
       var due = false;
       if (status === 'queued') {
@@ -1001,6 +1330,14 @@ function commsSweep_() {
           }
           due = true; // crashed lease, retry once
         }
+      } else if (status === 'failed') {
+        // Retried ONLY when something deliberately scheduled a retry. The crashed-
+        // lease branch above never sets next_attempt_at, so an at-most-once row can
+        // never be resurrected here — which is the whole point: we do not know
+        // whether that message went out, and a duplicate cold email is a complaint.
+        var nextAt = Date.parse(r.next_attempt_at || '') || 0;
+        if (nextAt && Date.now() >= nextAt &&
+            (Number(r.attempt_count) || 0) < COMMS_MAX_ATTEMPTS) due = true;
       }
       if (!due) continue;
 
@@ -1015,23 +1352,77 @@ function commsSweep_() {
       var subject = commsRenderSubject_(camp.subject, recipient);
       var innerHtml = commsRenderBody_(camp.body_markup, recipient);
       var html = buildCommsEmailHtml_(innerHtml,
-        { unsubscribeUrl: commsUnsubscribeUrl_(r.unsubscribe_token), preheader: subject });
+        { unsubscribeUrl: commsUnsubscribeUrl_(r.unsubscribe_token), preheader: subject,
+          category: camp.category });
       var plain = commsRenderPlain_(camp.body_markup, recipient);
+      // Sender comes off the CAMPAIGN row, locked at creation — never re-resolved
+      // here, so a mid-flight registry change cannot split one campaign across
+      // two mailboxes.
       var send = sendCommsEmail_({ to: r.email, subject: subject, htmlBody: html, plainBody: plain,
-                                   recipientId: r.recipient_id });
+                                   recipientId: r.recipient_id,
+                                   transport: camp.provider || '',
+                                   senderEmail: camp.sender_email || '',
+                                   senderScriptUrl: camp.sender_script_url || '' });
       var doneIso = new Date().toISOString();
       if (send.ok) {
         commsPatchRow_(logSheet, headers, r._row, { status: 'sent', sent_at: doneIso,
-          provider: send.provider, provider_message_id: send.providerMessageId || '', error: '' });
+          provider: send.provider, provider_message_id: send.providerMessageId || '', error: '',
+          // What actually sent, as reported by the sender script — not what we
+          // asked for. The two differing is exactly what an audit needs to catch.
+          sender_email: send.senderEmail || camp.sender_email || '' });
+        try {
+          if (typeof rsAfterCommsRecipientSent_ === 'function') {
+            rsAfterCommsRecipientSent_(camp, r, recipient, doneIso);
+          }
+        } catch (hookErr) {
+          Logger.log('Comms post-send hook failed: ' + hookErr);
+        }
         sentThisRun++;
+        dayCounter.campaigns[r.campaign_id] = (dayCounter.campaigns[r.campaign_id] || 0) + 1;
+        if (r.quote_id) emailedQuoteIds.push(r.quote_id);
       } else {
-        commsPatchRow_(logSheet, headers, r._row,
-          { status: 'failed', error: send.error || 'send failed', provider: send.provider });
+        // The provider told us it did not send, so a retry cannot duplicate. Only
+        // transient causes earn one — a malformed address just fails again on a
+        // timer, filling the log and delaying the campaign's completion.
+        var attempts = Number(r.attempt_count) || 1;
+        var retryable = commsIsTransientError_(send.error) && attempts < COMMS_MAX_ATTEMPTS;
+        commsPatchRow_(logSheet, headers, r._row, {
+          status: 'failed', error: send.error || 'send failed', provider: send.provider,
+          next_attempt_at: retryable
+            ? new Date(Date.now() + commsRetryDelayMs_(attempts)).toISOString() : ''
+        });
       }
     }
 
+    commsWriteDayCounter_(dayCounter);
+    // Stamps last_emailed_at / email_count on the CRM rows. Without it the cold
+    // buckets never learn a campaign happened and the next send hits the same
+    // list again. Isolated so a CRM permission problem cannot fail the sweep —
+    // the mail has already gone out by this point.
+    if (emailedQuoteIds.length && typeof leadRecordEmailed_ === 'function') {
+      try {
+        leadRecordEmailed_(emailedQuoteIds, new Date().toISOString());
+      } catch (wbErr) {
+        Logger.log('Comms: post-send write-back failed: ' + wbErr);
+      }
+    }
+    if (quotaSkipped || heldByWindow || heldByCap) {
+      Logger.log('Comms sweep held: ' + quotaSkipped + ' on quota (' + remaining + ' left), ' +
+                 heldByWindow + ' outside the send window, ' + heldByCap + ' at the daily cap. ' +
+                 'Sent ' + sentThisRun + ' this run.');
+    }
     commsFinalizeCampaigns_(Object.keys(sending));
-    commsRecomputeWake_();
+
+    // Nothing was sendable, so sleep until the reason expires instead of rescanning
+    // the whole log every 45 seconds — possibly all night. A cap resets tomorrow;
+    // the window reopens on its own schedule; quota returns on a rolling basis.
+    var backoff = 0;
+    if (!sentThisRun) {
+      if (heldByCap)         backoff = commsMsUntilCapReset_();
+      else if (heldByWindow) backoff = commsMsUntilBulkWindow_();
+      else if (quotaSkipped) backoff = COMMS_QUOTA_RETRY_MS;
+    }
+    commsRecomputeWake_(backoff);
   } finally {
     lock.releaseLock();
   }
@@ -1067,7 +1458,10 @@ function commsFinalizeCampaigns_(campaignIds) {
 // The single wake authority: recompute exactly one next sweep trigger from
 // current sheet state. If a 'sending' campaign has work left → soon; else if a
 // 'scheduled' campaign is pending → at its send_at; else no trigger.
-function commsRecomputeWake_() {
+// minDelayMs lets a caller ask for a longer nap without becoming a second source
+// of triggers — this stays the single wake authority, which is what the guard
+// ownership machinery below depends on.
+function commsRecomputeWake_(minDelayMs) {
   commsDeleteOwnTriggers_();
   var sendingIds = {}, earliest = null;
   commsSheetRows_('campaigns').forEach(function (c) {
@@ -1085,7 +1479,8 @@ function commsRecomputeWake_() {
     });
   }
   if (hasWork) {
-    ScriptApp.newTrigger('commsSweep_').timeBased().after(COMMS_SWEEP_INTERVAL_MS).create();
+    ScriptApp.newTrigger('commsSweep_').timeBased()
+      .after(Math.max(COMMS_SWEEP_INTERVAL_MS, Number(minDelayMs) || 0)).create();
   } else if (earliest !== null) {
     if (earliest <= Date.now() + 60000) {
       ScriptApp.newTrigger('commsSweep_').timeBased().after(5000).create();
@@ -1095,15 +1490,199 @@ function commsRecomputeWake_() {
   }
 }
 
-// Hourly safety net: if a normally-scheduled sweep trigger is ever lost, this
-// recovers within the hour. Installed once (idempotent).
-function commsEnsureGuardTrigger_() {
-  var exists = ScriptApp.getProjectTriggers().some(function (t) {
-    return t.getHandlerFunction() === 'commsSweepGuard_';
-  });
-  if (!exists) ScriptApp.newTrigger('commsSweepGuard_').timeBased().everyHours(1).create();
+// Does this campaign draw on THIS script's Gmail allowance? A campaign routed to
+// a per-person sender script spends that staff member's quota under their own
+// account, and an external provider spends none of it — so neither is constrained
+// by the reserve, and treating them as if they were would stall sends for nothing.
+function commsUsesGmailQuota_(camp) {
+  if (!camp) return false;
+  if (commsNorm_(camp.sender_script_url)) return false;
+  var provider = commsNorm_(camp.provider) || commsSendMode_();
+  return provider === 'gmail';
 }
+
+function commsRemainingQuota_() {
+  try { return MailApp.getRemainingDailyQuota(); } catch (e) { return -1; }
+}
+
+// A provider that told us HTTP 503 is safe to retry: we know nothing was sent.
+// A malformed address is not — retrying it just fails again on a schedule.
+var COMMS_TRANSIENT_RE = /(\b5\d\d\b|\b429\b|timeout|timed out|rate.?limit|too many|temporarily|unavailable|network|socket|ECONN|deadline)/i;
+function commsIsTransientError_(err) {
+  return COMMS_TRANSIENT_RE.test(String(err == null ? '' : err));
+}
+
+// Attempt N has already happened when this is called, so index from it directly;
+// the last backoff repeats if the array is shorter than the attempt cap.
+function commsRetryDelayMs_(attemptCount) {
+  var i = Math.max(0, (Number(attemptCount) || 1) - 1);
+  return COMMS_RETRY_BACKOFF_MS[Math.min(i, COMMS_RETRY_BACKOFF_MS.length - 1)];
+}
+
+// Unset and blank are "not configured", NOT zero.
+function commsNumProp_(key, fallback) {
+  var raw = commsProps_().getProperty(key);
+  if (raw === null || raw === undefined || String(raw).trim() === '') return fallback;
+  var n = Number(raw);
+  return isNaN(n) ? fallback : n;
+}
+
+function commsDayKey_() {
+  return Utilities.formatDate(new Date(), COMMS_TZ, 'yyyy-MM-dd');
+}
+
+// Spend is tracked in ONE script property rather than by scanning the log, which
+// would be a second full read per sweep. Losing a write to a crash undercounts by
+// at most one run — i.e. errs toward sending slightly more, never toward stalling.
+function commsReadDayCounter_() {
+  var today = commsDayKey_();
+  var c = null;
+  try { c = JSON.parse(commsProps_().getProperty('COMMS_DAY_COUNTER') || '{}'); } catch (e) {}
+  if (!c || c.day !== today) c = { day: today, campaigns: {} };
+  if (!c.campaigns) c.campaigns = {};
+  return c;
+}
+function commsWriteDayCounter_(c) {
+  try { commsProps_().setProperty('COMMS_DAY_COUNTER', JSON.stringify(c)); } catch (e) {}
+}
+
+// Bulk mail waits for civilised hours; operational mail never does. A reschedule
+// notice at 7am is useful, a promotion at 3am is a complaint.
+function commsBulkWindowOk_(now) {
+  // ⚠️ Number(null) is 0, so reading an unset property straight into Number() and
+  // range-checking it yields a VALID hour of midnight — i.e. an unconfigured
+  // install would quietly open the window at 00:00 and send marketing at 3am,
+  // which is the exact thing this function exists to prevent.
+  var start = commsNumProp_('COMMS_BULK_HOUR_START', COMMS_BULK_HOUR_START);
+  var end   = commsNumProp_('COMMS_BULK_HOUR_END', COMMS_BULK_HOUR_END);
+  if (!(start >= 0 && start < 24)) start = COMMS_BULK_HOUR_START;
+  if (!(end > 0 && end <= 24))     end   = COMMS_BULK_HOUR_END;
+  var ct;
+  try {
+    ct = new Date((now || new Date()).toLocaleString('en-US', { timeZone: COMMS_TZ }));
+  } catch (e) { return true; }   // never let a clock problem stop the queue
+  if (ct.getDay() === 0) return false;                 // no Sunday marketing
+  return ct.getHours() >= start && ct.getHours() < end;
+}
+
+// Milliseconds until the window reopens, so a held campaign sleeps rather than
+// rescanning the log every 45 seconds all night.
+function commsMsUntilBulkWindow_(now) {
+  var base = now || new Date();
+  for (var m = 15; m <= 60 * 24 * 2; m += 15) {
+    if (commsBulkWindowOk_(new Date(base.getTime() + m * 60000))) return m * 60000;
+  }
+  return COMMS_QUOTA_RETRY_MS;
+}
+
+// A daily cap resets when the DATE rolls over in COMMS_TZ, which is not the same
+// moment the window reopens — while the window is still open today, the next open
+// slot is fifteen minutes away and the cap would still be spent. So step past
+// midnight first, then find the next open slot.
+function commsMsUntilCapReset_(now) {
+  var base = now || new Date();
+  var today = Utilities.formatDate(base, COMMS_TZ, 'yyyy-MM-dd');
+  for (var m = 15; m <= 60 * 24 * 2; m += 15) {
+    var t = new Date(base.getTime() + m * 60000);
+    if (Utilities.formatDate(t, COMMS_TZ, 'yyyy-MM-dd') !== today && commsBulkWindowOk_(t)) {
+      return m * 60000;
+    }
+  }
+  return COMMS_QUOTA_RETRY_MS;
+}
+
+// Hourly safety net: if a normally-scheduled sweep trigger is ever lost, this
+// recovers within the hour.
+//
+// ⚠️ Triggers are owned by the account that created them, and
+// ScriptApp.getProjectTriggers() only ever returns the EFFECTIVE user's own. So a
+// bare "is one installed?" check answers "no" whenever a *different* account
+// asks, and installs a second guard — neither account able to see or delete the
+// other's. Both then fire hourly, each sweeping as its own owner, and because the
+// sweeping account is the Gmail sender (and its sweep creates the follow-on
+// commsSweep_ triggers, inheriting the same identity), the From on customer mail
+// ends up decided by trigger firing order rather than by configuration.
+//
+// Script properties ARE shared across accounts, so ownership is recorded there.
+// The owning guard stamps a heartbeat every run; one that goes quiet for
+// COMMS_GUARD_STALE_MS is treated as abandoned (owner suspended or departed) and
+// may be taken over, so a dead owner can't stall the queue forever.
+var COMMS_GUARD_OWNER_PROP    = 'COMMS_GUARD_OWNER';
+var COMMS_GUARD_BEAT_PROP     = 'COMMS_GUARD_LAST_BEAT';
+var COMMS_GUARD_CONFLICT_PROP = 'COMMS_GUARD_CONFLICT';
+var COMMS_GUARD_STALE_MS      = 10800000; // 3h — an hourly guard missed 3 beats
+
+function commsEffectiveUser_() {
+  try { return String(Session.getEffectiveUser().getEmail() || ''); } catch (e) { return ''; }
+}
+function commsGuardOwner_() {
+  return String(commsProps_().getProperty(COMMS_GUARD_OWNER_PROP) || '');
+}
+// ms since the owning guard last fired, or null if it has never reported in.
+function commsGuardBeatAge_() {
+  var t = Date.parse(commsProps_().getProperty(COMMS_GUARD_BEAT_PROP) || '');
+  return isNaN(t) ? null : Date.now() - t;
+}
+// Claiming ownership counts as a beat, so a freshly installed guard is never
+// mistaken for an abandoned one during its first hour.
+function commsClaimGuard_(me) {
+  var p = commsProps_();
+  p.setProperty(COMMS_GUARD_OWNER_PROP, me);
+  p.setProperty(COMMS_GUARD_BEAT_PROP, new Date().toISOString());
+}
+
+// Editor-runnable: clear a recorded conflict AFTER the surplus guard has actually
+// been deleted. Deliberately manual — only the surplus guard's own account can
+// delete it (cross-account deletes are impossible), so no code path can confirm
+// the fix, and auto-clearing would erase the warning while the duplicate lived on.
+function commsClearGuardConflict() {
+  var was = String(commsProps_().getProperty(COMMS_GUARD_CONFLICT_PROP) || '');
+  commsProps_().deleteProperty(COMMS_GUARD_CONFLICT_PROP);
+  Logger.log(was ? 'Cleared guard conflict: ' + was : 'No guard conflict was recorded.');
+  return { ok: true, cleared: was };
+}
+
+function commsEnsureGuardTrigger_() {
+  var me = commsEffectiveUser_();
+  var visible;
+  try {
+    visible = ScriptApp.getProjectTriggers().some(function (t) {
+      return t.getHandlerFunction() === 'commsSweepGuard_';
+    });
+  } catch (e) {
+    return; // Can't read triggers — never guess, or we install the duplicate.
+  }
+
+  var owner = commsGuardOwner_();
+
+  if (visible) {
+    if (!me || owner === me) return;
+    if (!owner) { commsClaimGuard_(me); return; }
+    // Guards held by TWO accounts — the state this fix prevents, and the one
+    // already possible in any project that ran the old check. Record it for the
+    // diagnostic rather than quietly reassigning ownership and hiding it.
+    commsProps_().setProperty(COMMS_GUARD_CONFLICT_PROP, owner + ' + ' + me);
+    Logger.log('Comms guard conflict: hourly guards owned by BOTH ' + owner + ' and ' + me);
+    return;
+  }
+
+  if (owner && me && owner !== me) {
+    var age = commsGuardBeatAge_();
+    if (age !== null && age <= COMMS_GUARD_STALE_MS) return; // alive elsewhere; stand down
+    // Taking over cannot remove the old owner's trigger (cross-account deletes
+    // are impossible), but 3h of silence means it is not running anyway, and a
+    // stalled queue is worse than a dormant duplicate.
+    Logger.log('Comms guard: taking over from ' + owner + ' after '
+               + (age === null ? 'no recorded beat' : age + 'ms of silence'));
+  }
+
+  ScriptApp.newTrigger('commsSweepGuard_').timeBased().everyHours(1).create();
+  if (me) commsClaimGuard_(me);
+}
+
 function commsSweepGuard_() {
+  // Heartbeat first: proof of life must survive an early return below.
+  try { commsProps_().setProperty(COMMS_GUARD_BEAT_PROP, new Date().toISOString()); } catch (e) {}
   var nowMs = Date.now();
   var active = commsSheetRows_('campaigns').some(function (c) {
     var st = String(c.status);
@@ -1154,6 +1733,7 @@ function handleCommsCancelCampaign_(payload) {
 // ─── Reads: campaign list + per-recipient detail ─────────────────────────────
 function handleCommsListCampaigns_() {
   commsEnsureSheets_();
+  var counter = commsReadDayCounter_();
   var rows = commsSheetRows_('campaigns').map(function (c) {
     return {
       campaign_id: c.campaign_id, name: c.name, category: c.category, subject: c.subject,
@@ -1161,11 +1741,19 @@ function handleCommsListCampaigns_() {
       created_at: c.created_at, started_at: c.started_at, finished_at: c.finished_at,
       total_recipients: Number(c.total_recipients) || 0, sendable_count: Number(c.sendable_count) || 0,
       sent_count: Number(c.sent_count) || 0, failed_count: Number(c.failed_count) || 0,
-      skipped_count: Number(c.skipped_count) || 0
+      skipped_count: Number(c.skipped_count) || 0,
+      // Pacing state travels with the row. A paced campaign legitimately sits at
+      // 'sending' for days, and a progress bar that stalls with no explanation
+      // reads as a broken send — which is how someone ends up cancelling a
+      // campaign that was working exactly as intended.
+      lane: c.lane || '', daily_cap: Number(c.daily_cap) || 0,
+      sent_today: Number(counter.campaigns[c.campaign_id]) || 0
     };
   });
   rows.sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
-  return { ok: true, campaigns: rows };
+  return { ok: true, campaigns: rows,
+           // So the UI can say WHEN it will resume, not merely that it paused.
+           window_open: commsBulkWindowOk_(), today: commsDayKey_() };
 }
 
 function handleCommsCampaignDetail_(payload) {

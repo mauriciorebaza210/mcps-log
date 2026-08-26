@@ -38,9 +38,10 @@ async function loadCRM() {
 
   const cachedCrm = _appCacheGet('crm_data', 15 * 60 * 1000);
   if (cachedCrm) {
-    _crmCache = cachedCrm;
-    renderCRM(_crmCache, true);
-    renderCRMStats();
+      _crmCache = cachedCrm;
+      renderCRM(_crmCache, true);
+      renderCRMStatusFilter();
+      renderCRMStats();
     populateYearFilter();
     _applyPendingCrmFilter_();
     // Deep-link: open a specific lead's drawer on arrival. Set by the Action
@@ -69,6 +70,7 @@ async function loadCRM() {
         _crmCache = res.data || [];
         _appCacheSet('crm_data', _crmCache);
         renderCRM(_crmCache, true);
+        renderCRMStatusFilter();
         renderCRMStats();
         populateYearFilter();
         if (!cachedCrm) _applyPendingCrmFilter_();
@@ -106,23 +108,19 @@ function renderCRM(data, resetPage = true) {
 
   tbody.innerHTML = page.map(item => {
     const ts = item.timestamp ? new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: '2-digit' }) : '—';
-    const status = (item.status || 'UNSENT').toUpperCase();
+    // ⚠️ The badge used to print the RAW stored value in a seven-branch if-chain:
+    // ACTIVE_CUSTOMER read as "ACTIVE_CUSTOMER", DECLINED fell through to the
+    // unsent style, and 'COMPLETED' was styled while nothing ever stores it.
+    const state = MCPS_STATUS.derive(item);
+    const sm = MCPS_STATUS.meta(state);
     const client = `${item.first_name || ''} ${item.last_name || ''}`.trim() || (item.client_name || '—');
     const total = typeof item.total_with_tax === 'number' ? `$${item.total_with_tax.toFixed(2)}` : (item.total_with_tax || '—');
     const area = item.area ? `<span class="crm-area-badge">${item.area.toUpperCase()}</span>` : '';
 
-    let statusClass = 'sc-unsent';
-    if (status === 'SIGNED' || status === 'COMPLETED') statusClass = 'sc-signed';
-    if (status === 'ACTIVE_CUSTOMER') statusClass = 'sc-active';
-    if (status === 'LOST') statusClass = 'sc-lost';
-    if (status === 'LEAD') statusClass = 'sc-lead';
-    if (status === 'SENT') statusClass = 'sc-sent';
-    if (status === 'COMPLETED_JOB') statusClass = 'sc-completed';
-
     return `
       <tr onclick="viewCRMDetail('${item.quote_id}')" style="cursor:pointer">
         <td><div style="font-size:.85rem;color:var(--muted)">${ts}</div></td>
-        <td><span class="sc-badge ${statusClass}">${status}</span></td>
+        <td><span class="sc-badge" title="${escHtml(sm.hint)}" style="background:${sm.bg};color:${sm.color}">${escHtml(sm.short)}</span></td>
         <td><div style="font-weight:600">${client}</div><div style="font-size:.72rem;color:var(--muted)">${item.email || ''}</div></td>
         <td><div style="font-size:.85rem">${item.city || '—'}</div></td>
         <td>${area}</td>
@@ -174,27 +172,68 @@ function crmGoToPage(n) {
 function renderCRMStats() {
   const bar = document.getElementById('crm-stats-bar');
   if (!bar) return;
-  const counts = { all: _crmCache.length, LEAD: 0, UNSENT: 0, SENT: 0, SIGNED: 0, ACTIVE_CUSTOMER: 0, LOST: 0, COMPLETED_JOB: 0 };
-  _crmCache.forEach(i => {
-    const s = (i.status || 'UNSENT').toUpperCase();
-    if (counts[s] !== undefined) counts[s]++;
-    if (s === 'ACTIVE_CUSTOMER' && (i.contract_status || '').toUpperCase() === 'SIGNED') counts.SIGNED++;
-  });
-  const pills = [
-    { label: 'All', key: 'all', color: '#0f172a', bg: '#f1f5f9' },
-    { label: 'Leads', key: 'LEAD', color: '#475569', bg: '#e2e8f0' },
-    { label: 'Quoted', key: 'SENT', color: '#075985', bg: '#e0f2fe' },
-    { label: 'Signed', key: 'SIGNED', color: '#065f46', bg: '#d1fae5' },
-    { label: 'Active', key: 'ACTIVE_CUSTOMER', color: '#14532d', bg: '#bbf7d0' },
-    { label: 'Lost', key: 'LOST', color: '#991b1b', bg: '#fee2e2' },
-    { label: 'Completed', key: 'COMPLETED_JOB', color: '#475569', bg: '#e2e8f0' },
+  // Rollups and lifecycle stages are rendered separately. Open and Needs You
+  // overlap the stages by design; showing them in the same row made the CRM read as
+  // if records were double-counted.
+  const counts = MCPS_STATUS.counts(_crmCache);
+  const summaries = [
+    { key: 'all', label: 'Total', note: 'records' },
+    { key: 'open', label: 'Open Pipeline', note: 'live deals' },
+    { key: 'action', label: 'Needs You', note: 'requires review' }
   ];
-  bar.innerHTML = pills.map(p =>
-    `<button class="crm-stat-pill" onclick="crmStatFilter('${p.key}')"
-       style="background:${p.bg};color:${p.color}">
-       ${p.label} <strong>${counts[p.key] ?? 0}</strong>
-     </button>`
-  ).join('');
+  const toneFor = (p) => {
+    const state = p.states.length === 1 ? p.states[0]
+      : p.key === 'SENT' ? 'SENT'
+      : p.key === 'ACTIVE_CUSTOMER' ? 'ACTIVE_CUSTOMER'
+      : p.key === 'lost' ? 'LOST'
+      : p.key === 'CHANGES_REQUESTED' ? 'CHANGES_REQUESTED'
+      : '';
+    const m = state ? MCPS_STATUS.meta(state) : null;
+    return {
+      color: m ? m.color : '#334155',
+      bg: m ? m.bg : '#f8fafc',
+      title: m ? m.hint : p.label
+    };
+  };
+
+  const summaryHtml = summaries.map(s => `
+    <button class="crm-summary-chip${_crmStatusFilter === s.key ? ' active' : ''}"
+      onclick="crmStatFilter(${jsArg(s.key)})" aria-pressed="${_crmStatusFilter === s.key}">
+      <span>${escHtml(s.label)}</span>
+      <strong>${counts[s.key] || 0}</strong>
+      <small>${escHtml(s.note)}</small>
+    </button>`).join('');
+
+  const stageHtml = MCPS_STATUS.STAGE_PILLS
+    .filter(p => p.key !== 'all' && counts[p.key] > 0)
+    .map(p => {
+      const tone = toneFor(p);
+      return `<button class="crm-stage-pill${_crmStatusFilter === p.key ? ' active' : ''}"
+        onclick="crmStatFilter(${jsArg(p.key)})" aria-pressed="${_crmStatusFilter === p.key}"
+        title="${escHtml(tone.title)}" style="--pill-bg:${tone.bg};--pill-color:${tone.color}">
+        <span>${escHtml(p.label)}</span><strong>${counts[p.key] || 0}</strong>
+      </button>`;
+    }).join('');
+
+  bar.innerHTML = `
+    <div class="crm-summary-row">${summaryHtml}</div>
+    <div class="crm-stage-row">${stageHtml}</div>`;
+}
+
+// The status dropdown, from the same vocabulary as the pills.
+function renderCRMStatusFilter() {
+  const sel = document.getElementById('crm-filter-status');
+  if (!sel) return;
+  const keep = sel.value || 'all';
+  const stageOpts = MCPS_STATUS.STAGE_PILLS.filter(p => p.key !== 'all')
+    .map(p => `<option value="${escHtml(p.key)}">${escHtml(p.label)}</option>`).join('');
+  const facetOpts = MCPS_STATUS.FACET_PILLS
+    .map(p => `<option value="${escHtml(p.key)}">${escHtml(p.label)}</option>`).join('');
+  sel.innerHTML = '<option value="all">All Statuses</option>' +
+    `<optgroup label="Lifecycle">${stageOpts}</optgroup>` +
+    `<optgroup label="Rollups">${facetOpts}</optgroup>`;
+  sel.value = keep;
+  if (sel.value !== keep) sel.value = 'all';
 }
 
 function populateYearFilter() {
@@ -212,17 +251,22 @@ function populateYearFilter() {
   else select.value = 'all';
 }
 
+let _crmStatusFilter = 'all';
+
 function crmStatFilter(key) {
+  // ⚠️ This used to assign a value that was not among the <select>'s options for
+  // COMPLETED_JOB, so .value silently became '' and the filter matched nothing —
+  // clicking the Completed pill always said "No records match this filter."
+  _crmStatusFilter = key || 'all';
   const statusEl = document.getElementById('crm-filter-status');
-  if (key === 'all') statusEl.value = 'all';
-  else if (key === 'SENT') statusEl.value = 'SENT';
-  else statusEl.value = key;
+  if (statusEl) statusEl.value = _crmStatusFilter;
   filterCRM();
 }
 
 function filterCRM() {
   const q = (document.getElementById('crm-search').value || '').toLowerCase();
   const status = document.getElementById('crm-filter-status').value;
+  _crmStatusFilter = status;
   const areaEl = document.getElementById('crm-filter-area');
   const area = areaEl ? areaEl.value : 'all';
   const yearEl = document.getElementById('crm-filter-year');
@@ -233,12 +277,8 @@ function filterCRM() {
   const filtered = _crmCache.filter(item => {
     const name = item.client_name || `${item.first_name || ''} ${item.last_name || ''}`;
     const clientMatch = `${name} ${item.email || ''} ${item.city || ''}`.toLowerCase().includes(q);
-    const itemStatus = (item.status || 'UNSENT').toUpperCase();
-    const itemContract = (item.contract_status || '').toUpperCase();
-    const statusMatch = status === 'all'
-      || (status.toUpperCase() === 'SIGNED'
-          ? itemStatus === 'ACTIVE_CUSTOMER' && itemContract === 'SIGNED'
-          : itemStatus === status.toUpperCase());
+    // One derivation, shared with the pills, the badges and the Home dashboard.
+    const statusMatch = MCPS_STATUS.matchesPill(status, MCPS_STATUS.derive(item));
     const areaMatch = area === 'all' || (item.area || '').toUpperCase() === area.toUpperCase();
     const yearMatch = yearMatchVal === 'all' || String(item.year_built || '').trim() === yearMatchVal;
     const contractMatch = contractFilter === 'all' || (item.contract_status || '').toUpperCase() === contractFilter.toUpperCase();
@@ -263,7 +303,7 @@ async function viewCRMDetail(quoteId) {
   _activeLeadId = quoteId;
 
   const name = (item.client_name || `${item.first_name || ''} ${item.last_name || ''}`).trim() || 'Lead Detail';
-  const status = (item.status || 'UNSENT').toUpperCase();
+  const status = MCPS_STATUS.label(MCPS_STATUS.derive(item));
   document.getElementById('lead-drawer-title').textContent = name;
   document.getElementById('lead-drawer-sub').textContent = status + (item.area ? '  ·  Area ' + item.area.toUpperCase() : '');
   document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(item) +
@@ -281,7 +321,7 @@ async function viewCRMDetail(quoteId) {
       if (idx > -1) _crmCache[idx] = { ..._crmCache[idx], ...res.item };
       const updated = _crmCache.find(i => i.quote_id === quoteId) || res.item;
       const updatedName = (updated.client_name || `${updated.first_name || ''} ${updated.last_name || ''}`).trim() || 'Lead Detail';
-      const updatedStatus = (updated.status || 'UNSENT').toUpperCase();
+      const updatedStatus = MCPS_STATUS.label(MCPS_STATUS.derive(updated));
       document.getElementById('lead-drawer-title').textContent = updatedName;
       document.getElementById('lead-drawer-sub').textContent = updatedStatus + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
       document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
@@ -302,9 +342,14 @@ function closeLeadDrawer() {
 function closeCRMDetail() { closeLeadDrawer(); }
 
 function buildLeadDrawerHTML(item) {
-  const status = (item.status || 'UNSENT').toUpperCase();
+  const _derivedState = MCPS_STATUS.derive(item);
+  const status = _derivedState;
   const contactLog = Array.isArray(item.contact_log) ? item.contact_log : [];
-  const STATUSES = ['LEAD','UNSENT','SENT','SIGNED','ACTIVE_CUSTOMER','LOST','COMPLETED_JOB'];
+  // ⚠️ Was a hardcoded seven. It offered SIGNED as something an operator could
+  // click — claiming a signature that never happened — and offered every status
+  // from every status, including nonsense like LOST -> ACTIVE_CUSTOMER. The
+  // module returns only the legal manual moves from where this quote actually is.
+  const STATUSES = MCPS_STATUS.allowedNext(_derivedState);
 
   const logHTML = contactLog.length
     ? contactLog.slice().reverse().map(e => `
@@ -342,7 +387,12 @@ function buildLeadDrawerHTML(item) {
       ${hasQuoteData ? `
       <!-- Service & Financials -->
       <div class="lead-section">
-        <div class="lead-sec-label">Quote Details</div>
+        <div class="lead-sec-label">Quote Details
+          <button onclick="crmOpenInQuoteTool('${item.quote_id}')"
+            style="float:right;padding:.2rem .55rem;background:none;border:1px solid var(--border);border-radius:6px;font-size:.72rem;color:var(--teal);cursor:pointer;font-weight:600">
+            Open in Quote Tool
+          </button>
+        </div>
         <div class="lead-info-grid">
           ${item.service ? `<div><b>Service</b>${item.service}</div>` : ''}
           ${item.pool_type ? `<div><b>Pool Type</b>${item.pool_type}</div>` : ''}
@@ -390,22 +440,19 @@ function buildLeadDrawerHTML(item) {
       </div>` : ''}
 
       ${item.contract_url ? `
-      <!-- Contract -->
+      <!-- Legacy contract (Google Docs generator + SignRequest, both retired).
+           The link stays so historical PDFs still open; nothing regenerates or
+           re-sends from here. New agreements live on the Contracts page. -->
       <div class="lead-section">
-        <div class="lead-sec-label">Contract</div>
+        <div class="lead-sec-label">Contract (archived)</div>
         <div style="display:flex;flex-direction:column;gap:.45rem">
           <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
             <a href="${escHtml(item.contract_url)}" target="_blank" rel="noopener"
                style="padding:.45rem .9rem;border:1px solid var(--border);border-radius:8px;font-size:.82rem;color:var(--teal);text-decoration:none;font-weight:600">
               View PDF
             </a>
-            <button id="drawer-send-btn" onclick="sendContract('${item.quote_id}')"
-              style="padding:.45rem .9rem;background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer">
-              ${item.sent_at ? 'Resend Contract' : 'Send Contract ✉'}
-            </button>
           </div>
           ${item.sent_at ? `<div style="font-size:.75rem;color:var(--muted)">Last sent: ${new Date(item.sent_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>` : ''}
-          <div id="send-contract-msg" style="display:none;font-size:.8rem;padding:.3rem .5rem;border-radius:6px"></div>
         </div>
       </div>` : ''}
 
@@ -520,7 +567,15 @@ function buildLeadDrawerHTML(item) {
       <div class="lead-section">
         <div class="lead-sec-label">Update Status</div>
         <div class="lead-status-row">
-          ${STATUSES.map(s => `<button class="lead-status-btn${s === status ? ' active' : ''}" data-status="${s}" onclick="selectLeadStatus('${s}')">${s}</button>`).join('')}
+          <span class="lead-status-current" title="Current derived lifecycle status">Current: ${escHtml(MCPS_STATUS.label(_derivedState))}</span>
+          ${STATUSES.map(k => {
+            const m = MCPS_STATUS.meta(k);
+            return `<button class="lead-status-btn" data-status="${k}"
+              title="${escHtml(m.hint)}" onclick="selectLeadStatus(${jsArg(k)})">${escHtml(m.label)}</button>`;
+          }).join('')}
+          ${STATUSES.length === 0
+            ? `<span class="lead-status-current">No manual moves available</span>`
+            : ''}
         </div>
       </div>
 
@@ -833,7 +888,6 @@ async function saveBillingSetup(quoteId) {
 
   const item = _crmCache.find(i => i.quote_id === quoteId) || {};
   const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
-    status: item.status || 'ACTIVE_CUSTOMER', notes: item.notes || '',
     invoice_day: day, billing_start: start });
 
   if (res.ok) {
@@ -870,7 +924,7 @@ async function cyclePaymentStatus(quoteId, month) {
   if (el) el.innerHTML = _buildBillingSectionHTML_(_crmCache[cacheIdx]);
 
   const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
-    status: item.status, notes: item.notes || '', payment_log: payLog });
+    payment_log: payLog });
 
   if (!res.ok) {
     _crmCache[cacheIdx].payment_log = prevLog;
@@ -888,7 +942,7 @@ function selectLeadStatus(status) {
   const svcEndSection = document.getElementById('lead-svc-end-section');
   const svcEndInput = document.getElementById('lead-service-end');
   if (svcEndSection && svcEndInput) {
-    if (status === 'LOST' || status === 'COMPLETED_JOB') {
+    if (MCPS_STATUS.meta(status).closed) {
       svcEndSection.style.display = '';
       if (!svcEndInput.value) {
         svcEndInput.value = new Date().toISOString().split('T')[0];
@@ -957,6 +1011,14 @@ async function saveLeadChanges() {
   } finally {
     btn.disabled = false; btn.textContent = 'Save Changes';
   }
+}
+
+// Reopen a saved quote in the builder, where price, service, specs and scope can
+// all be changed. Until api/quotes/get.js existed there was nothing to open: a
+// saved quote could only be viewed here, and its pricing was read-only forever.
+function crmOpenInQuoteTool(quoteId) {
+  window._pendingQuoteId = quoteId;
+  if (typeof navigateTo === 'function') navigateTo('quotes');
 }
 
 function _nextMcpsPoolId_() {
@@ -1042,7 +1104,7 @@ async function confirmActivateCustomer(quoteId) {
         document.getElementById('lead-drawer-title').textContent =
           (updated.client_name || `${updated.first_name || ''} ${updated.last_name || ''}`).trim();
         document.getElementById('lead-drawer-sub').textContent =
-          'ACTIVE_CUSTOMER' + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
+          MCPS_STATUS.label(MCPS_STATUS.derive(updated)) + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
         document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
       }
     } else {
@@ -1070,7 +1132,6 @@ async function assignPoolId(quoteId) {
     const item = _crmCache.find(i => i.quote_id === quoteId) || {};
     const res = await api({
       action: 'update_lead', token: _s.token, quote_id: quoteId,
-      status: item.status || 'ACTIVE_CUSTOMER',
       pool_id: poolId,
       sponsored_by_mcp: item.sponsored_by_mcp,
       notes: item.notes || ''
@@ -1258,37 +1319,6 @@ async function crmScheduleGtcVisit(poolId, customerName) {
   }
 }
 
-async function sendContract(quoteId) {
-  const btn = document.getElementById('drawer-send-btn');
-  const msg = document.getElementById('send-contract-msg');
-  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-
-  try {
-    const res = await api({ action: 'send_contract', token: _s.token, quote_id: quoteId });
-    if (res.ok) {
-      const sentAt = res.sent_at || new Date().toISOString();
-      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
-      if (idx > -1) {
-        _crmCache[idx].status = 'SENT';
-        _crmCache[idx].sent_at = sentAt;
-      }
-      renderCRM(_crmFiltered, false);
-      renderCRMStats();
-      const updated = _crmCache.find(i => i.quote_id === quoteId);
-      if (updated) {
-        document.getElementById('lead-drawer-sub').textContent =
-          'SENT' + (updated.area ? '  ·  Area ' + updated.area.toUpperCase() : '');
-        document.getElementById('lead-drawer-body').innerHTML = buildLeadDrawerHTML(updated);
-      }
-    } else {
-      if (msg) { msg.className = 'im err'; msg.textContent = res.error || 'Failed to send.'; msg.style.display = 'block'; }
-      if (btn) { btn.disabled = false; btn.textContent = 'Send Contract ✉'; }
-    }
-  } catch(e) {
-    if (msg) { msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block'; }
-    if (btn) { btn.disabled = false; btn.textContent = 'Send Contract ✉'; }
-  }
-}
 
 async function generateCrmProposal(quoteId) {
   const btn = document.getElementById('drawer-generate-proposal-btn');
@@ -1343,36 +1373,6 @@ async function sendProposalApproval(quoteId) {
   } catch(e) {
     if (msg) { msg.className = 'im err'; msg.textContent = 'Network error. Please try again.'; msg.style.display = 'block'; }
     if (btn) { btn.disabled = false; btn.textContent = 'Send for Approval'; }
-  }
-}
-
-async function confirmImportLeads() {
-  const btn = document.getElementById('import-leads-confirm-btn');
-  const msg = document.getElementById('import-leads-msg');
-  const valid = _importLeadsParsed.filter(r => r.client_name.trim());
-  if (!valid.length) return;
-
-  btn.disabled = true;
-  btn.textContent = `Importing ${valid.length} leads...`;
-
-  try {
-    // Each lead in 'valid' already has first_name/last_name from _parseLeadsText
-    const res = await api({ action: 'import_leads', token: _s.token, leads: valid });
-    if (res.ok) {
-      msg.className = 'im'; msg.style.background = '#dcfce7'; msg.style.color = '#166534';
-      msg.textContent = `Successfully imported ${res.count} leads.`;
-      msg.style.display = 'block';
-      setTimeout(() => { closeImportLeads(); loadCRM(); }, 1500);
-    } else {
-      throw new Error(res.error || 'Unknown error');
-    }
-  } catch (err) {
-    console.error('Import error:', err);
-    msg.className = 'im'; msg.style.background = '#fef2f2'; msg.style.color = '#991b1b';
-    msg.textContent = `Import failed: ${err.message}`;
-    msg.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Confirm Import';
   }
 }
 
@@ -1532,8 +1532,12 @@ async function confirmImportLeads() {
   try {
     const res = await api({ action: 'import_leads', token: _s.token, leads: valid });
     if (res.ok) {
-      document.getElementById('import-leads-backdrop').style.display = 'none';
-      loadCRM();
+      // Confirm the count rather than closing silently: an import that reports
+      // nothing is indistinguishable from one that dropped rows.
+      msg.className = 'im ok';
+      msg.textContent = `Imported ${res.count} lead${res.count === 1 ? '' : 's'}.`;
+      msg.style.display = 'block';
+      setTimeout(() => { closeImportLeads(); loadCRM(); }, 1200);
     } else {
       msg.className = 'im err'; msg.textContent = res.error || 'Import failed.'; msg.style.display = 'block';
       btn.disabled = false; btn.textContent = 'Import Leads';

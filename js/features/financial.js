@@ -1210,8 +1210,6 @@ async function _clientsMarkBilling(quoteId, status) {
     action: 'update_lead',
     token: _s.token,
     quote_id: quoteId,
-    status: item.status || 'ACTIVE_CUSTOMER',
-    notes: item.notes || '',
     payment_log: log
   });
 

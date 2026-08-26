@@ -1610,24 +1610,20 @@ function handleRespondToProposal_(payload) {
     softSetCell_(approvals, approval._rowNum, 'responded_at', now);
     softSetCell_(approvals, approval._rowNum, 'updated_at', now);
 
+    // RETIRED: approval-without-signature. This branch used to accept a bare
+    // "approved" click and then chain handleGenerateContract_ → handleSendContract_
+    // → Zapier → SignRequest. In the merged flow acceptance IS the signature, so
+    // there is no such thing as an approved-but-unsigned proposal: the customer
+    // signs on agreement.html and handleSignAgreement_ does the activation.
+    //
+    // Refused rather than quietly recording a half-state, because a caller that
+    // believed this activated a customer would be wrong in a way nobody notices
+    // until the pool never appears on a route.
     if (approvalStatus === 'APPROVED') {
-      softSetCell_(proposals, proposal._rowNum, 'status', 'ACCEPTED');
-      softSetCell_(proposals, proposal._rowNum, 'accepted_at', now);
-      softSetCell_(proposals, proposal._rowNum, 'updated_at', now);
-      softSetCell_(hit.sheet, hit.rowNum, 'proposal_accepted_at', now);
-      softSetCell_(hit.sheet, hit.rowNum, 'proposal_response_note', note);
-      // Customer approval advances any repair work orders on this quote
-      try { markRepairOrdersApprovedForQuote_(approval.quote_id); } catch (roErr) { Logger.log('markRepairOrdersApprovedForQuote_: ' + roErr); }
-      let contract = handleGenerateContract_(approval.quote_id);
-      if (contract.ok) {
-        const sent = handleSendContract_(approval.quote_id);
-        softSetCell_(proposals, proposal._rowNum, 'status', 'ACCEPTED');
-        softSetCell_(proposals, proposal._rowNum, 'accepted_at', now);
-        softSetCell_(proposals, proposal._rowNum, 'updated_at', now);
-        softSetCell_(hit.sheet, hit.rowNum, 'proposal_accepted_at', now);
-        return { ok: true, status: 'APPROVED', agreement_sent: !!sent.ok, agreement_error: sent.ok ? '' : sent.error };
-      }
-      return { ok: true, status: 'APPROVED', agreement_sent: false, agreement_error: contract.error || 'Agreement generation failed.' };
+      return {
+        ok: false,
+        error: 'Approval requires a signature. Send the agreement link and have the customer sign it.'
+      };
     }
 
     if (approvalStatus === 'DECLINED') {
@@ -3556,94 +3552,6 @@ function activateQuoteServiceFromAgreement_(quoteId, signedAt, activationMethod,
   return Object.assign({ ok: true, quote_id: quoteId, pool_id: poolId }, sync);
 }
 
-function handleServiceAgreementSigned_(payload) {
-  ensureNormalizedSalesSheets_();
-  const agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
-  const signedAt = payload.signed_at || nowIso_();
-  // ══════════════════════════════════════════════════════════════════════════
-  // ⚠️ EXTERNAL, UNAUTHENTICATED CALLER (SignRequest → Zapier).
-  //
-  // Every identifier here comes from outside. Resolving them in priority order
-  // and taking the first hit meant a later identifier was never examined: a
-  // payload carrying a valid quote_id AND a rogue amendment signrequest_id
-  // resolved on the quote_id, passed the type check, and silently ignored the
-  // signrequest entirely.
-  //
-  // So: resolve EVERY supplied identifier, then require them to agree. A payload
-  // whose identifiers point at different agreements is not a request to be
-  // interpreted — it is a request to be refused.
-  // ══════════════════════════════════════════════════════════════════════════
-  const resolved = [];
-  if (payload.agreement_id) {
-    resolved.push({ src: 'agreement_id',
-                    row: findRowByValue_(agreements, 'agreement_id', payload.agreement_id) });
-  }
-  if (payload.signrequest_id) {
-    resolved.push({ src: 'signrequest_id',
-                    row: findRowByValue_(agreements, 'signrequest_id', payload.signrequest_id) });
-  }
-  if (payload.quote_id) {
-    try {
-      resolved.push({ src: 'quote_id',
-                      row: findOriginalAgreementByQuoteStrict_(agreements, payload.quote_id) });
-    } catch (ambErr) {
-      return { ok: false, error: String(ambErr.message || ambErr) };
-    }
-  }
-
-  const hits = resolved.filter(function (r) { return !!r.row; });
-
-  // ⚠️ Type-check EVERY resolved row, not just the winner. An amendment reached
-  // through any identifier must stop the whole request — otherwise a rogue
-  // signrequest_id rides along beside a legitimate quote_id.
-  for (var ri = 0; ri < hits.length; ri++) {
-    if (isAmendmentRow_(hits[ri].row)) {
-      return { ok: false,
-               error: 'This is an amendment (via ' + hits[ri].src +
-                      '). Amendments are signed through the amendment flow.' };
-    }
-  }
-
-  // Identifiers must not disagree.
-  const distinct = [];
-  hits.forEach(function (h) {
-    var id = String(value_(h.row, 'agreement_id') || '');
-    if (distinct.indexOf(id) === -1) distinct.push(id);
-  });
-  if (distinct.length > 1) {
-    return { ok: false,
-             error: 'Conflicting identifiers: ' +
-                    hits.map(function (h) { return h.src + '→' + value_(h.row, 'agreement_id'); }).join(', ') +
-                    '. Refusing to guess which agreement was signed.' };
-  }
-
-  let agreement = hits.length ? hits[0].row : null;
-
-  let quoteId = String(payload.quote_id || (agreement && agreement.source_quote_id) || '').trim();
-  if (!quoteId && payload.row_number) {
-    const sheet = getCrmSheet_();
-    const rowNum = Number(payload.row_number);
-    if (rowNum > 1) {
-      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      const row = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
-      quoteId = value_(quoteObjectFromRow_(headers, row, rowNum), 'quote_id');
-    }
-  }
-  if (!quoteId) return { ok: false, error: 'quote_id, agreement_id, row_number, or signrequest_id required' };
-
-  const activate = activateQuoteServiceFromAgreement_(quoteId, signedAt,
-    payload.activation_method || 'SIGNED_AGREEMENT', agreement && agreement.agreement_id);
-  const refreshedAgreement = agreement || findOriginalAgreementByQuoteStrict_(agreements, quoteId);
-  if (refreshedAgreement) {
-    softSetCell_(agreements, refreshedAgreement._rowNum, 'status', 'SIGNED');
-    softSetCell_(agreements, refreshedAgreement._rowNum, 'signed_at', signedAt);
-    softSetCell_(agreements, refreshedAgreement._rowNum, 'activated_at', nowIso_());
-    if (payload.signrequest_id) softSetCell_(agreements, refreshedAgreement._rowNum, 'signrequest_id', payload.signrequest_id);
-    if (activate.service_account_id) softSetCell_(agreements, refreshedAgreement._rowNum, 'service_account_id', activate.service_account_id);
-    softSetCell_(agreements, refreshedAgreement._rowNum, 'updated_at', nowIso_());
-  }
-  return activate;
-}
 
 function completeStartupAndCreateWeeklyService_(quoteId, billingStart) {
   try {
@@ -4044,10 +3952,6 @@ function handleNormalizedSalesAction_(payload) {
     return { ok: true, agreement_id: res.id, created: res.created };
   }
 
-  if (action === 'service_agreement_signed') {
-    return handleServiceAgreementSigned_(payload);
-  }
-
   if (action === 'activate_service_account_from_agreement') {
     const agreement = payload.agreement_id
       ? findRowByValue_(ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', payload.agreement_id)
@@ -4086,9 +3990,21 @@ function handleNormalizedSalesAction_(payload) {
  * Targets the correct CRM sheet and maps all provided lead info.
  */
 function handleImportLeads_(leads) {
-  const sheet = getCrmSheet_(); 
+  const sheet = getCrmSheet_();
+  // ⚠️ Imported leads used to arrive with NO timestamp, so every one of them
+  // rendered as '—' in the CRM date column and could never be aged or cohorted —
+  // which is precisely what a dormant-list campaign needs to segment on. Stamp it
+  // at import: entering the CRM is a real creation event even when the lead's
+  // original origin date is unrecoverable.
+  //
+  // ensureColumn_ runs FIRST because getColIdx_ throws on a missing column, so a
+  // sheet that predates any of these would otherwise take the whole import down.
+  ['timestamp', 'imported_at', 'lead_source', 'pool_info', 'contact_log'].forEach(function (c) {
+    ensureColumn_(sheet, c);
+  });
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  
+  const nowIso = new Date().toISOString();
+
   const newRows = leads.map(l => {
     let row = new Array(headers.length).fill("");
     row[getColIdx_(headers, 'quote_id')] = "Q-" + Utilities.getUuid().substring(0,8);
@@ -4100,9 +4016,18 @@ function handleImportLeads_(leads) {
     row[getColIdx_(headers, 'city')] = l.city || "";
     row[getColIdx_(headers, 'area')] = l.area || "";
     row[getColIdx_(headers, 'status')] = "LEAD";
+    // Written to BOTH columns on purpose: the import has always stored pool info
+    // in specs_summary while the CRM lead drawer reads item.pool_info, so every
+    // imported pool description was invisible in the UI it was imported for.
     row[getColIdx_(headers, 'specs_summary')] = l.pool_info || "";
+    row[getColIdx_(headers, 'pool_info')] = l.pool_info || "";
     row[getColIdx_(headers, 'year_built')] = l.year_built || "";
     row[getColIdx_(headers, 'contact_log')] = "[]";
+    row[getColIdx_(headers, 'timestamp')] = nowIso;
+    row[getColIdx_(headers, 'imported_at')] = nowIso;
+    // Real provenance. Deliberately NOT quote_source, which means "which tool
+    // created this row" and is read elsewhere as a version discriminator.
+    row[getColIdx_(headers, 'lead_source')] = l.lead_source || "import";
     return row;
   });
 
@@ -4114,6 +4039,45 @@ function handleImportLeads_(leads) {
  * REPLACEMENT FOR handleUpdateLead_
  * Targets the correct CRM sheet for updates.
  */
+// ══════════════════════════════════════════════════════════════════════════════
+// STATUS ENUM — server-side mirror of js/lib/status.js
+//
+// ⚠️ handleUpdateLead_ wrote payload.status straight into the sheet with NO
+// validation, and its route required only *any* valid session token — no role
+// check. A technician's token could set any string, including one no screen can
+// render, on any customer's record. It also wrote payload.notes unconditionally,
+// so a caller that omitted notes ERASED them.
+//
+// Keep in step with js/lib/status.js. Divergence here means the browser offers a
+// transition the server rejects, or vice versa.
+// ══════════════════════════════════════════════════════════════════════════════
+var MCPS_STATUS_ALIASES = {
+  DECLINED: 'CHANGES_DECLINED', CHANGES_DECLINED: 'CHANGES_DECLINED',
+  APPROVED: 'SIGNED', ACCEPTED: 'SIGNED',
+  NOT_REQUIRED: 'ACTIVE_CUSTOMER', DRAFT: 'UNSENT', GENERATED: 'UNSENT',
+  CONVERTED_TO_SERVICE: 'ACTIVE_CUSTOMER', CONVERTED_TO_INVOICE: 'COMPLETED_JOB',
+  COMPLETED: 'COMPLETED_JOB', QUOTED: 'SENT', CANCELLED: 'LOST',
+  PENDING: 'UNSENT', ACTIVE: 'ACTIVE_CUSTOMER', SIGNED_CUSTOMER: 'ACTIVE_CUSTOMER'
+};
+
+var MCPS_STATUS_STATES = ['LEAD','UNSENT','SENT','VIEWED','CHANGES_REQUESTED','SIGNED',
+  'ACTIVE_CUSTOMER','PAUSED','COMPLETED_JOB','CHANGES_DECLINED','EXPIRED','LOST'];
+
+// Only what a human may set by hand. Signing outcomes are recorded by the
+// signing flow — a button that claims a signature is a liability.
+var MCPS_STATUS_MANUAL = ['LEAD','UNSENT','SENT','ACTIVE_CUSTOMER','PAUSED','COMPLETED_JOB','LOST'];
+
+function mcpsNormalizeStatus_(raw) {
+  var v = String(raw == null ? '' : raw).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (!v) return '';
+  if (MCPS_STATUS_STATES.indexOf(v) !== -1) return v;
+  return MCPS_STATUS_ALIASES[v] || '';
+}
+
+function mcpsClosedStatus_(key) {
+  return ['COMPLETED_JOB','CHANGES_DECLINED','EXPIRED','LOST'].indexOf(key) !== -1;
+}
+
 function handleUpdateLead_(payload) {
   ensureNormalizedSalesSheets_();
   const sheet = getCrmSheet_(); // Updated to use the CRM sheet helper
@@ -4129,8 +4093,26 @@ function handleUpdateLead_(payload) {
 
   if (rowIdx === -1) return { ok: false, error: "Quote ID not found" };
 
-  sheet.getRange(rowIdx, getColIdx_(headers, 'status') + 1).setValue(payload.status);
-  sheet.getRange(rowIdx, getColIdx_(headers, 'notes') + 1).setValue(payload.notes);
+  // ⚠️ VALIDATION. This used to write payload.status verbatim, so any string
+  // reached the sheet — including values no screen renders, which then showed as
+  // an unstyled badge and matched no filter.
+  if (payload.status !== undefined && payload.status !== null && String(payload.status).trim() !== '') {
+    var wanted = mcpsNormalizeStatus_(payload.status);
+    if (!wanted) {
+      return { ok: false, error: 'Unrecognised status: ' + payload.status };
+    }
+    if (MCPS_STATUS_MANUAL.indexOf(wanted) === -1) {
+      return { ok: false, error: wanted + ' is set by the signing flow, not by hand.' };
+    }
+    sheet.getRange(rowIdx, getColIdx_(headers, 'status') + 1).setValue(wanted);
+    payload.status = wanted;   // downstream branches below compare against this
+  }
+
+  // ⚠️ notes used to be written unconditionally, so any caller that did not send
+  // them ERASED whatever was there. Only write when the field is actually present.
+  if (payload.notes !== undefined && payload.notes !== null) {
+    sheet.getRange(rowIdx, getColIdx_(headers, 'notes') + 1).setValue(payload.notes);
+  }
 
   // Write pool_id when provided (used during ACTIVE_CUSTOMER activation)
   if (payload.pool_id !== undefined && payload.pool_id !== null) {
@@ -4149,8 +4131,24 @@ function handleUpdateLead_(payload) {
   if (payload.contact_entry) {
     const logColIdx = getColIdx_(headers, 'contact_log') + 1;
     const currentLogStr = sheet.getRange(rowIdx, logColIdx).getValue();
-    let logArr = currentLogStr ? JSON.parse(currentLogStr) : [];
-    logArr.push(payload.contact_entry);
+    // A malformed cell used to throw here and take the entire lead update down
+    // with it — including the status change the user was actually making.
+    let logArr = [];
+    if (currentLogStr) {
+      try {
+        const parsed = JSON.parse(currentLogStr);
+        if (Array.isArray(parsed)) logArr = parsed;
+      } catch (e) { logArr = []; }
+    }
+    // entry.date is what the user typed — when they remember the call happening —
+    // and stays as narrative. logged_at is when the server was told, which is the
+    // only one of the two that cannot be backdated, and therefore the only one
+    // safe to compute recency from. See appscript/LeadSegments.js.
+    const entry = payload.contact_entry;
+    if (entry && typeof entry === 'object' && !entry.logged_at) {
+      entry.logged_at = new Date().toISOString();
+    }
+    logArr.push(entry);
     sheet.getRange(rowIdx, logColIdx).setValue(JSON.stringify(logArr));
   }
 
@@ -4165,6 +4163,10 @@ function handleUpdateLead_(payload) {
     }
     sheet.getRange(rowIdx, idx + 1).setValue(val !== undefined && val !== null ? val : '');
   };
+  // Server-stamped last contact. Without this, logging a call in the drawer moves
+  // nothing the cold-list segments can see, and the lead stays on the "never
+  // contacted" list somebody just phoned.
+  if (payload.contact_entry) softSet('last_contact_logged_at', new Date().toISOString());
   if (payload.invoice_day !== undefined && payload.invoice_day !== null && payload.invoice_day !== '') {
     softSet('invoice_day', Number(payload.invoice_day));
   }
@@ -4471,199 +4473,11 @@ function handleUpdateQuoteInfo_(payload) {
 // CONTRACT GENERATION
 // ──────────────────────────────────────────────────────────────────────────────
 
-function handleGenerateContract_(quoteId) {
-  try {
-    const sheet = getCrmSheet_();
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    const idCol = headers.map(h => String(h).toLowerCase().trim()).indexOf('quote_id');
-    let rowNum = -1;
-    let rowData = null;
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][idCol]).trim() === String(quoteId).trim()) {
-        rowNum = i + 1;
-        rowData = data[i];
-        break;
-      }
-    }
-    if (rowNum === -1 || !rowData) return { ok: false, error: 'Quote not found: ' + quoteId };
-
-    const get = (col) => {
-      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
-      return idx !== -1 ? rowData[idx] : '';
-    };
-    const setCell = (col, val) => {
-      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
-      if (idx !== -1) sheet.getRange(rowNum, idx + 1).setValue(val);
-    };
-
-    const props = PropertiesService.getScriptProperties();
-    const templateId = props.getProperty('CONTRACT_TEMPLATE_ID');
-    const folderId   = props.getProperty('CONTRACT_FOLDER_ID');
-    if (!templateId) return { ok: false, error: 'CONTRACT_TEMPLATE_ID not set in Script Properties.' };
-    if (!folderId)   return { ok: false, error: 'CONTRACT_FOLDER_ID not set in Script Properties.' };
-
-    const fullName = [get('first_name'), get('last_name')].filter(Boolean).join(' ').trim() || 'Customer';
-    const fileName = 'Pool Service Agreement - ' + fullName + ' - #' + quoteId;
-
-    const templateFile = DriveApp.getFileById(templateId);
-    const folder       = DriveApp.getFolderById(folderId);
-    const tempDoc      = templateFile.makeCopy('TEMP_DOC_' + fileName, folder);
-    const doc          = DocumentApp.openById(tempDoc.getId());
-    const body         = doc.getBody();
-
-    body.replaceText('{{DATE}}',      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy'));
-    body.replaceText('{{CLIENT_NAME}}', fullName);
-    body.replaceText('{{EMAIL}}',     String(get('email')  || ''));
-    body.replaceText('{{PHONE}}',     String(get('phone')  || ''));
-    body.replaceText('{{ADDRESS}}',   String(get('address') || ''));
-    body.replaceText('{{SERVICE_TYPE}}', String(get('service') || ''));
-    body.replaceText('{{TOTAL}}',     '$' + Number(get('total_with_tax')  || 0).toFixed(2));
-    body.replaceText('{{POOL_SPECS}}', String(get('specs_summary') || ''));
-    body.replaceText('{{MONTHLY_RATE}}', '$' + Number(get('quote_subtotal')  || 0).toFixed(2));
-    body.replaceText('{{SALES_TAX}}', '$' + Number(get('sales_tax')  || 0).toFixed(2));
-    body.replaceText('{{QUOTE_ID}}',  quoteId || 'N/A');
-
-    const zip      = String(get('zip_code') || '');
-    const city     = String(get('city')     || '');
-    const location = [city, zip].filter(Boolean).join(', ');
-    body.replaceText('{{ZIP_CODE}}',  zip      || 'N/A');
-    body.replaceText('{{CITY}}',      city     || 'N/A');
-    body.replaceText('{{LOCATION}}',  location || 'N/A');
-    body.replaceText('{{TRAVEL_FEE}}', '$' + Number(get('travel_fee') || 0).toFixed(2));
-
-    const startDateRaw = get('contract_start_date');
-    let startDateFormatted = 'TBD';
-    if (startDateRaw) {
-      try {
-        startDateFormatted = Utilities.formatDate(new Date(startDateRaw), Session.getScriptTimeZone(), 'MMMM d, yyyy');
-      } catch(_) {
-        startDateFormatted = String(startDateRaw);
-      }
-    }
-    body.replaceText('{{CONTRACT_START_DATE}}', startDateFormatted);
-
-    doc.saveAndClose();
-
-    const pdfBlob    = tempDoc.getAs(MimeType.PDF).setName(fileName + '.pdf');
-    const pdfFile    = folder.createFile(pdfBlob);
-    tempDoc.setTrashed(true);
-
-    const fileId            = pdfFile.getId();
-    const driveUrl          = pdfFile.getUrl();
-    const directDownloadUrl = 'https://drive.google.com/uc?export=download&id=' + fileId;
-
-    setCell('contract_generated',    'Yes');
-    setCell('contract_file_id',      fileId);
-    setCell('contract_url',          driveUrl);
-    setCell('contract_download_url', directDownloadUrl);
-    setCell('contract_status',       'CONTRACT_GENERATED');
-
-    let normalized = null;
-    try {
-      normalized = syncQuoteToNormalized_(quoteId);
-    } catch(syncErr) {
-      logMigration_('handleGenerateContract_', 'ERROR', 'Normalized sync failed for ' + quoteId, 1, syncErr);
-    }
-
-    return {
-      ok: true,
-      contract_url: driveUrl,
-      contract_download_url: directDownloadUrl,
-      file_id: fileId,
-      agreement_id: normalized && normalized.agreement_id
-    };
-  } catch(e) {
-    return { ok: false, error: 'handleGenerateContract_ Error: ' + e.toString() };
-  }
-}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CONTRACT SENDING (fires Zapier webhook → Drive → SignRequest → Sheet update)
 // ──────────────────────────────────────────────────────────────────────────────
 
-function handleSendContract_(quoteId) {
-  try {
-    const sheet = getCrmSheet_();
-    const data  = sheet.getDataRange().getValues();
-    const headers = data[0];
-
-    const idCol = headers.map(h => String(h).toLowerCase().trim()).indexOf('quote_id');
-    let rowNum = -1;
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][idCol]).trim() === String(quoteId).trim()) { rowNum = i + 1; break; }
-    }
-    if (rowNum === -1) return { ok: false, error: 'Quote not found: ' + quoteId };
-
-    const get = col => {
-      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
-      return idx !== -1 ? data[rowNum - 1][idx] : '';
-    };
-    const setCell = (col, val) => {
-      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
-      if (idx !== -1) sheet.getRange(rowNum, idx + 1).setValue(val);
-    };
-
-    const webhookUrl = PropertiesService.getScriptProperties().getProperty('ZAPIER_CONTRACT_WEBHOOK');
-    if (!webhookUrl) return { ok: false, error: 'ZAPIER_CONTRACT_WEBHOOK not set in Script Properties.' };
-
-    const sentAt = new Date().toISOString();
-
-    // Extract file ID from Drive URL (contract_file_id column may not exist in sheet)
-    const contractUrl = get('contract_url');
-    const fileIdMatch = contractUrl.match(/\/d\/([a-zA-Z0-9_\-]+)/);
-    const contractFileId = fileIdMatch ? fileIdMatch[1] : get('contract_file_id');
-
-    let normalized = null;
-    try {
-      normalized = syncQuoteToNormalized_(quoteId);
-    } catch(syncErr) {
-      logMigration_('handleSendContract_', 'ERROR', 'Normalized sync failed before send for ' + quoteId, 1, syncErr);
-    }
-    const agreement = normalized && normalized.agreement_id
-      ? findRowByValue_(ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', normalized.agreement_id)
-      : null;
-
-    const zapPayload = {
-      row_number:       rowNum,
-      quote_id:         get('quote_id'),
-      agreement_id:     normalized && normalized.agreement_id || '',
-      agreement_number: agreement && agreement.agreement_number || '',
-      first_name:       get('first_name'),
-      last_name:        get('last_name'),
-      email:            get('email'),
-      contract_file_id: contractFileId,
-      url:              contractUrl,
-      send_contract:    'true',    // string — Zapier filter uses text match
-      send_contract_at: sentAt,
-      // sent_at intentionally omitted — Zapier filter checks "Does not exist"
-      status:           get('status')
-    };
-
-    UrlFetchApp.fetch(webhookUrl, {
-      method:           'post',
-      contentType:      'application/json',
-      payload:          JSON.stringify(zapPayload),
-      muteHttpExceptions: true
-    });
-
-    // Update Quotes sheet columns
-    setCell('send_contract',    true);
-    setCell('send_contract_at', sentAt);
-    setCell('status',           'SENT');
-
-    try {
-      syncQuoteToNormalized_(quoteId);
-    } catch(syncErr) {
-      logMigration_('handleSendContract_', 'ERROR', 'Normalized sync failed for ' + quoteId, 1, syncErr);
-    }
-
-    return { ok: true, sent_at: sentAt };
-  } catch(e) {
-    return { ok: false, error: 'handleSendContract_ Error: ' + e.toString() };
-  }
-}
 
 // Sets route_status = 'inactive' in the Routes sheet for a given pool_id.
 // Called when a quote is marked COMPLETED_JOB or LOST so the pool drops off the schedule.
@@ -4696,18 +4510,101 @@ function deactivatePoolInRoutes_(poolId) {
 //   recurring route stop.
 // - Green-to-Clean keeps its existing route placeholder flow.
 // ──────────────────────────────────────────────────────────────────────────────
+// ⚠️ This used to dispatch on the service LABEL, matching the literal string
+// 'weekly full service'. Any drift in that label — a rename, a stray space —
+// silently produced a pool with no Routes row, which is why
+// repairMissingWeeklyRouteRows_ had to exist as a cleanup. It now prefers the
+// machine key and only falls back to label sniffing for rows written before
+// service_key existed.
 function syncQuoteOperationalSchedule_(quoteHeaders, quoteRow, poolId) {
   const qIdx = (col) => quoteHeaders.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
   const get = (col) => { const i = qIdx(col); return i !== -1 ? String(quoteRow[i] || '').trim() : ''; };
-  const service = get('service').toLowerCase();
-  if (!poolId || !service) return;
+  if (!poolId) return;
 
-  if (service.indexOf('startup') !== -1) {
-    addStartupPoolToRoutes_(quoteHeaders, quoteRow, poolId);
-  } else if (service.indexOf('green') !== -1) {
-    addGtcPoolToRoutes_(quoteHeaders, quoteRow, poolId);
-  } else if (service.indexOf('weekly full service') !== -1) {
-    addWeeklyPoolToRoutes_(quoteHeaders, quoteRow, poolId);
+  var key = get('service_key').toLowerCase();
+  if (!key) {
+    const service = get('service').toLowerCase();
+    if (!service) return;
+    if (service.indexOf('startup') !== -1) key = 'pool_startup';
+    else if (service.indexOf('green') !== -1) key = 'green_to_clean';
+    else if (service.indexOf('repair') !== -1 || service.indexOf('other job') !== -1) key = 'repair_job';
+    else if (service.indexOf('bi-weekly') !== -1 || service.indexOf('biweekly') !== -1) key = 'biweekly_maint';
+    else if (service.indexOf('weekly') !== -1) key = 'weekly_full';
+  }
+
+  if (key === 'pool_startup')        addStartupPoolToRoutes_(quoteHeaders, quoteRow, poolId);
+  else if (key === 'green_to_clean') addGtcPoolToRoutes_(quoteHeaders, quoteRow, poolId);
+  else if (key === 'weekly_full')    addWeeklyPoolToRoutes_(quoteHeaders, quoteRow, poolId);
+  // biweekly_maint and repair_job intentionally place no recurring route row.
+}
+
+// ── Operational provisioning for a quote written elsewhere ────────────────────
+// api/quotes/save.js writes the relational model and the Quotes export from
+// Vercel in ~8 HTTP calls, then the browser calls this once, AFTER it has already
+// shown "Saved". The Google-specific work — Routes placement, Maps geocoding,
+// Scheduled_Visits, the repair work order — stays here because it needs Maps and
+// the Routes spreadsheet, but it no longer sits inside the operator's wait.
+//
+// Idempotent: every function it calls already guards against duplicates
+// (addWeeklyPoolToRoutes_ returns early on an existing pool_id,
+// createScheduledVisitIfMissing_ dedupes on pool_id + visit_type).
+function handleProvisionQuoteSchedule_(quoteId) {
+  try {
+    const qid = String(quoteId || '').trim();
+    if (!qid) return { ok: false, error: 'quote_id required' };
+    const hit = getQuoteById_(qid);
+    if (!hit) return { ok: false, error: 'Quote not found: ' + qid };
+
+    const q = hit.object;
+    const poolId = String(value_(q, 'pool_id') || '').trim();
+    const serviceKey = String(value_(q, 'service_key') || '').trim().toLowerCase();
+    const done = { routes: false, repair_order: '' };
+
+    if (poolId) {
+      try {
+        syncQuoteOperationalSchedule_(hit.headers, hit.row, poolId);
+        done.routes = true;
+      } catch (routesErr) {
+        Logger.log('handleProvisionQuoteSchedule_ routes failed: ' + routesErr);
+        done.routes_error = String(routesErr);
+      }
+    }
+
+    // ⚠️ THE REPAIR WORK ORDER. handleSaveQuote_ guarded this with
+    //     String(payload.service).toLowerCase() === 'repair_job'
+    // while the browser sent the LABEL 'Repair / Replacement / Other Job', so the
+    // comparison was never true and no Repair_Orders row was ever created. Every
+    // repair sold through the quote tool was invisible to the Jobs tab. Keyed off
+    // service_key now.
+    if (serviceKey === 'repair_job' || /repair|other job/i.test(String(value_(q, 'service') || ''))) {
+      try {
+        const orderId = createRepairOrderFromQuote_({
+          first_name: value_(q, 'first_name'), last_name: value_(q, 'last_name'),
+          address: value_(q, 'address') || value_(q, 'repair_company_address'),
+          city: value_(q, 'city'), pool_id: poolId,
+          repair_company_name: value_(q, 'repair_company_name'),
+          repair_company_address: value_(q, 'repair_company_address'),
+          repair_job_name: value_(q, 'repair_job_name'),
+          repair_job_type: value_(q, 'repair_job_type'),
+          repair_job_description: value_(q, 'repair_job_description'),
+          repair_equipment: value_(q, 'repair_equipment'),
+          repair_issue: value_(q, 'repair_issue'),
+          repair_priority: value_(q, 'repair_priority'),
+          repair_parts: value_(q, 'repair_parts'),
+          repair_assigned_to: value_(q, 'repair_assigned_to'),
+          repair_photo_url: value_(q, 'repair_photo_url'),
+          created_by: value_(q, 'created_by')
+        }, qid);
+        done.repair_order = orderId || '';
+      } catch (roErr) {
+        Logger.log('handleProvisionQuoteSchedule_ repair order failed: ' + roErr);
+        done.repair_order_error = String(roErr);
+      }
+    }
+
+    return { ok: true, quote_id: qid, pool_id: poolId, provisioned: done };
+  } catch (e) {
+    return { ok: false, error: 'handleProvisionQuoteSchedule_ Error: ' + e.toString() };
   }
 }
 

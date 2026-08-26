@@ -717,20 +717,16 @@
         </div>
       </div>
       <div style="padding:.85rem 1.1rem">
-        <div id="crm-stats-bar" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem"></div>
+        <div id="crm-stats-bar"></div>
         <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
           <div style="flex:1;min-width:200px">
             <input class="si" id="crm-search" type="text" placeholder="Search by name, email, or city..." oninput="filterCRM()">
           </div>
+          <!-- Options are populated from js/lib/status.js by renderCRMStatusFilter().
+               Hardcoding them is how the value COMPLETED came to be offered while
+               COMPLETED_JOB is what is stored, so the filter matched nothing. -->
           <select class="si" id="crm-filter-status" onchange="filterCRM()" style="width:auto">
             <option value="all">All Statuses</option>
-            <option value="LEAD">Leads</option>
-            <option value="UNSENT">Quotes (Unsent)</option>
-            <option value="SENT">Quotes (Sent)</option>
-            <option value="SIGNED">Signed Contracts</option>
-            <option value="ACTIVE_CUSTOMER">Active Customers</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="LOST">Lost</option>
           </select>
           <select class="si" id="crm-filter-area" onchange="filterCRM()" style="width:auto">
             <option value="all">All Areas</option>
@@ -2200,6 +2196,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="/js/lib/constants.js"></script>
+<script src="/js/lib/status.js"></script>
 <script src="/js/lib/api.js"></script>
 <script src="/js/lib/auth.js"></script>
 <script src="/js/lib/router.js"></script>

@@ -63,6 +63,7 @@ function navigateTo(pageWithSub){
     loadRoutes();
     switchHubTab(sub || 'schedule');
   }
+  if(page==='route_planner') loadRoutePlanner();
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
@@ -93,12 +94,16 @@ function _setSidebarActive(page, hubTab) {
   } else {
     targetId = hubTab ? `ni-${page}-${hubTab}` : `ni-${page}`;
   }
-  const target = document.getElementById(targetId);
+  let target = document.getElementById(targetId);
+  // Fall back to the page itself when a sub-tab has no sidebar entry of its own.
+  // Without this the sidebar shows NOTHING as active on any such tab (e.g.
+  // comms/audiences), which reads as "you are nowhere".
+  if (!target && hubTab) target = document.getElementById(`ni-${page}`);
   if (target) target.classList.add('active');
   // Auto-expand parent accordion
   if (page === 'crm' || page === 'quotes' || page === 'comms' || page === 'contracts' ||
       page === 'action_queue') _setAccordionOpen('sales', true);
-  if (['jobs','live_map','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
+  if (['jobs','live_map','route_planner','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
   if (page === 'financial_hub') _setAccordionOpen('finance', true);
   if (page === 'alerts') _setAccordionOpen('alerts', true);
 }

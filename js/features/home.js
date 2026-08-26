@@ -417,7 +417,10 @@ async function loadHomeStats() {
         
         const price = parseFloat(item.total_with_tax) || parseFloat(String(item.price || 0).replace(/[^0-9.]/g, '')) || 0;
 
-        if (['LEAD', 'QUOTED'].includes(status)) {
+        // ⚠️ This filtered on a legacy quote status nothing has ever written. Only
+        // LEAD ever matched, so every priced-but-unsigned quote contributed $0
+        // and "Open Opportunities" showed a fraction of the real pipeline.
+        if (MCPS_STATUS.meta(MCPS_STATUS.derive(item)).open) {
           openOpportunities += price;
         }
 
@@ -530,14 +533,13 @@ async function loadHomeStats() {
 
     const criticalAlerts = ((alertsRes.ok && alertsRes.alerts) ? alertsRes.alerts.length : 0) + billingAlerts.length;
 
+    // ⚠️ All three stages were near-permanently zero: the legacy quoted state is never written,
+    // and 'SIGNED' is DERIVED (ACTIVE_CUSTOMER + contract_status SIGNED) rather
+    // than stored, so a raw equality check almost never matched either.
     let crmLeads = 0, crmQuoted = 0, crmSigned = 0;
     if (crmRes.ok && crmRes.data) {
-      crmRes.data.forEach(item => {
-        const s = (item.status || '').toUpperCase();
-        if (s === 'LEAD') crmLeads++;
-        else if (s === 'QUOTED') crmQuoted++;
-        else if (s === 'SIGNED') crmSigned++;
-      });
+      const pl = MCPS_STATUS.pipeline(crmRes.data);
+      crmLeads = pl.leads; crmQuoted = pl.quoted; crmSigned = pl.signed + pl.active;
     }
 
     const signedCount = (goalRes && goalRes.ok) ? (goalRes.signed_this_week || 0) : 0;
@@ -584,10 +586,14 @@ async function loadHomeStats() {
 
       newLeadsThisWeek = crmRes.data.filter(i => {
         const d = _parseClientDate_(i.timestamp || i.created_at);
-        return d && d >= sevenDaysAgo && (i.status || '').toUpperCase() === 'LEAD';
+        return d && d >= sevenDaysAgo && MCPS_STATUS.derive(i) === 'LEAD';
       }).length;
 
-      quotesSent = crmRes.data.filter(i => (i.status || '').toUpperCase() === 'QUOTED').length;
+      // Was always 0 for the same reason.
+      quotesSent = crmRes.data.filter(i => {
+        const st = MCPS_STATUS.derive(i);
+        return st === 'SENT' || st === 'VIEWED';
+      }).length;
 
       const timestamps = crmRes.data
         .map(i => _parseClientDate_(i.timestamp || i.created_at))
