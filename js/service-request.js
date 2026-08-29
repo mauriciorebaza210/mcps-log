@@ -522,12 +522,37 @@
     });
     $('back').addEventListener('click', function () { go(4); });
     $('send').addEventListener('click', submit);
+
+    // Submitting mid-upload silently drops the photo — the customer attached it,
+    // watched it appear, and it never arrives. Hold the button and re-check,
+    // rather than letting them send an incomplete request.
+    if (uploading) waitForUploads();
   }
 
   function row(k, v, editStep, strong) {
     return '<div class="row"><div class="k">' + esc(k) +
       (editStep ? '<br><button class="editlink" data-edit="' + editStep + '">Change</button>' : '') +
       '</div><div class="v' + (strong ? ' strong' : '') + '">' + esc(v) + '</div></div>';
+  }
+
+  function waitForUploads() {
+    var btn = $('send');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Finishing photos...';
+    var tries = 0;
+    var poll = setInterval(function () {
+      var left = S.photos.filter(function (p) { return p.state === 'uploading'; }).length;
+      // 30s ceiling: a stuck upload must not trap someone on the review screen.
+      // Failed photos are simply left off, which the customer can see.
+      if (!left || ++tries > 60) {
+        clearInterval(poll);
+        if (!$('send')) return;
+        $('send').disabled = false;
+        $('send').textContent = 'Send request';
+        if (S.step === 5) render();
+      }
+    }, 500);
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────

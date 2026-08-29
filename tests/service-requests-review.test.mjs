@@ -127,6 +127,20 @@ t('direct scheduling is refused', await (async () => {
   return r.status === 400 && /quote tool/i.test(r.body.error || '');
 })());
 
+// ── Input validation ────────────────────────────────────────────────────────
+section('Input validation');
+{
+  const bad = d => call('POST', { action: 'schedule', request_id: rSchedulable.request_id, scheduled_date: d });
+  t('a malformed date is refused', (await bad('next tuesday')).status === 400);
+  t('an impossible date is refused', (await bad('2026-13-45')).status === 400, 'a regex alone would accept this');
+  t('Feb 30 is refused', (await bad('2026-02-30')).status === 400);
+  t('a past date is refused', (await bad('2020-01-01')).status === 400);
+  t('a missing date is refused', (await call('POST', { action: 'schedule', request_id: rSchedulable.request_id })).status === 400);
+
+  const r = await call('POST', { action: 'link', request_id: rNoPool.request_id, pool_id: 'MCPS-9999999' });
+  t('linking a pool ID that does not exist is refused', r.status === 400 && /does not exist/i.test(r.body.error || ''), JSON.stringify(r.body).slice(0, 120));
+}
+
 // ── Schedule + idempotency ──────────────────────────────────────────────────
 section('Schedule');
 {
@@ -183,7 +197,11 @@ section('Cleanup');
   let removed = 0;
 
   const blank = async (tab, id, matcher, width) => {
-    const values = await readSheetRange(tab, id);
+    // Retry once: a quota blip here would strand seeded rows in a live sheet,
+    // which is worse than a slow test.
+    let values;
+    try { values = await readSheetRange(tab, id); }
+    catch (_) { await new Promise(r => setTimeout(r, 8000)); values = await readSheetRange(tab, id).catch(() => []); }
     const w = width || (values[0] || []).length;
     for (let i = 1; i < values.length; i++) {
       if (matcher(values[i])) {

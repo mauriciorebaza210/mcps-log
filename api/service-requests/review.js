@@ -236,17 +236,61 @@ function stamp(row, session, action, toStatus, extra) {
 
 // ── link ────────────────────────────────────────────────────────────────────
 
+// Quotes, Clients and Client_Locations behind one short cache.
+//
+// Every action here was re-reading all three: create_lead for its re-match,
+// poolIdExists for its check. An admin working down a queue of ten made thirty
+// full-sheet reads in under a minute, which is enough to hit the Sheets
+// per-minute read quota — it did, during testing, and the endpoint fails hard
+// when it does.
+//
+// Fifteen seconds is deliberately short. create_lead's re-match has to see
+// current data to be worth anything, but what it guards against is a client
+// created hours ago, not fifteen seconds ago, so this collapses the burst
+// without weakening the check.
+function crmSnapshot() {
+  return getCached('sr:review-crm', 15 * 1000, async () => {
+    const id = crmSpreadsheetId();
+    const [quotes, clients, locations] = await Promise.all([
+      readSheetRange('Quotes', id).catch(() => []),
+      readSheetRange('Clients', id).catch(() => []),
+      readSheetRange('Client_Locations', id).catch(() => [])
+    ]);
+    return { quotes, clients, locations };
+  });
+}
+
+// The whole pool_id preflight rests on the id being real. It arrives from a
+// button the console rendered, but a stale tab or a hand-made request could
+// carry one that no longer exists — and a visit pointing at a missing pool is
+// the nameless stop on the tech board that the preflight exists to prevent.
+async function poolIdExists(poolId) {
+  const id = String(poolId || '').trim();
+  if (!id) return true;   // no id is a valid state; scheduling is blocked separately
+  const snap = await crmSnapshot();
+  const match = r => String(r.pool_id || '').trim().toUpperCase() === id.toUpperCase();
+  return rowsToObjects(snap.quotes).some(match) || rowsToObjects(snap.locations).some(match);
+}
+
 async function actionLink(req, res, session, body) {
   const { header, row } = await locate(body.request_id);
   if (!row) return sendJson(res, 404, { ok: false, error: 'Request not found.' });
   const blocked = guard(row, 'link'); if (blocked) return sendJson(res, 409, { ok: false, error: blocked });
+
+  const poolId = clean(body.pool_id, 40);
+  if (poolId && !(await poolIdExists(poolId))) {
+    return sendJson(res, 400, {
+      ok: false,
+      error: `Pool ID ${poolId} does not exist. Reload the queue — this match may be out of date.`
+    });
+  }
 
   const patch = stamp(row, session, 'link', 'in_review', {
     match_status: 'confident',
     match_client_id: clean(body.client_id, 40),
     match_quote_id: clean(body.quote_id, 40),
     match_location_id: clean(body.location_id, 40),
-    match_pool_id: clean(body.pool_id, 40),
+    match_pool_id: poolId,
     match_reasons: 'linked_by_' + actorName(session)
   });
   await saveRequest(header, row, patch);
@@ -266,9 +310,8 @@ async function actionCreateLead(req, res, session, body) {
   const blocked = guard(row, 'create_lead'); if (blocked) return sendJson(res, 409, { ok: false, error: blocked });
 
   const crmId = crmSpreadsheetId();
-  const [quoteValues, clientValues, locationValues] = await Promise.all([
-    readSheetRange('Quotes', crmId), readSheetRange('Clients', crmId), readSheetRange('Client_Locations', crmId)
-  ]);
+  const snap = await crmSnapshot();
+  const quoteValues = snap.quotes, clientValues = snap.clients, locationValues = snap.locations;
 
   // ⚠️ RE-MATCH AT CLICK TIME, not just at submit.
   // The match stored on the row is a snapshot from when the customer sent it.
@@ -360,10 +403,24 @@ async function actionSchedule(req, res, session, body) {
     });
   }
 
+  // A regex alone accepts 2026-13-45. Round-tripping through Date catches a day
+  // that does not exist, and the past check catches the far more likely slip —
+  // a date picker left on last month.
   const date = clean(body.scheduled_date, 12);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return sendJson(res, 400, { ok: false, error: 'Choose a date for the visit.' });
   }
+  const parsed = new Date(date + 'T12:00:00Z');
+  if (isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    return sendJson(res, 400, { ok: false, error: `${date} is not a real date.` });
+  }
+  const today = new Date();
+  const todayIso = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), 12))
+    .toISOString().slice(0, 10);
+  if (date < todayIso) {
+    return sendJson(res, 400, { ok: false, error: `${date} is in the past. Pick a day from today onward.` });
+  }
+
   const tech = clean(body.assigned_technician, 80);
 
   const now = new Date().toISOString();

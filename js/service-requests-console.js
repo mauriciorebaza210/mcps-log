@@ -34,8 +34,12 @@
 
   function api(method, payload) {
     var t = token();
-    var url = '/api/service-requests/review?token=' + encodeURIComponent(t) +
-      (method === 'GET' && STATE.filter === 'all' ? '&all=1' : '');
+    // A session token in a query string ends up in server and proxy logs. GET
+    // has nowhere else to put it, but POST does, so POST keeps it in the body.
+    var url = '/api/service-requests/review' +
+      (method === 'GET'
+        ? '?token=' + encodeURIComponent(t) + (STATE.filter === 'all' ? '&all=1' : '')
+        : '');
     var opts = { method: method };
     if (method === 'POST') {
       opts.headers = { 'content-type': 'application/json' };
