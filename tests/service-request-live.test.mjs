@@ -18,9 +18,9 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local', override: true, quiet: true });
 process.env.SERVICE_LINK_SECRET = process.env.SERVICE_LINK_SECRET || 'e2e-temp-secret';
 
-const { crmSpreadsheetId, readSheetRange, rowsToObjects } = await import('./api/_sheets.js');
-const handler = (await import('./api/service-request.js')).default;
-const { mintLinkToken } = await import('./api/service-request.js');
+const { crmSpreadsheetId, readSheetRange, rowsToObjects } = await import('../api/_sheets.js');
+const handler = (await import('../api/service-request.js')).default;
+const { mintLinkToken } = await import('../api/service-request.js');
 const ID = crmSpreadsheetId();
 
 let pass=0, fail=0;
@@ -148,7 +148,7 @@ console.log('\n7. What landed in Service_Requests');
 // automated test data sitting in an operational tab.
 console.log('\n8. Cleanup');
 {
-  const { writeSheetRange } = await import('./api/_sheets.js');
+  const { writeSheetRange } = await import('../api/_sheets.js');
   const values = await readSheetRange('Service_Requests', ID);
   const width = (values[0]||[]).length;
   let removed = 0;
