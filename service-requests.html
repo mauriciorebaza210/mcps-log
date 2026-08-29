@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Service requests · MCPS</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all';this.onload=null"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<style>
+:root{
+  --teal:#0D3D3E; --aqua:#1FA7A8; --aqua-light:#5ED6D3; --gray:#F3F5F6;
+  --ink:#222222; --muted:#5c6b6b; --line:#d8e2e4;
+  --danger:#b42318; --danger-bg:#fef3f2;
+  --warn:#a9750c; --warn-bg:#fdf4e3; --warn-line:#ebd9ae;
+  --ok-bg:#ecfdf3; --ok-ink:#067647;
+  --fh:'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  --fb:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--gray);color:var(--ink);font-family:var(--fb);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--fh);margin:0}
+a{color:var(--aqua)}
+
+.top{background:var(--teal);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.top h1{font-size:15px;letter-spacing:.05em;text-transform:uppercase;font-weight:800}
+.top .co{font-size:11px;color:var(--aqua-light);font-weight:600}
+.top .sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+.pill{background:rgba(255,255,255,.14);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;font-family:var(--fh)}
+.tabs{display:flex;gap:4px}
+.tab{background:rgba(255,255,255,.1);border:0;color:#cfe3e3;border-radius:8px;padding:7px 13px;
+  font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--fb)}
+.tab.on{background:var(--aqua);color:#fff}
+
+.wrap{max-width:940px;margin:0 auto;padding:20px 16px 60px}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:13px;margin-bottom:16px;overflow:hidden;
+  box-shadow:0 5px 18px rgba(13,61,62,.06)}
+.chead{padding:15px 17px;display:flex;gap:13px;align-items:flex-start;flex-wrap:wrap;border-bottom:1px solid var(--gray)}
+.chead .who{flex:1;min-width:210px}
+.chead .name{font-family:var(--fh);font-weight:800;font-size:16.5px;color:var(--teal)}
+.chead .addr{font-size:13.5px;color:var(--muted);margin-top:2px}
+.chead .meta{font-size:11.5px;color:var(--muted);margin-top:5px}
+.tag{display:inline-block;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;padding:5px 10px;border-radius:20px;white-space:nowrap}
+.tag.cat{background:var(--gray);color:var(--teal)}
+.tag.new{background:var(--aqua);color:#fff}
+.tag.review{background:var(--warn-bg);color:var(--warn)}
+.tag.sched{background:var(--ok-bg);color:var(--ok-ink)}
+.tag.closed{background:var(--gray);color:var(--muted)}
+.tag.asap{background:var(--danger-bg);color:var(--danger)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+.band{padding:11px 17px;font-size:13.5px;display:flex;gap:9px;align-items:flex-start}
+.band.ok{background:var(--ok-bg);color:#065f46;border-bottom:1px solid #c9ecdb}
+.band.warn{background:var(--warn-bg);color:#6b5410;border-bottom:1px solid var(--warn-line)}
+.band.none{background:var(--gray);color:#455;border-bottom:1px solid var(--line)}
+.band.cust{background:#fff5f5;color:var(--danger);border-bottom:1px solid #f6d5d2;font-weight:700}
+.band b{font-weight:700}
+
+.cbody{padding:15px 17px}
+.desc{background:var(--gray);border-radius:9px;padding:12px 14px;font-size:14px;margin-bottom:13px;white-space:pre-wrap}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px;margin-bottom:13px}
+.kv .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;font-family:var(--fh)}
+.kv .v{font-size:14px;margin-top:2px;word-break:break-word}
+
+.shots{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:13px}
+.shots a{display:block;width:78px;height:78px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.shots img{width:100%;height:100%;object-fit:cover;display:block}
+
+.cands{border:1px dashed var(--warn-line);border-radius:9px;padding:11px 13px;margin-bottom:13px;background:#fffdf7}
+.cands .t{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--warn);margin-bottom:8px}
+.cand{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #f0e4c8;flex-wrap:wrap}
+.cand:first-of-type{border-top:0}
+.cand .n{font-weight:700;font-size:13.5px}
+.cand .d{font-size:12px;color:var(--muted)}
+.cand .s{margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--fh);font-weight:700}
+
+.acts{display:flex;gap:8px;flex-wrap:wrap;padding-top:13px;border-top:1px solid var(--gray)}
+.b{border:1.5px solid var(--line);background:#fff;border-radius:9px;padding:10px 14px;font-size:13.5px;
+  font-weight:700;color:var(--ink);cursor:pointer;font-family:var(--fb);text-decoration:none;display:inline-flex;
+  align-items:center;gap:6px;min-height:42px}
+.b:hover:not(:disabled){border-color:var(--aqua)}
+.b.pri{background:var(--aqua);border-color:var(--aqua);color:#fff}
+.b.pri:hover:not(:disabled){background:#1b9596}
+.b.dim{color:var(--muted)}
+.b.bad{color:var(--danger);border-color:#f0cdc9}
+.b:disabled{opacity:.42;cursor:not-allowed}
+.b.small{padding:7px 11px;font-size:12.5px;min-height:36px}
+
+.why{font-size:12px;color:var(--warn);background:var(--warn-bg);border:1px solid var(--warn-line);
+  border-radius:8px;padding:9px 11px;margin-top:11px;display:flex;gap:8px}
+
+.sched{background:var(--gray);border-radius:9px;padding:13px;margin-top:12px;display:none;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.sched.on{display:flex}
+.sched .f{display:flex;flex-direction:column;gap:4px}
+.sched label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;font-family:var(--fh)}
+.sched input,.sched select{border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;font-family:var(--fb);font-size:14px;background:#fff}
+.sched .hint{font-size:12px;color:var(--muted);flex-basis:100%;margin-top:-4px}
+
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty h2{font-size:19px;color:var(--teal);margin-bottom:7px}
+.msg{border-radius:9px;padding:11px 14px;margin:11px 0 0;font-size:13.5px;font-weight:600;display:none}
+.msg.on{display:block}
+.msg.err{background:var(--danger-bg);color:var(--danger)}
+.msg.ok{background:var(--ok-bg);color:var(--ok-ink)}
+.spin{width:34px;height:34px;margin:50px auto;border:3px solid var(--line);border-top-color:var(--aqua);
+  border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,140%);z-index:50;
+  max-width:min(560px,calc(100vw - 32px));padding:14px 20px;border-radius:11px;font-size:14px;font-weight:600;
+  box-shadow:0 12px 34px rgba(13,61,62,.24);transition:transform .28s cubic-bezier(.2,.8,.3,1);
+  background:var(--teal);color:#fff;text-align:center}
+.toast.on{transform:translate(-50%,0)}
+.toast.err{background:var(--danger)}
+.log{font-size:11.5px;color:var(--muted);margin-top:11px}
+.log summary{cursor:pointer;font-weight:700}
+.log div{padding:3px 0 0 12px}
+@media(max-width:560px){ .wrap{padding:14px 10px 40px} .acts .b{flex:1;justify-content:center} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Service requests</h1>
+    <div class="co">Mission Custom Pool Solutions</div>
+  </div>
+  <div class="sp">
+    <span class="pill" id="count">—</span>
+    <div class="tabs">
+      <button class="tab on" data-f="open">Open</button>
+      <button class="tab" data-f="all">All</button>
+    </div>
+    <button class="tab" id="refresh">Refresh</button>
+  </div>
+</header>
+
+<main class="wrap" id="app"><div class="spin"></div></main>
+
+<script src="/js/service-requests-console.js"></script>
+</body>
+</html>
