@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Request pool service · Mission Custom Pool Solutions</title>
+<meta name="description" content="Tell us what your pool needs and we'll take care of it. Green-to-clean, repairs, weekly service and one-time cleans in San Antonio.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.ico">
+<meta name="theme-color" content="#0D3D3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Loaded non-render-blocking: the CSS below names a full system fallback
+     stack, so text paints immediately and reflows to Montserrat/Open Sans when
+     they arrive. A plain stylesheet link here holds first paint hostage to a
+     third-party host, which on a phone on cell data is the whole first second. -->
+<link rel="stylesheet" media="print" onload="this.media='all';this.onload=null"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600;700&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600;700&display=swap"></noscript>
+<style>
+:root{
+  --teal:#0D3D3E; --teal-2:#082a2b; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+  --gray:#F3F5F6; --ink:#222222; --muted:#5c6b6b; --line:#d8e2e4;
+  --danger:#b42318; --danger-bg:#fef3f2; --ok-bg:#ecfdf3; --ok-ink:#067647;
+  --fh:'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  --fb:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;min-height:100dvh;background:var(--gray);color:var(--ink);
+  font-family:var(--fb);font-size:16px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;align-items:center;
+  padding:0 0 env(safe-area-inset-bottom);
+}
+h1,h2,h3{font-family:var(--fh);margin:0;}
+
+/* ── Masthead ─────────────────────────────────────────────────────────── */
+.top{
+  width:100%;background:var(--teal);color:#fff;
+  padding:calc(14px + env(safe-area-inset-top)) 20px 14px;
+  display:flex;align-items:center;gap:12px;justify-content:center;
+  position:relative;
+}
+.top .brand{display:flex;align-items:center;gap:12px;width:100%;max-width:680px;}
+.top img{width:40px;height:40px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;flex:0 0 auto;}
+.top h1{font-size:15px;letter-spacing:.05em;text-transform:uppercase;font-weight:800;line-height:1.25;}
+.top .co{font-size:11px;color:var(--aqua-light);font-weight:600;letter-spacing:.02em;}
+
+/* ── Shell ────────────────────────────────────────────────────────────── */
+.wrap{width:100%;max-width:680px;padding:0 16px 40px;flex:1;}
+.card{
+  background:#fff;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 14px 40px rgba(13,61,62,.10);
+  margin-top:16px;padding:22px 20px 24px;
+}
+.eyebrow{
+  color:var(--aqua);font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;font-family:var(--fh);
+}
+h2{font-size:23px;color:var(--teal);margin:7px 0 6px;line-height:1.25;font-weight:800;}
+.sub{color:var(--muted);font-size:14.5px;margin:0 0 18px;}
+.muted{color:var(--muted);}
+
+/* ── Progress ─────────────────────────────────────────────────────────── */
+.steps{display:flex;gap:5px;margin:14px 0 0;}
+.steps span{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.22);transition:background .25s;}
+.steps span.on{background:var(--aqua-light);}
+.stepwrap{width:100%;max-width:680px;padding:0 16px;}
+
+/* ── Tap cards (step 1) ───────────────────────────────────────────────── */
+.picks{display:grid;gap:11px;margin-top:4px;}
+.pick{
+  display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  border:1.5px solid var(--line);border-radius:12px;background:#fff;
+  padding:16px 15px;cursor:pointer;font-family:var(--fb);color:var(--ink);
+  transition:border-color .15s,box-shadow .15s,transform .06s;
+  min-height:64px;
+}
+.pick:hover{border-color:var(--aqua);}
+.pick:active{transform:scale(.99);}
+.pick:focus-visible{outline:3px solid var(--aqua-light);outline-offset:2px;}
+.pick.sel{border-color:var(--aqua);box-shadow:0 0 0 3px rgba(31,167,168,.14);}
+.pick .ic{
+  flex:0 0 auto;width:44px;height:44px;border-radius:10px;background:var(--gray);
+  display:flex;align-items:center;justify-content:center;
+}
+.pick .ic svg{width:26px;height:26px;}
+.pick .t{font-family:var(--fh);font-weight:700;font-size:15.5px;color:var(--teal);display:block;}
+.pick .d{font-size:13px;color:var(--muted);display:block;margin-top:2px;line-height:1.4;}
+.pick .go{margin-left:auto;color:var(--line);flex:0 0 auto;}
+.pick:hover .go{color:var(--aqua);}
+
+/* ── Chips ────────────────────────────────────────────────────────────── */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px;}
+.chip{
+  border:1.5px solid var(--line);border-radius:999px;background:#fff;
+  padding:10px 15px;font-size:14px;font-weight:600;color:var(--ink);
+  cursor:pointer;font-family:var(--fb);min-height:44px;
+}
+.chip:hover{border-color:var(--aqua);}
+.chip:focus-visible{outline:3px solid var(--aqua-light);outline-offset:2px;}
+.chip.on{background:var(--aqua);border-color:var(--aqua);color:#fff;}
+
+/* ── Fields ───────────────────────────────────────────────────────────── */
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;}
+.fld{display:flex;flex-direction:column;gap:5px;}
+.fld.full{grid-column:1/-1;}
+.fld label{font-size:12.5px;font-weight:700;color:var(--muted);}
+.fld .opt{font-weight:400;text-transform:none;letter-spacing:0;}
+/* 16px keeps iOS Safari from zooming the viewport on focus. */
+.fld input,.fld textarea,.fld select{
+  border:1.5px solid var(--line);border-radius:9px;padding:13px 13px;
+  font-family:var(--fb);font-size:16px;background:#fff;color:var(--ink);width:100%;
+}
+.fld input:focus,.fld textarea:focus,.fld select:focus{
+  outline:none;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(31,167,168,.14);
+}
+.fld.bad input,.fld.bad textarea{border-color:var(--danger);background:var(--danger-bg);}
+.fld .err{font-size:12px;color:var(--danger);font-weight:600;}
+textarea{min-height:96px;resize:vertical;line-height:1.5;}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.actions{display:flex;gap:10px;align-items:center;margin-top:22px;flex-wrap:wrap;}
+button{font-family:var(--fb);}
+.btn{
+  border:1.5px solid var(--aqua);border-radius:10px;padding:14px 20px;
+  font-weight:700;font-size:15px;background:#fff;color:var(--aqua);
+  cursor:pointer;min-height:50px;
+}
+.btn:focus-visible{outline:3px solid var(--aqua-light);outline-offset:2px;}
+.btn.primary{background:var(--aqua);color:#fff;box-shadow:0 6px 16px rgba(31,167,168,.24);}
+.btn.primary:hover{background:#1b9596;}
+.btn.wide{flex:1;justify-content:center;}
+.btn:disabled{opacity:.5;cursor:default;box-shadow:none;}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted);
+  text-decoration:underline;padding:12px 6px;box-shadow:none;min-height:44px;}
+
+/* ── Photos ───────────────────────────────────────────────────────────── */
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px;margin-top:10px;}
+.photo{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--gray);}
+.photo img{width:100%;height:100%;object-fit:cover;display:block;}
+.photo .rm{
+  position:absolute;top:5px;right:5px;width:26px;height:26px;border-radius:50%;
+  background:rgba(0,0,0,.62);color:#fff;border:0;font-size:15px;line-height:1;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+}
+.photo .bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--aqua);width:0;transition:width .3s;}
+.photo.done .bar{width:100%;background:var(--ok-ink);}
+.photo.failed{border-color:var(--danger);}
+.photo .warn{position:absolute;inset:auto 0 0 0;background:var(--danger);color:#fff;font-size:10px;text-align:center;padding:2px;}
+.addphoto{
+  aspect-ratio:1;border:2px dashed var(--line);border-radius:10px;background:var(--gray);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  cursor:pointer;color:var(--teal);font-weight:700;font-size:12px;font-family:var(--fb);
+}
+.addphoto:hover{border-color:var(--aqua);}
+.addphoto svg{width:22px;height:22px;}
+
+/* ── Notices ──────────────────────────────────────────────────────────── */
+.notice{border:1px solid var(--aqua-light);background:#f0fbfb;border-radius:10px;
+  padding:13px 15px;margin:0 0 16px;font-size:14px;display:flex;gap:10px;align-items:flex-start;}
+.notice svg{flex:0 0 auto;margin-top:2px;}
+.notice b{color:var(--teal);}
+.msg{border-radius:10px;padding:13px 15px;margin-top:16px;font-weight:600;font-size:14.5px;display:none;}
+.msg.show{display:block;}
+.msg.err{background:var(--danger-bg);color:var(--danger);}
+.msg.ok{background:var(--ok-bg);color:var(--ok-ink);}
+
+/* ── Review ───────────────────────────────────────────────────────────── */
+.rev{border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:4px;}
+.rev .row{display:flex;gap:12px;padding:12px 14px;border-bottom:1px solid var(--gray);font-size:14.5px;}
+.rev .row:last-child{border-bottom:0;}
+.rev .k{flex:0 0 34%;color:var(--muted);font-weight:600;font-size:13px;}
+.rev .v{flex:1;color:var(--ink);word-break:break-word;}
+.rev .v.strong{font-weight:700;color:var(--teal);}
+.editlink{background:none;border:0;color:var(--aqua);font-size:12.5px;font-weight:700;
+  cursor:pointer;text-decoration:underline;padding:0;font-family:var(--fb);}
+
+/* ── Done ─────────────────────────────────────────────────────────────── */
+.done{text-align:center;padding:8px 0 4px;}
+.done .tick{width:64px;height:64px;border-radius:50%;background:var(--ok-bg);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 18px;}
+.refbox{background:var(--gray);border-radius:11px;padding:16px;margin:20px 0;}
+.refbox .lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);font-weight:700;font-family:var(--fh);}
+.refbox .ref{font-family:var(--fh);font-weight:800;font-size:25px;color:var(--teal);
+  letter-spacing:.06em;margin-top:5px;}
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+.foot{width:100%;max-width:680px;padding:22px 16px 34px;text-align:center;
+  color:var(--muted);font-size:12.5px;line-height:1.7;}
+.foot a{color:var(--aqua);font-weight:600;}
+.foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--aqua);font-size:10px;margin-bottom:7px;}
+
+.spin{width:38px;height:38px;margin:30px auto;border:3px solid var(--line);
+  border-top-color:var(--aqua);border-radius:50%;animation:sp .8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg)}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+
+@media (max-width:430px){
+  .fgrid{grid-template-columns:1fr;}
+  h2{font-size:21px;}
+  .card{padding:19px 16px 21px;border-radius:12px;}
+  .wrap{padding:0 11px 30px;}
+  .stepwrap{padding:0 11px;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important;}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <img src="/logo.png" alt="" aria-hidden="true">
+    <div>
+      <h1>Request pool service</h1>
+      <div class="co">Mission Custom Pool Solutions</div>
+    </div>
+  </div>
+</header>
+<div class="stepwrap"><div class="steps" id="steps" aria-hidden="true"></div></div>
+
+<main class="wrap"><div class="card" id="app"><div class="spin"></div></div></main>
+
+<footer class="foot">
+  <div class="m">Every pool matters.</div>
+  <div id="foot-contact"></div>
+  <div style="margin-top:8px"><a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a></div>
+</footer>
+
+<script src="/js/service-request.js"></script>
+</body>
+</html>

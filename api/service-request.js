@@ -28,7 +28,17 @@ import {
 } from './_lib/service-requests.js';
 
 const NORM = { normEmail, normPhone, normAddress };
-const MATCH_CACHE_MS = 60 * 1000;
+
+// Five minutes, not one. Profiling the submit path: minting the Google OAuth
+// token costs ~640ms cold and the three sheet reads ~330ms, while the match
+// itself is under a millisecond — so nearly all of a customer's wait is warming
+// up, and a longer cache removes it for everyone after the first.
+//
+// Staleness cannot produce a WRONG match, only a missed one: a client added in
+// the last five minutes simply isn't matched, and an unmatched request goes to
+// the review queue for a human anyway. "Create lead" re-runs the match against
+// live data before it writes, which is where a stale miss gets caught.
+const MATCH_CACHE_MS = 5 * 60 * 1000;
 const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // ── Kill switch ─────────────────────────────────────────────────────────────
@@ -127,11 +137,26 @@ async function loadCrmSnapshot() {
   });
 }
 
+// One round trip on the common path.
+//
+// ensureSheetWithHeaders costs a metadata fetch plus a header read before the
+// data read even starts — three sequential calls to Google, ~250ms of a
+// customer's wait, to answer a question the data read already answers: the tab
+// exists and row 0 is its header. So read first, and only fall back to creating
+// the tab when the read comes back with nothing, which happens exactly once in
+// the lifetime of the sheet.
 async function loadRequests() {
-  const header = await ensureSheetWithHeaders(SHEET, HEADERS, crmSpreadsheetId());
-  const values = await readSheetRange(SHEET, crmSpreadsheetId());
+  const id = crmSpreadsheetId();
+  let values = await readSheetRange(SHEET, id).catch(() => null);
+
+  if (!values || !values.length || !(values[0] || []).length) {
+    const header = await ensureSheetWithHeaders(SHEET, HEADERS, id);
+    return { header: header.map(normalizeHeader), rows: [] };
+  }
+
+  const header = values[0].map(normalizeHeader);
   const rows = rowsToObjects(values).map((obj, i) => Object.assign(obj, { _row: i + 2 }));
-  return { header: header.map(normalizeHeader), rows };
+  return { header, rows };
 }
 
 // Column letter for a 0-based index, so an update targets the real width of the
@@ -356,6 +381,16 @@ async function handleStatus(res, ref, contact) {
   });
 }
 
+// ── GET: warm ───────────────────────────────────────────────────────────────
+// Called once when the page loads. It mints the Google OAuth token and fills the
+// match snapshot, so by the time the customer finishes the form — a minute or
+// more later — submitting is a write rather than a cold start. Returns nothing
+// about anybody; it exists purely for the timing.
+async function handleWarm(res) {
+  try { await loadCrmSnapshot(); } catch (_) { /* warming must never surface an error */ }
+  return sendJson(res, 200, { ok: true });
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -369,6 +404,7 @@ export default async function handler(req, res) {
       const q = req.query || {};
       if (q.r) return await handleStatus(res, q.r, q.contact);
       if (q.k) return await handlePrefill(res, q.k);
+      if (q.warm) return await handleWarm(res);
       return sendJson(res, 400, { ok: false, error: 'Missing parameter.' });
     }
     res.setHeader('allow', 'GET, POST, OPTIONS');
