@@ -26,6 +26,7 @@ import {
   SHEET, HEADERS, CATEGORIES, OPEN_STATUSES, PUBLIC_STATUS,
   sanitizeSubmission, idempotencyKey, newRequestId, rowFromObject, appendAction, clean
 } from './_lib/service-requests.js';
+import { notifyCustomer, notifyOffice } from './_lib/notify.js';
 
 const NORM = { normEmail, normPhone, normAddress };
 
@@ -95,15 +96,20 @@ const hits = new Map();
 const RATE_MAX = 8;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 
-function rateLimited(ip) {
+function bucket(map, ip, max, windowMs) {
   const now = Date.now();
   const key = String(ip || 'unknown');
-  const list = (hits.get(key) || []).filter(t => now - t < RATE_WINDOW_MS);
+  const list = (map.get(key) || []).filter(t => now - t < windowMs);
   list.push(now);
-  hits.set(key, list);
-  if (hits.size > 5000) hits.clear();   // crude ceiling; a cold map is fine
-  return list.length > RATE_MAX;
+  map.set(key, list);
+  if (map.size > 5000) map.clear();   // crude ceiling; a cold map is fine
+  return list.length > max;
 }
+
+function rateLimited(ip) { return bucket(hits, ip, RATE_MAX, RATE_WINDOW_MS); }
+
+const reads = new Map();
+function readLimited(ip) { return bucket(reads, ip, 60, RATE_WINDOW_MS); }
 
 function clientIp(req) {
   const fwd = req.headers['x-forwarded-for'];
@@ -154,7 +160,22 @@ async function loadRequests() {
     return { header: header.map(normalizeHeader), rows: [] };
   }
 
-  const header = values[0].map(normalizeHeader);
+  let header = values[0].map(normalizeHeader);
+
+  // ⚠️ ensureSheetWithHeaders does NOT repair a partial header row — it returns
+  // whatever is there. So a column someone deleted, renamed or reordered by hand
+  // becomes a SILENT DROP on every write: the value goes nowhere and nothing
+  // errors. That is exactly how scope_items_json went missing for months on the
+  // Apps Script side (see the note in api/_repo/sheets-driver.js). Appending the
+  // missing columns costs one extra request and only on a sheet that is actually
+  // broken.
+  const missing = HEADERS.map(normalizeHeader).filter(h => header.indexOf(h) === -1);
+  if (missing.length) {
+    header = header.concat(missing);
+    await writeSheetRange(`${SHEET}!A1:${colLetter(header.length - 1)}1`, [header], id);
+    console.warn('Service_Requests header repaired, added:', missing.join(', '));
+  }
+
   const rows = rowsToObjects(values).map((obj, i) => Object.assign(obj, { _row: i + 2 }));
   return { header, rows };
 }
@@ -171,16 +192,35 @@ function colLetter(index) {
 // A submission may only claim photos it actually uploaded. The upload endpoint
 // stores every blob under service-requests/<draft_id>/, so requiring that prefix
 // stops a submission attaching someone else's pool photos by pasting a URL.
+// The blob store's own host. Checking the path prefix alone is not enough: a
+// caller picks their own draft_id, so they could satisfy it with a URL on a host
+// they control — and the admin console renders these in an <img>, which would
+// make the review queue load attacker-chosen content. The host check is what
+// closes that, and the path check is what stops one draft claiming another's
+// photos.
+function isBlobHost(hostname) {
+  const base = process.env.BLOB_PUBLIC_BASE || '';
+  if (base) {
+    try { return hostname === new URL(base).hostname; } catch (_) { return false; }
+  }
+  return /(^|\.)public\.blob\.vercel-storage\.com$/i.test(hostname);
+}
+
 function acceptedPhotoUrls(rawList, draftId) {
   if (!draftId) return [];
-  const base = process.env.BLOB_PUBLIC_BASE || '';
   const list = Array.isArray(rawList) ? rawList : [];
-  return list
-    .map(u => clean(u, 600))
-    .filter(u => /^https:\/\//i.test(u))
-    .filter(u => u.includes(`service-requests/${draftId}/`))
-    .filter(u => !base || u.startsWith(base))
-    .slice(0, 4);
+  const out = [];
+  for (const raw of list) {
+    const value = clean(raw, 600);
+    let parsed;
+    try { parsed = new URL(value); } catch (_) { continue; }
+    if (parsed.protocol !== 'https:') continue;
+    if (!isBlobHost(parsed.hostname)) continue;
+    if (!parsed.pathname.includes(`service-requests/${draftId}/`)) continue;
+    out.push(value);
+    if (out.length === 4) break;
+  }
+  return out;
 }
 
 // ── POST: submit ────────────────────────────────────────────────────────────
@@ -320,11 +360,41 @@ async function handleSubmit(req, res) {
 
   await appendSheetRows(SHEET, [rowFromObject(existing.header, record)], crmSpreadsheetId());
 
+  // ⚠️ Best effort, and awaited on purpose. Awaited because a serverless
+  // instance can be frozen the moment the response is sent, so a floating
+  // promise here would be silently dropped — the customer would get no receipt
+  // and the office no alert. Best effort because the row is already saved: a
+  // mail failure must never turn into an error the customer sees, or they will
+  // send the whole thing again.
+  const notes = await Promise.allSettled([
+    notifyCustomer(record, CATEGORIES[fields.category].label),
+    notifyOffice(record, CATEGORIES[fields.category].label, matchSummary(match, matched))
+  ]);
+  notes.forEach(n => {
+    const v = n.status === 'fulfilled' ? n.value : { error: String(n.reason) };
+    if (v && v.error) console.warn('service-request notification failed:', v.error);
+  });
+
   return sendJson(res, 200, {
     ok: true,
     request_id: requestId,
     category_label: CATEGORIES[fields.category].label
   });
+}
+
+// One line an office reader can act on, rather than a confidence score.
+function matchSummary(match, matched) {
+  if (match && String(match.status || '').toUpperCase() === 'ACTIVE_CUSTOMER') {
+    return `ALREADY A CUSTOMER — ${match.display || match.quote_id} (${match.quote_id || match.client_id})`;
+  }
+  if (match) {
+    return `Matched ${match.display || match.quote_id || match.client_id} on ${(match.reasons || []).join(', ')}` +
+      (match.pool_id ? ` · pool ${match.pool_id}` : ' · no pool ID yet');
+  }
+  if (matched.status === 'ambiguous') {
+    return `Needs review — ${matched.candidates.length} possible match(es), none certain`;
+  }
+  return 'No match — nobody in the CRM looks like this person';
 }
 
 // ── GET: prefill ────────────────────────────────────────────────────────────
@@ -402,9 +472,16 @@ export default async function handler(req, res) {
     if (req.method === 'POST') return await handleSubmit(req, res);
     if (req.method === 'GET') {
       const q = req.query || {};
+      if (q.warm) return await handleWarm(res);
+
+      // Reads are rate limited too. A reference number is eight hex characters,
+      // and an unthrottled lookup that answers 404 for unknown and 200 for known
+      // is an enumerator — slow, but there is no reason to leave it open.
+      if (readLimited(clientIp(req))) {
+        return sendJson(res, 429, { ok: false, error: 'Too many lookups. Please wait a moment.' });
+      }
       if (q.r) return await handleStatus(res, q.r, q.contact);
       if (q.k) return await handlePrefill(res, q.k);
-      if (q.warm) return await handleWarm(res);
       return sendJson(res, 400, { ok: false, error: 'Missing parameter.' });
     }
     res.setHeader('allow', 'GET, POST, OPTIONS');

@@ -89,8 +89,21 @@ async function loadRequests() {
   const id = crmSpreadsheetId();
   const values = await readSheetRange(SHEET, id).catch(() => []);
   if (!values.length || !(values[0] || []).length) return { header: HEADERS.map(normalizeHeader), rows: [] };
+
+  // Same header-repair guard as the intake path. A column missing from the sheet
+  // is a silent drop on write, and this side writes the fields that matter most
+  // — scheduled_visit_id, converted_quote_id, action_log. Losing one of those
+  // would break idempotency without any error to notice.
+  let header = values[0].map(normalizeHeader);
+  const missing = HEADERS.map(normalizeHeader).filter(h => header.indexOf(h) === -1);
+  if (missing.length) {
+    header = header.concat(missing);
+    await writeSheetRange(`${SHEET}!A1:${colLetter(header.length - 1)}1`, [header], id);
+    console.warn('Service_Requests header repaired, added:', missing.join(', '));
+  }
+
   return {
-    header: values[0].map(normalizeHeader),
+    header,
     rows: rowsToObjects(values).map((obj, i) => Object.assign(obj, { _row: i + 2 }))
   };
 }
