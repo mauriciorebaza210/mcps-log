@@ -17,7 +17,8 @@
 (function () {
   'use strict';
 
-  var DRAFT_KEY = 'mcps_sr_draft';
+  // v2: step 2 and 3 swapped, so a v1 draft would resume on the wrong screen.
+  var DRAFT_KEY = 'mcps_sr_draft_v2';
   var DRAFT_TTL_MS = 3 * 24 * 60 * 60 * 1000;
   var MAX_PHOTOS = 4;
   var CONTACT = { phone: '', phone_href: '', email: '' };  // filled by CONFIG below
@@ -176,8 +177,12 @@
   function render() {
     renderSteps();
     if (S.step === 1) return renderCategory();
-    if (S.step === 2) return renderDetail();
-    if (S.step === 3) return renderWhere();
+    // Address before details: someone who has just said "my pool is green" is
+    // most willing to type right then, and the address is the field we cannot
+    // do anything without. Photos and the description are genuinely optional,
+    // so they come after the request is already answerable.
+    if (S.step === 2) return renderWhere();
+    if (S.step === 3) return renderDetail();
     if (S.step === 4) return renderWhen();
     if (S.step === 5) return renderReview();
   }
@@ -229,7 +234,7 @@
     var showPhotos = !!WANTS_PHOTOS[cat];
 
     app().innerHTML =
-      '<div class="eyebrow">Step 2 of 5</div>' +
+      '<div class="eyebrow">Step 3 of 5</div>' +
       '<h2>' + esc(meta ? meta.title : 'Tell us more') + '</h2>' +
       '<p class="sub">' + esc(SUB_PROMPT[cat] || '') + '</p>' +
       '<div class="chips" id="subs">' +
@@ -262,8 +267,8 @@
       });
     });
     $('desc').addEventListener('input', function (e) { S.description = e.target.value; saveDraft(); });
-    $('back').addEventListener('click', function () { go(1); });
-    $('next').addEventListener('click', function () { go(3); });
+    $('back').addEventListener('click', function () { go(2); });
+    $('next').addEventListener('click', function () { go(4); });
     if (showPhotos) { renderPhotos(); wirePhotoInput(); }
   }
 
@@ -372,7 +377,7 @@
   // ── Step 3 — where ───────────────────────────────────────────────────────
   function renderWhere() {
     app().innerHTML =
-      '<div class="eyebrow">Step 3 of 5</div>' +
+      '<div class="eyebrow">Step 2 of 5</div>' +
       '<h2>Where is the pool?</h2>' +
       '<p class="sub">So we know whose pool we\'re looking at and how to reach you.</p>' +
       '<div class="fgrid">' +
@@ -398,10 +403,10 @@
         saveDraft();
       });
     });
-    $('back').addEventListener('click', function () { go(2); });
+    $('back').addEventListener('click', function () { go(1); });
     $('next').addEventListener('click', function () {
       if (!validateWhere()) return;
-      go(4);
+      go(3);
     });
   }
 
@@ -501,12 +506,19 @@
       '<h2>Does this look right?</h2>' +
       '<p class="sub">We\'ll review it and get back to you with a day and a price.</p>' +
       '<div class="rev">' +
-        row('What you need', (meta ? meta.title : '') + (S.subcategory ? ' · ' + subLabel(S.category, S.subcategory) : ''), 2, true) +
-        (S.description ? row('Details', S.description, 2) : '') +
-        (S.photos.length ? row('Photos', okPhotos + ' attached' + (uploading ? ' · ' + uploading + ' still uploading' : ''), 2) : '') +
-        row('Name', name || '—', 3) +
-        row('Contact', [S.phone, S.email].filter(Boolean).join(' · ') || '—', 3) +
-        row('Pool address', addr || '—', 3) +
+        // Two rows, not one. The category is chosen on step 1 and the specifics
+        // on step 3, so a single merged row could only ever send "Change" to one
+        // of them — and after the swap it was pointing at the address step,
+        // which owns neither.
+        row('What you need', meta ? meta.title : '', 1, true) +
+        (S.subcategory || S.description
+          ? row('Details', [S.subcategory ? subLabel(S.category, S.subcategory) : '', S.description]
+              .filter(Boolean).join(' — '), 3)
+          : row('Details', 'Nothing added', 3)) +
+        (S.photos.length ? row('Photos', okPhotos + ' attached' + (uploading ? ' · ' + uploading + ' still uploading' : ''), 3) : '') +
+        row('Name', name || '—', 2) +
+        row('Contact', [S.phone, S.email].filter(Boolean).join(' · ') || '—', 2) +
+        row('Pool address', addr || '—', 2) +
         row('Timing', timingLabel(S.timing_preference) + (S.timing_notes ? ' · ' + S.timing_notes : ''), 4) +
       '</div>' +
       '<div class="msg err" id="msg"></div>' +
