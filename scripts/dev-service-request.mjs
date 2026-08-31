@@ -31,7 +31,8 @@ const ROUTES = {
 const API = {
   '/api/service-request': () => import('../api/service-request.js'),
   '/api/service-request-photo': () => import('../api/service-request-photo.js'),
-  '/api/service-requests/review': () => import('../api/service-requests/review.js')
+  '/api/service-requests/review': () => import('../api/service-requests/review.js'),
+  '/api/service-requests/photo': () => import('../api/service-requests/photo.js')
 };
 
 const TYPES = {
@@ -54,14 +55,35 @@ function readBody(req) {
 }
 
 // The shape the handlers expect from Vercel: res.status(n).send(body).
+//
+// It also has to support STREAMING. Vercel hands a handler a real Node
+// ServerResponse, so a handler is entitled to call res.write() or pipe into it —
+// the photo proxy streams blob bytes that way. An earlier version of this shim
+// had only send/json/end, and the proxy failed with "res.write is not a
+// function" in dev while being perfectly correct in production. A dev harness
+// that is less capable than the real runtime invents bugs that do not exist and
+// hides ones that do.
 function shim(res) {
+  let sent = false;
+  const flush = status => { if (!sent) { sent = true; res.writeHead(status); } };
   return {
     _status: 200,
-    setHeader: (k, v) => res.setHeader(k, v),
+    setHeader: (k, v) => { if (!sent) res.setHeader(k, v); },
+    getHeader: k => res.getHeader(k),
+    get headersSent() { return sent; },
     status(code) { this._status = code; return this; },
-    send(body) { res.writeHead(this._status); res.end(body); return this; },
-    json(body) { res.setHeader('content-type', 'application/json'); res.writeHead(this._status); res.end(JSON.stringify(body)); return this; },
-    end() { res.writeHead(this._status); res.end(); return this; }
+    write(chunk) { flush(this._status); return res.write(chunk); },
+    send(body) { flush(this._status); res.end(body); return this; },
+    json(body) {
+      if (!sent) res.setHeader('content-type', 'application/json');
+      flush(this._status); res.end(JSON.stringify(body)); return this;
+    },
+    end(body) { flush(this._status); res.end(body); return this; },
+    // Node streams call .on()/.once()/.emit() on a pipe destination.
+    on: (...a) => res.on(...a),
+    once: (...a) => res.once(...a),
+    emit: (...a) => res.emit(...a),
+    removeListener: (...a) => res.removeListener(...a)
   };
 }
 

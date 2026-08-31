@@ -192,31 +192,22 @@ function colLetter(index) {
 // A submission may only claim photos it actually uploaded. The upload endpoint
 // stores every blob under service-requests/<draft_id>/, so requiring that prefix
 // stops a submission attaching someone else's pool photos by pasting a URL.
-// The blob store's own host. Checking the path prefix alone is not enough: a
-// caller picks their own draft_id, so they could satisfy it with a URL on a host
-// they control — and the admin console renders these in an <img>, which would
-// make the review queue load attacker-chosen content. The host check is what
-// closes that, and the path check is what stops one draft claiming another's
-// photos.
-function isBlobHost(hostname) {
-  const base = process.env.BLOB_PUBLIC_BASE || '';
-  if (base) {
-    try { return hostname === new URL(base).hostname; } catch (_) { return false; }
-  }
-  return /(^|\.)public\.blob\.vercel-storage\.com$/i.test(hostname);
-}
-
-function acceptedPhotoUrls(rawList, draftId) {
+// A submission may only claim photos it actually uploaded.
+//
+// These are pathnames, not URLs, which makes the check both simpler and
+// stronger than the host allowlist a URL would need: a pathname cannot point at
+// another host at all. All that is left is proving the photo belongs to THIS
+// draft, so one draft cannot attach another's photos by guessing.
+function acceptedPhotoPaths(rawList, draftId) {
   if (!draftId) return [];
+  const prefix = `service-requests/${draftId}/`;
   const list = Array.isArray(rawList) ? rawList : [];
   const out = [];
   for (const raw of list) {
-    const value = clean(raw, 600);
-    let parsed;
-    try { parsed = new URL(value); } catch (_) { continue; }
-    if (parsed.protocol !== 'https:') continue;
-    if (!isBlobHost(parsed.hostname)) continue;
-    if (!parsed.pathname.includes(`service-requests/${draftId}/`)) continue;
+    const value = clean(raw, 300);
+    if (!value.startsWith(prefix)) continue;
+    // No traversal, and only the characters the upload endpoint generates.
+    if (!/^service-requests\/[a-z0-9]{8,40}\/[A-Za-z0-9._-]{1,80}$/.test(value)) continue;
     out.push(value);
     if (out.length === 4) break;
   }
@@ -284,7 +275,7 @@ async function handleSubmit(req, res) {
   }, NORM);
 
   const now = new Date().toISOString();
-  const photoUrls = acceptedPhotoUrls(body.photo_urls, fields.draft_id);
+  const photoUrls = acceptedPhotoPaths(body.photo_urls || body.photo_paths, fields.draft_id);
 
   const matchFields = {
     match_status: match ? 'confident' : matched.status,

@@ -112,6 +112,7 @@
     }
     app().innerHTML = STATE.items.map(card).join('');
     wire();
+    loadPhotos();
   }
 
   // ── Card ─────────────────────────────────────────────────────────────────
@@ -212,11 +213,38 @@
       }).join('');
   }
 
+  // Photos live in a private blob store, so there is no URL an <img> can point
+  // at. Setting src to the proxy would work but would put the session token in
+  // the DOM and in browser history, so each photo is fetched with the token in a
+  // header and rendered from an object URL instead.
   function photoStrip(it) {
     if (!it.photos || !it.photos.length) return '';
-    return '<div class="shots">' + it.photos.map(function (u) {
-      return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" alt="Customer photo" loading="lazy"></a>';
+    return '<div class="shots">' + it.photos.map(function (p, i) {
+      return '<button class="shot" data-photo="' + esc(p) + '" data-key="' + esc(it.request_id + ':' + i) + '" ' +
+        'title="Open full size"><span class="ph">' + (i + 1) + '</span></button>';
     }).join('') + '</div>';
+  }
+
+  var _photoCache = {};
+  function loadPhotos() {
+    Array.prototype.forEach.call(document.querySelectorAll('.shot[data-photo]'), function (b) {
+      var key = b.dataset.key;
+      if (_photoCache[key]) return paint(b, _photoCache[key]);
+      fetch('/api/service-requests/photo?pathname=' + encodeURIComponent(b.dataset.photo) +
+            '&token=' + encodeURIComponent(token()))
+        .then(function (r) { return r.ok ? r.blob() : null; })
+        .then(function (blob) {
+          if (!blob) { b.classList.add('missing'); b.title = 'Photo unavailable'; return; }
+          var url = URL.createObjectURL(blob);
+          _photoCache[key] = url;
+          paint(b, url);
+        })
+        .catch(function () { b.classList.add('missing'); });
+    });
+  }
+  function paint(btn, url) {
+    btn.innerHTML = '<img src="' + url + '" alt="Customer photo">';
+    btn.onclick = function () { window.open(url, '_blank', 'noopener'); };
   }
 
   // tel: / mailto: / copy — no new workflow, just fewer steps to follow up.

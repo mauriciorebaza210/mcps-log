@@ -493,12 +493,19 @@ async function actionRepairOrder(req, res, session, body) {
     customer_name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
     address: row.service_address, city: row.city,
     job_name: clean(body.job_name, 120) || ('Repair: ' + (row.subcategory || 'customer request')),
-    description: clean(row.description, 900),
+    description: [
+      clean(row.description, 800),
+      photos.length ? `[${photos.length} photo${photos.length > 1 ? 's' : ''} on service request ${row.request_id}]` : ''
+    ].filter(Boolean).join(' '),
     equipment: clean(row.subcategory, 60),
     issue: clean(row.description, 300),
     priority: clean(body.priority, 20) || (row.timing_preference === 'asap' ? 'high' : 'medium'),
     parts_json: '[]',
-    photo_url: photos[0] || '',
+    // Deliberately blank. Photos are private blob pathnames, not URLs, and the
+    // Jobs hub renders this field as an image — writing a pathname there would
+    // put a broken image in the Repairs hub. The count and the request id go in
+    // the description instead, so a tech knows to look and where.
+    photo_url: '',
     status: 'new',
     assignee_type: '', assigned_to: clean(body.assigned_to, 80),
     reported_at: row.created_at || now,

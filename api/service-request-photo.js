@@ -17,9 +17,16 @@
 // accepts photo URLs under service-requests/<draft_id>/, so a submission cannot
 // attach photos belonging to somebody else's request.
 //
-// Photos are pool photos of private homes. They are never returned by the
-// unauthenticated status or prefill endpoints — only the authenticated admin
-// console reads them back.
+// The store is PRIVATE, deliberately. These are photos of people's back gardens
+// and equipment pads, and a public blob URL is unguessable but permanent and
+// unauthenticated — anyone who ever sees the link keeps access forever. So
+// nothing here returns a fetchable URL: it returns a PATHNAME, and the only way
+// to read the bytes is through the authenticated proxy in
+// api/service-requests/photo.js.
+//
+// Storing the pathname rather than the URL also makes the submit-side check
+// simpler and stronger: a pathname cannot point at another host at all, so
+// there is no host allowlist to get wrong — only a prefix to match.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import crypto from 'node:crypto';
@@ -134,14 +141,16 @@ export default async function handler(req, res) {
     const suffix = crypto.randomBytes(9).toString('base64url');
     const key = `service-requests/${draftId}/${Date.now().toString(36)}-${suffix}.${kind.ext}`;
 
-    const blob = await put(key, buf, {
-      access: 'public',
+    await put(key, buf, {
+      access: 'private',
       contentType: kind.mime,
       addRandomSuffix: false,
       cacheControlMaxAge: 31536000
     });
 
-    return sendJson(res, 200, { ok: true, url: blob.url, content_type: kind.mime, bytes: buf.length });
+    // The pathname, not a URL. Callers cannot fetch this directly, which is the
+    // point — reads go through the authenticated proxy.
+    return sendJson(res, 200, { ok: true, pathname: key, content_type: kind.mime, bytes: buf.length });
   } catch (error) {
     console.error('service-request-photo failed', error);
     return sendJson(res, 500, { ok: false, error: 'We could not save that photo. You can still send your request without it.' });

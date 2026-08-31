@@ -360,7 +360,7 @@
         body: JSON.stringify({ draft_id: S.draft_id, data_url: dataUrl, name: file.name })
       }).then(function (r) { return r.json(); });
     }).then(function (res) {
-      if (res && res.ok && res.url) { entry.url = res.url; entry.state = 'done'; }
+      if (res && res.ok && res.pathname) { entry.url = res.pathname; entry.state = 'done'; }
       else { entry.state = 'failed'; }
       renderPhotos();
     }).catch(function () {

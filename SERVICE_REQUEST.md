@@ -25,8 +25,9 @@ intake create a lead.
 | `service-request.html` + `js/service-request.js` | the customer page (`/service`) |
 | `service-requests.html` + `js/service-requests-console.js` | the staff queue (`/service-requests`) |
 | `api/service-request.js` | public intake (POST), prefill + status (GET) |
-| `api/service-request-photo.js` | photo upload to Vercel Blob |
+| `api/service-request-photo.js` | photo upload to Vercel Blob (private) |
 | `api/service-requests/review.js` | staff actions — link, create lead, schedule, repair order, decline |
+| `api/service-requests/photo.js` | authenticated read proxy for the private photos |
 | `api/_lib/identity.js` | the matcher; pure, no I/O |
 | `api/_lib/service-requests.js` | sheet schema, validation, idempotency; pure |
 | `api/_lib/notify.js` | customer receipt + office alert via Resend |
@@ -94,11 +95,37 @@ secret `SEC`. Both are why the page is standalone down to its own `post()`.
 **A tie in the matcher refuses to match.** Two different people scoring equally
 means we cannot tell which one it is. Do not "fix" it by taking the first.
 
+**The blob store is PRIVATE, and the code depends on it.** These are photos of
+customers' back gardens and equipment pads; a public blob URL is unguessable but
+permanent and unauthenticated, so anyone who ever sees the link keeps access.
+Consequences worth knowing:
+
+- `put()` uses `access: 'private'`. Calling it with `'public'` against a private
+  store throws outright — that is how this was discovered.
+- The sheet stores a **pathname**, not a URL. That also makes the submit-side
+  check stronger: a pathname cannot point at another host, so there is no host
+  allowlist to get wrong — only a prefix to match.
+- Reads go through `api/service-requests/photo.js`, which checks the portal
+  session on every request. The console fetches with the token in a **header**
+  and renders an object URL; an `<img src>` pointing at the proxy would put the
+  session token in the DOM and in browser history.
+- `Repair_Orders.photo_url` is deliberately left blank. The Jobs hub renders
+  that field as an image and a private pathname would show as broken, so the
+  photo count and request id go into the description instead.
+
+**The dev server must stay as capable as the runtime.** `scripts/dev-service-request.mjs`
+fakes Vercel's `req`/`res`. Its first version had only `send`/`json`/`end`, so
+the streaming photo proxy failed with "res.write is not a function" in dev while
+being entirely correct in production. A harness weaker than the real thing
+invents bugs that do not exist and hides ones that do — if a handler needs a
+response method, add it to the shim.
+
 ## Environment
 
 | Variable | Effect if unset |
 |---|---|
 | `BLOB_READ_WRITE_TOKEN` | photo upload fails politely; requests still send |
+| `BLOB_STORE_ID` | informational only; nothing reads it |
 | `RESEND_API_KEY` | no confirmation or office email; requests still save |
 | `SERVICE_REQUEST_OFFICE_EMAIL` | no office alert (comma-separated list) |
 | `SERVICE_LINK_SECRET` | personalised `?k=` links never verify; page falls back to its address form |
