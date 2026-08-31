@@ -102,6 +102,23 @@ function esc(s) {
 // Escaping to \uXXXX keeps the JSON valid and parses back to exactly the same
 // object on the far side, so accents survive into the email itself. Only the
 // bytes being signed change.
+// RFC 2606 / 6761 reserve these so they can never resolve. Anything addressed to
+// one is guaranteed to bounce, and a bounce is not free: it lands in the sending
+// mailbox as noise and it costs domain reputation, which matters most in the
+// days around a cold campaign — exactly when this feature is busiest.
+//
+// This started as test hygiene (the live suites seed @e2e-test.invalid and each
+// run mailed Mau a bounce) but it belongs in production regardless: a customer
+// who typos "gmail.invalid" should cost us nothing.
+const UNDELIVERABLE_TLDS = ['invalid', 'test', 'example', 'localhost', 'local'];
+
+function isUndeliverable(address) {
+  const domain = String(address || '').split('@')[1];
+  if (!domain) return true;
+  const tld = domain.trim().toLowerCase().split('.').pop();
+  return UNDELIVERABLE_TLDS.includes(tld);
+}
+
 function asciiJson(value) {
   return JSON.stringify(value).replace(/[\u007f-\uffff]/g, ch =>
     '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
@@ -110,11 +127,16 @@ function asciiJson(value) {
 async function send(msg) {
   const cfg = notifyConfig();
   if (!cfg.secret) return { ok: false, skipped: 'no SERVICE_REQUEST_NOTIFY_SECRET configured' };
-  if (!msg.to || !msg.to.length) return { ok: false, skipped: 'no recipient' };
+
+  const recipients = (Array.isArray(msg.to) ? msg.to : [msg.to])
+    .map(a => String(a || '').trim())
+    .filter(Boolean)
+    .filter(a => !isUndeliverable(a));
+  if (!recipients.length) return { ok: false, skipped: 'no deliverable recipient' };
 
   const body = asciiJson({
     action: 'service_request_notify',
-    to: Array.isArray(msg.to) ? msg.to.join(',') : String(msg.to),
+    to: recipients.join(','),
     subject: msg.subject,
     htmlBody: msg.html,
     plainBody: msg.text,

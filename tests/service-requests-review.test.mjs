@@ -20,6 +20,11 @@
 
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local', override: true, quiet: true });
+
+// ⚠️ No real mail from a test run. Seeded requests would otherwise send a
+// receipt to a fake address, bounce, and land the bounce in a real inbox —
+// which costs sending reputation, not just attention.
+delete process.env.SERVICE_REQUEST_NOTIFY_SECRET;
 process.env.SERVICE_LINK_SECRET = process.env.SERVICE_LINK_SECRET || 'test-secret';
 
 const { crmSpreadsheetId, readSheetRange, writeSheetRange, rowsToObjects,
