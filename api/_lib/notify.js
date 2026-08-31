@@ -54,8 +54,8 @@ export function notifyConfig() {
     from: env('SERVICE_REQUEST_FROM', 'Mission Custom Pool Solutions <noreply@mcpoolsolutions.org>'),
     office: env('SERVICE_REQUEST_OFFICE_EMAIL', '')
       .split(',').map(s => s.trim()).filter(Boolean),
-    phone: env('MCPS_PHONE', '(210) 274-9599'),
-    replyTo: env('SERVICE_REQUEST_REPLY_TO', 'service@mcpoolsolutions.org'),
+    phone: env('MCPS_PHONE', '(210) 559-2073'),
+    replyTo: env('SERVICE_REQUEST_REPLY_TO', 'antonio@mcpoolsolutions.org'),
     consoleUrl: env('PORTAL_BASE_URL', 'https://mcps-log.vercel.app') + '/service-requests',
     logoUrl: env('COMMS_LOGO_URL', 'https://mcps-log.vercel.app/logo.png')
   };

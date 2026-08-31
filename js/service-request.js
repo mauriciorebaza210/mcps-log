@@ -25,8 +25,8 @@
   // Single place to change the office contact details shown in the footer and
   // in the "call us instead" fallbacks.
   var CONFIG = window.MCPS_SERVICE_REQUEST_CONFIG || {};
-  CONTACT.phone = CONFIG.phone || '(210) 274-9599';
-  CONTACT.email = CONFIG.email || 'service@mcpoolsolutions.org';
+  CONTACT.phone = CONFIG.phone || '(210) 559-2073';
+  CONTACT.email = CONFIG.email || 'antonio@mcpoolsolutions.org';
   CONTACT.phone_href = 'tel:+1' + CONTACT.phone.replace(/\D/g, '');
 
   var params = new URLSearchParams(location.search);

@@ -103,7 +103,7 @@ means we cannot tell which one it is. Do not "fix" it by taking the first.
 | `SERVICE_REQUEST_OFFICE_EMAIL` | no office alert (comma-separated list) |
 | `SERVICE_LINK_SECRET` | personalised `?k=` links never verify; page falls back to its address form |
 | `SERVICE_REQUEST_INTAKE=off` | kill switch — intake refuses politely, reads keep working |
-| `MCPS_PHONE`, `SERVICE_REQUEST_REPLY_TO` | footer contact falls back to defaults |
+| `MCPS_PHONE`, `SERVICE_REQUEST_REPLY_TO` | falls back to (210) 559-2073 / antonio@mcpoolsolutions.org |
 
 ## Not done yet
 
