@@ -44,11 +44,18 @@
   function $(id) { return document.getElementById(id); }
   function app() { return $('sr-body'); }
 
-  function api(method, payload) {
+  // ⚠️ NOT named api(). Every portal feature file shares one global scope, and
+  // js/lib/api.js already defines a global api(payload) that talks to Apps
+  // Script. A local api() here shadowed it, so the quote save silently called
+  // the wrong function and no quote was ever created — with no error, because
+  // the shapes are different enough to fail quietly.
+  var FAST_SERVICES = ['Weekly Full Service', 'Bi-Weekly Maintenance', 'Repair / Replacement / Other Job'];
+
+  function reviewApi(method, payload, op) {
     var t = token();
     // A session token in a query string ends up in server and proxy logs. GET
     // has nowhere else to put it, but POST does, so POST keeps it in the body.
-    var url = '/api/service-request?op=review' +
+    var url = '/api/service-request?op=' + (op || 'review') +
       (method === 'GET'
         ? '&token=' + encodeURIComponent(t) + (STATE.filter === 'all' ? '&all=1' : '')
         : '');
@@ -91,7 +98,7 @@
   function load() {
     if (!token()) return renderNoSession();
     app().innerHTML = '<div class="spin"></div>';
-    api('GET').then(function (res) {
+    reviewApi('GET').then(function (res) {
       if (res && res.ok) {
         STATE.items = res.items || [];
         STATE.techs = res.technicians || [];
@@ -165,6 +172,7 @@
         contactRow(it) +
         actions(it) +
         scheduleForm(it) +
+        (it.converted_quote_id ? quoteProgress(it) : '<div id="qp-' + esc(it.request_id) + '"></div>') +
         '<div class="msg" id="m-' + esc(it.request_id) + '"></div>' +
         auditLog(it) +
       '</div>' +
@@ -297,14 +305,17 @@
         out.push('<button class="b pri" data-act="show_sched" data-id="' + id + '"' + (hasPool ? '' : ' disabled') + '>' +
           (it.scheduled_visit_id ? 'Scheduled' : 'Schedule visit') + '</button>');
       }
-    } else {
-      out.push('<a class="b pri" href="/#quotes" target="_blank" rel="noopener">Open quote tool</a>');
+    } else if (!it.converted_quote_id) {
+      // Weekly service is built HERE, not handed off. Bouncing to another screen
+      // to retype what the customer already told us is the hand-off this page
+      // exists to remove.
+      out.push('<button class="b pri" data-act="quote_show" data-id="' + id + '">Build quote</button>');
     }
 
-    // The why-note below tells a blocked admin to set the customer up in the
-    // quote tool. Saying that without giving them the button is a dead end.
-    if (it.schedulable && !hasPool) {
-      out.push('<a class="b" href="/#quotes" target="_blank" rel="noopener">Open quote tool</a>');
+    // A schedulable request with no pool_id cannot go on the board, and a quote
+    // is what mints one — so offer it right where the block is explained.
+    if (it.schedulable && !hasPool && !it.converted_quote_id) {
+      out.push('<button class="b" data-act="quote_show" data-id="' + id + '">Build quote</button>');
     }
 
     out.push('<button class="b" data-act="note" data-id="' + id + '">Add note</button>');
@@ -318,9 +329,9 @@
       why = '<div class="why"><span>⚠</span><span>No pool ID on this property yet, so it can\'t go on the schedule. ' +
         'Link it to an existing customer above, or set them up in the quote tool first — that\'s what assigns a pool ID.</span></div>';
     }
-    if (!it.schedulable) {
-      why = '<div class="why"><span>ℹ</span><span>Weekly service needs a signed agreement, billing and a route slot. ' +
-        'Build it in the quote tool so it goes through the normal proposal and e-sign flow.</span></div>';
+    if (!it.schedulable && !it.converted_quote_id) {
+      why = '<div class="why"><span>ℹ</span><span>Weekly service needs a signed agreement before it can go on a route. ' +
+        'Build the quote here and send it for signature — the customer signs, and activation assigns the pool ID and route slot.</span></div>';
     }
     return '<div class="acts">' + out.join('') + '</div>' + why;
   }
@@ -362,6 +373,177 @@
       }).join('') + '</details>';
   }
 
+
+  // ══ Quote panel ═══════════════════════════════════════════════════════════
+  //
+  // The whole quote → proposal → send-for-approval flow, in the card.
+  //
+  // ⚠️ PRICING IS NOT REIMPLEMENTED HERE. qCalcEngine and qCalcDiscount are the
+  // quote tool's own functions (js/features/quotes.js) and every portal feature
+  // file shares one global scope, so this calls them directly. A second pricing
+  // implementation would be two sources of truth for what a customer is charged,
+  // and they would drift the first time a rate changed.
+  //
+  // Saving goes through the same `save_quote` action the quote tool posts, so a
+  // quote raised here is indistinguishable from one raised there — same columns,
+  // same pool_id minting, same operational sync.
+
+  var SPECS = [
+    ['size',      'Size',      [['small','Small · 0–15k gal'],['medium','Medium · 15–20k'],['large','Large · 20k+']]],
+    ['pool_type', 'Pool type', [['inground','Inground'],['above_ground','Above ground']]],
+    ['material',  'Material',  [['plaster','Plaster'],['fiberglass','Fiberglass'],['vinyl','Vinyl'],['tile','Tile']]],
+    ['finish',    'Finish',    [['light','Light'],['dark','Dark']]],
+    ['debris',    'Debris',    [['light','Light'],['heavy','Heavy']]]
+  ];
+  var TOGGLES = [['spa','Spa'],['has_robot','Robot on site'],['high_sun_exposure','High sun'],['has_pets','Pets']];
+
+  var SERVICE_CHOICES = [
+    ['weekly_full',    'Weekly Full Service'],
+    ['biweekly_maint', 'Bi-Weekly Maintenance'],
+    ['green_to_clean', 'Green-to-Clean'],
+    ['pool_startup',   'Pool Startup'],
+    ['repair_job',     'Repair / Other']
+  ];
+
+  // Reasonable opening guesses. The customer never told us their pool size, so
+  // these are a starting point an admin corrects — not a claim.
+  function newQuoteState(it) {
+    return {
+      service: it.category === 'weekly_service' ? 'weekly_full'
+             : it.category === 'green_to_clean' ? 'green_to_clean'
+             : it.category === 'repair' ? 'repair_job' : 'weekly_full',
+      size: 'medium', pool_type: 'inground', material: 'plaster',
+      spa: false, finish: 'light', debris: 'light',
+      has_robot: false, high_sun_exposure: false, has_pets: false,
+      startup_chemical: true, startup_programming: false, startup_pool_school: false,
+      startup_company: '', startup_company_email: '', sponsored_by_mcp: false,
+      startup_start_date: '', repair_type: '', repair_company: '', repair_amount: 0,
+      discount_type: 'none', discount_value: 0,
+      first_name: it.first_name, last_name: it.last_name, email: it.email, phone: it.phone,
+      address: it.service_address, city: it.city, zip_code: it.zip_code, area: '',
+      travel: null, void_travel: false, busy: '', error: ''
+    };
+  }
+
+  var _quotes = {};   // request_id -> quote state
+
+  function quoteState(it) {
+    if (!_quotes[it.request_id]) _quotes[it.request_id] = newQuoteState(it);
+    return _quotes[it.request_id];
+  }
+
+  function priceOf(q) {
+    if (typeof qCalcEngine !== 'function') return null;
+    var eng = qCalcEngine(q);
+    var d = (typeof qCalcDiscount === 'function' && q.discount_type !== 'none')
+      ? qCalcDiscount(eng.subtotal, q.discount_type, Number(q.discount_value) || 0, 0)
+      : { da: 0, discounted: eng.subtotal };
+    var travel = (q.travel && !q.void_travel) ? Number(q.travel.travel_fee || 0) : 0;
+    var sub = Math.round((d.discounted + travel) * 100) / 100;
+    var tax = Math.round(sub * 0.0825 * 100) / 100;
+    return {
+      eng: eng, discountAmount: d.da, discounted: d.discounted, travel: travel,
+      subtotal: sub, tax: tax, total: Math.round((sub + tax) * 100) / 100
+    };
+  }
+
+  function money(n) { return '$' + Number(n || 0).toFixed(2); }
+
+  function quotePanel(it) {
+    var q = quoteState(it);
+    var id = esc(it.request_id);
+    var p = priceOf(q);
+    if (!p) {
+      return '<div class="why"><span>⚠</span><span>The quote engine did not load. ' +
+        'Open the Quote Tool from the sidebar instead.</span></div>';
+    }
+    var startup = q.service === 'pool_startup';
+    var repair = q.service === 'repair_job';
+
+    return '<div class="quote" id="q-' + id + '">' +
+      '<div class="qt">Build the quote</div>' +
+      '<div class="qrow">' +
+        '<div class="qf" style="flex:1;min-width:190px"><label>Service</label><select data-q="service" data-id="' + id + '">' +
+          SERVICE_CHOICES.map(function (s) {
+            return '<option value="' + s[0] + '"' + (q.service === s[0] ? ' selected' : '') + '>' + esc(s[1]) + '</option>';
+          }).join('') + '</select></div>' +
+        (repair
+          ? '<div class="qf" style="flex:1;min-width:150px"><label>Price</label>' +
+            '<input type="number" step="0.01" data-q="repair_amount" data-id="' + id + '" value="' + esc(q.repair_amount) + '"></div>'
+          : '') +
+      '</div>' +
+      (repair || startup ? '' :
+        '<div class="qrow">' + SPECS.map(function (s) {
+          return '<div class="qf"><label>' + esc(s[1]) + '</label><select data-q="' + s[0] + '" data-id="' + id + '">' +
+            s[2].map(function (o) {
+              return '<option value="' + o[0] + '"' + (q[s[0]] === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+            }).join('') + '</select></div>';
+        }).join('') + '</div>' +
+        '<div class="qtoggles">' + TOGGLES.map(function (t) {
+          return '<button class="chipq' + (q[t[0]] ? ' on' : '') + '" data-qt="' + t[0] + '" data-id="' + id + '">' + esc(t[1]) + '</button>';
+        }).join('') + '</div>') +
+      (startup
+        ? '<div class="qtoggles">' +
+          [['startup_chemical','Chemical work'],['startup_programming','Programming'],['startup_pool_school','Pool school']]
+            .map(function (t) {
+              return '<button class="chipq' + (q[t[0]] ? ' on' : '') + '" data-qt="' + t[0] + '" data-id="' + id + '">' + esc(t[1]) + '</button>';
+            }).join('') + '</div>'
+        : '') +
+      (p.eng.pricing_ready
+        ? '<div class="qprice">' +
+            '<div><span>Service</span><b>' + money(p.eng.subtotal) + '</b></div>' +
+            (p.discountAmount ? '<div><span>Discount</span><b>&minus;' + money(p.discountAmount) + '</b></div>' : '') +
+            (p.travel ? '<div><span>Travel</span><b>' + money(p.travel) + '</b></div>' : '') +
+            '<div><span>Tax</span><b>' + money(p.tax) + '</b></div>' +
+            '<div class="tot"><span>Total</span><b>' + money(p.total) + '</b></div>' +
+          '</div>'
+        : '<div class="why"><span>⚠</span><span>' + esc(p.eng.pricing_warning || 'This service needs a price entered by hand.') + '</span></div>') +
+      '<div class="qspecs">' + esc(p.eng.specs_summary) + '</div>' +
+      (q.error ? '<div class="msg on err">' + esc(q.error) + '</div>' : '') +
+      // Creating a quote runs the Apps Script save, which writes the CRM row,
+      // the relational tabs and the operational rows. It routinely takes a
+      // minute. Saying so is the difference between "working" and "broken".
+      (q.busy === 'saving'
+        ? '<div class="msg on" style="background:var(--warn-bg);color:var(--warn)">' +
+          'Creating the quote — this takes up to a minute. Leave this open.</div>'
+        : '') +
+      '<div class="acts" style="border-top:0;padding-top:10px">' +
+        '<button class="b pri" data-act="quote_save" data-id="' + id + '"' +
+          (q.busy || !p.eng.pricing_ready ? ' disabled' : '') + '>' +
+          (q.busy === 'saving' ? 'Creating…' : 'Create quote') + '</button>' +
+        '<button class="b dim" data-act="quote_hide" data-id="' + id + '">Cancel</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // Once a quote exists the card shows the lifecycle instead of the form.
+  function quoteProgress(it) {
+    var id = esc(it.request_id);
+    var q = _quotes[it.request_id] || {};
+    var qid = it.converted_quote_id;
+    if (!qid) return '';
+    return '<div class="quote done">' +
+      '<div class="qt">Quote ' + esc(qid) + '</div>' +
+      (q.error ? '<div class="msg on err">' + esc(q.error) + '</div>' : '') +
+      (q.busy === 'proposal'
+        ? '<div class="msg on" style="background:var(--warn-bg);color:var(--warn)">' +
+          'Building the proposal PDF — this takes a moment.</div>'
+        : '') +
+      '<div class="acts" style="border-top:0;padding-top:0">' +
+        (q.proposal_url
+          ? '<a class="b" href="' + esc(q.proposal_url) + '" target="_blank" rel="noopener">View proposal</a>'
+          : '<button class="b" data-act="quote_proposal" data-id="' + id + '"' + (q.busy ? ' disabled' : '') + '>' +
+            (q.busy === 'proposal' ? 'Generating…' : 'Generate proposal') + '</button>') +
+        (q.proposal_url && !q.sent
+          ? '<button class="b pri" data-act="quote_send" data-id="' + id + '"' + (q.busy ? ' disabled' : '') + '>' +
+            (q.busy === 'sending' ? 'Sending…' : 'Send for approval') + '</button>'
+          : '') +
+        (q.sent ? '<span class="b dim" style="border:0">Sent — waiting on the customer to sign</span>' : '') +
+        '<a class="b dim" href="/#quotes" target="_blank" rel="noopener">Open in Quote Tool</a>' +
+      '</div>' +
+    '</div>';
+  }
+
   // ── Wiring ───────────────────────────────────────────────────────────────
   function msg(id, text, kind) {
     var el = $('m-' + id);
@@ -374,11 +556,46 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-act]'), function (b) {
       b.addEventListener('click', function () { onAction(b); });
     });
+    // Quote panel: every change re-prices immediately, so the number on screen
+    // is always the number that would be saved.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-q]'), function (el) {
+      el.addEventListener('change', function () {
+        var it = itemById(el.dataset.id);
+        if (!it) return;
+        quoteState(it)[el.dataset.q] = el.value;
+        repaintQuote(el.dataset.id);
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-qt]'), function (el) {
+      el.addEventListener('click', function () {
+        var it = itemById(el.dataset.id);
+        if (!it) return;
+        var q = quoteState(it);
+        q[el.dataset.qt] = !q[el.dataset.qt];
+        repaintQuote(el.dataset.id);
+      });
+    });
   }
 
   function onAction(btn) {
     var act = btn.dataset.act;
     var id = btn.dataset.id;
+
+
+    // ── Quote flow ─────────────────────────────────────────────────────────
+    if (act === 'quote_show') {
+      var host = $('qp-' + id);
+      if (host) { host.innerHTML = quotePanel(itemById(id)); wire(); }
+      return;
+    }
+    if (act === 'quote_hide') {
+      var h2 = $('qp-' + id);
+      if (h2) { h2.innerHTML = ''; delete _quotes[id]; }
+      return;
+    }
+    if (act === 'quote_save')     return saveQuote(id, btn);
+    if (act === 'quote_proposal') return generateProposal(id, btn);
+    if (act === 'quote_send')     return sendProposal(id, btn);
 
     if (act === 'copy') {
       navigator.clipboard.writeText(btn.dataset.copy).then(function () {
@@ -472,7 +689,7 @@
   };
 
   function send(id, payload, restore, handled) {
-    api('POST', payload).then(function (res) {
+    reviewApi('POST', payload).then(function (res) {
       restore();
       if (res && res.ok) {
         var copy = DONE_COPY[payload.action];
@@ -604,12 +821,159 @@
 #page-service_requests .tab:hover{border-color:var(--aqua);color:var(--teal)}
 #page-service_requests .tab.on{background:var(--aqua);border-color:var(--aqua);color:#fff}
 #page-service_requests .tab:focus-visible{outline:2.5px solid var(--aqua-light);outline-offset:2px}
+
+#page-service_requests .quote{background:var(--gray);border:1px solid var(--line);border-radius:11px;
+  padding:15px 17px;margin-top:13px}
+#page-service_requests .quote.done{background:var(--ok-bg);border-color:#c9ecdb}
+#page-service_requests .quote .qt{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--teal);margin-bottom:12px}
+#page-service_requests .qrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:11px}
+#page-service_requests .qf{display:flex;flex-direction:column;gap:4px;flex:1;min-width:118px}
+#page-service_requests .qf label{font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);font-weight:700;font-family:var(--fh)}
+#page-service_requests .qf select,#page-service_requests .qf input{border:1.5px solid var(--line);
+  border-radius:8px;padding:8px 10px;font-family:var(--fb);font-size:13.5px;background:#fff;color:var(--ink)}
+#page-service_requests .qtoggles{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+#page-service_requests .chipq{border:1.5px solid var(--line);border-radius:999px;background:#fff;
+  padding:6px 13px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer;font-family:var(--fb)}
+#page-service_requests .chipq:hover{border-color:var(--aqua)}
+#page-service_requests .chipq.on{background:var(--aqua);border-color:var(--aqua);color:#fff}
+#page-service_requests .qprice{background:#fff;border:1px solid var(--line);border-radius:9px;padding:11px 14px;margin-bottom:10px}
+#page-service_requests .qprice div{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;color:var(--muted)}
+#page-service_requests .qprice div b{color:var(--ink);font-variant-numeric:tabular-nums}
+#page-service_requests .qprice .tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-size:15px}
+#page-service_requests .qprice .tot span{color:var(--teal);font-weight:700}
+#page-service_requests .qprice .tot b{color:var(--teal);font-family:var(--fh);font-weight:800}
+#page-service_requests .qspecs{font-size:11.5px;color:var(--muted);line-height:1.5}
 #page-service_requests .sr-pill{background:var(--gray);border-radius:999px;padding:5px 12px;font-size:12px;
   font-weight:700;font-family:var(--fh);color:var(--muted)}
 #page-service_requests .spin{width:34px;height:34px;margin:50px auto;border:3px solid var(--line);
   border-top-color:var(--aqua);border-radius:50%;animation:srspin .8s linear infinite}
 @keyframes srspin{to{transform:rotate(360deg)}}
 `;
+
+
+  function itemById(id) {
+    for (var i = 0; i < STATE.items.length; i++) if (STATE.items[i].request_id === id) return STATE.items[i];
+    return null;
+  }
+
+  function repaintQuote(id) {
+    var it = itemById(id);
+    var host = $('qp-' + id);
+    if (host && it) { host.innerHTML = it.converted_quote_id ? quoteProgress(it) : quotePanel(it); wire(); }
+  }
+
+  // Same action, same payload shape, same server code path as the quote tool —
+  // so a quote raised from a request is not a second class of quote.
+  function saveQuote(id, btn) {
+    var it = itemById(id), q = quoteState(it);
+    var p = priceOf(q);
+    if (!p || !p.eng.pricing_ready) return;
+    q.busy = 'saving'; q.error = ''; repaintQuote(id);
+
+    var payload = {
+      action: 'save_quote', token: token(),
+      first_name: q.first_name, last_name: q.last_name, email: q.email, phone: q.phone,
+      address: q.address, city: q.city, zip_code: q.zip_code, area: q.area,
+      service: p.eng.service_label, pool_type: p.eng.pool_type, size: p.eng.size,
+      material: p.eng.material, spa: p.eng.spa, finish: p.eng.finish, debris: p.eng.debris,
+      has_robot: q.has_robot, high_sun_exposure: q.high_sun_exposure, has_pets: q.has_pets,
+      startup_chemical_work: q.startup_chemical, startup_programming: q.startup_programming,
+      startup_pool_school: q.startup_pool_school, startup_company: q.startup_company,
+      startup_company_email: q.startup_company_email, sponsored_by_mcp: q.sponsored_by_mcp,
+      startup_start_date: q.startup_start_date, startup_total_days: q.sponsored_by_mcp ? 3 : 0,
+      repair_job_type: q.service === 'repair_job' ? (q.repair_type || 'Repair') : '',
+      repair_invoice_amount: q.service === 'repair_job' ? Number(q.repair_amount) || 0 : 0,
+      travel_fee: p.travel,
+      service_subtotal: p.eng.subtotal,
+      discount_type: q.discount_type === 'none' ? '' : q.discount_type,
+      discount_value: q.discount_value, discount_amount: p.discountAmount,
+      discounted_service_subtotal: p.discounted,
+      quote_subtotal: p.subtotal, sales_tax: p.tax, total_with_tax: p.total,
+      chem_cost_est: p.eng.chem_cost,
+      net_profit_est: Math.round((p.subtotal - p.eng.chem_cost) * 100) / 100,
+      margin_percent: p.subtotal ? Math.round((p.subtotal - p.eng.chem_cost) / p.subtotal * 1000) / 10 : 0,
+      specs_summary: p.eng.specs_summary,
+      quickbooks_skus: (p.eng.qb_skus || []).join(', '),
+      quickbooks_item_names: (p.eng.qb_names || []).join(', '),
+      created_by: (typeof _s !== 'undefined' && _s && _s.name) || 'portal',
+      // Recorded so a quote raised from a request is traceable to it later.
+      quote_source: 'service_request',
+      quote_version: '2.0',
+      sales_flow: 'proposal_first',
+      signature_required: 'TRUE',
+      activation_method: 'SIGNED_AGREEMENT',
+      status: 'UNSENT'
+    };
+
+    // Fast path first. Apps Script's save_quote takes ~80s because it fans out
+    // across six relational tabs on every save; the Sheets API writes the flat
+    // row in about a second, and generate_proposal performs that fan-out itself
+    // (idempotently) when a proposal is actually needed.
+    //
+    // Green-to-clean and startups still go through Apps Script — those mint a
+    // pool_id and write Routes rows, and skipping that would leave a customer
+    // with no pool and no route.
+    var quotePromise = FAST_SERVICES.indexOf(p.eng.service_label) !== -1
+      ? reviewApi('POST', Object.assign({}, payload, { action: undefined }), 'quote')
+          .then(function (r) {
+            if (r && r.code === 'needs_apps_script') return gasApi(payload);
+            return r;
+          })
+      : gasApi(payload);
+
+    quotePromise.then(function (res) {
+      q.busy = '';
+      if (!res || !res.ok) { q.error = (res && res.error) || 'Could not create the quote.'; return repaintQuote(id); }
+      // Stamp it on the request so the link survives a reload.
+      return reviewApi('POST', { action: 'link_quote', request_id: id, quote_id: res.quote_id })
+        .then(function () {
+          toast('Quote ' + res.quote_id + ' created.', 'ok');
+          load();
+        });
+    }).catch(function () {
+      q.busy = ''; q.error = 'Network error — check the connection.'; repaintQuote(id);
+    });
+  }
+
+  function generateProposal(id, btn) {
+    var it = itemById(id), q = quoteState(it);
+    q.busy = 'proposal'; q.error = ''; repaintQuote(id);
+    gasApi({ action: 'generate_proposal', token: token(), quote_id: it.converted_quote_id })
+      .then(function (res) {
+        q.busy = '';
+        if (res && res.ok) { q.proposal_url = res.proposal_pdf_url || ''; toast('Proposal generated.', 'ok'); }
+        else q.error = (res && res.error) || 'Proposal generation failed.';
+        repaintQuote(id);
+      })
+      .catch(function () { q.busy = ''; q.error = 'Network error.'; repaintQuote(id); });
+  }
+
+  function sendProposal(id, btn) {
+    var it = itemById(id), q = quoteState(it);
+    q.busy = 'sending'; q.error = ''; repaintQuote(id);
+    gasApi({ action: 'send_proposal_for_approval', token: token(), quote_id: it.converted_quote_id })
+      .then(function (res) {
+        q.busy = '';
+        if (res && res.ok) {
+          q.sent = true;
+          toast('Sent to ' + (it.email || 'the customer') + ' for signature.', 'ok');
+        } else q.error = (res && res.error) || 'Could not send the proposal.';
+        repaintQuote(id);
+      })
+      .catch(function () { q.busy = ''; q.error = 'Network error.'; repaintQuote(id); });
+  }
+
+  // The quote lifecycle lives in Apps Script, not in the Vercel endpoints, so
+  // these go through the portal's own global api(). Referenced off window
+  // deliberately: a bare `api` would resolve to whatever this file happens to
+  // have in scope, which is how the shadowing bug above happened.
+  function gasApi(payload) {
+    if (typeof window.api === 'function') return window.api(payload);
+    return fetch('/api/gas', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload) }).then(function (r) { return r.json(); });
+  }
 
   // ── Entry point ──────────────────────────────────────────────────────────
   // Called by the router on navigation. Wiring the header controls is done once;

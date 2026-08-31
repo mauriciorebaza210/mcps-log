@@ -62,6 +62,7 @@ const ALLOWED_FROM = {
   schedule:     ['new', 'in_review'],
   repair_order: ['new', 'in_review'],
   note:         ['new', 'in_review', 'scheduled', 'quoted'],
+  link_quote:   ['new', 'in_review'],
   decline:      ['new', 'in_review', 'scheduled', 'quoted']
 };
 
@@ -547,8 +548,41 @@ async function actionNote(req, res, session, body) {
   return sendJson(res, 200, { ok: true, request_id: row.request_id, status: patch.status });
 }
 
+
+// ── link_quote ──────────────────────────────────────────────────────────────
+// Records a quote raised from the review console against the request.
+//
+// The quote itself is created by Apps Script's save_quote, which the browser
+// calls directly — the same path the quote tool uses, so a quote raised here is
+// identical to one raised there. This only ties the two together, so reopening
+// the queue still shows what happened and a second click cannot raise a second
+// quote for the same request.
+async function actionLinkQuote(req, res, session, body) {
+  const { header, row } = await locate(body.request_id);
+  if (!row) return sendJson(res, 404, { ok: false, error: 'Request not found.' });
+
+  if (String(row.converted_quote_id || '').trim()) {
+    return sendJson(res, 200, { ok: true, request_id: row.request_id, quote_id: row.converted_quote_id, existing: true });
+  }
+  const blocked = guard(row, 'link_quote'); if (blocked) return sendJson(res, 409, { ok: false, error: blocked });
+
+  const quoteId = clean(body.quote_id, 40);
+  if (!/^Q-[A-Za-z0-9]{4,}$/.test(quoteId) && !/^quote\d+$/i.test(quoteId)) {
+    return sendJson(res, 400, { ok: false, error: 'That does not look like a quote id.' });
+  }
+
+  const patch = stamp(row, session, 'quote_created', 'quoted', {
+    converted_quote_id: quoteId,
+    match_quote_id: row.match_quote_id || quoteId,
+    match_status: 'confident'
+  });
+  await saveRequest(header, row, patch);
+  return sendJson(res, 200, { ok: true, request_id: row.request_id, quote_id: quoteId });
+}
+
 const ACTIONS = {
   link: actionLink,
+  link_quote: actionLinkQuote,
   create_lead: actionCreateLead,
   schedule: actionSchedule,
   repair_order: actionRepairOrder,

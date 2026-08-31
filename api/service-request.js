@@ -12,6 +12,7 @@
 //     GET  /api/service-request?op=review     the review queue
 //     POST /api/service-request?op=review     link / create lead / schedule / decline
 //     GET  /api/service-request?op=view       read a private customer photo
+//     POST /api/service-request?op=quote      create a quote (fast path)
 //
 // ⚠️ WHY ONE FUNCTION AND NOT FOUR. The Hobby plan allows 12 serverless
 // functions per deployment and the portal already uses 12, so four more failed
@@ -480,7 +481,8 @@ async function handleWarm(res) {
 const OPS = {
   upload: { admin: false, load: () => import('./_lib/photo-upload.js') },
   review: { admin: true,  load: () => import('./_lib/review.js') },
-  view:   { admin: true,  load: () => import('./_lib/photo-read.js') }
+  view:   { admin: true,  load: () => import('./_lib/photo-read.js') },
+  quote:  { admin: true,  load: () => import('./_lib/quote-write.js') }
 };
 
 export default async function handler(req, res) {
