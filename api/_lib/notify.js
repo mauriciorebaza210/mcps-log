@@ -66,7 +66,16 @@ export function notifyConfig() {
     phone: env('MCPS_PHONE', '(210) 559-2073'),
     replyTo: env('SERVICE_REQUEST_REPLY_TO', 'antonio@mcpoolsolutions.org'),
     consoleUrl: env('PORTAL_BASE_URL', 'https://mcps-log.vercel.app') + '/#service_requests',
-    logoUrl: env('COMMS_LOGO_URL', 'https://mcps-log.vercel.app/logo.png')
+    // Mirrors commsBrandCfg_ in appscript/Comms.js so a receipt from here is
+    // indistinguishable from every other email MCPS sends.
+    name: env('COMMS_BUSINESS_NAME', 'Mission Custom Pool Solutions'),
+    address: env('COMMS_BUSINESS_ADDRESS', '4640 S Flores Rd, Elmendorf, TX 78112'),
+    website: env('COMMS_WEBSITE', 'missioncustompools.com'),
+    // ⚠️ NOT logo.png. That one is 1024x1024 and 348KB — a square mark forced
+    // into the 200x56 header slot renders as a tiny square, and a third of a
+    // megabyte is a lot to ask of a phone on cell data for a header image.
+    // assets/email-logo.png is the horizontal lockup at 440x131 and 20KB.
+    logoUrl: env('COMMS_LOGO_URL', 'https://mcps-log.vercel.app/assets/email-logo.png')
   };
 }
 
@@ -76,12 +85,34 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// ⚠️ THE SIGNED BODY MUST BE PURE ASCII.
+//
+// Node hashes the UTF-8 bytes of a string; Apps Script's
+// Utilities.computeHmacSha256Signature does not agree with it on any character
+// above U+007F. Signing a body containing one produces "Bad signature" on a
+// request that is perfectly genuine.
+//
+// This was not theoretical. It was found by sending a real test: an office
+// alert failed while the customer receipt succeeded, and the only difference
+// between them was a "·" in the match summary. On a San Antonio customer list
+// it would have silently killed the email for every José, Peña and Gutiérrez —
+// and for anyone whose description contained a curly quote pasted from a phone
+// keyboard.
+//
+// Escaping to \uXXXX keeps the JSON valid and parses back to exactly the same
+// object on the far side, so accents survive into the email itself. Only the
+// bytes being signed change.
+function asciiJson(value) {
+  return JSON.stringify(value).replace(/[\u007f-\uffff]/g, ch =>
+    '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
 async function send(msg) {
   const cfg = notifyConfig();
   if (!cfg.secret) return { ok: false, skipped: 'no SERVICE_REQUEST_NOTIFY_SECRET configured' };
   if (!msg.to || !msg.to.length) return { ok: false, skipped: 'no recipient' };
 
-  const body = JSON.stringify({
+  const body = asciiJson({
     action: 'service_request_notify',
     to: Array.isArray(msg.to) ? msg.to.join(',') : String(msg.to),
     subject: msg.subject,
@@ -114,31 +145,52 @@ async function send(msg) {
 
 // ── Shell ───────────────────────────────────────────────────────────────────
 
-function shell(bodyHtml, cfg) {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:${GRAY};">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRAY};padding:24px 12px;">
-<tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid ${LINE};border-radius:8px;overflow:hidden;">
-  <tr><td style="background:${TEAL};padding:24px 30px;text-align:center;">
-    <div style="font-family:'Montserrat',Arial,sans-serif;font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:${AQUA_LIGHT};">Mission Custom Pool Solutions</div>
+// The house email shell, matching buildCommsEmailHtml_ in appscript/Comms.js.
+//
+// ⚠️ An earlier version of this invented its own: a teal band with the company
+// name set in text. It looked generic in a real inbox, and for a reason worth
+// remembering — email clients do not load web fonts, so Montserrat fell back to
+// Arial and the only thing carrying the brand was a colour. The real shell
+// leads with the LOGO on white, which survives having no fonts at all.
+//
+// Keep this in step with Comms.js. Two shells that drift is how a customer ends
+// up able to tell which system sent them something.
+function shell(bodyHtml, cfg, opts) {
+  const o = opts || {};
+  const pre = o.preheader
+    ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(o.preheader)}</div>`
+    : '';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light only">
+</head>
+<body style="margin:0;padding:0;background:${GRAY};">${pre}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRAY};">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#FFFFFF;border-radius:8px;overflow:hidden;border:1px solid ${LINE};">
+  <tr><td align="center" style="padding:28px 24px 16px;background:#FFFFFF;">
+    <img src="${esc(cfg.logoUrl)}" alt="${esc(cfg.name)}" width="200" style="display:block;max-height:56px;width:auto;border:0;">
   </td></tr>
-  <tr><td style="height:3px;background:${AQUA};font-size:0;line-height:0;">&nbsp;</td></tr>
-  <tr><td style="padding:30px;font-family:'Open Sans',Arial,sans-serif;font-size:16px;line-height:1.6;color:${INK};">
+  <tr><td style="padding:0 24px;"><div style="height:3px;background:${AQUA};border-radius:2px;"></div></td></tr>
+  <tr><td style="padding:24px;font-family:'Open Sans',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:${INK};">
     ${bodyHtml}
   </td></tr>
-  <tr><td style="background:${TEAL};padding:22px 30px;text-align:center;font-family:'Open Sans',Arial,sans-serif;font-size:12px;line-height:1.7;color:${FOOT_INK};">
-    <div style="font-family:'Montserrat',Arial,sans-serif;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:${AQUA_LIGHT};font-size:10px;margin-bottom:8px;">Every pool matters.</div>
-    Questions? ${esc(cfg.phone)} &middot; <a href="mailto:${esc(cfg.replyTo)}" style="color:${AQUA_LIGHT};">${esc(cfg.replyTo)}</a>
+  <tr><td style="padding:20px 24px;background:${TEAL};font-family:'Open Sans',Arial,Helvetica,sans-serif;">
+    <div style="font-size:15px;font-weight:bold;color:#FFFFFF;margin-bottom:4px;">${esc(cfg.name)}</div>
+    <div style="font-size:12px;color:${FOOT_INK};line-height:1.5;">
+      Pool service in San Antonio, TX<br>
+      ${esc(cfg.address)}<br>
+      ${esc(cfg.phone)} &nbsp;&bull;&nbsp; ${esc(cfg.website)}
+    </div>
   </td></tr>
-</table>
-</td></tr></table></body></html>`;
+</table></td></tr></table></body></html>`;
 }
 
 function factTable(rows) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${GRAY};border-radius:8px;margin:0 0 22px;">` +
     rows.filter(Boolean).map(([k, v]) =>
-      `<tr><td style="padding:11px 16px;font-family:'Open Sans',Arial,sans-serif;font-size:13px;color:#5c6b6b;width:38%;">${esc(k)}</td>` +
-      `<td style="padding:11px 16px;font-family:'Open Sans',Arial,sans-serif;font-size:14px;color:${INK};font-weight:600;">${esc(v)}</td></tr>`
+      `<tr><td style="padding:11px 16px;font-family:'Open Sans',Arial,Helvetica,sans-serif;font-size:13px;color:#5c6b6b;width:38%;">${esc(k)}</td>` +
+      `<td style="padding:11px 16px;font-family:'Open Sans',Arial,Helvetica,sans-serif;font-size:14px;color:${INK};font-weight:600;">${esc(v)}</td></tr>`
     ).join('') + '</table>';
 }
 
@@ -154,7 +206,7 @@ export async function notifyCustomer(request, categoryLabel) {
     const address = [request.service_address, request.city].filter(Boolean).join(', ');
 
     const body =
-      `<h1 style="font-family:'Montserrat',Arial,sans-serif;font-weight:700;font-size:21px;color:${TEAL};margin:0 0 16px;">We have your request</h1>` +
+      `<h1 style="font-family:'Montserrat',Arial,Helvetica,sans-serif;font-weight:bold;font-size:20px;color:${TEAL};margin:0 0 16px;">We have your request</h1>` +
       `<p style="margin:0 0 18px;">${greeting} thank you for reaching out. We have your request and a member of our team will contact you within one business day to confirm the day and the price.</p>` +
       factTable([
         ['Reference', request.request_id],
@@ -183,7 +235,7 @@ export async function notifyCustomer(request, categoryLabel) {
     return await send({
       to: request.email,
       subject: `We have your pool service request (${request.request_id})`,
-      html: shell(body, cfg),
+      html: shell(body, cfg, { preheader: `We'll contact you within one business day. Reference ${request.request_id}.` }),
       text,
       idempotencyKey: 'sr-cust-' + request.request_id
     });
@@ -204,7 +256,7 @@ export async function notifyOffice(request, categoryLabel, matchSummary) {
     const urgent = request.timing_preference === 'asap';
 
     const body =
-      `<h1 style="font-family:'Montserrat',Arial,sans-serif;font-weight:700;font-size:21px;color:${TEAL};margin:0 0 6px;">New service request</h1>` +
+      `<h1 style="font-family:'Montserrat',Arial,Helvetica,sans-serif;font-weight:bold;font-size:20px;color:${TEAL};margin:0 0 6px;">New service request</h1>` +
       `<p style="margin:0 0 18px;color:#5c6b6b;font-size:14px;">${esc(request.request_id)}${urgent ? ' &middot; <strong style="color:#b42318;">ASAP</strong>' : ''}</p>` +
       factTable([
         ['Customer', name],
@@ -219,7 +271,7 @@ export async function notifyOffice(request, categoryLabel, matchSummary) {
         ? `<p style="margin:0 0 22px;padding:14px 16px;background:${GRAY};border-radius:8px;font-size:14px;">${esc(request.description)}</p>`
         : '') +
       `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:${AQUA};">` +
-      `<a href="${esc(cfg.consoleUrl)}" style="display:inline-block;padding:14px 28px;font-family:'Montserrat',Arial,sans-serif;font-weight:700;font-size:14px;color:#ffffff;text-decoration:none;">Open the review queue</a>` +
+      `<a href="${esc(cfg.consoleUrl)}" style="display:inline-block;padding:14px 28px;font-family:'Montserrat',Arial,Helvetica,sans-serif;font-weight:bold;font-size:14px;color:#ffffff;text-decoration:none;">Open the review queue</a>` +
       `</td></tr></table>`;
 
     const text = [
@@ -240,7 +292,7 @@ export async function notifyOffice(request, categoryLabel, matchSummary) {
     return await send({
       to: cfg.office,
       subject: `${urgent ? '[ASAP] ' : ''}New service request — ${name} (${categoryLabel})`,
-      html: shell(body, cfg),
+      html: shell(body, cfg, { preheader: `${name} — ${categoryLabel}` }),
       text,
       idempotencyKey: 'sr-office-' + request.request_id
     });
