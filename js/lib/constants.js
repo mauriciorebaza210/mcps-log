@@ -10,7 +10,7 @@ const PAGE_META = {
   home:'Home', jobs:'Jobs', live_map:'Technician Hub', service_log:'Service Log',
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
   onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues',
-  comms:'Communications'
+  comms:'Communications', service_requests:'Service Requests'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
@@ -91,6 +91,7 @@ const SIDEBAR_GROUPS = [
     id: 'sales',
     label: 'Sales Hub',
     children: [
+      { page:'service_requests', label:'Service Requests', icon:SVG_BELL },
       { page:'crm',    label:'Leads CRM',       icon:SVG_CHART },
       { page:'quotes', label:'Quote Tool',      icon:SVG_DOC   },
       { page:'comms',  label:'Communications',  icon:SVG_MAIL }
@@ -134,9 +135,9 @@ const ROLE_PAGES = {
   lead:['home','live_map','service_log','alerts'],
   trainee:['home','live_map'],
   new_hire:['onboarding'],
-  office:['home','inventory','alerts'],
-  manager:['home','crm','comms','live_map','service_log','inventory','quotes','financial_hub','alerts'],
-  admin:['home','crm','comms','live_map','service_log','inventory','quotes','admin','financial_hub','alerts'],
+  office:['home','inventory','alerts','service_requests'],
+  manager:['home','crm','comms','live_map','service_log','inventory','quotes','financial_hub','alerts','service_requests'],
+  admin:['home','crm','comms','live_map','service_log','inventory','quotes','admin','financial_hub','alerts','service_requests'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

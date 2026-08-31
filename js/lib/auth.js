@@ -47,7 +47,9 @@ function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch
 
 function unionPages_(roles) {
   const set = new Set();
-  const order = ['home','onboarding','jobs','live_map','service_log','crm','comms','inventory','quotes','training','admin','financial_hub','alerts'];
+  // ⚠️ A page in ROLE_PAGES but missing HERE is silently dropped — this filter
+  // is the last word on what a user gets, and it fails without an error.
+  const order = ['home','onboarding','jobs','live_map','service_log','service_requests','crm','comms','inventory','quotes','training','admin','financial_hub','alerts'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }

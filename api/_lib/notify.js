@@ -65,7 +65,7 @@ export function notifyConfig() {
       .split(',').map(s => s.trim()).filter(Boolean),
     phone: env('MCPS_PHONE', '(210) 559-2073'),
     replyTo: env('SERVICE_REQUEST_REPLY_TO', 'antonio@mcpoolsolutions.org'),
-    consoleUrl: env('PORTAL_BASE_URL', 'https://mcps-log.vercel.app') + '/service-requests',
+    consoleUrl: env('PORTAL_BASE_URL', 'https://mcps-log.vercel.app') + '/#service_requests',
     logoUrl: env('COMMS_LOGO_URL', 'https://mcps-log.vercel.app/logo.png')
   };
 }

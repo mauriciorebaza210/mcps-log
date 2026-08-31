@@ -23,7 +23,7 @@ intake create a lead.
 | Path | What it is |
 |---|---|
 | `service-request.html` + `js/service-request.js` | the customer page (`/service`) |
-| `service-requests.html` + `js/service-requests-console.js` | the staff queue (`/service-requests`) |
+| `js/features/service-requests.js` | the staff queue, a page **inside the portal** (`/#service_requests`) |
 | `api/service-request.js` | public intake (POST), prefill + status (GET) |
 | `api/service-request-photo.js` | photo upload to Vercel Blob (private) |
 | `api/service-requests/review.js` | staff actions — link, create lead, schedule, repair order, decline |
@@ -65,6 +65,22 @@ The two live suites seed their own data and remove it, including the
 review suite finds an admin session on the `Sessions` sheet, or reads
 `SR_TEST_TOKEN`.
 
+## Registering the portal page took five edits, not one
+
+Adding `service_requests` to `ROLE_PAGES` alone does nothing. All five are
+required, and four of them fail silently:
+
+1. `js/lib/constants.js` — `PAGE_META` (the label)
+2. `js/lib/constants.js` — `SIDEBAR_GROUPS` (the nav entry)
+3. `js/lib/constants.js` — `ROLE_PAGES` (who may see it)
+4. `js/lib/auth.js` — **the `order` array in `unionPages_`**. This filter is the
+   last word on what a user gets, and a page missing from it is dropped with no
+   error anywhere. This is the one that bites.
+5. `js/lib/router.js` — the `if (page === '...') load...()` hook
+
+Plus the `<div class="pf" id="page-service_requests">` and the `<script>` tag in
+`index.html`.
+
 ## Traps worth knowing
 
 **`ensureSheetWithHeaders` does not repair a partial header row.** It creates a
@@ -91,6 +107,15 @@ session token from `localStorage` into any payload omitting `token`, and this
 page shares an origin with the portal — a logged-in admin would silently send
 their session to a public endpoint. `constants.js` likewise ships the webhook
 secret `SEC`. Both are why the page is standalone down to its own `post()`.
+
+**Feature CSS is injected at runtime, namespaced under the page.** Following
+how `comms.js` ships its styles, rather than editing `style.css`. Every selector
+is scoped to `#page-service_requests` because the portal defines its own
+`--teal` at a different value and bare `.card` / `.tab` / `.b` rules would
+collide. Two things that must NOT be namespaced: `@keyframes` and `@media` —
+prefixing an at-rule makes it invalid, and one malformed rule makes the browser
+discard everything after it. That happened here: a mangled `@keyframes` cost 13
+rules and left the tab buttons rendering as unstyled browser defaults.
 
 **A tie in the matcher refuses to match.** Two different people scoring equally
 means we cannot tell which one it is. Do not "fix" it by taking the first.

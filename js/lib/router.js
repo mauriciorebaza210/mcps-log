@@ -63,6 +63,7 @@ function navigateTo(pageWithSub){
   if(page==='service_log') loadServiceLog(window._pendingSvcPoolId);
   if(page==='inventory'&&!_invLoaded) loadInventory();
   if(page==='quotes') qInit();
+  if(page==='service_requests') loadServiceRequests();
   if(page==='crm') loadCRM();
   if(page==='comms') loadCommsPage(sub);
   if(page==='training') loadTraining();

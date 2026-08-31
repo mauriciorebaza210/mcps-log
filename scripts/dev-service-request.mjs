@@ -25,10 +25,15 @@ const PORT = Number(process.env.PORT || 3999);
 
 const ROUTES = {
   '/service': '/service-request.html',
-  '/service-requests': '/service-requests.html'
+  // The review queue is a page inside the portal now: index.html#service_requests
+  '/': '/index.html'
 };
 
 const API = {
+  // The portal itself talks to Apps Script through this proxy, so serving
+  // index.html without it means a session that cannot refresh and a console
+  // full of 404s that look like this feature's fault.
+  '/api/gas': () => import('../api/gas.js'),
   '/api/service-request': () => import('../api/service-request.js'),
   '/api/service-request-photo': () => import('../api/service-request-photo.js'),
   '/api/service-requests/review': () => import('../api/service-requests/review.js'),
@@ -130,6 +135,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`\n  service-request dev server\n`);
   console.log(`    customer page   http://localhost:${PORT}/service`);
-  console.log(`    review console  http://localhost:${PORT}/service-requests`);
+  console.log(`    review queue    http://localhost:${PORT}/#service_requests  (inside the portal)`);
   console.log(`    status view     http://localhost:${PORT}/service?r=SR-XXXXXXXX\n`);
 });
