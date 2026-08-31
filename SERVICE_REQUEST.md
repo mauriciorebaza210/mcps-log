@@ -30,7 +30,7 @@ intake create a lead.
 | `api/service-requests/photo.js` | authenticated read proxy for the private photos |
 | `api/_lib/identity.js` | the matcher; pure, no I/O |
 | `api/_lib/service-requests.js` | sheet schema, validation, idempotency; pure |
-| `api/_lib/notify.js` | customer receipt + office alert via Resend |
+| `api/_lib/notify.js` | customer receipt + office alert, sent through Gmail via Apps Script |
 | `api/_lib/ids.js` | Routes/Auth spreadsheet ids (`main`'s `_sheets.js` only exports the CRM one) |
 | `scripts/preflight-service-request.mjs` | proves the service account can read+write both spreadsheets |
 | `scripts/dev-service-request.mjs` | local server — `vercel dev` cannot start in this repo, see below |
@@ -126,11 +126,44 @@ response method, add it to the shim.
 |---|---|
 | `BLOB_READ_WRITE_TOKEN` | photo upload fails politely; requests still send |
 | `BLOB_STORE_ID` | informational only; nothing reads it |
-| `RESEND_API_KEY` | no confirmation or office email; requests still save |
-| `SERVICE_REQUEST_OFFICE_EMAIL` | no office alert (comma-separated list) |
+| `SERVICE_REQUEST_NOTIFY_SECRET` | no confirmation or office email; requests still save. Must match the Apps Script property of the same name |
+| `SERVICE_REQUEST_OFFICE_EMAIL` | defaults to antonio@mcpoolsolutions.org (comma-separated list) |
 | `SERVICE_LINK_SECRET` | personalised `?k=` links never verify; page falls back to its address form |
 | `SERVICE_REQUEST_INTAKE=off` | kill switch — intake refuses politely, reads keep working |
 | `MCPS_PHONE`, `SERVICE_REQUEST_REPLY_TO` | falls back to (210) 559-2073 / antonio@mcpoolsolutions.org |
+
+## Email
+
+MCPS does not use Resend. Everything sends through GmailApp inside Apps Script
+(`send_mode: gmail`), so notifications go back through a relay:
+
+```
+Vercel builds subject + HTML + text
+   → POST to the Apps Script /exec with ?sig=<HMAC of the exact body>
+   → handleServiceRequestNotify_ verifies signature, ts skew, nonce
+   → GmailApp.sendEmail
+```
+
+The relay is dumb on purpose — copy lives on the Vercel side so changing a word
+in an email does not need a clasp push and a redeploy.
+
+**To turn it on**, the same secret must exist in both places:
+
+1. Apps Script → Project Settings → Script Properties →
+   `SERVICE_REQUEST_NOTIFY_SECRET`
+2. Vercel → the `mcps-log` project → Environment Variables → the same name and
+   value
+3. `clasp push` + redeploy, **from the full working branch only**
+
+Until then it fails open at both stages: no secret configured returns `skipped`,
+and a configured secret with the action not yet deployed returns
+`{ok:false,error:"Unauthorized"}`. Either way the request is saved and sitting
+in the review queue.
+
+⚠️ `appscript/ServiceRequestNotify.js` and its route in `WebhookReceiver.js`
+live on the **working branch**, not on this feature branch — `clasp push` sends
+whatever `appscript/` the checkout has, so the relay has to travel with the rest
+of the Apps Script code.
 
 ## Not done yet
 

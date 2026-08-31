@@ -9,17 +9,27 @@
 // is already saved; throwing here would show the customer an error for a request
 // we actually have, and they would send it again. Every path resolves.
 //
-// Transport is Resend, the same provider appscript/Comms.js already supports
-// (commsSendViaResend_, Comms.js:66) — so this reuses an existing account rather
-// than introducing a second one. Copy RESEND_API_KEY from the Apps Script
-// properties into the Vercel environment and both halves send as the same
-// domain. With no key set, nothing sends and nothing breaks: the request is
-// still saved and still appears in the review console.
+// Transport is Gmail, through the Apps Script backend — the same path every
+// other MCPS email already takes (`send_mode: gmail`, confirmed against the live
+// deployment). Vercel has no mail of its own and MCPS does not use Resend, so
+// the only sender that exists is GmailApp inside Apps Script.
 //
-// Markup follows the brand email shell in Comms.js:959-1010 — 600px table, teal
-// masthead, aqua rule, Open Sans body, teal footer band — so a receipt from here
-// looks like every other email MCPS sends.
-// ══════════════════════════════════════════════════════════════════════════════
+// Vercel builds the HTML and text; Apps Script is a dumb authenticated relay.
+// Keeping the templates on this side means changing a word in an email does not
+// need a clasp push and a redeploy.
+//
+// Requests are signed the way appscript/CommsSenders.js signs its sends —
+// HMAC-SHA256 over the exact request body, plus a timestamp and a nonce, so a
+// captured request cannot be replayed into an open send relay.
+//
+// ⚠️ FAILS OPEN, INCLUDING BEFORE THE APPS SCRIPT SIDE EXISTS. Until
+// `service_request_notify` is deployed, the backend answers
+// {ok:false,error:"Unauthorized"} and this logs and moves on. The request is
+// already saved and already visible in the review queue; email is a
+// convenience, never the system of record.
+
+import crypto from 'node:crypto';
+import { appsScriptUrl } from '../_sheets.js';
 
 const TEAL = '#0D3D3E';
 const AQUA = '#1FA7A8';
@@ -50,9 +60,8 @@ function env(name, fallback) {
 
 export function notifyConfig() {
   return {
-    key: env('RESEND_API_KEY', ''),
-    from: env('SERVICE_REQUEST_FROM', 'Mission Custom Pool Solutions <noreply@mcpoolsolutions.org>'),
-    office: env('SERVICE_REQUEST_OFFICE_EMAIL', '')
+    secret: env('SERVICE_REQUEST_NOTIFY_SECRET', ''),
+    office: env('SERVICE_REQUEST_OFFICE_EMAIL', 'antonio@mcpoolsolutions.org')
       .split(',').map(s => s.trim()).filter(Boolean),
     phone: env('MCPS_PHONE', '(210) 559-2073'),
     replyTo: env('SERVICE_REQUEST_REPLY_TO', 'antonio@mcpoolsolutions.org'),
@@ -69,28 +78,38 @@ function esc(s) {
 
 async function send(msg) {
   const cfg = notifyConfig();
-  if (!cfg.key) return { ok: false, skipped: 'no RESEND_API_KEY configured' };
+  if (!cfg.secret) return { ok: false, skipped: 'no SERVICE_REQUEST_NOTIFY_SECRET configured' };
   if (!msg.to || !msg.to.length) return { ok: false, skipped: 'no recipient' };
 
-  const headers = { authorization: `Bearer ${cfg.key}`, 'content-type': 'application/json' };
-  // Resend honours this for 24h, so a retry after a timeout cannot double-send.
-  if (msg.idempotencyKey) headers['Idempotency-Key'] = String(msg.idempotencyKey);
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      from: cfg.from,
-      to: Array.isArray(msg.to) ? msg.to : [msg.to],
-      reply_to: cfg.replyTo,
-      subject: msg.subject,
-      html: msg.html,
-      text: msg.text
-    })
+  const body = JSON.stringify({
+    action: 'service_request_notify',
+    to: Array.isArray(msg.to) ? msg.to.join(',') : String(msg.to),
+    subject: msg.subject,
+    htmlBody: msg.html,
+    plainBody: msg.text,
+    replyTo: cfg.replyTo,
+    dedupeKey: msg.idempotencyKey || '',
+    ts: Date.now(),
+    nonce: crypto.randomUUID()
   });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: json.message || `Resend returned ${res.status}` };
-  return { ok: true, id: json.id };
+
+  // The signature covers the exact bytes sent, so there is no canonical form to
+  // agree on and no field-ordering bug to have.
+  const sig = crypto.createHmac('sha256', cfg.secret).update(body).digest('hex');
+  const url = appsScriptUrl() + (appsScriptUrl().includes('?') ? '&' : '?') + 'sig=' + sig;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+    redirect: 'follow'
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch (_) { return { ok: false, error: 'Apps Script returned non-JSON: ' + text.slice(0, 120) }; }
+  if (!json.ok) return { ok: false, error: json.error || 'Apps Script refused the send' };
+  return { ok: true, id: json.messageId || '' };
 }
 
 // ── Shell ───────────────────────────────────────────────────────────────────
