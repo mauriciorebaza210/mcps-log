@@ -48,9 +48,9 @@
     var t = token();
     // A session token in a query string ends up in server and proxy logs. GET
     // has nowhere else to put it, but POST does, so POST keeps it in the body.
-    var url = '/api/service-requests/review' +
+    var url = '/api/service-request?op=review' +
       (method === 'GET'
-        ? '?token=' + encodeURIComponent(t) + (STATE.filter === 'all' ? '&all=1' : '')
+        ? '&token=' + encodeURIComponent(t) + (STATE.filter === 'all' ? '&all=1' : '')
         : '');
     var opts = { method: method };
     if (method === 'POST') {
@@ -241,7 +241,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.shot[data-photo]'), function (b) {
       var key = b.dataset.key;
       if (_photoCache[key]) return paint(b, _photoCache[key]);
-      fetch('/api/service-requests/photo?pathname=' + encodeURIComponent(b.dataset.photo) +
+      fetch('/api/service-request?op=view&pathname=' + encodeURIComponent(b.dataset.photo) +
             '&token=' + encodeURIComponent(token()))
         .then(function (r) { return r.ok ? r.blob() : null; })
         .then(function (blob) {

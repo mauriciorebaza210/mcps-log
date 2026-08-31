@@ -26,7 +26,6 @@ const { crmSpreadsheetId, readSheetRange, writeSheetRange, rowsToObjects,
         validatePortalSession, hasAdminAccess } = await import('../api/_sheets.js');
 const { routesSpreadsheetId } = await import('../api/_lib/ids.js');
 const intake = (await import('../api/service-request.js')).default;
-const review = (await import('../api/service-requests/review.js')).default;
 
 const CRM = crmSpreadsheetId();
 const ROUTES = routesSpreadsheetId();
@@ -66,9 +65,15 @@ const submit = async body => {
     socket: {} }, res);
   return res._j;
 };
+// Auth now lives in the dispatcher (api/service-request.js), so the test drives
+// the same gate rather than the handler alone — otherwise it would prove the
+// handler works while saying nothing about whether it is actually protected.
+const dispatch = (await import('../api/service-request.js')).default;
 const call = async (method, body, query) => {
   const res = mockRes();
-  await review({ method, body, query: Object.assign({ token: TOKEN }, query || {}), headers: {}, socket: {} }, res);
+  await dispatch({ method, body,
+    query: Object.assign({ op: 'review', token: TOKEN }, query || {}),
+    headers: {}, socket: {} }, res);
   return { status: res._s, body: res._j };
 };
 

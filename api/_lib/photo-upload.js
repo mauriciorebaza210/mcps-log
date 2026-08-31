@@ -31,7 +31,7 @@
 
 import crypto from 'node:crypto';
 import { put } from '@vercel/blob';
-import { sendJson } from './_sheets.js';
+import { sendJson } from '../_sheets.js';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const RATE_MAX = 24;                       // 4 photos x a few retries
@@ -83,7 +83,7 @@ function validDraftId(value) {
   return /^[a-z0-9]{8,40}$/.test(String(value || ''));
 }
 
-export default async function handler(req, res) {
+export async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('allow', 'POST, OPTIONS');
     return res.status(204).end();

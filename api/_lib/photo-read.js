@@ -18,7 +18,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { get } from '@vercel/blob';
-import { sendJson, requireAdminPortalToken } from '../_sheets.js';
+import { sendJson } from '../_sheets.js';
 
 // Exactly the shape api/service-request-photo.js generates. Anything else is
 // either a bug or an attempt to read a different part of the store.
@@ -29,7 +29,7 @@ const CONTENT_TYPES = {
   webp: 'image/webp', heic: 'image/heic'
 };
 
-export default async function handler(req, res) {
+export async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.setHeader('allow', 'GET, OPTIONS');
     return res.status(204).end();
@@ -40,8 +40,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const session = await requireAdminPortalToken(req, res);
-    if (!session) return;   // requireAdminPortalToken already answered
+    // Auth already enforced by the dispatcher in api/service-request.js, which
+    // is the single gate for every admin op. req.session is what it resolved.
+    const session = req.session;
 
     const pathname = String((req.query && req.query.pathname) || '').trim();
     if (!PATHNAME.test(pathname)) {

@@ -56,7 +56,7 @@ async function loadCRM() {
   try {
     let res;
     try {
-      res = await apiLocalGet('/api/crm/list', { token: _s.token });
+      res = await apiLocalGet('/api/crm', { op: 'list', token: _s.token });
     } catch (fastErr) {
       console.warn('Fast CRM list failed, falling back to Apps Script:', fastErr);
       res = await apiGet({ action: 'get_crm_data', token: _s.token });
@@ -272,7 +272,7 @@ async function viewCRMDetail(quoteId) {
   if (item.pool_id) loadLeadPoolNotes(item.pool_id);
 
   try {
-    const res = await apiLocalGet('/api/crm/detail', { token: _s.token, quote_id: quoteId });
+    const res = await apiLocalGet('/api/crm', { op: 'detail', token: _s.token, quote_id: quoteId });
     if (res.ok && res.item && _activeLeadId === quoteId) {
       const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
       if (idx > -1) _crmCache[idx] = { ..._crmCache[idx], ...res.item };

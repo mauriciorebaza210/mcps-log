@@ -1,9 +1,29 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// PUBLIC SERVICE-REQUEST INTAKE
+// SERVICE REQUESTS — the feature's single serverless function
 //
-//   POST /api/service-request            submit a request
-//   GET  /api/service-request?k=<token>  prefill for a personalised link
-//   GET  /api/service-request?r=<id>     coarse status for a reference number
+//   PUBLIC
+//     POST /api/service-request               submit a request
+//     POST /api/service-request?op=upload     attach a photo
+//     GET  /api/service-request?k=<token>     prefill for a personalised link
+//     GET  /api/service-request?r=<id>        coarse status for a reference number
+//     GET  /api/service-request?warm=1        warm the caches
+//
+//   ADMIN (portal session)
+//     GET  /api/service-request?op=review     the review queue
+//     POST /api/service-request?op=review     link / create lead / schedule / decline
+//     GET  /api/service-request?op=view       read a private customer photo
+//
+// ⚠️ WHY ONE FUNCTION AND NOT FOUR. The Hobby plan allows 12 serverless
+// functions per deployment and the portal already uses 12, so four more failed
+// the deploy outright. The handlers still live in separate files under
+// api/_lib/ — which Vercel does not count, being underscore-prefixed — and this
+// dispatches to them. The split is by module, not by file-per-route.
+//
+// ⚠️ AUTH IS ENFORCED HERE, ONCE, FROM THE TABLE BELOW — never inside the
+// handlers. Public and admin routes now share an entry point, and the way that
+// goes wrong is a new op added without its check. Making the dispatcher the
+// only gate means forgetting is not possible: an op with no table entry is a
+// 400, not an open door.
 //
 // Public and unauthenticated. Two rules govern everything here:
 //
@@ -17,7 +37,8 @@
 import crypto from 'node:crypto';
 import {
   crmSpreadsheetId, readSheetRange, writeSheetRange, appendSheetRows,
-  ensureSheetWithHeaders, rowsToObjects, normalizeHeader, sendJson, getCached
+  ensureSheetWithHeaders, rowsToObjects, normalizeHeader, sendJson, getCached,
+  requireAdminPortalToken
 } from './_sheets.js';
 import {
   findMatch, normEmail, normPhone, normAddress
@@ -454,15 +475,40 @@ async function handleWarm(res) {
 
 // ── Router ──────────────────────────────────────────────────────────────────
 
+// The whole access-control surface, in one readable table. `admin: true` sends
+// the request through requireAdminPortalToken before the handler ever runs.
+const OPS = {
+  upload: { admin: false, load: () => import('./_lib/photo-upload.js') },
+  review: { admin: true,  load: () => import('./_lib/review.js') },
+  view:   { admin: true,  load: () => import('./_lib/photo-read.js') }
+};
+
 export default async function handler(req, res) {
   try {
     if (req.method === 'OPTIONS') {
       res.setHeader('allow', 'GET, POST, OPTIONS');
       return res.status(204).end();
     }
+
+    const q = req.query || {};
+    const op = String(q.op || '').trim();
+
+    if (op) {
+      const route = OPS[op];
+      // An unknown op is refused rather than falling through to the public
+      // intake — a typo must not silently become a submission.
+      if (!route) return sendJson(res, 400, { ok: false, error: 'Unknown operation.' });
+      if (route.admin) {
+        const session = await requireAdminPortalToken(req, res);
+        if (!session) return;   // requireAdminPortalToken already answered
+        req.session = session;
+      }
+      const mod = await route.load();
+      return await mod.handler(req, res);
+    }
+
     if (req.method === 'POST') return await handleSubmit(req, res);
     if (req.method === 'GET') {
-      const q = req.query || {};
       if (q.warm) return await handleWarm(res);
 
       // Reads are rate limited too. A reference number is eight hex characters,

@@ -354,7 +354,7 @@
       renderPhotos();
       // Uploads start the moment a photo is picked, so by the time the customer
       // reaches Review the URLs are already attached and Send is instant.
-      return fetch('/api/service-request-photo', {
+      return fetch('/api/service-request?op=upload', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ draft_id: S.draft_id, data_url: dataUrl, name: file.name })

@@ -34,10 +34,9 @@ const API = {
   // index.html without it means a session that cannot refresh and a console
   // full of 404s that look like this feature's fault.
   '/api/gas': () => import('../api/gas.js'),
+  // One function, matching production — the ops are query params, not paths.
   '/api/service-request': () => import('../api/service-request.js'),
-  '/api/service-request-photo': () => import('../api/service-request-photo.js'),
-  '/api/service-requests/review': () => import('../api/service-requests/review.js'),
-  '/api/service-requests/photo': () => import('../api/service-requests/photo.js')
+  '/api/crm': () => import('../api/crm/index.js')
 };
 
 const TYPES = {

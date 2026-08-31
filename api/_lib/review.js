@@ -26,13 +26,13 @@
 import crypto from 'node:crypto';
 import {
   crmSpreadsheetId, readSheetRange, writeSheetRange, appendSheetRows,
-  rowsToObjects, normalizeHeader, sendJson, requireAdminPortalToken, getCached
+  rowsToObjects, normalizeHeader, sendJson, getCached
 } from '../_sheets.js';
-import { routesSpreadsheetId, authSpreadsheetId } from '../_lib/ids.js';
-import { findMatch } from '../_lib/identity.js';
+import { routesSpreadsheetId, authSpreadsheetId } from './ids.js';
+import { findMatch } from './identity.js';
 import {
   SHEET, HEADERS, CATEGORIES, STATUSES, clean, appendAction, rowFromObject
-} from '../_lib/service-requests.js';
+} from './service-requests.js';
 
 const VISITS_SHEET = 'Scheduled_Visits';
 const REPAIRS_SHEET = 'Repair_Orders';
@@ -558,15 +558,16 @@ const ACTIONS = {
 
 // ── Router ──────────────────────────────────────────────────────────────────
 
-export default async function handler(req, res) {
+export async function handler(req, res) {
   try {
     if (req.method === 'OPTIONS') {
       res.setHeader('allow', 'GET, POST, OPTIONS');
       return res.status(204).end();
     }
 
-    const session = await requireAdminPortalToken(req, res);
-    if (!session) return;   // requireAdminPortalToken already answered
+    // Auth already enforced by the dispatcher in api/service-request.js, which
+    // is the single gate for every admin op. req.session is what it resolved.
+    const session = req.session;
 
     if (req.method === 'GET') return await handleList(req, res);
 
