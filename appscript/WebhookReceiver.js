@@ -2261,6 +2261,19 @@ function doPost(e) {
       return sqRes;
     }
 
+    // Service-request notifications — the receipt to the customer and the alert
+    // to the office, handed over by the Vercel intake endpoint.
+    //
+    // ⚠️ Deliberately not gated by validateToken(). There is no portal user
+    // behind a customer's submission, so a session check is impossible here.
+    // Authentication is an HMAC over the raw body plus a skew window and a
+    // nonce, verified inside the handler — the same scheme the per-person
+    // campaign senders use. It takes `e` rather than `payload` because the
+    // signature covers the exact bytes received, not the reparsed object.
+    if (payload.action === 'service_request_notify') {
+      return jsonResponse_(handleServiceRequestNotify_(e));
+    }
+
     // Selectable start dates for the signing page's "Starts" calendar.
     //
     // Two paths, kept strictly apart INSIDE the handler (savResolveQuote_):
