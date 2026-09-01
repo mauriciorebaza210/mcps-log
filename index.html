@@ -1631,6 +1631,20 @@
     </div>
 
     <!-- ── Alerts & Issues page ── -->
+    <!-- ══════════════ SERVICE REQUESTS ══════════════ -->
+    <div class="pf" id="page-service_requests">
+      <div class="fin-page-hdr" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+        <h2 style="margin:0;">Service Requests</h2>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <span id="sr-count" class="sr-pill">&mdash;</span>
+          <button class="tab on" data-f="open">Open</button>
+          <button class="tab" data-f="all">All</button>
+          <button class="tab" id="sr-refresh">Refresh</button>
+        </div>
+      </div>
+      <div id="sr-body" style="padding:0 1rem 2rem;"><div class="spin"></div></div>
+    </div>
+
     <div class="pf" id="page-alerts">
       <div class="fin-page-hdr" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
         <h2 style="margin:0;">Alerts &amp; Issues</h2>
@@ -2263,6 +2277,7 @@
 <script src="/js/features/service-areas.js"></script>
 <script src="/js/features/merge-duplicates.js"></script>
 <script src="/js/features/contracts.js"></script>
+<script src="/js/features/service-requests.js"></script>
 <script src="/js/lib/vendor/driver.iife.min.js"></script>
 <script src="/js/features/tour.js"></script>
 <script src="/app.js"></script>

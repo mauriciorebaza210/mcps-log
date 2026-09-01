@@ -387,25 +387,32 @@ function srDetailHtml_(r) {
     </div>`;
 }
 
-// Pricing mirrors the Quote Tool exactly — qCalcEngine and Q_TAX are the same
-// globals quotes.js uses, so the numbers can never drift between the two flows.
+// Pricing mirrors the Quote Tool exactly — MCPS_PRICING (js/lib/pricing.js) is
+// the one engine both flows price through, so the numbers can never drift.
 function srPricing_(requestId) {
   const chk = k => { const el = document.getElementById(`sr-${k}-${requestId}`); return !!(el && el.checked); };
-  const eng = qCalcEngine({
+  const c = MCPS_PRICING.priceQuote({
     service: 'pool_startup',
     startup_chemical: chk('chem'), startup_programming: chk('prog'), startup_pool_school: chk('school'),
     startup_company: '', size: 'startup', pool_type: 'inground', material: 'plaster',
     spa: false, finish: 'light', debris: 'light', has_robot: false,
     high_sun_exposure: false, has_pets: false,
-    repair_type: '', repair_company: '', repair_address: '', repair_desc: '',
-    repair_amount: 0, repair_sku: '', first_name: '', last_name: ''
+    repair_type: '', manual_price: 0,
+    adjustment_type: 'none', adjustment_value: 0,
+    travel_fee: 0, void_travel: false
   });
-  const sub = eng.subtotal;
-  const tax = Math.round(sub * Q_TAX * 100) / 100;
-  const total = Math.round((sub + tax) * 100) / 100;
-  const net = Math.round((sub - eng.chem_cost) * 100) / 100;
-  const margin = sub > 0 ? Math.round(net / sub * 1000) / 10 : 0;
-  return { eng, sub, tax, total, net, margin, sponsored: chk('mcp') };
+  // `eng` is kept for the two call sites that read subtotal/chem_cost/QB lists.
+  const eng = {
+    subtotal: c.service_subtotal, chem_cost: c.chem_cost_est,
+    qb_skus: c.qb_skus, qb_names: c.qb_names
+  };
+  return {
+    eng,
+    sub: c.quote_subtotal, tax: c.sales_tax, total: c.total_with_tax,
+    net: c.net_profit_est, margin: c.margin_percent,
+    taxPct: (MCPS_PRICING.CATALOG.tax_rate * 100).toFixed(2).replace(/\.00$/, ''),
+    sponsored: chk('mcp')
+  };
 }
 
 function srRecalc(requestId) {
@@ -414,7 +421,7 @@ function srRecalc(requestId) {
   const dateEl = document.getElementById(`sr-date-${requestId}`);
   if (!totals) return;
   const p = srPricing_(requestId);
-  totals.innerHTML = `Service: $${p.sub.toFixed(2)} · Tax (8.25%): $${p.tax.toFixed(2)} · <b>Total: $${p.total.toFixed(2)}</b>`;
+  totals.innerHTML = `Service: $${p.sub.toFixed(2)} · Tax (${p.taxPct}%): $${p.tax.toFixed(2)} · <b>Total: $${p.total.toFixed(2)}</b>`;
   if (approveBtn) approveBtn.disabled = !(dateEl && dateEl.value);
 }
 

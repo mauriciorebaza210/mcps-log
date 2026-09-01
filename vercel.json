@@ -5,6 +5,7 @@
     { "source": "/margins", "destination": "/margins.html" },
     { "source": "/sms", "destination": "/sms.html" },
     { "source": "/startup-request", "destination": "/startup-request.html" },
-    { "source": "/builder-portal", "destination": "/builder-portal.html" }
+    { "source": "/builder-portal", "destination": "/builder-portal.html" },
+    { "source": "/service", "destination": "/service-request.html" }
   ]
 }

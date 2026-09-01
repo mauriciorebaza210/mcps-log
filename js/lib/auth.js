@@ -51,7 +51,7 @@ function unionPages_(roles) {
   // ROLE_PAGES but missing here is silently dropped from the session, so the
   // sidebar never renders it and navigateTo() refuses it. Add every new page
   // here as well as in ROLE_PAGES.
-  const order = ['home','action_queue','onboarding','jobs','live_map','route_planner','service_log','crm','comms','contracts','inventory','quotes','training','admin','financial_hub','alerts'];
+  const order = ['home','service_requests','action_queue','onboarding','jobs','live_map','route_planner','service_log','crm','comms','contracts','inventory','quotes','training','admin','financial_hub','alerts'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }

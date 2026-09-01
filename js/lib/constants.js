@@ -39,7 +39,8 @@ const PAGE_META = {
   inventory:'Inventory', quotes:'Quote Tool', crm:'Sales Hub', training:'Training', admin:'Admin',
   contracts:'Contracts', action_queue:'Action Queue',
   onboarding:'Get Started', financial_hub:'Financial Hub', alerts:'Alerts & Issues',
-  comms:'Communications', route_planner:'Route Planner'
+  comms:'Communications', route_planner:'Route Planner',
+  service_requests:'Service Requests'
 };
 
 // Emoji icons used on home cards only (sidebar uses SVG)
@@ -137,6 +138,7 @@ const SIDEBAR_GROUPS = [
     id: 'sales',
     label: 'Sales Hub',
     children: [
+      { page:'service_requests', label:'Service Requests', icon:SVG_BELL },
       { page:'action_queue', label:'Action Queue',  icon:SVG_INBOX, badgeId:'aq-badge' },
       { page:'crm',       label:'Leads CRM',       icon:SVG_CHART },
       { page:'quotes',    label:'Quote Tool',      icon:SVG_DOC   },
@@ -183,14 +185,16 @@ const ROLE_PAGES = {
   lead:['home','live_map','service_log','alerts'],
   trainee:['home','live_map'],
   new_hire:['onboarding'],
-  office:['home','inventory','alerts'],
+  office:['home','inventory','alerts','service_requests'],
   // 'action_queue' is deliberately NOT granted to office: every card in the queue
   // deep-links to 'crm' (aqOpenQuote), and navigateTo() hard-returns on a page the
   // role lacks — office would get an inbox whose every button silently did nothing.
+  // 'service_requests' IS granted: its cards resolve in place, so office never
+  // hits a page it lacks.
   // 'contracts' is admin/manager only for the same reason the GAS route is:
   // executed agreements carry pricing, signer IPs and signature images.
-  manager:['home','crm','comms','route_planner','live_map','service_log','inventory','quotes','financial_hub','alerts','action_queue','contracts'],
-  admin:['home','crm','comms','route_planner','live_map','service_log','inventory','quotes','admin','financial_hub','alerts','action_queue','contracts'],
+  manager:['home','crm','comms','route_planner','live_map','service_log','inventory','quotes','financial_hub','alerts','action_queue','contracts','service_requests'],
+  admin:['home','crm','comms','route_planner','live_map','service_log','inventory','quotes','admin','financial_hub','alerts','action_queue','contracts','service_requests'],
 };
 
 const ALL_ROLES = ['technician','lead', 'office','manager','admin','trainee','new_hire'];

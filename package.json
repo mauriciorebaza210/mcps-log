@@ -9,6 +9,7 @@
     "gas:deploy": "clasp push && clasp deploy -i AKfycbxFrdZRbkXuGuazfqf7q-rKp-T-3DinM8t_3Pp5i6Efr7tciDU59Go6L7s3kxCQl9I -d \"Portal update\""
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.0",
     "dotenv": "^17.4.1",
     "driver.js": "^1.4.0"
   },
