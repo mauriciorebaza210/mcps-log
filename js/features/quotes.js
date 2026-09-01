@@ -673,8 +673,22 @@ function qCalcDiscount(subtotal, dtype, dval, cprice) {
     const da = Math.round(Math.min(dval, subtotal)*100)/100;
     return { da, discounted: Math.round(Math.max(subtotal-da,0)*100)/100 };
   } else if (dtype === 'Custom Price') {
-    const cp = Math.round(Math.min(cprice, subtotal)*100)/100;
-    return { da: Math.round(Math.max(subtotal-cp,0)*100)/100, discounted: cp };
+    // ⚠️ This used to be Math.min(cprice, subtotal), which silently rewrote any
+    // price ABOVE the rate card back down to it — type $400 on a $260 pool and
+    // the quote came out $260, with nothing to say so. A pool service business
+    // has to be able to charge a premium: a difficult access, a long drive, a
+    // customer who wants Saturdays.
+    //
+    // The custom price is now honoured as typed. `da` goes NEGATIVE for a
+    // premium, which is the honest representation on a sheet whose only column
+    // is discount_amount — and every figure that matters downstream
+    // (discounted_service_subtotal, quote_subtotal, total_with_tax) is correct
+    // either way.
+    //
+    // Discounts behave exactly as before; only the previously-clamped case
+    // changes.
+    const cp = Math.round(Math.max(Number(cprice) || 0, 0)*100)/100;
+    return { da: Math.round((subtotal-cp)*100)/100, discounted: cp };
   }
   return { da:0, discounted:subtotal };
 }

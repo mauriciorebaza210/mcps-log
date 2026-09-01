@@ -504,7 +504,8 @@
             }).join('') + '</select></div>' +
         (q.discount_type === 'Custom Price'
           ? '<div class="qf"><label>Price</label><input type="number" step="0.01" min="0" ' +
-            'data-q="custom_price" data-id="' + id + '" value="' + esc(q.custom_price) + '"></div>'
+            'data-q="custom_price" data-id="' + id + '" value="' + esc(q.custom_price) + '" ' +
+            'placeholder="above or below the rate card"></div>'
           : q.discount_type !== 'none'
             ? '<div class="qf"><label>' + (q.discount_type === 'Percentage' ? 'Percent' : 'Amount') + '</label>' +
               '<input type="number" step="0.01" min="0" data-q="discount_value" data-id="' + id + '" value="' + esc(q.discount_value) + '"></div>'
@@ -519,8 +520,9 @@
         ? '<div class="qprice">' +
             '<div><span>Service</span><b>' + money(p.eng.subtotal) + '</b></div>' +
             (p.discountAmount
-              ? '<div><span>' + (q.discount_type === 'Custom Price' ? 'Adjusted to ' + money(p.discounted) : 'Discount') +
-                '</span><b>&minus;' + money(p.discountAmount) + '</b></div>'
+              ? (p.discountAmount < 0
+                  ? '<div><span>Premium</span><b>+' + money(Math.abs(p.discountAmount)) + '</b></div>'
+                  : '<div><span>Discount</span><b>&minus;' + money(p.discountAmount) + '</b></div>')
               : '') +
             (p.travel ? '<div><span>Travel</span><b>' + money(p.travel) + '</b></div>' : '') +
             '<div><span>Tax</span><b>' + money(p.tax) + '</b></div>' +
@@ -922,8 +924,9 @@
       box.innerHTML =
         '<div><span>Service</span><b>' + money(p.eng.subtotal) + '</b></div>' +
         (p.discountAmount
-          ? '<div><span>' + (q.discount_type === 'Custom Price' ? 'Adjusted to ' + money(p.discounted) : 'Discount') +
-            '</span><b>&minus;' + money(p.discountAmount) + '</b></div>'
+          ? (p.discountAmount < 0
+              ? '<div><span>Premium</span><b>+' + money(Math.abs(p.discountAmount)) + '</b></div>'
+              : '<div><span>Discount</span><b>&minus;' + money(p.discountAmount) + '</b></div>')
           : '') +
         (p.travel ? '<div><span>Travel</span><b>' + money(p.travel) + '</b></div>' : '') +
         '<div><span>Tax</span><b>' + money(p.tax) + '</b></div>' +
