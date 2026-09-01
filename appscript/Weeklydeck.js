@@ -109,7 +109,11 @@ function generateWeeklyDeck(weekKey) {
   const snapStu = getWeeklyKpiSnapshot(weekKey, "Startup");
   const snapOth = getWeeklyKpiSnapshot(weekKey, "Other");
   const prevSnap = getPreviousWeekSnapshot_(weekKey);
-  const invAlerts = getInventoryAlerts_();
+  // Muted directly in the Apps Script editor at some point and never mirrored into
+  // git — found by diffing the live project on 2026-08-30. Preserved deliberately so
+  // a deploy does not silently resume inventory alerts in the weekly deck. To turn
+  // them back on, restore: getInventoryAlerts_()
+  const invAlerts = []; // muted manually
 
   // WoW numbers
   const wowDelta  = prevSnap ? snap.grandTotal - prevSnap.grandTotal : null;

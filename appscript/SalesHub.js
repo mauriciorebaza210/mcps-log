@@ -721,6 +721,23 @@ function getProposalByQuoteId_(quoteId) {
 // ── Agreement-link email (sent when a proposal goes out for signature) ───────
 // ⚠️ Leads with "Prepared For", NOT the price — confirmed with Mau, per Tony's
 // review. The investment appears on the signing page below the terms.
+// Is the LEGACY Zapier/SignRequest flow the one that will actually run?
+//
+// This matters for COPY, not just for control flow. The agreement email was
+// written for the merged in-portal flow — "ready to sign, about two minutes,
+// nothing to download" — but under the legacy flow clicking through only
+// APPROVES, and SignRequest then emails a second time with the real document.
+// Promising a two-minute signature and delivering a two-email round trip is how
+// a customer decides you are disorganised.
+function legacyContractFlowActive_() {
+  try {
+    return String(PropertiesService.getScriptProperties()
+      .getProperty('LEGACY_CONTRACT_FLOW') || '').trim().toLowerCase() !== 'off';
+  } catch (e) {
+    return true;   // unset means legacy, so an unreadable property must too
+  }
+}
+
 function buildAgreementLinkEmailHtml_(d) {
   var facts = [
     ['Service', d.serviceName],
@@ -742,8 +759,11 @@ function buildAgreementLinkEmailHtml_(d) {
     '<tr><td style="padding:30px 32px 4px;">' +
       '<div style="font-family:' + MCPS_EMAIL_FB_ + ';font-size:15px;line-height:1.65;color:#3A4645;margin:0 0 20px;">' +
         'Hi ' + htmlEscape_(d.firstName) + ' &mdash; thank you for considering Mission Custom Pool Solutions. ' +
-        'Your service agreement is ready to review and sign. It takes about two minutes, and there&rsquo;s ' +
-        'nothing to download or print.' +
+        (legacyContractFlowActive_()
+          ? 'Your service agreement is ready. Review it at the link below and approve it, and we will ' +
+            'send the document straight over for your signature.'
+          : 'Your service agreement is ready to review and sign. It takes about two minutes, and there&rsquo;s ' +
+            'nothing to download or print.') +
       '</div>' +
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
         'style="background:#F3F5F6;border-radius:10px;margin:0 0 6px;"><tr><td style="padding:6px 18px;">' +
@@ -782,13 +802,15 @@ function buildAgreementLinkEmailText_(d) {
     'YOUR SERVICE AGREEMENT IS READY',
     '',
     'Hi ' + d.firstName + ' — thank you for considering Mission Custom Pool Solutions.',
-    'Your service agreement is ready to review and sign. It takes about two minutes.',
+    (legacyContractFlowActive_()
+      ? 'Your service agreement is ready. Review it at the link below and approve it, and we will send the document straight over for your signature.'
+      : 'Your service agreement is ready to review and sign. It takes about two minutes.'),
     '',
     'Service: ' + d.serviceName,
     d.serviceAddress ? 'Property: ' + d.serviceAddress : '',
     d.validUntil ? 'Valid until: ' + d.validUntil : '',
     '',
-    'Review and sign here:',
+    (legacyContractFlowActive_() ? 'Review and approve here:' : 'Review and sign here:'),
     d.approvalUrl,
     '',
     'Need something changed first? You can request an adjustment right from that page.',
@@ -1610,20 +1632,40 @@ function handleRespondToProposal_(payload) {
     softSetCell_(approvals, approval._rowNum, 'responded_at', now);
     softSetCell_(approvals, approval._rowNum, 'updated_at', now);
 
-    // RETIRED: approval-without-signature. This branch used to accept a bare
-    // "approved" click and then chain handleGenerateContract_ → handleSendContract_
-    // → Zapier → SignRequest. In the merged flow acceptance IS the signature, so
-    // there is no such thing as an approved-but-unsigned proposal: the customer
-    // signs on agreement.html and handleSignAgreement_ does the activation.
+    // Approval-without-signature is the LEGACY path: a bare "approved" click chains
+    // handleGenerateContract_ → handleSendContract_ → Zapier → SignRequest. The merged
+    // e-sign flow replaces it (acceptance IS the signature, on agreement.html), but that
+    // frontend is not deployed yet — so this stays live and the cutover is a Script
+    // Property flip, not another deploy.
     //
-    // Refused rather than quietly recording a half-state, because a caller that
-    // believed this activated a customer would be wrong in a way nobody notices
-    // until the pool never appears on a route.
+    // Kill switch: set LEGACY_CONTRACT_FLOW = 'off' the moment agreement.html ships.
+    // Unset/anything else keeps today's behaviour, so deploying this changes nothing.
     if (approvalStatus === 'APPROVED') {
-      return {
-        ok: false,
-        error: 'Approval requires a signature. Send the agreement link and have the customer sign it.'
-      };
+      var legacyOff = String(PropertiesService.getScriptProperties()
+        .getProperty('LEGACY_CONTRACT_FLOW') || '').trim().toLowerCase() === 'off';
+      if (legacyOff) {
+        // Refuse rather than quietly record a half-state: a caller that believed this
+        // activated a customer would be wrong in a way nobody notices until the pool
+        // never appears on a route.
+        return {
+          ok: false,
+          error: 'Approval requires a signature. Send the agreement link and have the customer sign it.'
+        };
+      }
+
+      softSetCell_(proposals, proposal._rowNum, 'status', 'ACCEPTED');
+      softSetCell_(proposals, proposal._rowNum, 'accepted_at', now);
+      softSetCell_(proposals, proposal._rowNum, 'updated_at', now);
+      softSetCell_(hit.sheet, hit.rowNum, 'proposal_accepted_at', now);
+      softSetCell_(hit.sheet, hit.rowNum, 'proposal_response_note', note);
+      // Customer approval advances any repair work orders on this quote
+      try { markRepairOrdersApprovedForQuote_(approval.quote_id); } catch (roErr) { Logger.log('markRepairOrdersApprovedForQuote_: ' + roErr); }
+      var contract = handleGenerateContract_(approval.quote_id);
+      if (contract.ok) {
+        var sent = handleSendContract_(approval.quote_id);
+        return { ok: true, status: 'APPROVED', agreement_sent: !!sent.ok, agreement_error: sent.ok ? '' : sent.error };
+      }
+      return { ok: true, status: 'APPROVED', agreement_sent: false, agreement_error: contract.error || 'Agreement generation failed.' };
     }
 
     if (approvalStatus === 'DECLINED') {
@@ -3553,6 +3595,45 @@ function activateQuoteServiceFromAgreement_(quoteId, signedAt, activationMethod,
 }
 
 
+// RESTORED: the SignRequest/Zapier callback (action `service_agreement_signed`).
+// External callers have no deploy of their own — the Zap posts here the moment a
+// document is signed. Removing the route made that post fall through to the QBO
+// bill handler and return ok:true, so Zapier saw success while the customer was
+// never activated. Keep until the Zap itself is retired.
+function handleServiceAgreementSigned_(payload) {
+  ensureNormalizedSalesSheets_();
+  const agreements = ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS);
+  const signedAt = payload.signed_at || nowIso_();
+  let agreement = null;
+  if (payload.agreement_id) agreement = findRowByValue_(agreements, 'agreement_id', payload.agreement_id);
+  if (!agreement && payload.quote_id) agreement = findRowByValue_(agreements, 'source_quote_id', payload.quote_id);
+  if (!agreement && payload.signrequest_id) agreement = findRowByValue_(agreements, 'signrequest_id', payload.signrequest_id);
+
+  let quoteId = String(payload.quote_id || (agreement && agreement.source_quote_id) || '').trim();
+  if (!quoteId && payload.row_number) {
+    const sheet = getCrmSheet_();
+    const rowNum = Number(payload.row_number);
+    if (rowNum > 1) {
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const row = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
+      quoteId = value_(quoteObjectFromRow_(headers, row, rowNum), 'quote_id');
+    }
+  }
+  if (!quoteId) return { ok: false, error: 'quote_id, agreement_id, row_number, or signrequest_id required' };
+
+  const activate = activateQuoteServiceFromAgreement_(quoteId, signedAt, payload.activation_method || 'SIGNED_AGREEMENT');
+  const refreshedAgreement = agreement || findRowByValue_(agreements, 'source_quote_id', quoteId);
+  if (refreshedAgreement) {
+    softSetCell_(agreements, refreshedAgreement._rowNum, 'status', 'SIGNED');
+    softSetCell_(agreements, refreshedAgreement._rowNum, 'signed_at', signedAt);
+    softSetCell_(agreements, refreshedAgreement._rowNum, 'activated_at', nowIso_());
+    if (payload.signrequest_id) softSetCell_(agreements, refreshedAgreement._rowNum, 'signrequest_id', payload.signrequest_id);
+    if (activate.service_account_id) softSetCell_(agreements, refreshedAgreement._rowNum, 'service_account_id', activate.service_account_id);
+    softSetCell_(agreements, refreshedAgreement._rowNum, 'updated_at', nowIso_());
+  }
+  return activate;
+}
+
 function completeStartupAndCreateWeeklyService_(quoteId, billingStart) {
   try {
     const sync = syncQuoteToNormalized_(quoteId);
@@ -4472,11 +4553,246 @@ function handleUpdateQuoteInfo_(payload) {
 // ──────────────────────────────────────────────────────────────────────────────
 // CONTRACT GENERATION
 // ──────────────────────────────────────────────────────────────────────────────
+// RESTORED: still reachable from the live portal (quotes.js) and from the
+// legacy approval chain. Retire together with the SignRequest flow, not before.
+function handleGenerateContract_(quoteId) {
+  try {
+    const sheet = getCrmSheet_();
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
 
+    const idCol = headers.map(h => String(h).toLowerCase().trim()).indexOf('quote_id');
+    let rowNum = -1;
+    let rowData = null;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idCol]).trim() === String(quoteId).trim()) {
+        rowNum = i + 1;
+        rowData = data[i];
+        break;
+      }
+    }
+    if (rowNum === -1 || !rowData) return { ok: false, error: 'Quote not found: ' + quoteId };
+
+    const get = (col) => {
+      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
+      return idx !== -1 ? rowData[idx] : '';
+    };
+    const setCell = (col, val) => {
+      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
+      if (idx !== -1) sheet.getRange(rowNum, idx + 1).setValue(val);
+    };
+
+    const props = PropertiesService.getScriptProperties();
+    const templateId = props.getProperty('CONTRACT_TEMPLATE_ID');
+    const folderId   = props.getProperty('CONTRACT_FOLDER_ID');
+    if (!templateId) return { ok: false, error: 'CONTRACT_TEMPLATE_ID not set in Script Properties.' };
+    if (!folderId)   return { ok: false, error: 'CONTRACT_FOLDER_ID not set in Script Properties.' };
+
+    const fullName = [get('first_name'), get('last_name')].filter(Boolean).join(' ').trim() || 'Customer';
+    const fileName = 'Pool Service Agreement - ' + fullName + ' - #' + quoteId;
+
+    const templateFile = DriveApp.getFileById(templateId);
+    const folder       = DriveApp.getFolderById(folderId);
+    const tempDoc      = templateFile.makeCopy('TEMP_DOC_' + fileName, folder);
+    const doc          = DocumentApp.openById(tempDoc.getId());
+    const body         = doc.getBody();
+
+    body.replaceText('{{DATE}}',      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMMM d, yyyy'));
+    body.replaceText('{{CLIENT_NAME}}', fullName);
+    body.replaceText('{{EMAIL}}',     String(get('email')  || ''));
+    body.replaceText('{{PHONE}}',     String(get('phone')  || ''));
+    body.replaceText('{{ADDRESS}}',   String(get('address') || ''));
+    body.replaceText('{{SERVICE_TYPE}}', String(get('service') || ''));
+    body.replaceText('{{TOTAL}}',     '$' + Number(get('total_with_tax')  || 0).toFixed(2));
+    body.replaceText('{{POOL_SPECS}}', String(get('specs_summary') || ''));
+    body.replaceText('{{MONTHLY_RATE}}', '$' + Number(get('quote_subtotal')  || 0).toFixed(2));
+    body.replaceText('{{SALES_TAX}}', '$' + Number(get('sales_tax')  || 0).toFixed(2));
+    body.replaceText('{{QUOTE_ID}}',  quoteId || 'N/A');
+
+    const zip      = String(get('zip_code') || '');
+    const city     = String(get('city')     || '');
+    const location = [city, zip].filter(Boolean).join(', ');
+    body.replaceText('{{ZIP_CODE}}',  zip      || 'N/A');
+    body.replaceText('{{CITY}}',      city     || 'N/A');
+    body.replaceText('{{LOCATION}}',  location || 'N/A');
+    body.replaceText('{{TRAVEL_FEE}}', '$' + Number(get('travel_fee') || 0).toFixed(2));
+
+    const startDateRaw = get('contract_start_date');
+    let startDateFormatted = 'TBD';
+    if (startDateRaw) {
+      try {
+        startDateFormatted = Utilities.formatDate(new Date(startDateRaw), Session.getScriptTimeZone(), 'MMMM d, yyyy');
+      } catch(_) {
+        startDateFormatted = String(startDateRaw);
+      }
+    }
+    body.replaceText('{{CONTRACT_START_DATE}}', startDateFormatted);
+
+    doc.saveAndClose();
+
+    const pdfBlob    = tempDoc.getAs(MimeType.PDF).setName(fileName + '.pdf');
+    const pdfFile    = folder.createFile(pdfBlob);
+    tempDoc.setTrashed(true);
+
+    const fileId            = pdfFile.getId();
+    const driveUrl          = pdfFile.getUrl();
+    const directDownloadUrl = 'https://drive.google.com/uc?export=download&id=' + fileId;
+
+    setCell('contract_generated',    'Yes');
+    setCell('contract_file_id',      fileId);
+    setCell('contract_url',          driveUrl);
+    setCell('contract_download_url', directDownloadUrl);
+    setCell('contract_status',       'CONTRACT_GENERATED');
+
+    let normalized = null;
+    try {
+      normalized = syncQuoteToNormalized_(quoteId);
+    } catch(syncErr) {
+      logMigration_('handleGenerateContract_', 'ERROR', 'Normalized sync failed for ' + quoteId, 1, syncErr);
+    }
+
+    return {
+      ok: true,
+      contract_url: driveUrl,
+      contract_download_url: directDownloadUrl,
+      file_id: fileId,
+      agreement_id: normalized && normalized.agreement_id
+    };
+  } catch(e) {
+    return { ok: false, error: 'handleGenerateContract_ Error: ' + e.toString() };
+  }
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CONTRACT SENDING (fires Zapier webhook → Drive → SignRequest → Sheet update)
 // ──────────────────────────────────────────────────────────────────────────────
+function handleSendContract_(quoteId) {
+  try {
+    const sheet = getCrmSheet_();
+    const data  = sheet.getDataRange().getValues();
+    const headers = data[0];
+
+    const idCol = headers.map(h => String(h).toLowerCase().trim()).indexOf('quote_id');
+    let rowNum = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idCol]).trim() === String(quoteId).trim()) { rowNum = i + 1; break; }
+    }
+    if (rowNum === -1) return { ok: false, error: 'Quote not found: ' + quoteId };
+
+    const get = col => {
+      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
+      return idx !== -1 ? data[rowNum - 1][idx] : '';
+    };
+    const setCell = (col, val) => {
+      const idx = headers.map(h => String(h).toLowerCase().trim()).indexOf(col.toLowerCase().trim());
+      if (idx !== -1) sheet.getRange(rowNum, idx + 1).setValue(val);
+    };
+
+    const webhookUrl = PropertiesService.getScriptProperties().getProperty('ZAPIER_CONTRACT_WEBHOOK');
+    if (!webhookUrl) return { ok: false, error: 'ZAPIER_CONTRACT_WEBHOOK not set in Script Properties.' };
+
+    const sentAt = new Date().toISOString();
+
+    // Extract file ID from Drive URL (contract_file_id column may not exist in sheet)
+    const contractUrl = get('contract_url');
+    const fileIdMatch = contractUrl.match(/\/d\/([a-zA-Z0-9_\-]+)/);
+    const contractFileId = fileIdMatch ? fileIdMatch[1] : get('contract_file_id');
+
+    let normalized = null;
+    try {
+      normalized = syncQuoteToNormalized_(quoteId);
+    } catch(syncErr) {
+      logMigration_('handleSendContract_', 'ERROR', 'Normalized sync failed before send for ' + quoteId, 1, syncErr);
+    }
+    const agreement = normalized && normalized.agreement_id
+      ? findRowByValue_(ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', normalized.agreement_id)
+      : null;
+
+    const zapPayload = {
+      row_number:       rowNum,
+      quote_id:         get('quote_id'),
+      agreement_id:     normalized && normalized.agreement_id || '',
+      agreement_number: agreement && agreement.agreement_number || '',
+      first_name:       get('first_name'),
+      last_name:        get('last_name'),
+      email:            get('email'),
+      contract_file_id: contractFileId,
+      url:              contractUrl,
+      send_contract:    'true',    // string — Zapier filter uses text match
+      send_contract_at: sentAt,
+      // sent_at intentionally omitted — Zapier filter checks "Does not exist"
+      status:           get('status')
+    };
+
+    // ⚠️ THE RESPONSE IS CHECKED. It used to be fired and forgotten:
+    // muteHttpExceptions swallows the error, nothing read the status code, and
+    // the quote was stamped SENT regardless. So a Zap that was turned off — or
+    // deleted, or erroring — looked exactly like a successful send.
+    //
+    // That is not hypothetical. It is what happened: customers approved a
+    // proposal, this posted into a disabled Zap, the portal reported success,
+    // and the signature request never arrived. Four approvals, zero signatures,
+    // and nothing anywhere showed a failure.
+    //
+    // Zapier answers 200 for an accepted hook and 400/404/410 for one that is
+    // off or gone. A non-2xx now fails the whole action, so the caller and the
+    // sheet both tell the truth.
+    var zapRes;
+    try {
+      zapRes = UrlFetchApp.fetch(webhookUrl, {
+        method:           'post',
+        contentType:      'application/json',
+        payload:          JSON.stringify(zapPayload),
+        muteHttpExceptions: true
+      });
+    } catch (netErr) {
+      return { ok: false, error: 'Could not reach Zapier: ' + ((netErr && netErr.message) || netErr) };
+    }
+
+    var zapCode = zapRes.getResponseCode();
+    if (zapCode < 200 || zapCode >= 300) {
+      var body = String(zapRes.getContentText() || '').slice(0, 200);
+      // The quote is deliberately NOT marked SENT. A customer who has not been
+      // sent anything must not look like one who has.
+      return {
+        ok: false,
+        error: 'Zapier refused the contract webhook (HTTP ' + zapCode + '). ' +
+               'Check that the "When contract is sent" Zap is turned on. ' + body
+      };
+    }
+
+    // These four columns did not exist on the Quotes sheet, so every setCell
+    // below was a silent no-op and nothing recorded that a contract had gone
+    // out. ensureColumn_ adds them once; after that this is a normal write.
+    ensureColumn_(sheet, 'send_contract');
+    ensureColumn_(sheet, 'send_contract_at');
+    ensureColumn_(sheet, 'contract_file_id');
+    ensureColumn_(sheet, 'signrequest_id');
+
+    // ensureColumn_ can widen the sheet, so the cached header row is stale.
+    var freshHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var setCellFresh = function (col, val) {
+      var idx = freshHeaders.map(function (h) { return String(h).toLowerCase().trim(); })
+        .indexOf(String(col).toLowerCase().trim());
+      if (idx !== -1) sheet.getRange(rowNum, idx + 1).setValue(val);
+    };
+
+    setCellFresh('send_contract',    true);
+    setCellFresh('send_contract_at', sentAt);
+    setCellFresh('contract_file_id', contractFileId);
+    setCellFresh('status',           'SENT');
+
+    try {
+      syncQuoteToNormalized_(quoteId);
+    } catch(syncErr) {
+      logMigration_('handleSendContract_', 'ERROR', 'Normalized sync failed for ' + quoteId, 1, syncErr);
+    }
+
+    return { ok: true, sent_at: sentAt };
+  } catch(e) {
+    return { ok: false, error: 'handleSendContract_ Error: ' + e.toString() };
+  }
+}
 
 
 // Sets route_status = 'inactive' in the Routes sheet for a given pool_id.

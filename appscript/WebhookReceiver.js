@@ -1522,11 +1522,17 @@ function doPost(e) {
       return jsonResponse_(handleEmployeeRegister(payload));
     }
 
-    // RETIRED: `service_agreement_signed` was the SignRequest → Zapier callback.
-    // It authenticated with the shared webhook secret rather than a session, so it
-    // was an externally-reachable write that could activate a customer. Signing now
-    // happens only in-portal via `sign_agreement` → handleSignAgreement_, which
-    // writes the same columns plus a full ESIGN/UETA audit trail.
+    // RESTORED: `service_agreement_signed` is the SignRequest → Zapier callback and
+    // SignRequest is still the live signing path. It authenticates with the shared
+    // webhook secret rather than a session because Zapier has no portal token — an
+    // externally-reachable write, deliberately. Retire it only once the Zap is off
+    // and in-portal `sign_agreement` → handleSignAgreement_ is the sole signing path.
+    if (payload.action === 'service_agreement_signed') {
+      const auth = payload.token ? validateToken(payload.token || '') : { ok: false };
+      const secretOk = payload.secret && String(payload.secret) === WEBHOOK_SECRET;
+      if (!auth.ok && !secretOk) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return jsonResponse_(handleServiceAgreementSigned_(payload));
+    }
 
     if (payload.action === 'get_proposal_approval') {
       return jsonResponse_(handleGetProposalApproval_(payload));
@@ -2367,6 +2373,20 @@ function doPost(e) {
     // generate_proposal and signed in-portal. Legacy rows keep their contract_url /
     // contract_file_id values and their Drive PDFs — only the generator is gone.
 
+    // RESTORED: both are still called by the live portal (quotes.js, crm.js) and by
+    // the legacy approval chain. Retire with the SignRequest flow, not before.
+    if (payload.action === 'generate_contract') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return jsonResponse_(handleGenerateContract_(payload.quote_id || ''));
+    }
+
+    if (payload.action === 'send_contract') {
+      const auth = validateToken(payload.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      return jsonResponse_(handleSendContract_(payload.quote_id || ''));
+    }
+
     if (payload.action === 'generate_proposal') {
       const auth = validateToken(payload.token || '');
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
@@ -3015,6 +3035,35 @@ function doPost(e) {
       } catch(e) {
         return jsonResponse_({ ok: false, error: e.message });
       }
+    }
+
+    // ONLINE-ONLY CODE, RECONSTRUCTED. The live Apps Script project carries a
+    // token-or-secret gate here that exists in no local checkout — verified against
+    // the deployed /exec on 2026-08-30:
+    //     {}                -> {"ok":false,"error":"Unauthorized"}
+    //     {secret: <SEC>}   -> {"ok":true,"result":{...,"reason":"No valid line items"}}
+    // `clasp push` replaces every file, so omitting this would silently delete the
+    // gate and re-open processQBOBillPayload_ — which writes to the Purchase Log —
+    // to unauthenticated callers. Keep it ahead of the unknown-action guard so an
+    // anonymous caller cannot enumerate which actions exist.
+    {
+      const gateAuth = payload.token ? validateToken(payload.token) : { ok: false };
+      const gateSecretOk = payload.secret && String(payload.secret) === WEBHOOK_SECRET;
+      if (!gateAuth.ok && !gateSecretOk) {
+        return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      }
+    }
+
+    // An unrecognised `action` must never reach the QBO bill handler. That handler
+    // reads invoice/vendor/line-item fields, finds none, and returns
+    // {written:0, reason:"No valid line items"} — which doPost then wraps as ok:true.
+    // A caller (portal button, Zapier Zap) therefore sees success for an action the
+    // server does not implement, and nothing retries. Fail loudly instead.
+    //
+    // The QBO bill webhook itself posts no `action` field, so it still falls through.
+    if (payload.action) {
+      Logger.log('doPost: unknown action "' + payload.action + '"');
+      return jsonResponse_({ ok: false, error: 'Unknown action: ' + payload.action });
     }
 
     const result = processQBOBillPayload_(payload);
