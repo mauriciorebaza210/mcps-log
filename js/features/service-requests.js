@@ -418,7 +418,10 @@
       startup_chemical: true, startup_programming: false, startup_pool_school: false,
       startup_company: '', startup_company_email: '', sponsored_by_mcp: false,
       startup_start_date: '', repair_type: '', repair_company: '', repair_amount: 0,
-      discount_type: 'none', discount_value: 0,
+      // Matches the quote tool's own vocabulary exactly (qCalcDiscount), so a
+      // discount means the same thing wherever it was entered.
+      discount_type: 'none', discount_value: 0, custom_price: 0,
+      travel_fee: 0,
       first_name: it.first_name, last_name: it.last_name, email: it.email, phone: it.phone,
       address: it.service_address, city: it.city, zip_code: it.zip_code, area: '',
       travel: null, void_travel: false, busy: '', error: ''
@@ -436,9 +439,9 @@
     if (typeof qCalcEngine !== 'function') return null;
     var eng = qCalcEngine(q);
     var d = (typeof qCalcDiscount === 'function' && q.discount_type !== 'none')
-      ? qCalcDiscount(eng.subtotal, q.discount_type, Number(q.discount_value) || 0, 0)
+      ? qCalcDiscount(eng.subtotal, q.discount_type, Number(q.discount_value) || 0, Number(q.custom_price) || 0)
       : { da: 0, discounted: eng.subtotal };
-    var travel = (q.travel && !q.void_travel) ? Number(q.travel.travel_fee || 0) : 0;
+    var travel = q.void_travel ? 0 : (Number(q.travel_fee) || 0);
     var sub = Math.round((d.discounted + travel) * 100) / 100;
     var tax = Math.round(sub * 0.0825 * 100) / 100;
     return {
@@ -489,10 +492,36 @@
               return '<button class="chipq' + (q[t[0]] ? ' on' : '') + '" data-qt="' + t[0] + '" data-id="' + id + '">' + esc(t[1]) + '</button>';
             }).join('') + '</div>'
         : '') +
+      // ── Price adjustments ────────────────────────────────────────────────
+      // The rate card is a starting point, not a cage. Same three adjustment
+      // kinds the quote tool offers, named identically so the saved row means
+      // the same thing either way.
+      '<div class="qrow">' +
+        '<div class="qf"><label>Adjustment</label><select data-q="discount_type" data-id="' + id + '">' +
+          [['none','None'],['Percentage','Percentage off'],['Dollar Amount','Dollar off'],['Custom Price','Set the price']]
+            .map(function (o) {
+              return '<option value="' + o[0] + '"' + (q.discount_type === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+            }).join('') + '</select></div>' +
+        (q.discount_type === 'Custom Price'
+          ? '<div class="qf"><label>Price</label><input type="number" step="0.01" min="0" ' +
+            'data-q="custom_price" data-id="' + id + '" value="' + esc(q.custom_price) + '"></div>'
+          : q.discount_type !== 'none'
+            ? '<div class="qf"><label>' + (q.discount_type === 'Percentage' ? 'Percent' : 'Amount') + '</label>' +
+              '<input type="number" step="0.01" min="0" data-q="discount_value" data-id="' + id + '" value="' + esc(q.discount_value) + '"></div>'
+            : '') +
+        '<div class="qf"><label>Travel fee</label><input type="number" step="0.01" min="0" ' +
+          'data-q="travel_fee" data-id="' + id + '" value="' + esc(q.travel_fee) + '"' +
+          (q.void_travel ? ' disabled' : '') + '></div>' +
+        '<div class="qf" style="justify-content:flex-end"><label>&nbsp;</label>' +
+          '<button class="chipq' + (q.void_travel ? ' on' : '') + '" data-qt="void_travel" data-id="' + id + '">No travel</button></div>' +
+      '</div>' +
       (p.eng.pricing_ready
         ? '<div class="qprice">' +
             '<div><span>Service</span><b>' + money(p.eng.subtotal) + '</b></div>' +
-            (p.discountAmount ? '<div><span>Discount</span><b>&minus;' + money(p.discountAmount) + '</b></div>' : '') +
+            (p.discountAmount
+              ? '<div><span>' + (q.discount_type === 'Custom Price' ? 'Adjusted to ' + money(p.discounted) : 'Discount') +
+                '</span><b>&minus;' + money(p.discountAmount) + '</b></div>'
+              : '') +
             (p.travel ? '<div><span>Travel</span><b>' + money(p.travel) + '</b></div>' : '') +
             '<div><span>Tax</span><b>' + money(p.tax) + '</b></div>' +
             '<div class="tot"><span>Total</span><b>' + money(p.total) + '</b></div>' +
@@ -558,12 +587,17 @@
     });
     // Quote panel: every change re-prices immediately, so the number on screen
     // is always the number that would be saved.
+    // Fields that change which inputs exist need the full rebuild; everything
+    // else must not, or it pulls the input out from under the person typing.
+    var RESHAPES = { service: 1, discount_type: 1 };
     Array.prototype.forEach.call(document.querySelectorAll('[data-q]'), function (el) {
-      el.addEventListener('change', function () {
+      var evt = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(evt, function () {
         var it = itemById(el.dataset.id);
         if (!it) return;
         quoteState(it)[el.dataset.q] = el.value;
-        repaintQuote(el.dataset.id);
+        if (RESHAPES[el.dataset.q]) repaintQuote(el.dataset.id);
+        else repaintPrice(el.dataset.id);
       });
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-qt]'), function (el) {
@@ -572,7 +606,10 @@
         if (!it) return;
         var q = quoteState(it);
         q[el.dataset.qt] = !q[el.dataset.qt];
-        repaintQuote(el.dataset.id);
+        el.classList.toggle('on', !!q[el.dataset.qt]);
+        // void_travel disables the fee input, so the row has to be re-rendered.
+        if (el.dataset.qt === 'void_travel') repaintQuote(el.dataset.id);
+        else repaintPrice(el.dataset.id);
       });
     });
   }
@@ -858,10 +895,44 @@
     return null;
   }
 
+  // A FULL rebuild. Only for changes that alter the form's SHAPE — picking a
+  // different service, or an adjustment kind that swaps which input is shown.
   function repaintQuote(id) {
     var it = itemById(id);
     var host = $('qp-' + id);
     if (host && it) { host.innerHTML = it.converted_quote_id ? quoteProgress(it) : quotePanel(it); wire(); }
+  }
+
+  // ⚠️ Everything else updates ONLY the numbers.
+  //
+  // Rebuilding the panel on every change tore out the input being typed in —
+  // change fires on blur, so the element was replaced mid-blur. The browser
+  // complained ("node to be removed is no longer a child"), and the real cost
+  // was that focus jumped away every time someone tabbed out of the price box.
+  function repaintPrice(id) {
+    var it = itemById(id);
+    if (!it) return;
+    var q = quoteState(it);
+    var p = priceOf(q);
+    var host = $('q-' + id);
+    if (!host || !p) return;
+
+    var box = host.querySelector('.qprice');
+    if (box && p.eng.pricing_ready) {
+      box.innerHTML =
+        '<div><span>Service</span><b>' + money(p.eng.subtotal) + '</b></div>' +
+        (p.discountAmount
+          ? '<div><span>' + (q.discount_type === 'Custom Price' ? 'Adjusted to ' + money(p.discounted) : 'Discount') +
+            '</span><b>&minus;' + money(p.discountAmount) + '</b></div>'
+          : '') +
+        (p.travel ? '<div><span>Travel</span><b>' + money(p.travel) + '</b></div>' : '') +
+        '<div><span>Tax</span><b>' + money(p.tax) + '</b></div>' +
+        '<div class="tot"><span>Total</span><b>' + money(p.total) + '</b></div>';
+    }
+    var specs = host.querySelector('.qspecs');
+    if (specs) specs.textContent = p.eng.specs_summary;
+    var save = host.querySelector('[data-act="quote_save"]');
+    if (save) save.disabled = !!q.busy || !p.eng.pricing_ready;
   }
 
   // Same action, same payload shape, same server code path as the quote tool —
@@ -888,7 +959,8 @@
       travel_fee: p.travel,
       service_subtotal: p.eng.subtotal,
       discount_type: q.discount_type === 'none' ? '' : q.discount_type,
-      discount_value: q.discount_value, discount_amount: p.discountAmount,
+      discount_value: q.discount_type === 'Custom Price' ? q.custom_price : q.discount_value,
+      discount_amount: p.discountAmount,
       discounted_service_subtotal: p.discounted,
       quote_subtotal: p.subtotal, sales_tax: p.tax, total_with_tax: p.total,
       chem_cost_est: p.eng.chem_cost,
