@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/qbo/:op", "destination": "/api/qbo?op=:op" },
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/margins", "destination": "/margins.html" },
     { "source": "/sms", "destination": "/sms.html" },
