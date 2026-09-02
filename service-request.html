@@ -216,7 +216,10 @@ button{font-family:var(--fb);}
 
 <header class="top">
   <div class="brand">
-    <img src="/logo.png" alt="" aria-hidden="true">
+    <!-- NOT /logo.png. That is the 1024x1024 original at 348KB, and this slot
+         renders it at 40x40 — a third of a megabyte for a 40px mark, on the one
+         page a customer on cell data reaches first. Same art, resampled. -->
+    <img src="/assets/mcps-logo-120.png" alt="" aria-hidden="true" width="40" height="40">
     <div>
       <h1>Request pool service</h1>
       <div class="co">Mission Custom Pool Solutions</div>
