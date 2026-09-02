@@ -1,0 +1,29 @@
+# Files that ship in git but must not be served publicly.
+#
+# There was no .vercelignore before this, and vercel.json set outputDirectory
+# to ".", so the entire repository was published — including api/ source (fixed
+# separately by dropping the build script) and, still today on main, the Apps
+# Script backend: /appscript/SalesHub.js and /appscript/WebhookReceiver.js were
+# both readable at 131 KB and 196 KB.
+#
+# ⚠️ DO NOT add js/ here. api/_repo/quote-write.js does
+#    require('../../js/lib/pricing.js') so the browser and the server price a
+#    quote with the same engine. Ignoring js/ breaks every quote save.
+# ⚠️ DO NOT add fixtures/. agreement.html fetches fixtures/agreement-sample.json
+#    to render its demo mode.
+
+# Apps Script backend — deployed via clasp, never served over HTTP.
+appscript/
+
+# Design mockups and email previews. Nothing in the app links to them.
+previews/
+approval-upload/
+approval.html
+action-center-enterprise-sketches.html
+
+# GAS-side document template, rendered server-side not fetched.
+templates/
+
+# Source documents and stray art that should not be downloadable.
+template (1).pdf
+Full Color.png
