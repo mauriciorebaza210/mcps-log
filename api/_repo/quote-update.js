@@ -17,12 +17,20 @@
 //     stays reproducible.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import { createRequire } from 'module';
 import { ENTITIES, COMPAT_SHEET } from './schema.js';
 import { toPricingInput, buildLineItems } from './quote-write.js';
 
-const require = createRequire(import.meta.url);
-const PRICING = require('../../js/lib/pricing.js');
+// ⚠️ A STATIC IMPORT, DELIBERATELY — do not put createRequire back.
+// This was `createRequire(import.meta.url)` + `require('../../js/lib/pricing.js')`.
+// Vercel's Node builder transpiles this file down to CommonJS (exports.x = ...)
+// but leaves `import.meta.url` in place, producing a file that is neither valid
+// CJS (import.meta is a syntax error there) nor valid ESM (exports is undefined
+// there). Node fails to parse it as CJS, reparses as ESM, and the function dies
+// at load with "exports is not defined in ES module scope" — every quote save
+// returning FUNCTION_INVOCATION_FAILED in production while working locally under
+// `vercel dev`, which runs from source and never transpiles.
+// pricing.js is UMD, so a default import yields its module.exports.
+import PRICING from '../../js/lib/pricing.js';
 
 const s = v => String(v === undefined || v === null ? '' : v).trim();
 const n = v => { const x = Number(s(v).replace(/[$,]/g, '')); return Number.isFinite(x) ? x : 0; };

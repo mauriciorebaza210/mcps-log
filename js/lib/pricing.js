@@ -4,7 +4,8 @@
 // Loads three ways, deliberately, so there is exactly ONE implementation:
 //   browser   <script src="js/lib/pricing.js">   -> globalThis.MCPS_PRICING
 //   node test require('js/lib/pricing.js')       -> module.exports
-//   vercel    createRequire(import.meta.url)     -> module.exports
+//   vercel    import PRICING from '.../pricing.js' -> module.exports (default)
+//             NOT createRequire — see the note in api/_repo/quote-write.js
 //
 // ⚠️ WHY THIS FILE EXISTS. The engine used to live only in js/features/quotes.js,
 // and appscript/SalesHub.js wrote whatever dollar figures the browser sent it —
