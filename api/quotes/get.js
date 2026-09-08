@@ -59,6 +59,14 @@ function toQuoteToolState(rec) {
     // the preview appeared empty and looked like it had been lost.
     proposal_image_url: s(p.proposal_image_url),
     proposal_pdf_url: s(p.proposal_pdf_url),
+    // ⚠️ BOTH NAMES, DELIBERATELY. The quote tool's saved card gates every
+    // proposal control on `_qS.proposal_url` (js/features/quotes.js), which is
+    // the name qGenerateProposal writes. Returning only proposal_pdf_url meant a
+    // reopened quote reported proposal_status:'generated' while proposal_url was
+    // empty — so `proposalReady` was false and View Packet, Preview Agreement
+    // and Send for Signature all vanished on a quote whose PDF existed. Sending
+    // an already-built proposal from the Quote Tool was impossible.
+    proposal_url: s(p.proposal_pdf_url),
     proposal_number: s(p.proposal_number),
     proposal_sent_at: s(p.sent_at),
     proposal_status: s(p.proposal_pdf_url) ? 'generated' : 'none',
