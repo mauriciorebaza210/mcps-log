@@ -15,7 +15,11 @@ const CONTRACT_RANGES = [
   'Clients',
   'Client_Locations',
   'Quotes',
-  'Proposal_Approvals'
+  'Proposal_Approvals',
+  // Needed for the pending-approval rows below: proposal_number is the only
+  // human-readable reference an unsigned proposal_first quote has, and
+  // proposal_pdf_url is the document the customer is actually looking at.
+  'Proposals'
 ];
 
 function clean(value) {
@@ -129,8 +133,88 @@ export function withContractFollowups(agreements, approvals) {
     agreement.approval_status = clean(approval.status);
     agreement.approval_sent_at = clean(approval.sent_at);
     agreement.approval_expires_at = clean(approval.expires_at);
+    // Whether the customer has actually opened the signing page. The funnel
+    // already counted this column; the rows never carried it, so the one
+    // question staff ask about a sent agreement — "did they even look at it?" —
+    // had no answer anywhere in the UI.
+    agreement.approval_viewed_at = clean(approval.viewed_at);
     return agreement;
   });
+}
+
+// ── Sent, awaiting signature, and not yet an agreement row ──────────────────
+//
+// ⚠️ WITHOUT THIS THE PAGE CONTRADICTS ITSELF. The funnel counts Sent/Viewed
+// straight off Proposal_Approvals, but the list is built from Service_Agreements
+// — and shouldHaveServiceAgreementFromQuote_ (appscript/SalesHub.js:3184)
+// deliberately writes NO agreement row for a `proposal_first` quote until it is
+// signed. So the header could read "1 Sent · 1 Viewed" while the list showed
+// nobody, and every pending signature in the current sales flow was invisible.
+// The four rows under "Awaiting signature" were all legacy `agreement_direct`
+// quotes, which is why the gap went unnoticed.
+//
+// These are synthesised, not stored: `agreement_id` is prefixed so the detail
+// view can tell a real agreement from a pending approval and never try to write
+// to a row that does not exist.
+export const PENDING_PREFIX = 'PENDING:';
+
+export function pendingApprovalRows(approvals, agreements, quotes, proposals) {
+  const quotesById = mapBy(quotes, 'quote_id');
+  const proposalsById = mapBy(proposals, 'proposal_id');
+
+  // Originals only: an amendment shares source_quote_id with its parent, so a
+  // loose match here would hide a genuinely pending original behind it.
+  const covered = new Set();
+  (agreements || []).forEach(a => {
+    const type = clean(a.agreement_type).toLowerCase();
+    if (type && type !== 'original') return;
+    const qid = clean(a.source_quote_id);
+    if (qid) covered.add(qid);
+  });
+
+  return (approvals || [])
+    .filter(ap => {
+      if (clean(ap.target_agreement_id)) return false;              // amendment approval
+      if (clean(ap.status).toUpperCase() !== 'SENT') return false;   // responded or void
+      const qid = clean(ap.quote_id);
+      return qid && !covered.has(qid);
+    })
+    .map(ap => {
+      const quote = quotesById.get(clean(ap.quote_id)) || {};
+      const proposal = proposalsById.get(clean(ap.proposal_id)) || {};
+      return {
+        agreement_id: PENDING_PREFIX + clean(ap.approval_id),
+        agreement_number: clean(proposal.proposal_number) || clean(quote.proposal_number),
+        is_pending_approval: true,
+        status: 'SENT',
+        signature_required: 'TRUE',
+        activation_method: 'SIGNED_AGREEMENT',
+        source_quote_id: clean(ap.quote_id),
+        proposal_id: clean(ap.proposal_id),
+        client_id: clean(quote.client_id),
+        location_id: clean(quote.location_id),
+        service_type: clean(quote.service),
+        service_name: clean(quote.service) || 'Pool Service',
+        monthly_rate: quote.discounted_service_subtotal || quote.quote_subtotal || '',
+        sales_tax: quote.sales_tax || '',
+        total: quote.total_with_tax || proposal.total || '',
+        // The proposal PDF IS the document under signature at this stage, so the
+        // row's PDF button opens what the customer is reading.
+        agreement_pdf_url: clean(proposal.proposal_pdf_url) || clean(quote.proposal_pdf_url),
+        sent_at: clean(ap.sent_at),
+        created_at: clean(ap.created_at),
+        approval_id: clean(ap.approval_id),
+        approval_status: clean(ap.status),
+        approval_sent_at: clean(ap.sent_at),
+        approval_viewed_at: clean(ap.viewed_at),
+        approval_expires_at: clean(ap.expires_at),
+        approval_url: clean(quote.proposal_approval_url),
+        followup_enabled: clean(ap.followup_enabled),
+        followup_schedule: clean(ap.followup_schedule),
+        last_followup_at: clean(ap.last_followup_at),
+        followup_cycle: clean(ap.followup_cycle)
+      };
+    });
 }
 
 function parseDate(value) {
@@ -303,10 +387,31 @@ async function loadContractsPayload(months) {
   const locations = rowsToObjects(values.Client_Locations);
   const quotes = rowsToObjects(values.Quotes);
   const approvals = rowsToObjects(values.Proposal_Approvals);
+  const proposals = rowsToObjects(values.Proposals);
+
+  // ⚠️ A ROW WITH NO agreement_id IS WRECKAGE, NOT A CONTRACT. The Sheets
+  // values:append anchor bug (fixed in api/_sheets.js) wrote whole rows shifted
+  // right, leaving column A empty — so the row read back as an agreement with no
+  // id. ctIdentity then fell through to signature_name and rendered a contract
+  // headed "SVA-000001" with a DRAFT badge, which is a service-account id in the
+  // signature column. It cannot be opened, PDF'd or acted on, because every
+  // lookup keys off agreement_id. Dropping it here keeps the page honest instead
+  // of listing a customer who does not exist.
+  const usable = agreements.filter(a => clean(a.agreement_id));
+  const dropped = agreements.length - usable.length;
+  if (dropped) {
+    console.warn('contracts: skipped ' + dropped + ' Service_Agreements row(s) with no agreement_id ' +
+                 '(column-shifted on write — see api/_sheets.js appendSheetRows)');
+  }
+
+  // Real agreement rows plus the sent-but-not-yet-an-agreement ones, named and
+  // sorted together so "Awaiting signature" means every pending signature —
+  // not just the ones the legacy flow happened to write a row for.
+  const pending = pendingApprovalRows(approvals, usable, quotes, proposals);
 
   const joinedAgreements = sortAgreements(
     withContractFollowups(
-      withContractCustomerNames(agreements, clients, locations, quotes),
+      withContractCustomerNames(usable.concat(pending), clients, locations, quotes),
       approvals
     )
   );

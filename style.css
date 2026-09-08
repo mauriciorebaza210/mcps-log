@@ -4087,6 +4087,12 @@ body.is-tech-nav .tech-nav { display: flex; }
 
 /* ── Create plan change (amendment) ────────────────────────────────────────── */
 .ct-amd{background:#EDE7F6;color:#5B4A8A}
+
+/* Has the customer opened the signing page? Deliberately quiet — this sits next
+   to the status badge and must not out-shout it. "Not opened" is information,
+   not an alarm: a link sent ten minutes ago is expected to be unopened. */
+.ct-viewed{background:#E4F1EC;color:#2C6B58}
+.ct-unopened{background:#F1F0EC;color:#7A7568}
 .ct-linkbtn{background:none;border:none;padding:0;color:var(--teal);text-decoration:underline;
   cursor:pointer;font:inherit;font-size:inherit}
 .amd-parent{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);

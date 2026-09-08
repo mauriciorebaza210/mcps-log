@@ -45,6 +45,25 @@ function ctStatusLabel(raw) {
   return CT_STATUS_LABELS[s] || (s ? s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ') : '—');
 }
 
+// The raw column values, said in English. SIGNED_AGREEMENT on a row labelled
+// "Awaiting signature" reads as a contradiction — it is the activation *rule*
+// ("activates once signed"), not a claim that anything has been signed.
+const CT_ACTIVATION_LABELS = {
+  SIGNED_AGREEMENT:  'Activates when signed',
+  IN_PORTAL_ESIGN:   'Signed in the portal',
+  AGREEMENT_DIRECT:  'Sent straight to signature',
+  ADMIN_OVERRIDE:    'Activated by an admin',
+  STARTUP_AUTO:      'Auto-activated with the startup',
+  GTC_AUTO:          'Auto-activated with the green-to-clean',
+  OPERATIONAL_OVERRIDE: 'Operational override'
+};
+
+function ctActivationLabel(raw) {
+  const s = String(raw || '').trim().toUpperCase();
+  if (!s) return '';
+  return CT_ACTIVATION_LABELS[s] || (s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' '));
+}
+
 function ctToken_() {
   return (typeof _s !== 'undefined' && _s && _s.token) ? _s.token : '';
 }
@@ -460,6 +479,21 @@ function renderContracts() {
                   : (a.sent_at ? 'Sent ' + ctDate(a.sent_at) : '')
     ].filter(Boolean).join(' · ');
 
+    // "Have they opened it?" is the whole question about a sent agreement, and
+    // it was answerable nowhere in the UI even though Proposal_Approvals has
+    // recorded viewed_at all along — the funnel counted it, the rows dropped it.
+    // ⚠️ ONLY WHEN THERE IS AN APPROVAL RECORD TO READ. The legacy
+    // agreement_direct rows went out through SignRequest and have no
+    // Proposal_Approvals row at all, so viewed_at is not "false" for them — it
+    // is unknown. Badging those "Not opened" would state as fact something the
+    // system never observed, and someone would chase a customer over it.
+    const tracked = !!(a.approval_id || a.approval_sent_at);
+    const tracking = (st === 'SENT' && tracked)
+      ? (a.approval_viewed_at
+          ? `<span class="ct-badge ct-viewed" title="Customer opened the signing page ${escHtml(ctDate(a.approval_viewed_at))}">Opened</span>`
+          : `<span class="ct-badge ct-unopened" title="Link sent, no open recorded yet">Not opened</span>`)
+      : '';
+
     return `<div class="ct-row">
       <div class="ct-main">
         <h3${who.unresolved ? ' class="ct-noid"' : ''}>${escHtml(who.label)}</h3>
@@ -467,6 +501,7 @@ function renderContracts() {
       </div>
       <div class="ct-actions">
         ${ctIsAmendment(a) ? `<span class="ct-badge ct-amd" title="Addendum to an earlier agreement">Plan change</span>` : ''}
+        ${tracking}
         <span class="ct-badge ct-${escHtml(st.toLowerCase())}">${escHtml(ctStatusLabel(st))}</span>
         ${pdf ? `<a class="ct-btn primary" href="${escHtml(pdf)}" target="_blank" rel="noopener">PDF</a>`
               : `<span class="ct-nopdf" title="No PDF stored on this agreement">No PDF</span>`}
@@ -488,12 +523,55 @@ function ctViewDetail(agreementId) {
   const pdf = a.signed_pdf_url || a.agreement_pdf_url || a.contract_url || '';
   const consent = String(a.consent_accepted || '').toUpperCase();
 
+  // ⚠️ NAME THE DOCUMENT FOR WHAT IT IS. This button said "Open signed PDF"
+  // for whatever PDF it could find, so an agreement still out for signature
+  // offered to open a signed copy that does not exist — the file behind it is
+  // the unsigned document the customer is reading. Only signed_pdf_url is the
+  // executed contract; renderSignedAgreementPdf_ writes it at signing time.
+  const pdfLabel = a.signed_pdf_url
+    ? 'Open signed PDF'
+    : (a.signed_at ? 'Open agreement PDF' : 'Open unsigned document');
+
   document.getElementById('ct-drawer-title').textContent =
     String(a.customer_name || '').trim() || a.agreement_number || 'Contract';
   document.getElementById('ct-drawer-sub').textContent =
     ctStatusLabel(ctStatus(a)) + (a.agreement_number ? '  ·  ' + a.agreement_number : '');
 
+  // The signature-tracking block. Shown for anything still out for signature,
+  // and it is the only place the customer's own activity is visible: when the
+  // link went out, whether they opened it, when it lapses, and where the
+  // reminder cadence has got to.
+  const daysLeft = (() => {
+    if (!a.approval_expires_at) return '';
+    const ms = new Date(a.approval_expires_at).getTime() - Date.now();
+    if (isNaN(ms)) return '';
+    const d = Math.ceil(ms / 86400000);
+    return d > 1 ? d + ' days left' : (d === 1 ? '1 day left' : 'expired');
+  })();
+
+  const isTracked = !!(a.approval_id || a.approval_sent_at);
+
+  const tracking = (ctStatus(a) === 'SENT' && isTracked) ? `
+    <div class="ct-sec">
+      <div class="ct-sec-h">Out for signature</div>
+      ${row('Link sent', ctDate(a.approval_sent_at || a.sent_at))}
+      ${row('Customer opened', a.approval_viewed_at ? ctDate(a.approval_viewed_at) : 'Not yet')}
+      ${row('Expires', [ctDate(a.approval_expires_at), daysLeft].filter(Boolean).join('  ·  '))}
+      ${row('Reminders', String(a.followup_enabled || '').toLowerCase() === 'false'
+        ? 'Off'
+        : 'On — day ' + (a.followup_schedule || CT_DEFAULT_FOLLOWUP_SCHEDULE).split(',').join(', '))}
+      ${row('Last reminder', ctDate(a.last_followup_at))}
+      ${a.approval_url
+        ? `<div class="ct-kv"><span>Signing link</span><b><a href="${escHtml(a.approval_url)}" target="_blank" rel="noopener">Open the customer's page</a></b></div>`
+        : ''}
+      ${a.is_pending_approval
+        ? `<div class="ct-note">No contract record exists yet — one is created when they sign. Until then this
+           row is the live approval (${escHtml(a.approval_id || '')}).</div>`
+        : ''}
+    </div>` : '';
+
   body.innerHTML = `
+    ${tracking}
     <div class="ct-sec">
       <div class="ct-sec-h">Agreement</div>
       ${row('Property', a.location_label)}
@@ -518,7 +596,7 @@ function ctViewDetail(agreementId) {
       ${row('Signer IP', a.signer_ip)}
       ${row('Device', a.signer_user_agent)}
       ${row('Document version', a.agreement_version)}
-      ${row('Activation', a.activation_method)}
+      ${row('Activation', ctActivationLabel(a.activation_method))}
       ${a.signature_image_url
         ? `<div class="ct-sig"><img src="${escHtml(a.signature_image_url)}" alt="Signature">
              <div class="ct-sig-c">Signature as captured</div></div>`
@@ -529,10 +607,15 @@ function ctViewDetail(agreementId) {
     <div class="ct-sec">
       <div class="ct-sec-h">Documents</div>
       ${pdf
-        ? `<a class="ct-btn primary" href="${escHtml(pdf)}" target="_blank" rel="noopener">Open signed PDF</a>`
+        ? `<a class="ct-btn primary" href="${escHtml(pdf)}" target="_blank" rel="noopener">${escHtml(pdfLabel)}</a>`
         : `<div class="ct-note">No PDF is stored on this agreement.</div>`}
       ${a.source_quote_id
         ? `<button class="ct-btn" onclick="ctOpenQuote(${jsArg(a.source_quote_id)})">Open quote in Sales Hub</button>`
+        : ''}
+      ${pdf && !a.signed_pdf_url
+        ? `<div class="ct-note">${a.signed_at
+            ? 'This is the agreement document. No countersigned copy is stored on this record.'
+            : 'This is the document the customer is being asked to sign — not an executed contract.'}</div>`
         : ''}
     </div>
 
