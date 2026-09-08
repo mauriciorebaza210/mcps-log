@@ -355,9 +355,28 @@ export async function writeSheetRange(range, values, spreadsheetId = crmSpreadsh
 }
 
 // Append rows to a sheet/tab (Google picks the next empty row).
+//
+// ⚠️ THE RANGE IS COLUMN-ANCHORED ON PURPOSE — DO NOT PASS A BARE SHEET NAME.
+// values:append does not simply write at column A. It scans the range it is
+// given for a "table" and appends "starting with the first column of the table",
+// so on a sheet with a blank row or stray far-right data it can pick a table
+// that does not start at A. That is not hypothetical: it silently wrote quote
+// Q-BB46915B into Quotes starting at column 87, Proposals at column 35 and
+// Service_Agreements at column 28 — every value shifted, quote_id cell empty, so
+// no lookup on any sheet could ever find that quote again. Three tabs corrupted
+// by one save, with a 200 OK.
+//
+// Naming an explicit A1:<width>1 range confines the search to the header block,
+// which makes column A the table's first column and pins the write there. Row
+// allocation still happens server-side, so concurrent saves cannot claim the
+// same row — which is the reason this uses append rather than an explicit
+// row write (see api/_lib/quote-write.js, which fixed the same bug the other
+// way because it already knew its row number).
 export async function appendSheetRows(sheetName, rows, spreadsheetId = crmSpreadsheetId()) {
   const token = await getAccessToken();
-  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append`);
+  const width = Math.max(1, ...(rows || []).map(r => (r || []).length));
+  const range = `${sheetName}!A1:${colLetter(width - 1)}1`;
+  const url = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append`);
   url.searchParams.set('valueInputOption', 'RAW');
   url.searchParams.set('insertDataOption', 'INSERT_ROWS');
   const res = await fetch(url.toString(), {
