@@ -172,7 +172,16 @@
         contactRow(it) +
         actions(it) +
         scheduleForm(it) +
-        (it.converted_quote_id ? quoteProgress(it) : '<div id="qp-' + esc(it.request_id) + '"></div>') +
+        // ⚠️ THE WRAPPER IS NOT OPTIONAL. This used to render quoteProgress()
+        // inline when a quote existed and only emit the #qp- host when it did
+        // not — so on exactly the cards that HAD a quote, repaintQuote()'s
+        // `$('qp-' + id)` came back null and every repaint was a silent no-op.
+        // The button never showed "Generating…", errors never appeared, and the
+        // Send button could not render even after a successful generate. The
+        // host must always exist; what goes inside it is what varies.
+        '<div id="qp-' + esc(it.request_id) + '">' +
+          (it.converted_quote_id ? quoteProgress(it) : '') +
+        '</div>' +
         '<div class="msg" id="m-' + esc(it.request_id) + '"></div>' +
         auditLog(it) +
       '</div>' +
@@ -600,31 +609,232 @@
     '</div>';
   }
 
-  // Once a quote exists the card shows the lifecycle instead of the form.
+  // ══ Quote lifecycle panel ═════════════════════════════════════════════════
+  //
+  // ⚠️ STATE COMES FROM THE SHEET, NOT FROM THIS TAB. The previous version read
+  // proposal_url / sent off the in-memory `_quotes` entry, which only ever got
+  // populated by a generate in this exact browser tab. On any page load the
+  // panel therefore claimed a quote with a months-old PDF had no document, and
+  // "Send for approval" was unreachable — the operator had to regenerate first,
+  // or give up and call the action by hand. `it.quote` is the live Quotes row,
+  // joined server-side in api/_lib/review.js; `_quotes[...]` now only carries
+  // in-flight and just-happened overlay so the panel updates before the reload.
+  //
+  // Every button states what it will do. "Send" is the only one that reaches the
+  // customer, and it is the only one that says so.
+
+  function fmtWhen(v) {
+    if (!v) return '';
+    var d = new Date(v);
+    if (isNaN(d.getTime())) return String(v);
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function money(v) {
+    var n = Number(String(v == null ? '' : v).replace(/[$,]/g, ''));
+    return isFinite(n) && n ? '$' + n.toFixed(2) : '';
+  }
+
+  // Resolves the sheet row and this tab's overlay into one shape, so the
+  // renderer never has to ask "which source is fresher".
+  function quoteView(it) {
+    var s = it.quote || {};
+    var o = _quotes[it.request_id] || {};
+    var sentAt = o.sent_at || s.proposal_sent_at || '';
+    return {
+      qid: it.converted_quote_id,
+      missing: !!s.missing,
+      pdf: o.proposal_url || s.proposal_pdf_url || '',
+      number: s.proposal_number || '',
+      sentAt: sentAt,
+      approvalUrl: o.approval_url || s.proposal_approval_url || '',
+      acceptedAt: s.proposal_accepted_at || '',
+      declinedAt: s.proposal_declined_at || '',
+      changesAt: s.proposal_change_requested_at || '',
+      note: s.proposal_response_note || '',
+      poolId: o.pool_id || s.pool_id || '',
+      existingPool: s.existing_pool || null,
+      poolConflict: s.pool_conflict || null,
+      status: String(s.status || '').toUpperCase(),
+      total: s.total_with_tax || '',
+      rate: s.discounted_service_subtotal || s.quote_subtotal || '',
+      busy: o.busy || '',
+      error: o.error || ''
+    };
+  }
+
   function quoteProgress(it) {
     var id = esc(it.request_id);
-    var q = _quotes[it.request_id] || {};
-    var qid = it.converted_quote_id;
-    if (!qid) return '';
+    var v = quoteView(it);
+    if (!v.qid) return '';
+
+    // ── Where is it? One sentence, so nobody has to infer from the buttons.
+    var stage, blurb;
+    if (v.missing) {
+      stage = 'Quote row not found';
+      blurb = 'The request points at ' + esc(v.qid) + ' but no such row exists in the Quotes sheet. ' +
+              'Nothing can be sent until that is sorted out.';
+    } else if (v.acceptedAt) {
+      stage = 'Signed ' + fmtWhen(v.acceptedAt);
+      blurb = v.poolId
+        ? 'Active customer on pool ' + esc(v.poolId) + '. Nothing further to do here.'
+        : 'Signed, but no pool ID landed on the quote — check the route board.';
+    } else if (v.declinedAt) {
+      stage = 'Declined ' + fmtWhen(v.declinedAt);
+      // ⚠️ esc() — customer_note is free text the customer typed on the public
+      // signing page. It reaches staff screens verbatim, so it is escaped here
+      // like every other customer-supplied field on this card.
+      blurb = v.note ? 'They said: “' + esc(v.note) + '”' : 'The customer declined the agreement.';
+    } else if (v.changesAt) {
+      stage = 'Changes requested ' + fmtWhen(v.changesAt);
+      blurb = v.note
+        ? 'They asked for: “' + esc(v.note) + '”'
+        : 'The customer asked for an adjustment before signing.';
+    } else if (v.sentAt) {
+      stage = 'Sent ' + fmtWhen(v.sentAt) + ' — waiting on signature';
+      blurb = 'The signing link is live for 30 days. Automatic reminders go out on day 3, 7 and 14.';
+    } else if (v.pdf) {
+      stage = 'Ready to send';
+      blurb = 'The document is built but the customer has not been emailed yet. Nothing has left the building.';
+    } else {
+      stage = 'No document yet';
+      blurb = 'Build the quote + agreement PDF first. Generating does not contact the customer.';
+    }
+
+    var pill = v.acceptedAt ? 'ok' : (v.declinedAt ? 'err' : (v.sentAt ? 'sent' : 'draft'));
+
+    // ── The duplicate-pool trap, made visible. Two shapes: nothing linked yet
+    //    (offer to link) or linked to the wrong pool (offer to repoint).
+    var poolWarn = '';
+    var ep = (!v.poolId && v.existingPool) ? v.existingPool : null;
+    var pc = v.poolConflict || null;
+
+    if (ep && !v.acceptedAt) {
+      poolWarn =
+        '<div class="qwarn">' +
+          '<div class="qwarn-t">This household already has a pool</div>' +
+          '<div class="qwarn-b">' +
+            '<b>' + esc(ep.pool_id) + '</b> — ' + esc(ep.customer_name || 'existing customer') +
+            (ep.service ? ' · ' + esc(ep.service) : '') +
+            ' (matched on ' + esc(ep.matched_on) + ').<br>' +
+            'If they sign while this quote has no pool ID, a brand-new pool is created and a ' +
+            '<b>second stop appears at the same address</b>. Link them and signing reuses ' +
+            esc(ep.pool_id) + ' instead.' +
+          '</div>' +
+          '<button class="b" data-act="quote_link_pool" data-id="' + id + '" data-pool="' + esc(ep.pool_id) + '"' +
+            (v.busy ? ' disabled' : '') + '>' +
+            (v.busy === 'linking' ? 'Linking…' : 'Link to ' + esc(ep.pool_id)) +
+          '</button>' +
+        '</div>';
+    } else if (pc && !v.acceptedAt) {
+      poolWarn =
+        '<div class="qwarn">' +
+          '<div class="qwarn-t">Pool ID looks wrong</div>' +
+          '<div class="qwarn-b">' +
+            'This quote points at <b>' + esc(v.poolId) + '</b>, but the pool at this address is ' +
+            '<b>' + esc(pc.pool_id) + '</b> — ' + esc(pc.customer_name || 'existing customer') +
+            (pc.service ? ' · ' + esc(pc.service) : '') +
+            ' (matched on ' + esc(pc.matched_on) + ').<br>' +
+            'Signing trusts whatever is on the quote, so they would be attached to ' + esc(v.poolId) +
+            ' and their real service history would be stranded.' +
+          '</div>' +
+          '<button class="b" data-act="quote_link_pool" data-id="' + id + '" data-pool="' + esc(pc.pool_id) + '"' +
+            ' data-replace="1"' + (v.busy ? ' disabled' : '') + '>' +
+            (v.busy === 'linking' ? 'Linking…' : 'Repoint to ' + esc(pc.pool_id)) +
+          '</button>' +
+        '</div>';
+    }
+
+    // ── In-flight and error banners.
+    var banner = '';
+    if (v.error) {
+      banner = '<div class="msg on err">' + esc(v.error) + '</div>';
+    } else if (v.busy === 'proposal') {
+      banner = '<div class="msg on" style="background:var(--warn-bg);color:var(--warn)">' +
+        'Building the PDF in Google Drive. This usually takes 30–60 seconds — leave the page open. ' +
+        'Nothing is emailed by this step.</div>';
+    } else if (v.busy === 'sending') {
+      banner = '<div class="msg on" style="background:var(--warn-bg);color:var(--warn)">' +
+        'Emailing the signing link. Do not click again — a second send delivers a second email.</div>';
+    } else if (v.busy === 'linking') {
+      banner = '<div class="msg on" style="background:var(--warn-bg);color:var(--warn)">Linking the pool…</div>';
+    }
+
+    // ── Buttons. Each one carries a note saying what happens when it is clicked.
+    var rows = [];
+
+    if (!v.missing && !v.acceptedAt) {
+      rows.push(btnRow(
+        '<button class="b" data-act="quote_proposal" data-id="' + id + '"' + (v.busy ? ' disabled' : '') + '>' +
+          (v.busy === 'proposal' ? 'Building…' : (v.pdf ? 'Rebuild document' : 'Build quote + agreement')) +
+        '</button>',
+        v.pdf
+          ? 'Replaces the PDF with a fresh one. Safe — the customer is not contacted.'
+          : 'Renders the PDF into Drive. Safe — the customer is not contacted.'
+      ));
+    }
+
+    if (v.pdf) {
+      rows.push(btnRow(
+        '<a class="b" href="' + esc(v.pdf) + '" target="_blank" rel="noopener">View document</a>',
+        'Opens the PDF the customer will read.'
+      ));
+      rows.push(btnRow(
+        '<a class="b" href="/agreement.html?preview=1&quote=' + encodeURIComponent(v.qid) +
+          '" target="_blank" rel="noopener">Preview signing page</a>',
+        'Exactly what they see when they click the email link. Read-only — no token is issued.'
+      ));
+    }
+
+    if (v.pdf && !v.acceptedAt) {
+      rows.push(btnRow(
+        '<button class="b pri" data-act="quote_send" data-id="' + id + '"' + (v.busy ? ' disabled' : '') + '>' +
+          (v.busy === 'sending' ? 'Sending…' : (v.sentAt ? 'Resend signing link' : 'Send for signature')) +
+        '</button>',
+        (v.sentAt ? 'Emails ' : '⚠ Emails ') + esc(it.email || 'the customer') +
+          ' a signing link and resets the 30-day window.' +
+          (v.sentAt ? ' They will receive a second email.' : ' This is the step the customer sees.')
+      ));
+    }
+
+    if (v.approvalUrl) {
+      rows.push(btnRow(
+        '<a class="b" href="' + esc(v.approvalUrl) + '" target="_blank" rel="noopener">Open signing link</a>' +
+        '<button class="b dim" data-act="copy" data-copy="' + esc(v.approvalUrl) + '">Copy link</button>',
+        'The customer’s own link — send it by text if email bounces.'
+      ));
+    }
+
+    rows.push(btnRow(
+      '<a class="b dim" href="/#quotes?quote=' + encodeURIComponent(v.qid) +
+        '" target="_blank" rel="noopener">Edit in Quote Tool</a>',
+      'Change pricing, scope or pool details. Rebuild the document afterwards.'
+    ));
+
     return '<div class="quote done">' +
-      '<div class="qt">Quote ' + esc(qid) + '</div>' +
-      (q.error ? '<div class="msg on err">' + esc(q.error) + '</div>' : '') +
-      (q.busy === 'proposal'
-        ? '<div class="msg on" style="background:var(--warn-bg);color:var(--warn)">' +
-          'Building the proposal PDF — this takes a moment.</div>'
-        : '') +
-      '<div class="acts" style="border-top:0;padding-top:0">' +
-        (q.proposal_url
-          ? '<a class="b" href="' + esc(q.proposal_url) + '" target="_blank" rel="noopener">View proposal</a>'
-          : '<button class="b" data-act="quote_proposal" data-id="' + id + '"' + (q.busy ? ' disabled' : '') + '>' +
-            (q.busy === 'proposal' ? 'Generating…' : 'Generate proposal') + '</button>') +
-        (q.proposal_url && !q.sent
-          ? '<button class="b pri" data-act="quote_send" data-id="' + id + '"' + (q.busy ? ' disabled' : '') + '>' +
-            (q.busy === 'sending' ? 'Sending…' : 'Send for approval') + '</button>'
-          : '') +
-        (q.sent ? '<span class="b dim" style="border:0">Sent — waiting on the customer to sign</span>' : '') +
-        '<a class="b dim" href="/#quotes" target="_blank" rel="noopener">Open in Quote Tool</a>' +
+      '<div class="qhead">' +
+        '<div class="qt" style="margin:0">Quote ' + esc(v.qid) +
+          (v.number ? ' · ' + esc(v.number) : '') + '</div>' +
+        '<span class="qpill ' + pill + '">' + esc(stage) + '</span>' +
       '</div>' +
+      '<div class="qblurb">' + blurb + '</div>' +
+      (v.rate || v.total
+        ? '<div class="qmoney">' +
+            (v.rate ? '<b>' + money(v.rate) + '</b>/month service' : '') +
+            (v.total ? ' · ' + money(v.total) + ' billed with tax' : '') +
+            (v.poolId ? ' · pool ' + esc(v.poolId) : '') +
+          '</div>'
+        : '') +
+      poolWarn +
+      banner +
+      '<div class="qacts">' + rows.join('') + '</div>' +
+    '</div>';
+  }
+
+  function btnRow(buttons, note) {
+    return '<div class="qact">' +
+      '<div class="qact-b">' + buttons + '</div>' +
+      '<div class="qact-n">' + note + '</div>' +
     '</div>';
   }
 
@@ -685,9 +895,10 @@
       if (h2) { h2.innerHTML = ''; delete _quotes[id]; }
       return;
     }
-    if (act === 'quote_save')     return saveQuote(id, btn);
-    if (act === 'quote_proposal') return generateProposal(id, btn);
-    if (act === 'quote_send')     return sendProposal(id, btn);
+    if (act === 'quote_save')      return saveQuote(id, btn);
+    if (act === 'quote_proposal')  return generateProposal(id);
+    if (act === 'quote_send')      return sendProposal(id);
+    if (act === 'quote_link_pool') return linkPool(id, btn);
 
     if (act === 'copy') {
       navigator.clipboard.writeText(btn.dataset.copy).then(function () {
@@ -917,6 +1128,37 @@
 #page-service_requests .quote{background:var(--gray);border:1px solid var(--line);border-radius:11px;
   padding:15px 17px;margin-top:13px}
 #page-service_requests .quote.done{background:var(--ok-bg);border-color:#c9ecdb}
+
+/* Quote lifecycle panel. Every action gets a one-line note under it saying what
+   the click does, so the destructive one (Send) is never guessed at. */
+#page-service_requests .qhead{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;flex-wrap:wrap;margin-bottom:7px}
+#page-service_requests .qpill{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;border-radius:999px;padding:5px 11px;white-space:nowrap}
+#page-service_requests .qpill.draft{background:#eef1f2;color:#5c6a6a}
+#page-service_requests .qpill.sent{background:var(--warn-bg);color:var(--warn)}
+#page-service_requests .qpill.ok{background:#d7f2e3;color:#065f46}
+#page-service_requests .qpill.err{background:var(--danger-bg);color:var(--danger)}
+#page-service_requests .qblurb{font-size:13px;line-height:1.55;color:#3f4c4b;margin-bottom:9px}
+#page-service_requests .qmoney{font-size:12.5px;color:#4a5757;background:rgba(255,255,255,.6);
+  border:1px solid rgba(0,0,0,.05);border-radius:8px;padding:7px 11px;margin-bottom:11px}
+#page-service_requests .qmoney b{font-size:14.5px;color:var(--teal)}
+
+#page-service_requests .qwarn{border:1px solid var(--warn-line);background:#fffdf7;border-radius:9px;
+  padding:11px 13px;margin-bottom:11px}
+#page-service_requests .qwarn-t{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--warn);margin-bottom:6px}
+#page-service_requests .qwarn-b{font-size:12.5px;line-height:1.55;color:#6b5410;margin-bottom:9px}
+
+#page-service_requests .qacts{display:flex;flex-direction:column;gap:9px}
+#page-service_requests .qact{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+#page-service_requests .qact-b{display:flex;gap:7px;flex-wrap:wrap;flex:0 0 auto}
+#page-service_requests .qact-n{font-size:12px;line-height:1.5;color:var(--muted);flex:1 1 210px;min-width:180px}
+@media(max-width:560px){
+  #page-service_requests .qact{flex-direction:column;gap:4px}
+  #page-service_requests .qact-b{width:100%}
+  #page-service_requests .qact-b .b{flex:1;justify-content:center}
+}
 #page-service_requests .quote .qt{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.11em;
   text-transform:uppercase;color:var(--teal);margin-bottom:12px}
 #page-service_requests .qrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:11px}
@@ -1065,32 +1307,117 @@
     });
   }
 
-  function generateProposal(id, btn) {
+  // ⚠️ EVERY ONE OF THESE GUARDS ON q.busy AT THE TOP, not just in the render.
+  // The buttons only *look* disabled because the panel repainted; a repaint that
+  // silently failed (as it did for every card with a quote, see the #qp- note
+  // above) left them fully clickable. Two clicks on Build meant two Apps Script
+  // runs and two Drive PDFs; two clicks on Send meant the customer got two
+  // emails. The guard belongs where the work starts.
+
+  function generateProposal(id) {
     var it = itemById(id), q = quoteState(it);
+    if (q.busy) return;
     q.busy = 'proposal'; q.error = ''; repaintQuote(id);
     gasApi({ action: 'generate_proposal', token: token(), quote_id: it.converted_quote_id })
       .then(function (res) {
         q.busy = '';
-        if (res && res.ok) { q.proposal_url = res.proposal_pdf_url || ''; toast('Proposal generated.', 'ok'); }
-        else q.error = (res && res.error) || 'Proposal generation failed.';
+        if (res && res.ok) {
+          q.proposal_url = res.proposal_pdf_url || '';
+          toast('Document built. Nothing sent yet.', 'ok');
+        } else {
+          q.error = (res && res.error) || 'Could not build the document.';
+        }
         repaintQuote(id);
       })
-      .catch(function () { q.busy = ''; q.error = 'Network error.'; repaintQuote(id); });
+      .catch(function (err) {
+        q.busy = '';
+        // The proxy dies before Apps Script does, so a timeout here does NOT
+        // mean the work failed — it usually finished. Saying "network error"
+        // sent people back to click again and duplicate the PDF.
+        q.error = timeoutHint(err, 'The document may still have been built — hit Refresh in a minute before rebuilding.');
+        repaintQuote(id);
+      });
   }
 
-  function sendProposal(id, btn) {
+  function sendProposal(id) {
     var it = itemById(id), q = quoteState(it);
+    if (q.busy) return;
+
+    var v = quoteView(it);
+    var warning = v.sentAt
+      ? 'Resend the signing link to ' + (it.email || 'the customer') + '?\n\n' +
+        'They already received one on ' + fmtWhen(v.sentAt) + '. This delivers a SECOND email and ' +
+        'restarts the 30-day window.'
+      : 'Email the signing link to ' + (it.email || 'the customer') + '?\n\n' +
+        'This is the step the customer sees. They can sign immediately after receiving it.';
+    if (!window.confirm(warning)) return;
+
     q.busy = 'sending'; q.error = ''; repaintQuote(id);
     gasApi({ action: 'send_proposal_for_approval', token: token(), quote_id: it.converted_quote_id })
       .then(function (res) {
         q.busy = '';
         if (res && res.ok) {
-          q.sent = true;
-          toast('Sent to ' + (it.email || 'the customer') + ' for signature.', 'ok');
-        } else q.error = (res && res.error) || 'Could not send the proposal.';
+          q.sent_at = res.sent_at || new Date().toISOString();
+          q.approval_url = res.approval_url || '';
+          toast('Signing link sent to ' + (res.sent_to || it.email || 'the customer') + '.', 'ok');
+        } else {
+          q.error = (res && res.error) || 'Could not send the signing link.';
+        }
         repaintQuote(id);
       })
-      .catch(function () { q.busy = ''; q.error = 'Network error.'; repaintQuote(id); });
+      .catch(function (err) {
+        q.busy = '';
+        q.error = timeoutHint(err, 'It may have gone out anyway — hit Refresh and check for a “Sent” stamp before resending.');
+        repaintQuote(id);
+      });
+  }
+
+  // Link the quote to a pool that already exists at this address, so signing
+  // reuses it instead of minting a second pool and a second route stop.
+  function linkPool(id, btn) {
+    var it = itemById(id), q = quoteState(it);
+    if (q.busy) return;
+    var pool = btn.dataset.pool;
+    var replace = btn.dataset.replace === '1';
+    var v0 = quoteView(it);
+    var ask = replace
+      ? 'Repoint quote ' + it.converted_quote_id + ' from ' + v0.poolId + ' to ' + pool + '?\n\n' +
+        'This changes which pool the customer is attached to when they sign. Only do this if ' +
+        v0.poolId + ' is wrong.'
+      : 'Link quote ' + it.converted_quote_id + ' to pool ' + pool + '?\n\n' +
+        'When the customer signs, their service attaches to that existing pool instead of creating a ' +
+        'new one. No second stop on the route board.';
+    if (!window.confirm(ask)) return;
+
+    q.busy = 'linking'; q.error = ''; repaintQuote(id);
+    reviewApi('POST', { action: 'link_pool', request_id: id, pool_id: pool, replace: replace })
+      .then(function (res) {
+        q.busy = '';
+        if (res && res.ok) {
+          q.pool_id = res.pool_id;
+          toast('Linked to ' + res.pool_id + '. Signing will reuse this pool.', 'ok');
+          load();
+          return;
+        }
+        q.error = (res && res.error) || 'Could not link the pool.';
+        repaintQuote(id);
+      })
+      .catch(function (err) {
+        q.busy = '';
+        q.error = timeoutHint(err, 'Hit Refresh to see whether it took.');
+        repaintQuote(id);
+      });
+  }
+
+  // A hung /api/gas call is the single most confusing failure on this page: the
+  // serverless proxy gives up well before Apps Script does, so the browser sees
+  // an error for work that succeeded. Name it plainly instead.
+  function timeoutHint(err, tail) {
+    var m = String((err && err.message) || err || '');
+    if (/504|timeout|timed out|Failed to fetch|NetworkError|load failed/i.test(m)) {
+      return 'The request timed out waiting for Google. ' + tail;
+    }
+    return m ? ('Failed: ' + m.slice(0, 160)) : 'Failed — check the connection.';
   }
 
   // The quote lifecycle lives in Apps Script, not in the Vercel endpoints, so

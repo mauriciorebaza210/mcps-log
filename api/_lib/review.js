@@ -120,6 +120,93 @@ async function saveRequest(header, row, patch) {
   return merged;
 }
 
+// ── Live quote state, joined onto the queue ─────────────────────────────────
+//
+// ⚠️ THE CARD USED TO GUESS. quoteProgress() rendered its buttons from
+// in-memory state that only existed in the tab that had just clicked Generate,
+// so on any page load the card showed "Generate proposal" for a quote whose PDF
+// had been sitting on the sheet for hours — and "Send for approval" could never
+// appear at all. Reading the real columns here is what makes the card able to
+// say what is actually true.
+//
+// Also returns `existing_pool`: another ACTIVE_CUSTOMER quote for the same
+// household that already owns a pool_id. Signing mints a NEW pool whenever the
+// quote's own pool_id is blank, and addWeeklyPoolToRoutes_ dedupes on pool_id
+// only — never address — so without this the portal has no way to show that
+// activating would put a second stop on a house already on the route.
+const QUOTE_STATE_FIELDS = [
+  'quote_id', 'status', 'contract_status', 'service', 'pool_id',
+  'first_name', 'last_name', 'email', 'address',
+  'total_with_tax', 'quote_subtotal', 'discounted_service_subtotal', 'sales_tax',
+  'proposal_number', 'proposal_pdf_url', 'proposal_approval_url',
+  'proposal_sent_at', 'proposal_accepted_at', 'proposal_declined_at',
+  'proposal_change_requested_at', 'proposal_response_note',
+  'signed_at', 'contract_url'
+];
+
+const normKey = v => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+async function loadQuoteStates(quoteIds) {
+  const wanted = new Set(quoteIds.map(q => String(q || '').trim()).filter(Boolean));
+  if (!wanted.size) return {};
+
+  const rows = rowsToObjects(await readSheetRange('Quotes', crmSpreadsheetId()).catch(() => []));
+  if (!rows.length) return {};
+
+  const byId = {};
+  rows.forEach(r => {
+    const id = String(r.quote_id || '').trim();
+    // Exact, case-sensitive — the same comparison getQuoteById_ makes in Apps
+    // Script. A quote minted by the fast path can carry a lowercase suffix
+    // (Q-c0338596), and matching case-insensitively here would let the card
+    // show state for a row the backend would then refuse to find.
+    if (id && wanted.has(id)) {
+      const out = {};
+      QUOTE_STATE_FIELDS.forEach(f => { if (r[f] !== undefined && r[f] !== '') out[f] = r[f]; });
+      byId[id] = out;
+    }
+  });
+
+  // Pool candidates: anything already activated that owns a pool_id.
+  const pooled = rows.filter(r =>
+    String(r.pool_id || '').trim() &&
+    String(r.status || '').trim().toUpperCase() === 'ACTIVE_CUSTOMER');
+
+  // ⚠️ COMPUTED EVEN WHEN pool_id IS ALREADY SET. Skipping the lookup for a
+  // populated cell hides the worse of the two problems: a pool_id that is set
+  // but WRONG. That happens easily — the id activation *would have* minted is a
+  // plausible-looking value to type in by hand — and it is more damaging than a
+  // blank, because activation trusts whatever it finds and attaches the customer
+  // to a pool that exists nowhere else, stranding the real pool's history.
+  Object.keys(byId).forEach(id => {
+    const q = byId[id];
+    const email = normKey(q.email);
+    const addr = normKey(q.address);
+    const hit = pooled.find(p =>
+      String(p.quote_id || '').trim() !== id &&
+      ((email && normKey(p.email) === email) || (addr && normKey(p.address) === addr)));
+    if (!hit) return;
+
+    const household = {
+      pool_id: String(hit.pool_id).trim(),
+      quote_id: String(hit.quote_id || '').trim(),
+      customer_name: [hit.first_name, hit.last_name].filter(Boolean).join(' ').trim(),
+      service: String(hit.service || '').trim(),
+      address: String(hit.address || '').trim(),
+      matched_on: (email && normKey(hit.email) === email) ? 'email' : 'address'
+    };
+    const mine = String(q.pool_id || '').trim();
+
+    if (!mine) {
+      q.existing_pool = household;              // blank → offer to link
+    } else if (mine !== household.pool_id) {
+      q.pool_conflict = household;              // set, but not the household's pool
+    }
+  });
+
+  return byId;
+}
+
 async function technicians() {
   return getCached('sr:techs', 5 * 60 * 1000, async () => {
     const rows = rowsToObjects(await readSheetRange('Users', authSpreadsheetId()).catch(() => []));
@@ -194,6 +281,20 @@ async function handleList(req, res) {
     if (k) keyCounts[k] = (keyCounts[k] || 0) + 1;
   });
   items.forEach(i => { i.same_key_count = keyCounts[i.idempotency_key] || 1; });
+
+  // One extra Quotes read for the whole queue, not one per card. Failure is
+  // non-fatal: the card falls back to "state unknown" rather than 500-ing the
+  // queue, because the queue is also how staff triage requests that have no
+  // quote at all.
+  try {
+    const states = await loadQuoteStates(items.map(i => i.converted_quote_id));
+    items.forEach(i => {
+      const id = String(i.converted_quote_id || '').trim();
+      if (id) i.quote = states[id] || { quote_id: id, missing: true };
+    });
+  } catch (error) {
+    console.warn('review: quote-state join failed, cards will show unknown state', error.message);
+  }
 
   return sendJson(res, 200, {
     ok: true,
@@ -580,9 +681,74 @@ async function actionLinkQuote(req, res, session, body) {
   return sendJson(res, 200, { ok: true, request_id: row.request_id, quote_id: quoteId });
 }
 
+// Write an existing pool_id onto the quote BEFORE the customer signs.
+//
+// ⚠️ WHY THIS EXISTS. activateQuoteServiceFromAgreement_ mints a fresh pool_id
+// whenever the quote's own cell is blank, and addWeeklyPoolToRoutes_ dedupes on
+// pool_id alone — never on address. So a returning customer whose household
+// already owns a pool gets a SECOND pool and a SECOND route stop the moment they
+// sign, and the only fix used to be editing the sheet cell by hand. Setting it
+// beforehand makes activation reuse the pool and skip the duplicate route row.
+//
+// ⚠️ VERCEL-SIDE ON PURPOSE. update_quote_info in Apps Script only accepts the
+// seven contact columns, so routing this through GAS would mean a clasp push and
+// a redeploy of the live web app. An A-anchored writeSheetRange needs neither.
+async function actionLinkPool(req, res, session, body) {
+  const { row } = await locate(body.request_id);
+  if (!row) return sendJson(res, 404, { ok: false, error: 'Request not found.' });
+
+  const quoteId = String(row.converted_quote_id || '').trim();
+  if (!quoteId) return sendJson(res, 409, { ok: false, error: 'This request has no quote yet.' });
+
+  const poolId = clean(body.pool_id, 20);
+  if (!/^MCPS-\d{3,6}$/.test(poolId)) {
+    return sendJson(res, 400, { ok: false, error: 'Pool ID must look like MCPS-0286.' });
+  }
+
+  const id = crmSpreadsheetId();
+  const values = await readSheetRange('Quotes', id);
+  const header = (values[0] || []).map(normalizeHeader);
+  const poolCol = header.indexOf('pool_id');
+  const idCol = header.indexOf('quote_id');
+  if (poolCol === -1 || idCol === -1) {
+    return sendJson(res, 500, { ok: false, error: 'Quotes sheet is missing quote_id or pool_id.' });
+  }
+
+  // Exact, case-sensitive — same comparison Apps Script makes.
+  let rowNum = -1;
+  for (let i = 1; i < values.length; i += 1) {
+    if (String((values[i] || [])[idCol] || '').trim() === quoteId) { rowNum = i + 1; break; }
+  }
+  if (rowNum === -1) return sendJson(res, 404, { ok: false, error: 'Quote row not found: ' + quoteId });
+
+  // Overwriting a pool that is already set is deliberate, never incidental: it
+  // re-points a customer's whole service history, so the caller has to ask for
+  // it explicitly. Re-linking the SAME id is a no-op and stays a success, which
+  // is what makes the button safe to double-click.
+  const current = String((values[rowNum - 1] || [])[poolCol] || '').trim();
+  if (current && current !== poolId && body.replace !== true) {
+    return sendJson(res, 409, {
+      ok: false,
+      error: 'This quote is already linked to ' + current + '.',
+      current_pool_id: current,
+      needs_replace: true
+    });
+  }
+
+  // One cell, addressed explicitly. Nothing else on the row is touched.
+  await writeSheetRange(
+    'Quotes!' + colLetter(poolCol) + rowNum + ':' + colLetter(poolCol) + rowNum,
+    [[poolId]],
+    id
+  );
+
+  return sendJson(res, 200, { ok: true, request_id: row.request_id, quote_id: quoteId, pool_id: poolId });
+}
+
 const ACTIONS = {
   link: actionLink,
   link_quote: actionLinkQuote,
+  link_pool: actionLinkPool,
   create_lead: actionCreateLead,
   schedule: actionSchedule,
   repair_order: actionRepairOrder,
