@@ -4,13 +4,26 @@
 // Uses globals: _s, _curPage, _routeData, _activeHubTab, _usersCache, _invLoaded
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ⚠️ STRIP THE QUERY BEFORE RESOLVING. Feature code already reads parameters
+// straight off the hash — qInit() looks for `?quote=` in it to reopen a saved
+// quote — but this resolver used the raw string, so `#quotes?quote=Q-1234` split
+// on '/' to the whole thing and matched no page at all. The parameter side of
+// that convention worked; the routing side silently didn't, which made every
+// deep link into a page-not-found and forced staff to navigate by hand and
+// re-find the record. Params stay in the hash for the feature to read; only page
+// resolution ignores them.
+function _hashPath_(hash) {
+  return String(hash || '').split('?')[0];
+}
+
 function _resolvePageFromHash_(hash) {
-  if (!hash) return null;
-  if (hash === 'technicianhub' || hash.startsWith('technicianhub/')) {
-    const sub = hash.split('/')[1] || 'schedule';
+  const path = _hashPath_(hash);
+  if (!path) return null;
+  if (path === 'technicianhub' || path.startsWith('technicianhub/')) {
+    const sub = path.split('/')[1] || 'schedule';
     return (sub === 'service_log' || sub === 'inventory') ? sub : 'live_map';
   }
-  return hash.split('/')[0];
+  return path.split('/')[0];
 }
 
 function _pageToHash_(page, sub) {
@@ -22,6 +35,15 @@ function _pageToHash_(page, sub) {
 }
 
 function navigateTo(pageWithSub){
+  // Deep-link params ride along in the hash (`quotes?quote=Q-1234`). Split them
+  // off before any page matching — `_s.pages.includes('quotes?quote=Q-1234')` is
+  // false, so leaving them attached made navigateTo bail out silently — and put
+  // them back on the hash we write at the end, because the feature reads them
+  // from there on the way in.
+  const _q = String(pageWithSub || '').indexOf('?');
+  const query = _q === -1 ? '' : String(pageWithSub).slice(_q);
+  pageWithSub = _q === -1 ? String(pageWithSub || '') : String(pageWithSub).slice(0, _q);
+
   // Translate public technicianhub/ URLs to internal page IDs
   if (pageWithSub === 'technicianhub' || pageWithSub.startsWith('technicianhub/')) {
     const thSub = pageWithSub.split('/')[1] || 'schedule';
@@ -47,7 +69,7 @@ function navigateTo(pageWithSub){
   
   _setSidebarActive(page, sub);
   _curPage = page;
-  location.hash = _pageToHash_(page, sub);
+  location.hash = _pageToHash_(page, sub) + query;
   _closeSidebar();
 
   // Scroll content area back to top
