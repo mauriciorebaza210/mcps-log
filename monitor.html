@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>MCPS Fleet Monitor</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   MCPS Fleet Monitor — a trading terminal for pool chemistry.
+
+   Palette: official brand hexes (colors.md) — Primary Teal / Aqua / Light Aqua —
+   with dark neutrals DERIVED from Primary Teal (the brand guide has no dark
+   theme of its own), plus two flagged, off-palette additions, confirmed with
+   Mau rather than silently carried over from margins.html:
+     --gold  "drifting" status (the palette has no third status color)
+     --red   "out of spec" (lightened from builder-portal.html's --danger,
+              which is too dark to read against a near-black ground)
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root{
+  /* Official brand */
+  --teal:#0D3D3E; --aqua:#1FA7A8; --aqua-light:#5ED6D3;
+  --gray:#F3F5F6; --charcoal:#222222; --white:#FFFFFF;
+
+  /* Derived dark neutrals (brand guide has no dark theme).
+     Tuned toward calm premium depth rather than terminal contrast: the grounds
+     are near-neutral with only a trace of the brand teal, so the aqua accent
+     stays the brightest thing on screen and the page reads as a finance app,
+     not a console. */
+  --bg:#0A1211; --panel:#101A19; --panel2:#141F1E; --panel3:#1A2726;
+  --border:rgba(255,255,255,.07); --border-soft:rgba(255,255,255,.04);
+  --text:#EEF4F3; --text2:#9AAEAC; --text3:#647876;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+  --shadow-md:0 4px 16px rgba(0,0,0,.35);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.45);
+
+  /* Flagged exceptions — confirmed with Mau, not inherited from margins.html */
+  --gold:#c8a84b; --gold-dim:rgba(200,168,75,.5);
+  --red:#E5534B; --red-dim:rgba(229,83,75,.45);
+  --aqua-dim:rgba(31,167,168,.45);
+
+  --r-sm:10px; --r-md:14px; --r-lg:20px;
+  --font-head:'Montserrat',sans-serif; --font-body:'Open Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--text); font-family:var(--font-body);
+  min-height:100vh; overflow-x:hidden; -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mon-head,.mon-btn,.mon-label{font-family:var(--font-head)}
+table{font-variant-numeric:tabular-nums} /* Montserrat isn't tabular by default —
+  without this every poll makes digits jitter and the flash reads as noise. */
+
+::selection{background:var(--aqua);color:var(--bg)}
+a{color:var(--aqua-light)}
+
+/* ── Gate ─────────────────────────────────────────────────────────────────── */
+#gate{
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:1rem; text-align:center; padding:2rem;
+}
+#gate img{width:64px;height:64px;object-fit:contain;opacity:.9}
+#gate h1{font-size:1.1rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+#gate p{color:var(--text2);font-size:.9rem;max-width:360px;line-height:1.5}
+#gate a.mon-btn{display:inline-block;margin-top:.5rem}
+
+/* ── Buttons / chips ──────────────────────────────────────────────────────── */
+.mon-btn{
+  font-family:var(--font-head); font-weight:700; font-size:.72rem;
+  letter-spacing:.06em; text-transform:uppercase; text-decoration:none;
+  background:var(--aqua); color:#06231f; border:none; border-radius:var(--r-sm);
+  padding:.55rem 1rem; cursor:pointer; transition:filter .15s;
+}
+.mon-btn:hover{filter:brightness(1.12)}
+.mon-btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.mon-btn.ghost:hover{border-color:var(--aqua);color:var(--text)}
+
+/* ── App shell ────────────────────────────────────────────────────────────── */
+#app{display:flex;flex-direction:column;min-height:100vh}
+
+.topbar{
+  display:flex; align-items:center; gap:1.25rem; padding:.85rem 1.25rem;
+  background:rgba(16,26,25,.88); backdrop-filter:saturate(150%) blur(12px);
+  border-bottom:1px solid var(--border-soft); position:sticky; top:0; z-index:20;
+}
+.mon-brand{display:flex;align-items:center;gap:.6rem;flex-shrink:0}
+.mon-brand img{height:26px;width:auto}
+.mon-brand .mon-title{font-size:.95rem;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.mon-index{display:flex;align-items:baseline;gap:.4rem;flex-shrink:0}
+.mon-index .val{font-size:1.15rem;font-weight:800;font-family:var(--font-head)}
+.mon-index .delta{font-size:.78rem;font-weight:700}
+.mon-index .lbl{font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+.mon-counts{display:flex;gap:.9rem;font-size:.75rem;color:var(--text2);flex-shrink:0}
+.mon-counts b{color:var(--text);font-weight:700}
+.mon-counts .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:.3rem;vertical-align:middle}
+
+.mon-spacer{flex:1}
+
+.mon-search{
+  background:var(--panel3); border:1px solid var(--border); border-radius:var(--r-sm);
+  color:var(--text); font-family:var(--font-body); font-size:.8rem;
+  padding:.5rem .7rem; width:190px; outline:none;
+}
+.mon-search::placeholder{color:var(--text3)}
+.mon-search:focus{border-color:var(--aqua)}
+
+.mon-live{display:flex;align-items:center;gap:.4rem;font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+.mon-live .pulse{width:6px;height:6px;border-radius:50%;background:var(--aqua);animation:mon-breathe 2.4s ease-in-out infinite}
+.mon-live.stale .pulse{background:var(--text3);animation:none}
+@keyframes mon-breathe{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── Ticker ───────────────────────────────────────────────────────────────── */
+.mon-ticker-wrap{background:var(--panel);border-bottom:1px solid var(--border-soft);overflow:hidden;white-space:nowrap;position:relative}
+.mon-ticker-wrap.empty{display:none}
+.mon-ticker{display:inline-flex;padding:.5rem 0;animation:mon-scroll 75s linear infinite}
+.mon-ticker-wrap:hover .mon-ticker{animation-play-state:paused}
+@keyframes mon-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.mon-tick-item{display:inline-flex;align-items:center;gap:.4rem;padding:0 1.4rem;font-size:.78rem;border-right:1px solid var(--border-soft);cursor:pointer}
+.mon-tick-item:hover{color:var(--aqua-light)}
+.mon-tick-item .name{font-weight:700;color:var(--text)}
+.mon-tick-item.up{color:var(--aqua-light)}
+.mon-tick-item.down{color:var(--red)}
+.mon-tick-item.alert{color:var(--gold)}
+
+/* ── Movers ───────────────────────────────────────────────────────────────── */
+.mon-movers{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border-soft);border-bottom:1px solid var(--border-soft)}
+.mon-movers.empty{display:none}
+.mon-mover-col{background:var(--panel);padding:.6rem 1rem}
+.mon-mover-col h3{font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:.4rem}
+.mon-mover-row{display:flex;justify-content:space-between;font-size:.8rem;padding:.15rem 0;cursor:pointer}
+.mon-mover-row:hover .name{color:var(--aqua-light)}
+.mon-mover-row .name{color:var(--text2)}
+.mon-mover-row .delta{font-weight:700;font-variant-numeric:tabular-nums}
+.mon-mover-row .delta.up{color:var(--aqua-light)}
+.mon-mover-row .delta.down{color:var(--red)}
+
+/* ── Filters ──────────────────────────────────────────────────────────────── */
+.mon-filters{display:flex;gap:.4rem;padding:.6rem 1.25rem;flex-wrap:wrap;border-bottom:1px solid var(--border-soft)}
+.mon-chip{
+  font-size:.7rem; font-family:var(--font-head); font-weight:700; letter-spacing:.05em;
+  text-transform:uppercase; padding:.35rem .75rem; border-radius:999px;
+  border:1px solid var(--border); color:var(--text2); background:transparent;
+  cursor:pointer; transition:all .18s ease; white-space:nowrap;
+}
+.mon-chip:hover{border-color:var(--aqua);color:var(--text)}
+.mon-chip.active{background:var(--aqua);border-color:var(--aqua);color:#06231f}
+.mon-chip .n{opacity:.65;margin-left:.3rem}
+
+/* ── Board ────────────────────────────────────────────────────────────────── */
+.mon-board-wrap{flex:1;overflow:auto;padding:0 0 2rem}
+table.mon-board{width:100%;border-collapse:collapse;font-size:.83rem}
+.mon-board thead th{
+  position:sticky;top:0;background:var(--panel);z-index:5;
+  font-family:var(--font-head);font-weight:700;font-size:.65rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text3);text-align:left;padding:.6rem .7rem;
+  border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;
+}
+.mon-board thead th:hover{color:var(--text)}
+.mon-board thead th.sorted{color:var(--aqua-light)}
+.mon-board thead th .arrow{margin-left:.25rem;opacity:.7}
+.mon-board thead th.num,.mon-board td.num{text-align:right}
+
+.mon-board tbody tr{border-bottom:1px solid var(--border-soft);cursor:pointer;transition:background .18s ease}
+.mon-board tbody tr:hover{background:var(--panel2)}
+.mon-board tbody tr.focused{background:var(--panel3);box-shadow:inset 2px 0 0 var(--aqua)}
+.mon-board tbody tr.provisional{opacity:.72}
+.mon-board td{padding:.55rem .7rem;vertical-align:middle}
+
+.mon-status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.mon-status-dot.ok{background:var(--aqua)}
+.mon-status-dot.drift{background:var(--gold)}
+.mon-status-dot.out{background:var(--red)}
+.mon-status-dot.nodata{background:var(--text3)}
+
+.mon-pool-cell{display:flex;align-items:center;gap:.55rem}
+.mon-pool-name{font-weight:700;color:var(--text);white-space:nowrap}
+.mon-pool-addr{font-size:.7rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.mon-star{cursor:pointer;color:var(--text3);font-size:.9rem;flex-shrink:0}
+.mon-star.on{color:var(--gold)}
+/* ── Lifecycle badges ─────────────────────────────────────────────────────
+   The board answers "where is this customer in their life with us?", not just
+   "is the water balanced?". Three states are in scope:
+     ACTIVE   — on a weekly route, being serviced
+     STARTUP  — mid startup sequence
+     CONVERT  — startup finished but NOT yet on a weekly route. The pool most
+                likely to quietly become a lost customer, so it gets the loudest
+                treatment on the board and a direct action to resolve it.        */
+.mon-life{font-size:.58rem;font-weight:700;letter-spacing:.05em;border-radius:5px;
+  padding:.12rem .4rem;text-transform:uppercase;font-family:var(--font-head);white-space:nowrap}
+.mon-life.active{background:rgba(31,167,168,.14);color:var(--aqua-light);border:1px solid rgba(31,167,168,.3)}
+.mon-life.startup{background:rgba(94,214,211,.1);color:var(--aqua-light);border:1px solid rgba(94,214,211,.25)}
+.mon-life.convert{background:rgba(200,168,75,.16);color:var(--gold);border:1px solid rgba(200,168,75,.45)}
+.mon-board tbody tr.needs-convert{background:rgba(200,168,75,.045)}
+.mon-board tbody tr.needs-convert:hover{background:rgba(200,168,75,.08)}
+
+/* ── Row actions ──────────────────────────────────────────────────────────
+   Appear on hover so the board stays calm at rest, but every row is one click
+   from doing something rather than just reporting.                            */
+.mon-actions{display:flex;gap:.3rem;opacity:0;transition:opacity .18s ease;justify-content:flex-end}
+.mon-board tbody tr:hover .mon-actions,.mon-board tbody tr.focused .mon-actions{opacity:1}
+.mon-act{background:var(--panel3);border:1px solid var(--border);color:var(--text2);
+  border-radius:6px;padding:.22rem .5rem;font-size:.65rem;font-family:var(--font-head);
+  font-weight:700;letter-spacing:.04em;cursor:pointer;transition:all .15s ease;white-space:nowrap}
+.mon-act:hover{border-color:var(--aqua);color:var(--aqua-light)}
+.mon-act.gold{border-color:rgba(200,168,75,.5);color:var(--gold)}
+.mon-act.gold:hover{background:rgba(200,168,75,.14)}
+
+/* Open-issue indicator — reuses the existing Issues_Alerts feed. */
+.mon-alert-flag{color:var(--gold);font-size:.78rem;cursor:pointer;flex-shrink:0}
+.mon-alert-flag:hover{filter:brightness(1.25)}
+
+/* Toast for action feedback */
+#mon-toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(120%);
+  background:var(--panel3);border:1px solid var(--border);color:var(--text);
+  padding:.7rem 1.2rem;border-radius:var(--r-md);font-size:.82rem;z-index:200;
+  box-shadow:var(--shadow-lg);transition:transform .28s cubic-bezier(.22,1,.36,1)}
+#mon-toast.show{transform:translateX(-50%) translateY(0)}
+#mon-toast.err{border-color:var(--red);color:var(--red)}
+
+.mon-chip-startup{font-size:.58rem;font-weight:700;letter-spacing:.05em;background:var(--panel3);color:var(--aqua-light);border:1px solid var(--border);border-radius:4px;padding:.1rem .35rem;text-transform:uppercase}
+
+.mon-score{font-weight:800;font-family:var(--font-head);font-size:.95rem}
+.mon-delta{font-size:.75rem;font-weight:700}
+.mon-delta.up{color:var(--aqua-light)}
+.mon-delta.down{color:var(--red)}
+.mon-delta.flat{color:var(--text3)}
+
+.mon-spark{display:block}
+.mon-spark path.line{fill:none;stroke:var(--aqua-light);stroke-width:1.4}
+.mon-spark path.area{fill:var(--aqua);opacity:.12;stroke:none}
+.mon-spark.down path.line{stroke:var(--red)}
+.mon-spark.down path.area{fill:var(--red)}
+
+.mon-reading{display:flex;flex-direction:column;gap:2px;min-width:44px}
+.mon-reading .v{font-weight:600}
+.mon-reading .v.low,.mon-reading .v.high{color:var(--gold)}
+.mon-reading .v.veryhigh{color:var(--red)}
+.mon-reading .v.empty{color:var(--text3);font-weight:400;font-size:.75rem}
+.mon-meter{height:2px;border-radius:2px;background:var(--border);position:relative;overflow:hidden}
+.mon-meter .zone{position:absolute;top:0;bottom:0;background:rgba(31,167,168,.35)}
+.mon-meter .mark{position:absolute;top:-1px;width:2px;height:4px;background:var(--text)}
+
+.mon-forecast{font-size:.72rem;color:var(--text2)}
+.mon-forecast.urgent{color:var(--gold);font-weight:700}
+.mon-forecast .none{color:var(--text3)}
+
+.mon-lastvisit{font-size:.75rem;color:var(--text2)}
+.mon-lastvisit.stale{color:var(--gold)}
+.mon-lastvisit.verystale{color:var(--red)}
+
+/* Flash-on-change */
+/* Robinhood-style value change: a brief tinted wash that fades out smoothly,
+   not a strobe. Subtle enough to catch peripherally without yanking the eye. */
+@keyframes mon-flash-up{0%{background:rgba(31,167,168,.22)}100%{background:transparent}}
+@keyframes mon-flash-down{0%{background:rgba(229,83,75,.20)}100%{background:transparent}}
+td.flash-up{animation:mon-flash-up 1.6s cubic-bezier(.22,1,.36,1)}
+td.flash-down{animation:mon-flash-down 1.6s cubic-bezier(.22,1,.36,1)}
+
+.mon-empty{padding:3rem;text-align:center;color:var(--text3)}
+
+/* ── Palette (⌘K) ─────────────────────────────────────────────────────────── */
+#palette{position:fixed;inset:0;background:rgba(6,16,15,.75);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:100}
+.mon-palette-box{width:min(560px,92vw);background:var(--panel2);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.mon-palette-box input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--font-body);font-size:1rem;padding:1rem 1.2rem;outline:none}
+.mon-palette-box input::placeholder{color:var(--text3)}
+.mon-palette-list{max-height:50vh;overflow-y:auto;padding:.4rem}
+.mon-palette-item{display:flex;justify-content:space-between;padding:.6rem .8rem;border-radius:var(--r-sm);cursor:pointer;font-size:.85rem}
+.mon-palette-item.active{background:var(--panel3)}
+.mon-palette-item .sub{color:var(--text3);font-size:.72rem}
+.mon-palette-item .tag{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;color:var(--aqua-light);font-family:var(--font-head)}
+
+/* ── Shortcuts modal ──────────────────────────────────────────────────────── */
+#shortcuts-modal{position:fixed;inset:0;background:rgba(6,16,15,.75);display:flex;align-items:center;justify-content:center;z-index:100}
+.mon-sc-box{background:var(--panel2);border:1px solid var(--border);border-radius:var(--r-lg);padding:1.5rem 1.8rem;width:min(420px,90vw)}
+.mon-sc-box h3{font-size:.85rem;letter-spacing:.06em;text-transform:uppercase;margin-bottom:1rem}
+.mon-sc-row{display:flex;justify-content:space-between;padding:.4rem 0;font-size:.85rem;border-bottom:1px solid var(--border-soft)}
+.mon-sc-row kbd{background:var(--panel3);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem;font-family:monospace;font-size:.78rem}
+
+[hidden]{display:none!important}
+
+/* ── TV mode ──────────────────────────────────────────────────────────────── */
+body.tv .mon-filters,body.tv .mon-search,body.tv #palette-hint,body.tv .mon-star{display:none!important}
+body.tv{font-size:1.5rem}
+body.tv .mon-board{font-size:1.15rem}
+body.tv .topbar{padding:1.4rem 2rem}
+body.tv .mon-brand .mon-title{font-size:1.4rem}
+body.tv .mon-index .val{font-size:1.8rem}
+body.tv .mon-board thead th{font-size:.85rem;padding:.9rem 1rem}
+body.tv .mon-board td{padding:.9rem 1rem}
+body.tv .mon-pool-addr{max-width:none}
+
+/* ── Detail view ──────────────────────────────────────────────────────────── */
+#detail{padding:1.5rem;max-width:1100px;margin:0 auto;width:100%}
+.mon-detail-back{display:inline-flex;align-items:center;gap:.4rem;color:var(--text2);font-size:.8rem;text-decoration:none;margin-bottom:1rem;cursor:pointer}
+.mon-detail-back:hover{color:var(--aqua-light)}
+.mon-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.2rem}
+.mon-detail-id h1{font-size:1.3rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.mon-ticker-chip{font-size:.68rem;background:var(--panel3);border:1px solid var(--border);border-radius:4px;padding:.15rem .5rem;color:var(--aqua-light);font-family:monospace}
+.mon-detail-id p{color:var(--text2);font-size:.85rem;margin-top:.3rem}
+.mon-detail-score{text-align:right}
+.mon-detail-score .val{font-size:2.2rem;font-weight:800;font-family:var(--font-head);line-height:1}
+.mon-detail-score .lbl{font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+
+.mon-panel{background:var(--panel);border:1px solid var(--border-soft);border-radius:var(--r-lg);padding:1.2rem;margin-bottom:1rem}
+.mon-panel h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:.9rem}
+
+.mon-chart-tabs{display:flex;gap:.4rem;margin-bottom:.8rem;flex-wrap:wrap}
+.mon-chart-tab{font-size:.7rem;font-family:var(--font-head);font-weight:700;padding:.3rem .7rem;border-radius:6px;border:1px solid var(--border);color:var(--text2);cursor:pointer;background:transparent}
+.mon-chart-tab.active{background:var(--aqua);border-color:var(--aqua);color:#06231f}
+#detail-chart-wrap{position:relative;height:280px}
+
+.mon-vitals-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem}
+.mon-vital{background:var(--panel2);border-radius:var(--r-md);padding:.8rem}
+.mon-vital .lbl{font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.mon-vital .v{font-size:1.3rem;font-weight:700;font-family:var(--font-head);margin:.2rem 0}
+.mon-vital .band{font-size:.68rem;font-weight:700;text-transform:uppercase}
+.mon-vital .band.ideal{color:var(--aqua-light)}
+.mon-vital .band.low,.mon-vital .band.high{color:var(--gold)}
+.mon-vital .band.veryhigh{color:var(--red)}
+.mon-vital .band.empty{color:var(--text3)}
+
+.mon-lsi-gauge{display:flex;align-items:center;gap:1rem}
+.mon-lsi-track{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--red) 0%,var(--gold) 30%,var(--aqua) 50%,var(--gold) 70%,var(--red) 100%);position:relative}
+.mon-lsi-mark{position:absolute;top:-4px;width:3px;height:16px;background:var(--text);border-radius:2px}
+.mon-lsi-label{font-size:.85rem;font-weight:700;white-space:nowrap}
+.mon-lsi-note{font-size:.7rem;color:var(--text3);margin-top:.5rem}
+
+.mon-fund-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem;font-size:.82rem}
+.mon-fund-grid .lbl{color:var(--text3);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em}
+
+.mon-timeline-item{display:flex;gap:.8rem;padding:.6rem 0;border-bottom:1px solid var(--border-soft);font-size:.82rem}
+.mon-timeline-item .date{color:var(--text3);white-space:nowrap;min-width:80px}
+.mon-timeline-item.alert{color:var(--gold)}
+
+.mon-dosing-row{display:flex;justify-content:space-between;font-size:.8rem;padding:.35rem 0;border-bottom:1px solid var(--border-soft)}
+.mon-dosing-row .cost{color:var(--text2)}
+
+@media(max-width:720px){
+  .mon-movers{grid-template-columns:1fr}
+  .mon-counts{display:none}
+  .mon-search{width:120px}
+}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <img src="/assets/mcps-logo-120.png" alt="MCPS">
+  <h1 id="gate-title">Fleet Monitor</h1>
+  <p id="gate-msg">Checking your session…</p>
+</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="mon-brand">
+      <img src="/assets/mcps-logo-120.png" alt="MCPS">
+      <span class="mon-title">Fleet Monitor</span>
+    </div>
+    <div class="mon-index">
+      <span class="val" id="idx-val">—</span>
+      <span class="delta" id="idx-delta"></span>
+      <span class="lbl">Index</span>
+    </div>
+    <div class="mon-counts" id="mon-counts">
+      <span><b id="cnt-total">0</b> pools</span>
+      <span><span class="dot" style="background:var(--aqua)"></span><b id="cnt-ok">0</b></span>
+      <span><span class="dot" style="background:var(--gold)"></span><b id="cnt-drift">0</b></span>
+      <span><span class="dot" style="background:var(--red)"></span><b id="cnt-out">0</b></span>
+    </div>
+    <div class="mon-spacer"></div>
+    <input class="mon-search" id="mon-search" type="text" placeholder="Search pools… ( / )">
+    <div class="mon-live" id="mon-live"><span class="pulse"></span><span id="mon-live-txt">LIVE · 60s</span></div>
+    <button class="mon-btn ghost" id="btn-tv" title="Wall display mode">⛶ TV</button>
+  </header>
+
+  <div class="mon-ticker-wrap empty" id="ticker-wrap">
+    <div class="mon-ticker" id="ticker-track"></div>
+  </div>
+
+  <div class="mon-movers empty" id="movers-wrap">
+    <div class="mon-mover-col">
+      <h3>▲ Gainers</h3>
+      <div id="movers-up"></div>
+    </div>
+    <div class="mon-mover-col">
+      <h3>▼ Decliners</h3>
+      <div id="movers-down"></div>
+    </div>
+  </div>
+
+  <div class="mon-filters" id="mon-filters">
+    <button class="mon-chip active" data-filter="all">All <span class="n" id="fc-all">0</span></button>
+    <button class="mon-chip" data-filter="weekly">Weekly <span class="n" id="fc-weekly">0</span></button>
+    <button class="mon-chip" data-filter="startup">Startup <span class="n" id="fc-startup">0</span></button>
+    <button class="mon-chip" data-filter="convert">Needs Conversion <span class="n" id="fc-convert">0</span></button>
+    <button class="mon-chip" data-filter="out">Out of Spec <span class="n" id="fc-out">0</span></button>
+    <button class="mon-chip" data-filter="overdue">Overdue <span class="n" id="fc-overdue">0</span></button>
+    <button class="mon-chip" data-filter="watch">★ Watchlist <span class="n" id="fc-watch">0</span></button>
+  </div>
+
+  <div class="mon-board-wrap">
+    <table class="mon-board" id="board-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th data-sort="name">Pool</th>
+          <th data-sort="lifecycle">Status</th>
+          <th data-sort="score" class="num">Score</th>
+          <th data-sort="delta" class="num">Δ</th>
+          <th>Trend</th>
+          <th class="num">FC</th>
+          <th class="num">pH</th>
+          <th class="num">TA</th>
+          <th class="num">CH</th>
+          <th class="num">CYA</th>
+          <th class="num">Salt</th>
+          <th data-sort="lastvisit">Last Visit</th>
+          <th>Forecast</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="board-body"></tbody>
+    </table>
+    <div class="mon-empty" id="board-empty" hidden>No pools match this filter.</div>
+  </div>
+</div>
+
+<div id="mon-toast"></div>
+
+<div id="detail" hidden></div>
+
+<div id="palette" hidden>
+  <div class="mon-palette-box">
+    <input id="palette-input" type="text" placeholder="Jump to a pool, or type a command…">
+    <div class="mon-palette-list" id="palette-list"></div>
+  </div>
+</div>
+
+<div id="shortcuts-modal" hidden>
+  <div class="mon-sc-box">
+    <h3>Keyboard Shortcuts</h3>
+    <div class="mon-sc-row"><span>Move selection</span><kbd>j</kbd> <kbd>k</kbd></div>
+    <div class="mon-sc-row"><span>Open pool</span><kbd>Enter</kbd></div>
+    <div class="mon-sc-row"><span>Search</span><kbd>/</kbd></div>
+    <div class="mon-sc-row"><span>Toggle watchlist</span><kbd>w</kbd></div>
+    <div class="mon-sc-row"><span>Command palette</span><kbd>⌘K</kbd></div>
+    <div class="mon-sc-row"><span>This menu</span><kbd>?</kbd></div>
+    <div class="mon-sc-row"><span>Close / back</span><kbd>Esc</kbd></div>
+  </div>
+</div>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/js/lib/constants.js"></script>
+<script src="/js/lib/api.js"></script>
+<script src="/js/monitor/monitor-chem.js"></script>
+<script src="/js/monitor/monitor-data.js"></script>
+<script src="/js/monitor/monitor-board.js"></script>
+<script src="/js/monitor/monitor-detail.js"></script>
+<script>monInit(); monDetailRoute();</script>
+</body>
+</html>

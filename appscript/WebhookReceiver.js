@@ -2843,6 +2843,7 @@ function doPost(e) {
         } catch (e) {}
       }
 
+      fleetMonInvalidate_();
       return jsonResponse_({ ok: true, log_uid: logUid, undoable: undoable, undo_seconds: 60 });
     }
 
@@ -2871,6 +2872,7 @@ function doPost(e) {
       } catch (delErr) {
         Logger.log('cancel_service_log delete row: ' + delErr);
       }
+      fleetMonInvalidate_();
       return jsonResponse_({ ok: true, cancelled: true });
     }
 
@@ -2927,6 +2929,7 @@ function doPost(e) {
           CacheService.getScriptCache().remove('rd:' + ws);
         }
       } catch (cErr) { Logger.log('void_service_log cache: ' + cErr); }
+      fleetMonInvalidate_();
 
       return jsonResponse_({ ok: true, voided: true, pool_id: result.poolId || poolId, inventory: result.invResults || [] });
     }
@@ -3714,6 +3717,14 @@ function doGet(e) {
       if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
       if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
       return jsonResponse_(getEmployeePaychecks_(e.parameter.username || ''));
+    }
+
+    if (e && e.parameter && e.parameter.action === 'fleet_monitor_data') {
+      const auth = validateToken(e.parameter.token || '');
+      if (!auth.ok) return jsonResponse_({ ok: false, error: 'Unauthorized' });
+      if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager'))
+        return jsonResponse_({ ok: false, error: 'Admin access required.' });
+      return jsonResponse_(handleFleetMonitorData_(e.parameter));
     }
 
     if (e && e.parameter && e.parameter.action === 'get_visit_history') {
