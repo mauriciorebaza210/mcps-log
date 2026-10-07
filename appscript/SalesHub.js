@@ -108,8 +108,20 @@ const MCPS_QUOTE_EXTRA_HEADERS = [
   'startup_company_email'
 ];
 
+// openById costs roughly a second per call, and nearly every sheet helper went
+// through here — a single customer page load opened the same file ~13 times.
+// The handle is valid for the whole execution, so open it once.
+let crmSpreadsheet_ = null;
 function getCrmSpreadsheet_() {
-  return SpreadsheetApp.openById(MCPS_CRM_SS_ID);
+  if (!crmSpreadsheet_) crmSpreadsheet_ = SpreadsheetApp.openById(MCPS_CRM_SS_ID);
+  return crmSpreadsheet_;
+}
+
+// Read-only sheet lookup for hot public paths. ensureSheet_ re-checks headers and
+// re-freezes row 1 on every call — a write, on a page the customer is waiting on.
+// Falls back to ensureSheet_ only if the tab genuinely doesn't exist yet.
+function getSheetFast_(name, headers) {
+  return getCrmSpreadsheet_().getSheetByName(name) || ensureSheet_(name, headers);
 }
 
 // 2. The Settings Spreadsheet (where the script is attached / where 'Settings' tab lives)
@@ -1019,13 +1031,15 @@ function buildAgreementPagePayload_(quoteRow, proposal, approval) {
 
 function handleGetProposalApproval_(payload) {
   try {
-    ensureNormalizedSalesSheets_();
+    // ⚠️ No ensureNormalizedSalesSheets_ here. This is the customer's signing page:
+    // the schema migration it ran wrote to nine tabs on every open and was most of
+    // the wait. Any sheet this reads already exists once a link has been sent.
     const token = String(payload.token || '').trim();
     if (!token) return { ok: false, error: 'Approval link is missing a token.' };
-    const approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
+    const approvals = getSheetFast_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
     const approval = findRowByValue_(approvals, 'token', token);
     if (!approval) return { ok: false, error: 'This approval link is invalid.' };
-    const proposal = findRowByValue_(ensureSheet_('Proposals', MCPS_PROPOSAL_HEADERS), 'proposal_id', approval.proposal_id);
+    const proposal = findRowByValue_(getSheetFast_('Proposals', MCPS_PROPOSAL_HEADERS), 'proposal_id', approval.proposal_id);
     const hit = getQuoteById_(approval.quote_id);
     if (!proposal || !hit) return { ok: false, error: 'This proposal is no longer available.' };
     // ⚠️ An amendment token whose target row is missing or mistyped must FAIL,
@@ -1035,7 +1049,7 @@ function handleGetProposalApproval_(payload) {
     const targetId = String(value_(approval, 'target_agreement_id') || '').trim();
     if (targetId) {
       const amdRow = findRowByValue_(
-        ensureSheet_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', targetId);
+        getSheetFast_('Service_Agreements', MCPS_SERVICE_AGREEMENT_HEADERS), 'agreement_id', targetId);
       if (!amdRow) {
         return { ok: false, error: 'This amendment is no longer available.' };
       }

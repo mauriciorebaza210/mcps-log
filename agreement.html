@@ -398,6 +398,14 @@
       const n = Number(v || 0);
       return isNaN(n) ? '$0.00' : '$' + n.toFixed(2);
     }
+    // Sheets hands dates over as ISO midnight-Central (…T06:00:00.000Z). Format in
+    // the business's zone so a customer elsewhere never sees the day before.
+    function fmtValidUntil(v) {
+      if (!v) return '—';
+      const d = new Date(v);
+      if (isNaN(d)) return String(v);
+      return d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'long', day: 'numeric', year: 'numeric' });
+    }
     function esc(s) {
       return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
@@ -515,7 +523,7 @@
           <div class="addr">${esc([p.service_address, p.city_state_zip].filter(Boolean).join(', ')) || 'Address on file'}</div>
           <div class="facts">
             <div class="fact"><div class="k">Service</div><div class="v">${esc(p.service || 'Pool Service')}</div></div>
-            <div class="fact"><div class="k">Valid Until</div><div class="v">${esc(p.valid_until || '—')}</div></div>
+            <div class="fact"><div class="k">Valid Until</div><div class="v">${esc(fmtValidUntil(p.valid_until))}</div></div>
             <button type="button" class="fact fact-btn" id="starts-btn" onclick="openCalModal()">
               <div class="k">Starts</div><div class="v" id="starts-val">Choose date</div>
             </button>
