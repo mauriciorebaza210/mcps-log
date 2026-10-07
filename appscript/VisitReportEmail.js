@@ -24,7 +24,7 @@ const WATER_RANGES = {
   "Free Chlorine (FC)":    { min: 3,   max: 5 },
   "pH":                    { min: 7.2, max: 7.6 },
   "Total Alkalinity (TA)": { min: 90,  max: Infinity },
-  "Calcium Hardness (CH)": { min: 200, max: Infinity },
+  "Calcium Hardness (CH)": { min: 200, max: Infinity, optional: true },
   "Cyanuric Acid (CYA)":   { min: 30,  max: 80,   unit: "ppm", optional: true },
   "Salt Level":            { min: 2700, max: 4500, unit: "ppm", optional: true }
 };
@@ -51,6 +51,12 @@ const VR_UNIT_FALLBACK = {
   "Cyanuric Acid (Stabilizer)": "lbs",
   'Chlorine Tablets (3")'     : "tablets"
 };
+
+// Tablet level sits under Calcium Hardness; when CH wasn't tested (and is hidden),
+// it falls back under Total Alkalinity so it still reaches the customer.
+function vrTabletAnchor_(readings) {
+  return readings.some(r => r.label === 'Calcium Hardness') ? 'Calcium Hardness' : 'Total Alkalinity';
+}
 
 function getSubmittedChemicalFieldSet_(rawRow, rawHeaders) {
   const idx = rawHeaders.indexOf("_chemical_fields");
@@ -266,7 +272,7 @@ function buildVisitReportPayload_(rawRow, rawHeaders, poolId, photoUrls) {
     const raw   = get(label);
     const val   = parseFloat(raw);
     const range = WATER_RANGES[label];
-    // Optional readings (CYA, Salt) only appear when the tech actually tested them.
+    // Optional readings (CH, CYA, Salt) only appear when the tech actually tested them.
     if (range.optional && !isFinite(val)) return null;
     const inRange = isFinite(val) && val >= range.min && val <= range.max;
     const status  = !isFinite(val) ? "" : (inRange ? "In range" : "Being monitored");
@@ -418,6 +424,7 @@ function buildEmailHtml_(d) {
   const hasChemicals = d.chemicals.length > 0;
   const hasPhotos    = Array.isArray(d.photos) && d.photos.length > 0;
 
+  const tabletAnchor = vrTabletAnchor_(d.readings);
   const readingRows = d.readings.map(r => {
     const color = r.value === "—" ? "#9aa0a6" : r.ok ? "#137333" : "#b06000";
     const badge = r.status
@@ -434,7 +441,7 @@ function buildEmailHtml_(d) {
       '<td style="padding:8px 12px;border-bottom:1px solid #f1f3f4;text-align:right">' + badge + '</td>' +
       '</tr>';
       
-    if (r.label === 'Calcium Hardness' && d.tabletLevel) {
+    if (r.label === tabletAnchor && d.tabletLevel) {
        rowHTML += '<tr>' +
          '<td style="padding:8px 12px;border-bottom:1px solid #f1f3f4;color:#5f6368;font-size:13px">Chlorinator Tablet Level</td>' +
          '<td style="padding:8px 12px;border-bottom:1px solid #f1f3f4;font-weight:600;font-size:14px;color:#202124">' + d.tabletLevel + '</td>' +
@@ -601,9 +608,10 @@ function buildEmailText_(d) {
 
   if (d.readings.some(r => r.value !== "—")) {
     lines.push("WATER TEST RESULTS", "------------------");
+    const tabletAnchor = vrTabletAnchor_(d.readings);
     d.readings.forEach(r => {
       lines.push(r.label + ": " + r.value + (r.unit ? " " + r.unit : "") + (r.status ? " (" + r.status + ")" : ""));
-      if (r.label === 'Calcium Hardness' && d.tabletLevel) {
+      if (r.label === tabletAnchor && d.tabletLevel) {
         lines.push("Chlorinator Tablet Level: " + d.tabletLevel);
       }
     });

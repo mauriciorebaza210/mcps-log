@@ -883,17 +883,19 @@ function submitSvc(){
     if (!confirm(msg)) return;
   }
 
+  // Admins can submit without required photos; showSvcConfirm notes which are missing.
   const missingPhotos = svcMissingRequiredPhotos_();
-  if (missingPhotos.length) {
+  if (missingPhotos.length && !hasRole('admin')) {
     alert('Please attach required service photos:\n' + missingPhotos.join(', '));
     highlightMissingPhotoSlots_(missingPhotos);
     return;
   }
 
-  showSvcConfirm(payload);
+  showSvcConfirm(payload, missingPhotos);
 }
-function showSvcConfirm(payload){
+function showSvcConfirm(payload, missingPhotos){
   window._svcPayload=payload;
+  window._svcMissingPhotos=(missingPhotos||[]).slice();
 
   // ── Hero: WHO this report is going to (wrong-pool mitigation, Layer 2) ──────
   let poolLabel = payload['pool_id'] || '';
@@ -925,7 +927,14 @@ function showSvcConfirm(payload){
   const photoRow=pc?photoRows:'';
   const details = '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:.85rem;color:#0d4d44;font-weight:600;padding:4px 0">Show all details</summary><div style="margin-top:8px">' + rows + photoRow + '</div></details>';
 
-  document.getElementById('conf-modal-body').innerHTML = hero + details;
+  // Admin photo override — shown only in this staff modal, never emailed.
+  const override = window._svcMissingPhotos.length
+    ? '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:.85rem;font-weight:600;color:#92400e">'
+      + 'Missing photos: ' + escHtml(window._svcMissingPhotos.join(', ')) + '. Submitting as admin override.'
+      + '</div>'
+    : '';
+
+  document.getElementById('conf-modal-body').innerHTML = hero + override + details;
   document.getElementById('conf-modal-backdrop').classList.add('open');
 }
 function closeSvcConfirm(event){
