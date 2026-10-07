@@ -1937,7 +1937,7 @@ function doPost(e) {
       if (!hasRole(auth, 'admin') && !hasRole(auth, 'manager')) return jsonResponse_({ ok: false, error: 'Admin access required.' });
       if (!payload.pool_id) return jsonResponse_({ ok: false, error: 'pool_id required' });
       const saved = saveGateCode_(String(payload.pool_id), String(payload.gate_code || ""));
-      return jsonResponse_({ ok: saved, error: saved ? undefined : 'Pool not found in Routes sheet' });
+      return jsonResponse_({ ok: saved, error: saved ? undefined : 'Pool not found in Routes or Quotes' });
     }
 
     if (payload.action === 'save_pool_note') {

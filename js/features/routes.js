@@ -527,6 +527,7 @@ function _mergeScheduledVisits_(days, visits) {
           lng:                '',
           operator:           v.assigned_technician,
           pinned:             false,
+          gate_code:          v.gate_code || '',
           startup_start_date: _startupDateFromVisit_(v.scheduled_date, v.visit_type),
           _is_scheduled_visit:  true,
           _visit_type:          v.visit_type,
@@ -2310,6 +2311,7 @@ function pasSaveGateCode() {
       if (res.ok) {
         const pool = findPool_(_pasState.pool_id);
         if (pool) pool.gate_code = gateCode;
+        _clearRouteCache();
         btn.textContent = 'Saved ✓';
         setTimeout(() => { btn.textContent = 'Save'; }, 2000);
         renderRoutePage();

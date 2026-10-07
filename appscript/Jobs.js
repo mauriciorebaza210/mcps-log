@@ -706,6 +706,21 @@ function handleGetPoolProfile(payload) {
     };
   });
 
+  // Startup / one-time pools have no Routes row — their gate code lives on Quotes.
+  if (!info.gate_code) {
+    try {
+      const quotes = jobsReadRows_(SpreadsheetApp.openById(RD_CRM_SS_ID).getSheetByName('Quotes'));
+      quotes.rows.forEach(function(r) {
+        if (jobsVal_(quotes.headers, r, 'pool_id') !== poolId) return;
+        const gc = jobsVal_(quotes.headers, r, 'gate_code');
+        if (gc) info.gate_code = gc;
+        if (!info.customer_name) info.customer_name = jobsVal_(quotes.headers, r, 'customer_name');
+        if (!info.address) info.address = jobsVal_(quotes.headers, r, 'address');
+        if (!info.city) info.city = jobsVal_(quotes.headers, r, 'city');
+      });
+    } catch (e) { Logger.log('handleGetPoolProfile Quotes fallback failed: ' + e); }
+  }
+
   // Equipment
   const eq = jobsReadRows_(jobsEnsureSheet_('Pool_Equipment', POOL_EQUIPMENT_HEADERS));
   const equipment = [];

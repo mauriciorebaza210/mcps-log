@@ -446,25 +446,43 @@ function setStartupDate_(poolId, startupStartDate) {
   } catch(e) { Logger.log("setStartupDate_ error: " + e); return false; }
 }
 
+// Gate codes live on the Routes row AND the Quotes row. Scheduled-visit-only pools
+// (startups, G2C, one-time) have no Routes row, so Quotes is what they read from —
+// and keeping both in sync means the code survives when the pool later gets routed.
 function saveGateCode_(poolId, gateCode) {
+  const routes = SpreadsheetApp.openById(RD_ROUTES_SS_ID).getSheetByName("Routes");
+  const quotes = SpreadsheetApp.openById(RD_CRM_SS_ID).getSheetByName("Quotes");
+  const savedRoutes = writeGateCodeToSheet_(routes, poolId, gateCode);
+  const savedQuotes = writeGateCodeToSheet_(quotes, poolId, gateCode);
+  if (!savedRoutes && !savedQuotes) return false;
+
+  // Bust route caches for the surrounding weeks so the code shows up right away.
+  const cache = CacheService.getScriptCache();
+  const today = new Date();
+  for (let w = -1; w <= 8; w++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + w * 7);
+    try { cache.remove('rd:' + getWeekStartForDate_(d)); } catch(e) {}
+  }
+  return true;
+}
+
+function writeGateCodeToSheet_(sheet, poolId, gateCode) {
   try {
-    const ss = SpreadsheetApp.openById(RD_ROUTES_SS_ID);
-    const sheet = ss.getSheetByName("Routes");
     if (!sheet || sheet.getLastRow() < 2) return false;
-    const gcCol  = ensureRoutesCol_(sheet, "gate_code") + 1;
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
       .map(h => String(h || "").trim().toLowerCase().replace(/ /g, "_"));
     const pidCol = headers.indexOf("pool_id") + 1;
     if (pidCol === 0) return false;
-    const data = sheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][pidCol - 1] || "").trim() === String(poolId).trim()) {
-        sheet.getRange(i + 1, gcCol).setValue(gateCode || "");
-        return true;
-      }
+    const pids = sheet.getRange(2, pidCol, sheet.getLastRow() - 1, 1).getValues();
+    let found = false;
+    for (let i = 0; i < pids.length; i++) {
+      if (String(pids[i][0] || "").trim() !== String(poolId).trim()) continue;
+      const gcCol = ensureRoutesCol_(sheet, "gate_code") + 1;
+      sheet.getRange(i + 2, gcCol).setValue(gateCode || "");
+      found = true;
     }
-    return false;
-  } catch(e) { Logger.log("saveGateCode_ error: " + e); return false; }
+    return found;
+  } catch(e) { Logger.log("writeGateCodeToSheet_ error (" + (sheet && sheet.getName()) + "): " + e); return false; }
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -1107,15 +1125,19 @@ function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
       if (quotes && quotes.getLastRow() > 1) {
         const qData = quotes.getDataRange().getValues();
         const qH = qData[0].map(h => String(h).trim().toLowerCase().replace(/ /g, '_'));
-        const qPid = qH.indexOf('pool_id'), qAddr = qH.indexOf('address'), qCity = qH.indexOf('city'), qCn = qH.indexOf('customer_name');
+        const qPid = qH.indexOf('pool_id'), qAddr = qH.indexOf('address'), qCity = qH.indexOf('city'), qCn = qH.indexOf('customer_name'), qGc = qH.indexOf('gate_code');
         for (let i = 1; i < qData.length; i++) {
           const pid = String(qPid !== -1 ? qData[i][qPid] : '').trim();
+          const qGcVal = qGc !== -1 ? String(qData[i][qGc] || '') : '';
           if (pid && !addrMap[pid]) {
             addrMap[pid] = {
               address:       qAddr !== -1 ? String(qData[i][qAddr] || '') : '',
               city:          qCity !== -1 ? String(qData[i][qCity] || '') : '',
+              gate_code:     qGcVal,
               customer_name: qCn   !== -1 ? String(qData[i][qCn]   || '') : ''
             };
+          } else if (pid && !addrMap[pid].gate_code && qGcVal) {
+            addrMap[pid].gate_code = qGcVal;
           }
         }
       }
