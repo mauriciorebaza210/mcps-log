@@ -1144,18 +1144,58 @@
         return;
       }
       if (!token) { renderError('The signing link is missing its token.'); return; }
-      try {
-        const res = await api({ action: 'get_proposal_approval', token });
-        // res.expired arrives with ok:true — the token resolved, the link simply
-        // lapsed, so we know which quote to reissue. A failed lookup does not.
-        if (!res.ok || res.expired) {
-          renderError(res.error || 'This link is invalid or has expired.', { canRecover: !!res.expired });
-          return;
+      // The lookup is a read, so retrying is safe. A single Apps Script hiccup
+      // (cold start, a 502/504 through the proxy, a flaky phone connection) used
+      // to dead-end the customer on "Network error" with no way forward.
+      let res = null, lastErr = null;
+      for (let attempt = 0; attempt < 3 && !res; attempt++) {
+        if (attempt) await new Promise(r => setTimeout(r, 1500 * attempt));
+        try {
+          res = await api({ action: 'get_proposal_approval', token });
+        } catch (e) {
+          lastErr = e;
+          console.error('get_proposal_approval attempt ' + (attempt + 1) + ' failed', e);
         }
+      }
+      if (!res) {
+        renderRetry('We couldn\u2019t reach our server just now. Please check your connection and try again.');
+        return;
+      }
+      // res.expired arrives with ok:true — the token resolved, the link simply
+      // lapsed, so we know which quote to reissue. A failed lookup does not.
+      if (!res.ok || res.expired) {
+        renderError(res.error || 'This link is invalid or has expired.', { canRecover: !!res.expired });
+        return;
+      }
+      // Kept apart from the fetch: a display bug is not a network problem, and
+      // reporting it as one hides the real cause.
+      try {
         render(res);
       } catch (e) {
-        renderError('Network error. Please try again later.');
+        console.error('Agreement render failed', e);
+        renderError('Something went wrong displaying your agreement.');
       }
+    }
+
+    function renderRetry(message) {
+      screen(`<div class="wrap"><div class="card"><div class="body center">
+        <div class="eyebrow">Connection Problem</div>
+        <h2>We couldn\u2019t open your agreement</h2>
+        <p class="muted">${esc(message)}</p>
+        <div class="actions">
+          <button type="button" class="act primary" onclick="retryLoad()">Try again</button>
+        </div>
+        <p class="muted" style="margin-top:16px">Still not working? Call us at (210) 559-2073.</p>
+      </div></div></div>`);
+    }
+
+    function retryLoad() {
+      screen(`<div class="wrap"><div class="card"><div class="body center">
+        <div class="eyebrow">Loading</div>
+        <h2>Opening your agreement…</h2>
+        <p class="muted">This should only take a moment.</p>
+      </div></div></div>`);
+      load();
     }
     load();
   </script>
