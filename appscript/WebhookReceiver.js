@@ -748,7 +748,11 @@ function processPendingSvcJobs_() {
           }
 
           if (scheduledVisitId) {
-            try { markScheduledVisitCompleted_(routesSs, scheduledVisitId, safeCompletedAt, portalUser, rowNum); } catch (markErr) { Logger.log('processPendingSvcJobs_ mark scheduled visit: ' + markErr); }
+            try {
+              markScheduledVisitCompleted_(routesSs, scheduledVisitId, safeCompletedAt, portalUser, rowNum, {
+                eventId: job.logUid || '', actorUsername: job.portalUsername || '', eventAt: job.queuedAt
+              });
+            } catch (markErr) { Logger.log('processPendingSvcJobs_ mark scheduled visit: ' + markErr); }
           }
         } catch (svErr) { Logger.log('processPendingSvcJobs_ Routes writes: ' + svErr); }
       }
@@ -772,7 +776,10 @@ function processPendingSvcJobs_() {
   }
 }
 
-function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, completedBy, chemLogRef) {
+// eventOpts (optional): { eventId, actorUsername, eventAt } from an authenticated
+// service-log submission. One-time jobs (visit_type=job) are only completed with
+// it — the backfill path passes none, so it never completes a job.
+function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, completedBy, chemLogRef, eventOpts) {
   if (!scheduledVisitId) return false;
   const sheet = routesSs.getSheetByName('Scheduled_Visits');
   if (!sheet || sheet.getLastRow() < 2) return false;
@@ -795,6 +802,10 @@ function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, c
   const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
   for (let i = 0; i < values.length; i++) {
     if (String(values[i][idCol] || '').trim() !== scheduledVisitId) continue;
+    const vtIdx = updatedCol('visit_type');
+    if (vtIdx !== -1 && String(values[i][vtIdx] || '').trim().toLowerCase() === 'job') {
+      return otjCompleteFromServiceLog_(scheduledVisitId, completedAt, eventOpts);
+    }
     const rowNum = i + 2;
     sheet.getRange(rowNum, updatedCol('status') + 1).setValue('completed');
     sheet.getRange(rowNum, updatedCol('completed_at') + 1).setValue(completedAt.toISOString());
@@ -803,6 +814,11 @@ function markScheduledVisitCompleted_(routesSs, scheduledVisitId, completedAt, c
     // Repair visit → auto-complete its work order; also refresh Jobs tab caches
     try { completeRepairOrderByVisit_(scheduledVisitId, completedBy); } catch (roErr) { Logger.log('completeRepairOrderByVisit_: ' + roErr); }
     try { jobsBustCache_([completedBy]); } catch (jbErr) {}
+    try {
+      const sdIdx = updatedCol('scheduled_date');
+      const wk = sdIdx !== -1 ? getWeekStartForDate_(values[i][sdIdx]) : '';
+      if (wk) CacheService.getScriptCache().remove('rd:' + wk);
+    } catch (rdErr) {}
     return true;
   }
   return false;
@@ -1940,6 +1956,28 @@ function doPost(e) {
       return jsonResponse_({ ok: saved, error: saved ? undefined : 'Pool not found in Routes or Quotes' });
     }
 
+    // ── One-time jobs (OneTimeJobs.js) ─────────────────────────────────────────
+    if (['create_job', 'add_job_visit', 'get_job_group', 'update_job', 'set_job_status',
+         'toggle_job_material', 'retry_job_lead'].indexOf(payload.action) !== -1) {
+      const auth = validateToken(payload.token || "");
+      if (!auth.ok) return jsonResponse_({ ok: false, code: 'unauthorized', error: auth.error });
+      try {
+        switch (payload.action) {
+          case 'create_job':          return jsonResponse_(handleCreateJob_(payload, auth));
+          case 'add_job_visit':       return jsonResponse_(handleAddJobVisit_(payload, auth));
+          case 'get_job_group':       return jsonResponse_(handleGetJobGroup_(payload, auth));
+          case 'update_job':          return jsonResponse_(handleUpdateJob_(payload, auth));
+          case 'set_job_status':      return jsonResponse_(handleSetJobStatus_(payload, auth));
+          case 'toggle_job_material': return jsonResponse_(handleToggleJobMaterial_(payload, auth));
+          case 'retry_job_lead':      return jsonResponse_(handleRetryJobLead_(payload, auth));
+        }
+      } catch (jobErr) {
+        // No code → the client treats the outcome as unknown and retries the same op_id.
+        Logger.log(payload.action + ' failed: ' + jobErr);
+        return jsonResponse_({ ok: false, error: String(jobErr && jobErr.message || jobErr) });
+      }
+    }
+
     if (payload.action === 'save_pool_note') {
       const auth = validateToken(payload.token || "");
       if (!auth.ok) return jsonResponse_({ ok: false, error: auth.error });
@@ -2811,6 +2849,7 @@ function doPost(e) {
           queuedAt: Date.now(),
           poolId: String(payload.data.pool_id || '').trim(),
           portalUser: portalUserName,
+          portalUsername: String(auth.username || '').trim(),
           scheduledVisitId: String(payload.data._scheduled_visit_id || payload.data._service_visit_id || '').trim(),
           photoUrls: photoUrls
         }));

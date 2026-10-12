@@ -244,10 +244,152 @@ function quoteAddressInfo(row) {
   };
 }
 
+// ── One-time jobs (visit_type=job) ─────────────────────────────────────────────
+// Field-for-field mirror of jobShape_ / otjGroupStats_ / otjForViewer_ in
+// appscript/OneTimeJobs.js. Keep the two in step.
+
+function parseJsonCell(value, fallback) {
+  const raw = clean(value);
+  if (!raw) return fallback;
+  try { return JSON.parse(raw); } catch (e) { return fallback; }
+}
+
+function normMaterials(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map(it => ({ id: clean(it && it.id), text: clean(it && it.text) }))
+    .filter(it => it.text && /^m_[A-Za-z0-9]{4,12}$/.test(it.id));
+}
+
+function isJobRow(row) {
+  return lower(row && row.visit_type) === 'job';
+}
+
+function jobVisitOrder(a, b) {
+  const da = parseDateIso(a.scheduled_date), db = parseDateIso(b.scheduled_date);
+  if (da !== db) return da < db ? -1 : 1;
+  const ca = clean(a.created_at), cb = clean(b.created_at);
+  if (ca !== cb) return ca < cb ? -1 : 1;
+  const ia = clean(a.scheduled_visit_id), ib = clean(b.scheduled_visit_id);
+  return ia < ib ? -1 : ia > ib ? 1 : 0;
+}
+
+function jobGroupStats(rows) {
+  const groups = new Map();
+  (rows || []).forEach(row => {
+    if (!isJobRow(row) || lower(row.status) === 'cancelled') return;
+    const g = clean(row.job_group_id);
+    if (!g) return;
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(row);
+  });
+  const stats = {};
+  groups.forEach(list => {
+    list.slice().sort(jobVisitOrder).forEach((row, i) => {
+      stats[clean(row.scheduled_visit_id)] = { index: i + 1, count: list.length };
+    });
+  });
+  return stats;
+}
+
+function jobShape(row, lookups, stats) {
+  const id = clean(row.scheduled_visit_id);
+  const poolId = clean(row.pool_id);
+  const quoteId = clean(row.quote_id);
+  const route = poolId ? lookups.routeByPool.get(poolId) : null;
+  const quoteByPool = poolId ? lookups.quoteByPool.get(poolId) : null;
+  const quoteById = quoteId ? lookups.quoteById.get(quoteId) : null;
+  const srcs = [
+    {
+      name: clean(row.client_name) || clean(row.customer_name), phone: clean(row.phone),
+      address: clean(row.address), city: clean(row.city), gate_code: clean(row.gate_code)
+    },
+    route ? { name: clean(route.customer_name), phone: clean(route.phone), address: firstValue(route, ['address', 'service_address']), city: clean(route.city), gate_code: clean(route.gate_code) } : null,
+    quoteByPool ? { name: quoteCustomerName(quoteByPool), phone: clean(quoteByPool.phone), address: firstValue(quoteByPool, ['address', 'service_address']), city: clean(quoteByPool.city), gate_code: clean(quoteByPool.gate_code) } : null,
+    quoteById ? { name: quoteCustomerName(quoteById), phone: clean(quoteById.phone), address: firstValue(quoteById, ['address', 'service_address']), city: clean(quoteById.city), gate_code: clean(quoteById.gate_code) } : null
+  ];
+  const pick = f => {
+    for (const s of srcs) if (s && s[f]) return s[f];
+    return '';
+  };
+  const st = stats[id] || { index: 1, count: 1 };
+  const est = clean(row.est_minutes);
+  return {
+    scheduled_visit_id: id,
+    job_group_id: clean(row.job_group_id) || id,
+    visit_index: st.index,
+    visit_count: st.count,
+    title: clean(row.job_title) || 'Job',
+    scheduled_date: parseDateIso(row.scheduled_date),
+    assigned_technician: clean(row.assigned_technician),
+    assigned_username: clean(row.assigned_username),
+    est_minutes: est ? Number(est) : '',
+    materials: normMaterials(parseJsonCell(row.materials, [])),
+    materials_checked: parseJsonCell(row.materials_checked, {}) || {},
+    notes: clean(row.notes),
+    status: lower(row.status) || 'scheduled',
+    completed_at: clean(row.completed_at),
+    completed_by: clean(row.completed_by),
+    rev: Number(row.rev) || 0,
+    created_by: clean(row.created_by),
+    created_at: clean(row.created_at),
+    lead_status: lower(row.lead_status),
+    client: {
+      pool_id: poolId, quote_id: quoteId,
+      name: pick('name'), phone: pick('phone'), address: pick('address'),
+      city: pick('city'), gate_code: pick('gate_code')
+    }
+  };
+}
+
+function canSeeFullJob(job, viewer) {
+  if (!viewer) return false;
+  if (viewer.isAdmin) return true;
+  return !!viewer.username && lower(job && job.assigned_username) === viewer.username;
+}
+
+function jobForViewer(job, viewer) {
+  if (!job || canSeeFullJob(job, viewer)) return job;
+  return {
+    scheduled_visit_id: job.scheduled_visit_id, job_group_id: job.job_group_id,
+    visit_index: job.visit_index, visit_count: job.visit_count, title: job.title,
+    scheduled_date: job.scheduled_date, assigned_technician: job.assigned_technician,
+    status: job.status, restricted: true
+  };
+}
+
+// Returns a redacted COPY for non-admin viewers. Never mutates the cached
+// payload or its nested _job objects; untouched days/stops are shared as-is.
+function redactScheduleForViewer(payload, viewer) {
+  if (!payload || !Array.isArray(payload.days) || (viewer && viewer.isAdmin)) return payload;
+  return {
+    ...payload,
+    days: payload.days.map(day => {
+      let changed = false;
+      const pools = (day.pools || []).map(pool => {
+        if (!pool || !pool._job || canSeeFullJob(pool._job, viewer)) return pool;
+        changed = true;
+        return {
+          pool_id: '', customer_name: 'Job', address: '', city: '', service: 'One-time job',
+          maps_url: '', lat: '', lng: '', operator: pool.operator || '', pinned: false,
+          monthly_week: '', week_override: false, gate_code: '', notes: '', startup_start_date: '',
+          _is_scheduled_visit: true, _visit_type: 'job',
+          _scheduled_visit_id: pool._scheduled_visit_id, _scheduled_visit_status: pool._scheduled_visit_status,
+          _job: jobForViewer(pool._job, viewer)
+        };
+      });
+      if (!changed) return day;
+      return { ...day, pools, maps_url: buildMapsUrl(pools.filter(p => p.address)) };
+    })
+  };
+}
+
 function computeScheduledVisits({ scheduledVisits, routeRows, quoteRows, weekStart, operatorFilter }) {
   const weekEnd = addDays(weekStart, 5);
   const routeByPool = mapBy(routeRows, 'pool_id');
   const quoteByPool = mapBy(quoteRows, 'pool_id');
+  const jobLookups = { routeByPool, quoteByPool, quoteById: mapBy(quoteRows, 'quote_id') };
+  const jobStats = jobGroupStats(scheduledVisits);
   const visits = [];
 
   (scheduledVisits || []).forEach(row => {
@@ -261,6 +403,25 @@ function computeScheduledVisits({ scheduledVisits, routeRows, quoteRows, weekSta
     if (operatorFilter && operatorFilter !== 'all' && lower(assignedTech) !== lower(operatorFilter)) return;
 
     const poolId = clean(row.pool_id);
+    if (isJobRow(row)) {
+      const job = jobShape(row, jobLookups, jobStats);
+      visits.push({
+        scheduled_visit_id: job.scheduled_visit_id,
+        pool_id: poolId,
+        customer_name: job.client.name || job.title,
+        service_type: 'One-time job',
+        visit_type: 'job',
+        scheduled_date: scheduledDate,
+        assigned_technician: assignedTech,
+        status: status || 'scheduled',
+        notes: job.notes,
+        address: job.client.address,
+        city: job.client.city,
+        gate_code: job.client.gate_code,
+        job
+      });
+      return;
+    }
     const addr = routeAddressInfo(routeByPool.get(poolId) || {});
     const fallback = quoteAddressInfo(quoteByPool.get(poolId) || {});
     const customerName = clean(row.customer_name) || addr.customer_name || fallback.customer_name;
@@ -293,6 +454,33 @@ function mergeScheduledVisits(dayPools, visits, weekStart) {
   (visits || []).forEach(visit => {
     const day = dateToDay[visit.scheduled_date];
     if (!day || !dayPools[day]) return;
+
+    // One-time jobs are always their own stop — never folded into a weekly stop.
+    if (visit.visit_type === 'job' && visit.job) {
+      dayPools[day].push({
+        pool_id: visit.pool_id,
+        customer_name: visit.customer_name,
+        address: visit.address,
+        city: visit.city,
+        service: 'One-time job',
+        maps_url: '',
+        lat: '',
+        lng: '',
+        operator: visit.assigned_technician,
+        pinned: false,
+        monthly_week: '',
+        week_override: false,
+        gate_code: visit.gate_code || '',
+        notes: visit.notes || '',
+        startup_start_date: '',
+        _is_scheduled_visit: true,
+        _visit_type: 'job',
+        _scheduled_visit_id: visit.scheduled_visit_id,
+        _scheduled_visit_status: visit.status,
+        _job: visit.job
+      });
+      return;
+    }
 
     const existing = dayPools[day].find(pool => clean(pool.pool_id) === clean(visit.pool_id));
     if (existing) {
@@ -604,8 +792,15 @@ export default async function handler(req, res) {
       ? await loadSchedulePayload(weekStart)
       : await getCached(cacheKey, SCHEDULE_CACHE_MS, () => loadSchedulePayload(weekStart));
 
+    // `full` is the shared, viewer-neutral cached payload. Redaction runs after the
+    // cache read and returns copies, so one viewer's response never leaks into
+    // (or strips detail from) another's.
+    const viewer = {
+      username: lower(session.username),
+      isAdmin: hasAdminAccess(session)
+    };
     return sendJson(res, 200, {
-      ...filterSchedule(full, operator),
+      ...redactScheduleForViewer(filterSchedule(full, operator), viewer),
       auth_source: authSource,
       cache_ttl_ms: refresh ? 0 : SCHEDULE_CACHE_MS,
       operator

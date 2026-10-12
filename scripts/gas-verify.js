@@ -39,25 +39,25 @@ const SEC = '220ed543794285b632c27dec0b1b6529'; // WEBHOOK_SECRET — same value
 // before any side effect. Public/unauthenticated routes are deliberately absent:
 // probing those would actually execute them.
 const GATED_ACTIONS = [
-  'add_manual_pool', 'analyze_migration_coverage', 'analyze_route_geography',
+  'add_job_visit', 'add_manual_pool', 'analyze_migration_coverage', 'analyze_route_geography',
   'approve_pending_sku', 'archive_schedule_blackout', 'backfill_job_completions',
   'backfill_missing_usage_priced', 'cancel_service_log', 'confirm_start_date',
-  'convert_to_wfs', 'create_amendment', 'delete_pool_note', 'generate_contract',
+  'convert_to_wfs', 'create_amendment', 'create_job', 'delete_pool_note', 'generate_contract',
   'generate_proposal', 'get_action_queue', 'get_agreement_preview',
-  'get_assignment_exceptions', 'get_crm_data', 'get_gtc_pools', 'get_gtc_visits',
+  'get_assignment_exceptions', 'get_crm_data', 'get_gtc_pools', 'get_gtc_visits', 'get_job_group',
   'get_pool_context', 'get_pool_list', 'get_pool_phone', 'get_portal_schema',
   'get_sales_funnel', 'get_scope_library', 'import_leads', 'log_payroll_payment',
   'manual_apply_purchases', 'manual_check_poolcorp', 'onboarding_reject',
   'onboarding_save_contract', 'process_pending_service_jobs', 'provision_quote_schedule',
   'recalculate_routes', 'reject_pending_sku', 'resolve_assignment_exception',
-  'resolve_issue_alert', 'resolve_unmatched', 'save_employee_paycheck', 'save_gate_code',
+  'resolve_issue_alert', 'resolve_unmatched', 'retry_job_lead', 'save_employee_paycheck', 'save_gate_code',
   'save_i9_info', 'save_info', 'save_payroll_config', 'save_payroll_employee',
   'save_pool_note', 'save_portal_schema', 'save_quote', 'save_scope_library_item',
-  'save_sensitive_info', 'save_startup_checklist', 'schedule_gtc_visit', 'send_contract',
+  'save_sensitive_info', 'save_startup_checklist', 'schedule_gtc_visit', 'send_contract', 'set_job_status',
   'send_heads_up', 'service_agreement_signed', 'service_request_notify',
   'set_inventory_qty', 'set_paycheck_qbo_ref', 'set_payroll_approval', 'set_payroll_rate',
   'set_weekly_goal', 'submit_form', 'submit_issue_alert', 'sync_chemicals',
-  'sync_pool_dropdown', 'technician_check_out', 'update_employee_paycheck',
+  'sync_pool_dropdown', 'technician_check_out', 'toggle_job_material', 'update_employee_paycheck', 'update_job',
   'update_lead', 'update_quote_info', 'upload_alert_photo', 'validate_token',
   'void_service_log'
 ];

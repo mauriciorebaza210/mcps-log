@@ -4100,34 +4100,39 @@ function handleImportLeads_(leads) {
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const nowIso = new Date().toISOString();
 
-  const newRows = leads.map(l => {
-    let row = new Array(headers.length).fill("");
-    row[getColIdx_(headers, 'quote_id')] = "Q-" + Utilities.getUuid().substring(0,8);
-    row[getColIdx_(headers, 'first_name')] = l.first_name || "";
-    row[getColIdx_(headers, 'last_name')] = l.last_name || "";
-    row[getColIdx_(headers, 'email')] = l.email || "";
-    row[getColIdx_(headers, 'phone')] = l.phone || "";
-    row[getColIdx_(headers, 'address')] = l.address || "";
-    row[getColIdx_(headers, 'city')] = l.city || "";
-    row[getColIdx_(headers, 'area')] = l.area || "";
-    row[getColIdx_(headers, 'status')] = "LEAD";
-    // Written to BOTH columns on purpose: the import has always stored pool info
-    // in specs_summary while the CRM lead drawer reads item.pool_info, so every
-    // imported pool description was invisible in the UI it was imported for.
-    row[getColIdx_(headers, 'specs_summary')] = l.pool_info || "";
-    row[getColIdx_(headers, 'pool_info')] = l.pool_info || "";
-    row[getColIdx_(headers, 'year_built')] = l.year_built || "";
-    row[getColIdx_(headers, 'contact_log')] = "[]";
-    row[getColIdx_(headers, 'timestamp')] = nowIso;
-    row[getColIdx_(headers, 'imported_at')] = nowIso;
-    // Real provenance. Deliberately NOT quote_source, which means "which tool
-    // created this row" and is read elsewhere as a version discriminator.
-    row[getColIdx_(headers, 'lead_source')] = l.lead_source || "import";
-    return row;
-  });
+  // Ids are always generated here: the public import never accepts caller-supplied
+  // quote ids (only the trusted one-time-job path, createJobLead_, does).
+  const newRows = leads.map(l => buildLeadRow_(headers, l, nowIso, "Q-" + Utilities.getUuid().substring(0,8)));
 
   sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, headers.length).setValues(newRows);
   return { ok: true, count: newRows.length };
+}
+
+// One Quotes lead row. Shared by handleImportLeads_ and createJobLead_ (OneTimeJobs.js).
+function buildLeadRow_(headers, l, nowIso, quoteId) {
+  let row = new Array(headers.length).fill("");
+  row[getColIdx_(headers, 'quote_id')] = quoteId;
+  row[getColIdx_(headers, 'first_name')] = l.first_name || "";
+  row[getColIdx_(headers, 'last_name')] = l.last_name || "";
+  row[getColIdx_(headers, 'email')] = l.email || "";
+  row[getColIdx_(headers, 'phone')] = l.phone || "";
+  row[getColIdx_(headers, 'address')] = l.address || "";
+  row[getColIdx_(headers, 'city')] = l.city || "";
+  row[getColIdx_(headers, 'area')] = l.area || "";
+  row[getColIdx_(headers, 'status')] = "LEAD";
+  // Written to BOTH columns on purpose: the import has always stored pool info
+  // in specs_summary while the CRM lead drawer reads item.pool_info, so every
+  // imported pool description was invisible in the UI it was imported for.
+  row[getColIdx_(headers, 'specs_summary')] = l.pool_info || "";
+  row[getColIdx_(headers, 'pool_info')] = l.pool_info || "";
+  row[getColIdx_(headers, 'year_built')] = l.year_built || "";
+  row[getColIdx_(headers, 'contact_log')] = "[]";
+  row[getColIdx_(headers, 'timestamp')] = nowIso;
+  row[getColIdx_(headers, 'imported_at')] = nowIso;
+  // Real provenance. Deliberately NOT quote_source, which means "which tool
+  // created this row" and is read elsewhere as a version discriminator.
+  row[getColIdx_(headers, 'lead_source')] = l.lead_source || "import";
+  return row;
 }
 
 /**

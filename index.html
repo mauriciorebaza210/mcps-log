@@ -212,7 +212,7 @@
               <button class="mvt-btn active" id="btn-view-week" onclick="switchMapView('week')">Week</button>
               <button class="mvt-btn" id="btn-view-month" onclick="switchMapView('month')">Month</button>
             </div>
-            <button class="map-add-evt-btn" id="btn-add-adhoc" style="display:none" onclick="openAdHocModal()">+ Add Event</button>
+            <button class="map-add-evt-btn" id="btn-new-job" style="display:none" onclick="openNewJob()">+ New Job</button>
           </div>
 
           <!-- Admin operator filter -->
@@ -2015,52 +2015,67 @@
   <button class="pas-apply-btn" id="pas-apply-btn" onclick="applyPoolAction()">Apply Changes</button>
 </div>
 
-<!-- ── Add AdHoc Event Modal ── -->
-<div class="conf-modal-backdrop" id="adhoc-modal-backdrop" onclick="closeAdHocModal(event)">
-  <div class="conf-modal" onclick="event.stopPropagation()">
+<!-- ── One-time Job: create modal ── -->
+<div class="conf-modal-backdrop" id="job-modal" onclick="closeNewJob()">
+  <div class="conf-modal job-modal" role="dialog" aria-modal="true" aria-labelledby="job-modal-title" onclick="event.stopPropagation()">
     <div class="conf-modal-hdr">
-      <div class="conf-modal-title">Add Calendar Event</div>
-      <button class="drawer-close" onclick="closeAdHocModal()">✕</button>
+      <div class="conf-modal-title" id="job-modal-title">New Job</div>
+      <button class="drawer-close" onclick="closeNewJob()" aria-label="Close">✕</button>
     </div>
     <div class="conf-modal-body">
       <div class="q-1col">
-        <label for="adhoc-date" class="q-flabel">Date</label>
-        <input type="date" class="q-inp" id="adhoc-date">
+        <label for="job-client-q" class="q-flabel">Client</label>
+        <div id="job-client-chip" class="job-client-chip" style="display:none"></div>
+        <div id="job-client-search">
+          <input type="search" class="q-inp" id="job-client-q" placeholder="Search name, address, phone or pool #" autocomplete="off" oninput="jobClientInput()">
+        </div>
+        <div id="job-client-results" class="job-results" aria-live="polite"></div>
+        <div id="job-new-client" class="job-new-client" style="display:none">
+          <input type="text" class="q-inp" id="job-nc-name" placeholder="Name *" maxlength="80" autocomplete="off">
+          <input type="text" class="q-inp" id="job-nc-address" placeholder="Street address *" maxlength="200" autocomplete="off">
+          <div class="job-2col">
+            <input type="text" class="q-inp" id="job-nc-city" placeholder="City" autocomplete="off">
+            <input type="tel" class="q-inp" id="job-nc-phone" placeholder="Phone" autocomplete="off">
+          </div>
+          <input type="text" class="q-inp" id="job-nc-gate" placeholder="Gate code (optional)" maxlength="120" autocomplete="off">
+        </div>
       </div>
       <div class="q-1col">
-        <label for="adhoc-type" class="q-flabel">Event Type</label>
-        <select class="q-inp" id="adhoc-type">
-          <option value="Proposal">Proposal</option>
-          <option value="One-Time Service">One-Time Service</option>
-          <option value="Green to Clean">Green to Clean</option>
-          <option value="Other">Other</option>
-        </select>
+        <label for="job-title" class="q-flabel">Job title</label>
+        <input type="text" class="q-inp" id="job-title" placeholder="e.g. Replace pump seal, Acid wash" maxlength="120" autocomplete="off">
       </div>
       <div class="q-1col">
-        <label for="adhoc-customer" class="q-flabel">Customer Name / Pool</label>
-        <input type="text" class="q-inp" id="adhoc-customer" placeholder="John Doe">
+        <span class="q-flabel">Date</span>
+        <div class="pas-day-grid" id="job-date-chips"></div>
       </div>
       <div class="q-1col">
-        <label for="adhoc-address" class="q-flabel">Address &amp; City</label>
-        <input type="text" class="q-inp" id="adhoc-address" placeholder="123 Main St, San Antonio">
+        <label for="job-tech" class="q-flabel">Technician</label>
+        <select class="q-inp" id="job-tech"></select>
       </div>
       <div class="q-1col">
-        <label for="adhoc-operator" class="q-flabel">Operator</label>
-        <select class="q-inp" id="adhoc-operator">
-          <option value="UNASSIGNED">Unassigned</option>
-        </select>
+        <span class="q-flabel">Estimated time <span style="font-weight:400;color:var(--muted)">(optional)</span></span>
+        <div class="pas-day-grid" id="job-est-chips"></div>
       </div>
       <div class="q-1col">
-        <label for="adhoc-notes" class="q-flabel">Notes <span style="font-weight:400;color:var(--muted);">(Optional)</span></label>
-        <input type="text" class="q-inp" id="adhoc-notes" placeholder="Needs pressure wash...">
+        <label for="job-materials" class="q-flabel">Materials needed <span style="font-weight:400;color:var(--muted)">(one per line)</span></label>
+        <textarea class="q-inp" id="job-materials" rows="3" placeholder="Pump seal kit&#10;Teflon tape"></textarea>
       </div>
+      <div class="q-1col">
+        <label for="job-notes" class="q-flabel">Notes</label>
+        <textarea class="q-inp" id="job-notes" rows="3" maxlength="2000" placeholder="Anything the tech should know"></textarea>
+      </div>
+      <div class="job-err" id="job-err" role="alert"></div>
     </div>
     <div class="conf-modal-foot">
-      <button class="conf-cancel-btn" onclick="closeAdHocModal()">Cancel</button>
-      <button class="conf-submit-btn" id="btn-save-adhoc" onclick="saveAdHocEvent()">Save Event</button>
+      <button class="conf-cancel-btn" onclick="closeNewJob()">Cancel</button>
+      <button class="conf-submit-btn" onclick="saveNewJob()">Save Job</button>
     </div>
   </div>
 </div>
+
+<!-- ── One-time Job: details sheet ── -->
+<div class="pool-action-backdrop" id="job-sheet-backdrop" onclick="closeJobSheet()"></div>
+<div class="pool-action-sheet job-sheet" id="job-sheet" role="dialog" aria-modal="true" aria-label="Job details"></div>
 
 <!-- ── CRM Detail Modal ── -->
 <div class="conf-modal-backdrop" id="crm-detail-modal" onclick="closeCRMDetail()">
@@ -2278,6 +2293,7 @@
 <script src="/js/features/merge-duplicates.js"></script>
 <script src="/js/features/contracts.js"></script>
 <script src="/js/features/service-requests.js"></script>
+<script src="/js/features/one-time-jobs.js"></script>
 <script src="/js/lib/vendor/driver.iife.min.js"></script>
 <script src="/js/features/tour.js"></script>
 <script src="/app.js"></script>

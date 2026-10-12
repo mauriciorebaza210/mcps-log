@@ -25,6 +25,38 @@ function _applyPendingCrmFilter_() {
   }
 }
 
+// Network read of the whole client list: fast Sheets-API path, Apps Script fallback.
+// `refresh` skips the server caches (used right after a background lead lands).
+async function _fetchCrmList_(refresh) {
+  try {
+    const params = { op: 'list', token: _s.token };
+    if (refresh) params.refresh = String(Date.now());
+    return await apiLocalGet('/api/crm', params);
+  } catch (fastErr) {
+    console.warn('Fast CRM list failed, falling back to Apps Script:', fastErr);
+    return await apiGet({ action: 'get_crm_data', token: _s.token });
+  }
+}
+
+// Shared client list for pickers (one-time jobs): memory → localStorage (15 min)
+// → network. Resolves to an array; rejects only when every layer fails.
+let _crmListInFlight = null;
+function _getCrmListFast_(force) {
+  if (!force) {
+    if (_crmCache && _crmCache.length) return Promise.resolve(_crmCache);
+    const cached = _appCacheGet('crm_data', 15 * 60 * 1000);
+    if (cached && cached.length) { _crmCache = cached; return Promise.resolve(cached); }
+  }
+  if (_crmListInFlight) return _crmListInFlight;
+  _crmListInFlight = _fetchCrmList_(!!force).then(res => {
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Failed to load clients');
+    _crmCache = res.data || [];
+    _appCacheSet('crm_data', _crmCache);
+    return _crmCache;
+  }).finally(() => { _crmListInFlight = null; });
+  return _crmListInFlight;
+}
+
 async function loadCRM() {
   const loading = document.getElementById('crm-loading');
   const tbody = document.getElementById('crm-tbody');
@@ -58,13 +90,7 @@ async function loadCRM() {
   }
 
   try {
-    let res;
-    try {
-      res = await apiLocalGet('/api/crm', { op: 'list', token: _s.token });
-    } catch (fastErr) {
-      console.warn('Fast CRM list failed, falling back to Apps Script:', fastErr);
-      res = await apiGet({ action: 'get_crm_data', token: _s.token });
-    }
+    const res = await _fetchCrmList_();
     if (res.ok) {
       if (!cachedCrm || JSON.stringify(cachedCrm) !== JSON.stringify(res.data)) {
         _crmCache = res.data || [];

@@ -45,10 +45,12 @@ function getRouteData(token, operatorFilter, weekStartParam) {
     }
   }
 
-  // Apply operator filter in memory — no extra sheet reads
-  if (!operatorFilter || operatorFilter === 'all') return full;
+  // Apply operator filter in memory — no extra sheet reads. The cached payload is
+  // viewer-neutral; job details are redacted per viewer on a copy (never mutated).
+  const viewer = otjViewer_(auth);
+  if (!operatorFilter || operatorFilter === 'all') return otjRedactRoutePayload_(full, viewer);
   const f = operatorFilter.toLowerCase();
-  return {
+  return otjRedactRoutePayload_({
     ok:            full.ok,
     week_start:    full.week_start,
     today:         full.today,
@@ -59,7 +61,7 @@ function getRouteData(token, operatorFilter, weekStartParam) {
       pools:    d.pools.filter(p => (p.operator || '').toLowerCase() === f),
       maps_url: buildMapsUrl_(d.pools.filter(p => (p.operator || '').toLowerCase() === f))
     }))
-  };
+  }, viewer);
 }
 
 function computeRouteData_(weekStart) {
@@ -157,6 +159,28 @@ function computeRouteData_(weekStart) {
         const dn = dateToDay[v.scheduled_date];
         if (!dn || !dayPools[dn]) return;
         const bucket = dayPools[dn];
+        if (v.visit_type === 'job' && v.job) {
+          bucket.push({
+            pool_id:             v.pool_id,
+            customer_name:       v.customer_name,
+            address:             v.address,
+            city:                v.city,
+            service:             'One-time job',
+            maps_url:            '',
+            lat:                 '',
+            lng:                 '',
+            operator:            v.assigned_technician,
+            pinned:              false,
+            gate_code:           v.gate_code || '',
+            notes:               v.notes || '',
+            _is_scheduled_visit:     true,
+            _visit_type:             'job',
+            _scheduled_visit_id:     v.scheduled_visit_id,
+            _scheduled_visit_status: v.status,
+            _job:                    v.job
+          });
+          return;
+        }
         const existing = bucket.find(p => p.pool_id === v.pool_id);
         if (existing) {
           existing._is_scheduled_visit = true;
@@ -1083,7 +1107,10 @@ function startupDateFromVisit_(scheduledDate, visitType) {
 function getScheduledVisitsForWeek(token, weekStartParam, operatorFilter) {
   const auth = validateToken(token);
   if (!auth.ok) return { ok: false, error: auth.error };
-  return computeScheduledVisitsForWeek_(weekStartParam || getWeekStart_(), operatorFilter);
+  const res = computeScheduledVisitsForWeek_(weekStartParam || getWeekStart_(), operatorFilter);
+  if (!res || !res.ok || !res.visits) return res;
+  const viewer = otjViewer_(auth);
+  return { ok: true, visits: res.visits.map(v => otjRedactStop_(v, viewer)) };
 }
 
 // Same logic without auth — callable internally (e.g. from computeRouteData_ so
@@ -1102,9 +1129,11 @@ function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
 
     // Build address lookup from Routes sheet
     const addrMap = {};
+    let routesVals = null, quotesVals = null; // kept for one-time job lookups
     const routeSheet = ss.getSheetByName('Routes');
     if (routeSheet && routeSheet.getLastRow() > 1) {
       const rData = routeSheet.getDataRange().getValues();
+      routesVals = rData;
       const rH = rData[0].map(h => String(h).trim().toLowerCase().replace(/ /g, '_'));
       const rPid = rH.indexOf('pool_id'), rAddr = rH.indexOf('address'), rCity = rH.indexOf('city'), rGc = rH.indexOf('gate_code'), rCn = rH.indexOf('customer_name');
       for (let i = 1; i < rData.length; i++) {
@@ -1124,6 +1153,7 @@ function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
       const quotes = crmSs.getSheetByName('Quotes');
       if (quotes && quotes.getLastRow() > 1) {
         const qData = quotes.getDataRange().getValues();
+        quotesVals = qData;
         const qH = qData[0].map(h => String(h).trim().toLowerCase().replace(/ /g, '_'));
         const qPid = qH.indexOf('pool_id'), qAddr = qH.indexOf('address'), qCity = qH.indexOf('city'), qCn = qH.indexOf('customer_name'), qGc = qH.indexOf('gate_code');
         for (let i = 1; i < qData.length; i++) {
@@ -1148,6 +1178,14 @@ function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
     const svData = svSheet.getDataRange().getValues();
     const svH = svData[0].map(h => String(h).trim().toLowerCase().replace(/ /g, '_'));
     const col = name => svH.indexOf(name);
+
+    // One-time jobs (visit_type=job): numbered across their whole group, so
+    // stats come from every row, not just this week's.
+    const svObj = row => { const o = {}; svH.forEach((h, i) => { o[h] = row[i]; }); return o; };
+    const vtCol = col('visit_type');
+    const jobObjs = vtCol === -1 ? [] : svData.slice(1).filter(r => String(r[vtCol] || '').trim().toLowerCase() === 'job').map(svObj);
+    const jobStats = jobObjs.length ? otjGroupStats_(jobObjs) : {};
+    const jobLookups = jobObjs.length ? otjBuildLookups_(routesVals, quotesVals) : null;
 
     const visits = [];
     for (let i = 1; i < svData.length; i++) {
@@ -1174,6 +1212,26 @@ function computeScheduledVisitsForWeek_(weekStart, operatorFilter) {
       const poolId = String(row[col('pool_id')] || '').trim();
       const addr = addrMap[poolId] || { address: '', city: '' };
       const svCustName = String(row[col('customer_name')] || '').trim();
+
+      if (vtCol !== -1 && String(row[vtCol] || '').trim().toLowerCase() === 'job') {
+        const job = jobShape_(svObj(row), jobLookups, jobStats);
+        visits.push({
+          scheduled_visit_id:  job.scheduled_visit_id,
+          pool_id:             poolId,
+          customer_name:       job.client.name || job.title,
+          service_type:        'One-time job',
+          visit_type:          'job',
+          scheduled_date:      schedDate,
+          assigned_technician: assignedTech,
+          status:              status || 'scheduled',
+          notes:               job.notes,
+          address:             job.client.address,
+          city:                job.client.city,
+          gate_code:           job.client.gate_code,
+          job:                 job
+        });
+        continue;
+      }
 
       visits.push({
         scheduled_visit_id: String(row[col('scheduled_visit_id')] || ''),
@@ -1361,10 +1419,17 @@ function getCalendarData(token, month, year, operatorFilter) {
       const svData = svSheet.getDataRange().getValues();
       const svH = svData[0].map(h => String(h).trim().toLowerCase().replace(/ /g, "_"));
       const svCol = (name) => svH.indexOf(name);
+      // One-time jobs: completed ones stay on the month (muted); numbering spans the group.
+      const svObj = row => { const o = {}; svH.forEach((h, k) => { o[h] = row[k]; }); return o; };
+      const isJobRow = row => svCol("visit_type") !== -1 && String(row[svCol("visit_type")] || "").trim().toLowerCase() === "job";
+      const jobObjs = svData.slice(1).filter(isJobRow).map(svObj);
+      const jobStats = jobObjs.length ? otjGroupStats_(jobObjs) : {};
+      let jobLookups = null;
       for (let i = 1; i < svData.length; i++) {
         const row = svData[i];
         const status = String(row[svCol("status")] || "").trim().toLowerCase();
-        if (status && status !== "scheduled") continue;   // hide cancelled/completed/skipped
+        const jobRow = isJobRow(row);
+        if (status && status !== "scheduled" && !(jobRow && status === "completed")) continue;   // hide cancelled/completed/skipped
         const rawDate = row[svCol("scheduled_date")];
         const dateStr = rawDate instanceof Date
           ? Utilities.formatDate(rawDate, RD_TZ, "yyyy-MM-dd")
@@ -1373,6 +1438,23 @@ function getCalendarData(token, month, year, operatorFilter) {
         const tech = String(row[svCol("assigned_technician")] || "").trim();
         if (operatorFilter && operatorFilter !== 'all' && tech.toLowerCase() !== operatorFilter.toLowerCase()) continue;
         if (!visitsByDate[dateStr]) visitsByDate[dateStr] = [];
+        if (jobRow) {
+          if (!jobLookups) jobLookups = otjLoadLookups_(true);
+          const job = jobShape_(svObj(row), jobLookups, jobStats);
+          visitsByDate[dateStr].push({
+            scheduled_visit_id: job.scheduled_visit_id,
+            pool_id:            job.client.pool_id,
+            customer_name:      job.client.name || job.title,
+            service:            'One-time job',
+            visit_type:         'job',
+            operator:           tech,
+            status:             job.status,
+            title:              job.title,
+            notes:              job.notes,
+            job:                job
+          });
+          continue;
+        }
         visitsByDate[dateStr].push({
           scheduled_visit_id: String(row[svCol("scheduled_visit_id")] || ""),
           pool_id:            String(row[svCol("pool_id")] || ""),
@@ -1439,12 +1521,16 @@ function getCalendarData(token, month, year, operatorFilter) {
       current.setDate(current.getDate() + 1);
   }
 
+  // Redact one-time job details per viewer (new objects; nothing shared is mutated).
+  const viewer = otjViewer_(auth);
   return {
     ok: true,
     all_operators,
     month,
     year,
-    days: daysArray
+    days: viewer.isAdmin ? daysArray : daysArray.map(d => Object.assign({}, d, {
+      visits: (d.visits || []).map(v => otjRedactStop_(v, viewer))
+    }))
   };
 }
 

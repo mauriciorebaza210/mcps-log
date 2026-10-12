@@ -209,6 +209,8 @@ function _completionKeysForPool_(pool, fallbackIdx) {
 }
 
 function _isPoolCompleted_(doneSet, pool, fallbackIdx) {
+  // One-time jobs share pool_ids with weekly stops — use the job's own status.
+  if (pool && pool._visit_type === 'job') return !!(pool._job && pool._job.status === 'completed');
   return _completionKeysForPool_(pool, fallbackIdx).some(k => doneSet.has(k));
 }
 
@@ -406,11 +408,17 @@ function _fetchRouteDataViaGas_(op) {
 }
 
 function _fetchRouteData_(op, opts) {
-  return _fetchRouteDataViaSheets_(op, opts).catch(() => _fetchRouteDataViaGas_(op));
+  return _fetchRouteDataViaSheets_(op, opts).catch(() => _fetchRouteDataViaGas_(op)).then(res => {
+    // One-time jobs: a fresh server week is the canonical source for its jobs.
+    if (res && res.ok && typeof _jobsIngestPayload_ === 'function') _jobsIngestPayload_(res, true);
+    return res;
+  });
 }
 
 function loadRoutes(opOverride) {
   const op = opOverride || _activeOp;
+  // Resume one-time-job changes queued in an earlier session (this user only).
+  if (!window._jobsBooted && typeof _jobsBoot_ === 'function') { window._jobsBooted = true; _jobsBoot_(); }
 
   // ── Submit return: paint the known same-day route immediately ──────────────
   // Route optimization should not visibly reshuffle after a log submit; it only
@@ -503,6 +511,31 @@ function _mergeScheduledVisits_(days, visits) {
   visits.forEach(v => {
     if (!v.scheduled_date) return;
     const dayObj = dayMap[v.scheduled_date];
+    if (dayObj && v.visit_type === 'job') {
+      // One-time jobs are always their own stop — never folded into a weekly stop.
+      if (!dayObj.pools) dayObj.pools = [];
+      if (dayObj.pools.some(p => p._scheduled_visit_id === v.scheduled_visit_id)) return;
+      dayObj.pools.push({
+        pool_id:            v.pool_id,
+        customer_name:      v.customer_name,
+        address:            v.address,
+        city:               v.city,
+        service:            'One-time job',
+        maps_url:           '',
+        lat:                '',
+        lng:                '',
+        operator:           v.assigned_technician,
+        pinned:             false,
+        gate_code:          v.gate_code || '',
+        notes:              v.notes || '',
+        _is_scheduled_visit:  true,
+        _visit_type:          'job',
+        _scheduled_visit_id:  v.scheduled_visit_id,
+        _scheduled_visit_status: v.status,
+        _job:                 v.job
+      });
+      return;
+    }
     if (dayObj) {
       if (!dayObj.pools) dayObj.pools = [];
       const existingIdx = dayObj.pools.findIndex(p => p.pool_id === v.pool_id);
@@ -637,16 +670,10 @@ function switchMapView(view) {
   if (view === 'week') {
     document.getElementById('map-week-view').style.display = 'block';
     document.getElementById('map-month-view').style.display = 'none';
-    const addBtn = document.getElementById('btn-add-adhoc');
-    if (addBtn) addBtn.style.display = 'none';
     if (!_routeData) loadRoutes();
   } else {
     document.getElementById('map-week-view').style.display = 'none';
     document.getElementById('map-month-view').style.display = 'block';
-    if (isAdmin()) {
-      const addBtn = document.getElementById('btn-add-adhoc');
-      if (addBtn) addBtn.style.display = 'block';
-    }
     loadCalendarData(_calMonth, _calYear);
   }
 }
@@ -695,6 +722,8 @@ function loadCalendarData(m, y) {
 }
 
 function renderMapCalendar() {
+  const newJobBtn = document.getElementById('btn-new-job');
+  if (newJobBtn) newJobBtn.style.display = isAdmin() ? '' : 'none';
   const wrap = document.getElementById('cal-cells');
   if (!wrap) return;
   if (!_calData || !_calData.length) { wrap.innerHTML = ''; return; }
@@ -715,8 +744,15 @@ function renderMapCalendar() {
 
     // One-time work from Scheduled_Visits: startups, first-month/temporary
     // series, G2C. The week board has always shown these; the month view now does too.
-    if (day.visits && day.visits.length > 0) {
-      pillsHtml += `<div class="cal-pill visit">${day.visits.length} ${day.visits.length === 1 ? 'Visit' : 'Visits'}</div>`;
+    const dayJobs = (day.visits || []).filter(v => v.visit_type === 'job');
+    const otherVisits = (day.visits || []).filter(v => v.visit_type !== 'job');
+    if (otherVisits.length > 0) {
+      pillsHtml += `<div class="cal-pill visit">${otherVisits.length} ${otherVisits.length === 1 ? 'Visit' : 'Visits'}</div>`;
+    }
+    if (dayJobs.length > 0) {
+      const openJobs = dayJobs.filter(v => v.status !== 'completed').length;
+      if (openJobs) pillsHtml += `<div class="cal-pill job">${openJobs} ${openJobs === 1 ? 'Job' : 'Jobs'}</div>`;
+      if (dayJobs.length - openJobs) pillsHtml += `<div class="cal-pill job done">${dayJobs.length - openJobs} done</div>`;
     }
 
     // Adhocs (already filtered softly by backend for technicians, though we enforce admin only on adHoc sheet)
@@ -763,17 +799,32 @@ function _visitTypeLabel_(visitType) {
 }
 
 function showCalDayDetails(idx) {
-  const day = _calData[idx];
+  let day = _calData[idx];
   if (!day) return;
   const c = document.getElementById('cal-detail-card');
   c.style.display = 'block';
+  if (typeof _jobCalDate !== 'undefined') _jobCalDate = day.date;
+  const dayJobs = (day.visits || []).filter(v => v.visit_type === 'job');
+  if (typeof _jobsIngestJobs_ === 'function') _jobsIngestJobs_(dayJobs.map(v => v.job));
+  day = Object.assign({}, day, { visits: (day.visits || []).filter(v => v.visit_type !== 'job') });
 
   let html = `<div style="font-family:'Oswald',sans-serif;font-size:1.1rem;color:var(--teal);border-bottom:1px solid var(--border);padding-bottom:0.5rem;margin-bottom:1rem;">Details for ${day.date}</div>`;
 
   if ((!day.weeklies || !day.weeklies.length) && (!day.adhocs || !day.adhocs.length) &&
-      (!day.visits || !day.visits.length)) {
+      (!day.visits || !day.visits.length) && !dayJobs.length) {
     html += `<div style="color:var(--muted);font-size:0.9rem;">No services scheduled.</div>`;
   } else {
+    if (dayJobs.length > 0) {
+      html += `<div style="font-weight:600;margin-bottom:0.5rem;font-size:0.85rem;color:var(--muted);text-transform:uppercase;">One-time Jobs (${dayJobs.length})</div>`;
+      dayJobs.forEach(v => {
+        const j = v.job || {};
+        const done = v.status === 'completed';
+        html += `<button class="cal-job-row${done ? ' done' : ''}" onclick="openJobSheet(${jsArg(v.scheduled_visit_id)})">
+          <span class="cal-job-title">${escHtml(j.title || v.title || 'Job')}${done ? ' <span class="cal-pill job done">done</span>' : ''}</span>
+          <span class="cal-job-sub">${escHtml(j.restricted ? '' : ((j.client && j.client.name) || v.customer_name || ''))} · 👤 ${escHtml(v.operator || 'Unassigned')}</span>
+        </button>`;
+      });
+    }
     // Scheduled visits first — they are the exceptions, and the reason someone
     // opened this day.
     if (day.visits && day.visits.length > 0) {
@@ -830,63 +881,6 @@ function showCalDayDetails(idx) {
   c.innerHTML = html;
   c.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
-
-// ── AdHoc Modal ──
-function openAdHocModal() {
-  document.getElementById('adhoc-date').value = new Date().toLocaleDateString('en-CA');
-  document.getElementById('adhoc-type').value = 'Proposal';
-  document.getElementById('adhoc-customer').value = '';
-  document.getElementById('adhoc-address').value = '';
-  document.getElementById('adhoc-notes').value = '';
-
-  const opSel = document.getElementById('adhoc-operator');
-  if (opSel) {
-    opSel.innerHTML = '<option value="">Unassigned</option>';
-    if (window._calOperatorList) {
-      _calOperatorList.forEach(op => {
-        opSel.innerHTML += `<option value="${op}">${op}</option>`;
-      });
-    } else if (_routeData && _routeData.all_operators) {
-      _routeData.all_operators.forEach(op => {
-        opSel.innerHTML += `<option value="${op}">${op}</option>`;
-      });
-    }
-  }
-
-  document.getElementById('adhoc-modal-backdrop').classList.add('open');
-}
-
-function closeAdHocModal() {
-  document.getElementById('adhoc-modal-backdrop').classList.remove('open');
-}
-
-function saveAdHocEvent() {
-  const btn = document.getElementById('btn-save-adhoc');
-  const evt = {
-    date: document.getElementById('adhoc-date').value,
-    type: document.getElementById('adhoc-type').value,
-    customer_name: document.getElementById('adhoc-customer').value.trim(),
-    address: document.getElementById('adhoc-address').value.trim(),
-    operator: document.getElementById('adhoc-operator').value,
-    notes: document.getElementById('adhoc-notes').value.trim(),
-  };
-
-  if (!evt.date) { alert("Date is required"); return; }
-
-  btn.disabled = true; btn.textContent = 'Saving...';
-  api({ action: 'add_adhoc_event', token: _s.token, event: evt })
-    .then(res => {
-      btn.disabled = false; btn.textContent = 'Save Event';
-      if (!res.ok) { alert(res.error || "Failed to save event"); return; }
-      closeAdHocModal();
-      loadCalendarData(_calMonth, _calYear); // reload
-    })
-    .catch(e => {
-      btn.disabled = false; btn.textContent = 'Save Event';
-      alert("Network error: " + e.message);
-    });
-}
-
 
 // ── Form Editor (Admin) ──────────────────────────────────────────────────────
 let _formSchema = [];
@@ -1186,6 +1180,10 @@ function renderGtcJobsBanner() {
 
 function renderRoutePage() {
   if (!_routeData) return;
+  if (typeof _jobsApplyToRouteData_ === 'function') _jobsApplyToRouteData_();
+  if (typeof _jobPrefetchClients_ === 'function') _jobPrefetchClients_();
+  const newJobBtn = document.getElementById('btn-new-job');
+  if (newJobBtn) newJobBtn.style.display = isAdmin() ? '' : 'none';
 
   // Admin op filter
   const opRow = document.getElementById('op-filter-row');
@@ -1411,6 +1409,10 @@ function renderDayCard(dayData) {
   // Pool stop list
   html += '<div class="pool-stops">';
   pools.forEach((pool, idx) => {
+    if (pool._visit_type === 'job' && typeof _jobStopCardHtml_ === 'function') {
+      html += _jobStopCardHtml_(pool, idx);
+      return;
+    }
     const pId = pool.pool_id || String(idx);
     const done = _isPoolCompleted_(doneSet, pool, idx);
     const svcClass = getSvcClass_(pool.service);

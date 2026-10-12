@@ -33,11 +33,19 @@ function compact(row) {
   return out;
 }
 
-async function handleList(res) {
-  const data = await getCached('crm:list:v1', 45 * 1000, async () => {
-    const rows = rowsToObjects(await readSheetRange('Quotes'));
-    return rows.filter(row => row.quote_id).map(compact);
-  });
+async function loadList() {
+  const rows = rowsToObjects(await readSheetRange('Quotes'));
+  return rows.filter(row => row.quote_id).map(compact);
+}
+
+// refresh=<anything> skips the in-memory and CDN caches — used right after a
+// background lead lands (one-time jobs) so the new client is searchable at once.
+async function handleList(req, res) {
+  if (String(req.query.refresh || '').trim()) {
+    const data = await loadList();
+    return sendJson(res, 200, { ok: true, data, source: 'sheets_api' });
+  }
+  const data = await getCached('crm:list:v1', 45 * 1000, loadList);
   return sendJson(res, 200, { ok: true, data, source: 'sheets_api' }, 30);
 }
 
@@ -64,7 +72,7 @@ export default async function handler(req, res) {
     // Defaults to list so a caller that omits op behaves as /api/crm/list did.
     const op = String(req.query.op || 'list').trim();
     if (op === 'detail') return await handleDetail(req, res);
-    if (op === 'list') return await handleList(res);
+    if (op === 'list') return await handleList(req, res);
     return sendJson(res, 400, { ok: false, error: 'Unknown operation.' });
   } catch (error) {
     console.error('crm read failed', error);
