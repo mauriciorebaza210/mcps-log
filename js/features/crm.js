@@ -843,7 +843,7 @@ function _buildBillingSectionHTML_(item) {
     const [yr, mn] = mo.split('-');
     const lbl = new Date(Number(yr), Number(mn) - 1, 1).toLocaleString([], { month: 'short' }) + ' \'' + yr.slice(2);
     const icon = st === 'paid' ? '✓' : st === 'invoiced' ? '✉' : '○';
-    return `<div class="bill-month bm-${st}" onclick="cyclePaymentStatus('${item.quote_id}','${mo}')" title="${mo}">
+    return `<div id="bm-${item.quote_id}-${mo}" class="bill-month bm-${st}" onclick="cyclePaymentStatus('${item.quote_id}','${mo}')" title="${mo}">
       <div class="bm-label">${lbl}</div><div class="bm-icon">${icon}</div>
     </div>`;
   }).join('');
@@ -881,11 +881,11 @@ function openBillingSetup(quoteId) {
         </div>
       </div>
       <div style="display:flex;gap:.5rem">
-        <button onclick="saveBillingSetup('${quoteId}')"
+        <button id="billing-save-btn" onclick="saveBillingSetup('${quoteId}')"
           style="padding:.4rem .85rem;background:var(--teal);color:#fff;border:none;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer">
           Save
         </button>
-        <button onclick="cancelBillingSetup('${quoteId}')"
+        <button id="billing-cancel-btn" onclick="cancelBillingSetup('${quoteId}')"
           style="padding:.4rem .85rem;background:transparent;border:1px solid var(--border);border-radius:7px;font-size:.82rem;cursor:pointer">
           Cancel
         </button>
@@ -913,8 +913,19 @@ async function saveBillingSetup(quoteId) {
   }
 
   const item = _crmCache.find(i => i.quote_id === quoteId) || {};
-  const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
-    invoice_day: day, billing_start: start });
+  const saveBtn = document.getElementById('billing-save-btn');
+  const cancelBtn = document.getElementById('billing-cancel-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (msg) msg.style.display = 'none';
+
+  let res;
+  try {
+    res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
+      invoice_day: day, billing_start: start });
+  } catch (e) {
+    res = { ok: false, error: 'Network error saving billing tracker.' };
+  }
 
   if (res.ok) {
     const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
@@ -922,11 +933,18 @@ async function saveBillingSetup(quoteId) {
     const el = document.getElementById('billing-section-body');
     if (el) el.innerHTML = _buildBillingSectionHTML_(_crmCache[idx] || item);
   } else {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    if (cancelBtn) cancelBtn.disabled = false;
     if (msg) { msg.style.display = 'block'; msg.className = 'im err'; msg.textContent = res.error || 'Save failed.'; }
   }
 }
 
+const _bmPending = new Set();
+
 async function cyclePaymentStatus(quoteId, month) {
+  const pendingKey = quoteId + '|' + month;
+  if (_bmPending.has(pendingKey)) return;   // a save for this cell is already in flight
+
   const cacheIdx = _crmCache.findIndex(i => i.quote_id === quoteId);
   if (cacheIdx === -1) return;
   const item = _crmCache[cacheIdx];
@@ -944,17 +962,26 @@ async function cyclePaymentStatus(quoteId, month) {
   else payLog.push({ month, status: next });
 
   // Optimistic update
+  _bmPending.add(pendingKey);
   const prevLog = item.payment_log;
   _crmCache[cacheIdx].payment_log = payLog;
   const el = document.getElementById('billing-section-body');
   if (el) el.innerHTML = _buildBillingSectionHTML_(_crmCache[cacheIdx]);
+  document.getElementById('bm-' + quoteId + '-' + month)?.classList.add('bm-saving');
 
-  const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
-    payment_log: payLog });
+  try {
+    const res = await api({ action: 'update_lead', token: _s.token, quote_id: quoteId,
+      payment_log: payLog });
 
-  if (!res.ok) {
+    if (!res.ok) {
+      _crmCache[cacheIdx].payment_log = prevLog;
+      if (el) el.innerHTML = _buildBillingSectionHTML_(item);
+    }
+  } catch (e) {
     _crmCache[cacheIdx].payment_log = prevLog;
     if (el) el.innerHTML = _buildBillingSectionHTML_(item);
+  } finally {
+    _bmPending.delete(pendingKey);
   }
 }
 

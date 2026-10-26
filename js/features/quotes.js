@@ -20,8 +20,8 @@ const _qDef = () => ({
   startup_chemical:true, startup_programming:true, startup_pool_school:false,
   startup_company:'', startup_company_email:'', startup_companies:[], startup_company_saving:false,
   sponsored_by_mcp:false, startup_start_date:'',
-  repair_type:'repair_replacement', repair_company:'', repair_address:'',
-  repair_desc:'', repair_amount:0, repair_sku:'',
+  repair_type:'repair_replacement', repair_company:'',
+  repair_amount:0,
   repair_job_name:'', repair_priority:'medium', repair_equipment:'',
   repair_issue:'', repair_assigned_to:'', repair_parts:[],
   people:[], client_id:'', location_id:'', pool_id:'',
@@ -999,7 +999,7 @@ function qReset() {
     'q-startup-co','q-startup-company-email','q-startup-date','q-startup-company-select',
     'q-rep-name','q-rep-issue','q-rep-equip','q-rep-tech','q-rep-company-select',
     'q-rep-client-search','q-rep-client-select','q-rep-location-select',
-    'q-adj-val','q-manual-price','q-scope-custom'
+    'q-adj-val','q-manual-price','q-scope-custom','q-rep-amt'
   ].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
   const adjType = document.getElementById('q-adj-type');

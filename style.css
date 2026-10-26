@@ -2344,6 +2344,7 @@ select.q-inp{cursor:pointer}
 .bm-invoiced .bm-icon { color: #b45309; }
 .bm-paid     { background: #dcfce7; border-color: var(--success); }
 .bm-paid .bm-icon     { color: #15803d; }
+.bm-saving   { opacity: .45; pointer-events: none; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    TECHNICIAN HUB — AESTHETIC & OPTIMIZATION OVERHAUL
@@ -4437,4 +4438,19 @@ body.is-tech-nav .tech-nav { display: flex; }
 .job-toast.show{transform:translate(-50%,0)}
 .job-toast.warn{background:#92400e}
 .job-toast.error{background:#b91c1c}
+
+/* Profile tab — notification preferences */
+.notify-pref-rows{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.5rem}
+.notify-pref-row{
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  padding:.65rem .75rem;border-radius:var(--r-md);
+  background:var(--surface);border:1px solid var(--border);
+}
+.notify-pref-label{font-size:var(--text-sm);font-weight:600;color:var(--text)}
+.notify-pref-hint{font-size:var(--text-xs);color:var(--muted);margin-top:.1rem}
+.notify-pref-toggles{display:flex;align-items:center;gap:1rem;flex-shrink:0}
+.notify-toggle{display:flex;align-items:center;gap:.4rem;font-size:var(--text-xs);color:var(--text);cursor:pointer;white-space:nowrap}
+.notify-toggle input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--teal)}
+.notify-toggle-disabled{color:var(--muted);cursor:default}
+.notify-toggle-disabled input[type="checkbox"]{cursor:default}
 @media(max-width:480px){.job-2col{grid-template-columns:1fr}}

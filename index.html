@@ -297,6 +297,15 @@
             <div class="im" id="avail-msg" style="display:none;margin-top:.75rem"></div>
           </div>
 
+          <!-- Notification preferences — self only, so this stays hidden when an
+               admin is viewing someone else's profile from the team grid above. -->
+          <div class="avail-section" id="profile-notify-section" style="display:none">
+            <div class="avail-section-title">NOTIFICATIONS</div>
+            <div class="avail-section-hint">Choose which events email you.</div>
+            <div id="profile-notify-rows" class="notify-pref-rows"></div>
+            <div class="im" id="profile-notify-msg" style="display:none;margin-top:.5rem"></div>
+          </div>
+
           <!-- Tutorial restart — visible to technicians and leads -->
           <div class="tour-restart-wrap" id="tour-restart-wrap">
             <button class="tour-restart-btn" onclick="restartTour()" aria-label="Restart the portal tutorial">
@@ -1147,7 +1156,10 @@
             <button type="button" class="q-btn-ghost" style="white-space:nowrap" onclick="qRepOpenAddCompanyModal()">+ Add New</button>
           </div>
         </div>
-
+        <div class="q-1col" style="margin-bottom:0">
+          <label class="q-flabel">Job Price ($)</label>
+          <input class="q-inp" id="q-rep-amt" type="number" min="0" step="0.01" placeholder="0.00" oninput="qField('repair_amount',parseFloat(this.value)||0)">
+        </div>
       </div>
 
       <!-- Contact Info -->

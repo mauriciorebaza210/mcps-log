@@ -170,7 +170,12 @@ function ensureSheet_(name, headers) {
   return sheet;
 }
 
-function ensureNormalizedSalesSheets_() {
+// Just the Quotes sheet's own link columns — the cheap part of
+// ensureNormalizedSalesSheets_ (one sheet, header-row check only). Callers that
+// only touch Quotes (e.g. handleUpdateLead_ on a status/notes/billing edit) use
+// this instead of the full function, which also opens and header-checks eight
+// unrelated sheets (Clients, Proposals, Service_Agreements, ...) on every call.
+function ensureQuotesLinkHeaders_() {
   const quotes = getCrmSheet_();
   if (!quotes) throw new Error('Quotes sheet not found');
   const qHeaders = quotes.getRange(1, 1, 1, quotes.getLastColumn()).getValues()[0];
@@ -180,6 +185,11 @@ function ensureNormalizedSalesSheets_() {
       qHeaders.push(h);
     }
   });
+  return quotes;
+}
+
+function ensureNormalizedSalesSheets_() {
+  ensureQuotesLinkHeaders_();
   ensureSheet_('Clients', MCPS_CLIENT_HEADERS);
   ensureSheet_('Client_Locations', MCPS_LOCATION_HEADERS);
   ensureSheet_('Proposals', MCPS_PROPOSAL_HEADERS);
@@ -1437,6 +1447,46 @@ function handleUpdateContractFollowups_(payload) {
   }
 }
 
+// ── Edit the signing-link expiration directly ────────────────────────────────
+// A resend (send_proposal_for_approval) always re-emails the customer AND resets
+// the window to a fresh 30 days. Staff sometimes just need to extend — or pull
+// in — the deadline on a link that is already out, without sending another
+// email. This edits expires_at on the existing approval row in place.
+function handleUpdateAgreementExpiration_(payload) {
+  try {
+    const quoteId = String(payload.quote_id || '').trim();
+    if (!quoteId) return { ok: false, error: 'quote_id required' };
+    const expiresAt = new Date(payload.expires_at);
+    if (isNaN(expiresAt.getTime())) return { ok: false, error: 'A valid expiration date is required.' };
+
+    const approvals = ensureSheet_('Proposal_Approvals', MCPS_PROPOSAL_APPROVAL_HEADERS);
+    // Original (non-amendment) approval for this quote, most recently created.
+    // ⚠️ NO status filter — an already-EXPIRED row (status only ever gets
+    // stamped EXPIRED lazily, the moment someone tries a dead link) is exactly
+    // the one staff are trying to fix, so excluding it here would be self-
+    // defeating.
+    const candidates = sheetToObjects_(approvals).rows.filter(function(r) {
+      return String(r.quote_id || '') === quoteId && !String(r.target_agreement_id || '').trim();
+    }).sort(function(a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+    const approval = candidates[0];
+    if (!approval) return { ok: false, error: 'No signing link found for this contract.' };
+
+    const status = String(approval.status || '').toUpperCase();
+    if (status && status !== 'SENT' && status !== 'EXPIRED') {
+      return { ok: false, error: 'This agreement has already been ' + status.toLowerCase() + ' — its expiration can no longer be changed.' };
+    }
+
+    softSetCell_(approvals, approval._rowNum, 'expires_at', expiresAt.toISOString());
+    // Pushing the deadline out un-expires a link that had lapsed.
+    if (status === 'EXPIRED') softSetCell_(approvals, approval._rowNum, 'status', 'SENT');
+    softSetCell_(approvals, approval._rowNum, 'updated_at', nowIso_());
+
+    return { ok: true, quote_id: quoteId, approval_id: String(approval.approval_id || ''), expires_at: expiresAt.toISOString(), status: status === 'EXPIRED' ? 'SENT' : status };
+  } catch (e) {
+    return { ok: false, error: 'handleUpdateAgreementExpiration_ Error: ' + e };
+  }
+}
+
 function handleGetSalesFunnel_(payload) {
   try {
     var months = Math.min(24, Math.max(1, Number(payload && payload.months) || 6));
@@ -2493,6 +2543,20 @@ function handleSignAgreement_(payload) {
     } catch (welcomeErr) {
       welcomeEmail = { ok: false, skipped: false, error: String(welcomeErr) };
       Logger.log('sendSignedAgreementWelcomeEmail_ exception: ' + welcomeErr);
+    }
+
+    // 9. Notify staff who've opted in. Non-blocking: no staff session exists on
+    // this flow (it's authenticated by the customer's signing token), so this
+    // can only say WHO signed, not who on staff triggered it.
+    try {
+      staffNotifyEvent_('agreement_signed', {
+        customerName: signatureName || value_(q, 'customer_name') ||
+          [value_(q, 'first_name'), value_(q, 'last_name')].filter(Boolean).join(' '),
+        quoteId: quoteId,
+        poolId: (activate && activate.pool_id) || ''
+      });
+    } catch (staffNotifyErr) {
+      Logger.log('staffNotifyEvent_ agreement_signed failed: ' + staffNotifyErr);
     }
 
     return {
@@ -4030,6 +4094,10 @@ function handleNormalizedSalesAction_(payload) {
     return handleUpdateContractFollowups_(payload);
   }
 
+  if (action === 'update_agreement_expiration') {
+    return handleUpdateAgreementExpiration_(payload);
+  }
+
   if (action === 'create_direct_service_agreement' || action === 'create_service_agreement_from_proposal') {
     const data = payload.agreement || payload;
     if (data.quote_id) {
@@ -4179,8 +4247,11 @@ function mcpsClosedStatus_(key) {
 }
 
 function handleUpdateLead_(payload) {
-  ensureNormalizedSalesSheets_();
-  const sheet = getCrmSheet_(); // Updated to use the CRM sheet helper
+  // ⚠️ NOT the full ensureNormalizedSalesSheets_ — that header-checks eight other
+  // sheets (Clients, Proposals, Service_Agreements, ...) that a status/notes/
+  // billing edit never touches. syncQuoteToNormalized_ below calls the full
+  // version itself, on the (uncommon) occasions it actually runs.
+  const sheet = ensureQuotesLinkHeaders_();
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const data = sheet.getDataRange().getValues();
   
@@ -4311,12 +4382,31 @@ function handleUpdateLead_(payload) {
     }
   }
 
-  try {
-    syncQuoteToNormalized_(payload.quote_id);
-  } catch(syncErr) {
-    softSetCell_(sheet, rowIdx, 'migration_status', 'SYNC_FAILED');
-    softSetCell_(sheet, rowIdx, 'migration_notes', String(syncErr));
-    logMigration_('handleUpdateLead_', 'ERROR', 'Normalized sync failed for ' + payload.quote_id, 1, syncErr);
+  // ⚠️ ONLY RE-RUN THE FULL NORMALIZED SYNC WHEN SOMETHING IT OWNS CHANGED.
+  // syncQuoteToNormalized_ re-finds (or creates) the client/location/proposal/
+  // agreement/service-account rows for this quote — several full-sheet scans
+  // across 5-6 spreadsheet tabs. None of that depends on status, notes, the
+  // contact log, or billing fields: those live on the Quotes row directly. A
+  // quote that is already linked (migration_status MIGRATED with a client_id)
+  // only needs re-syncing when a pool_id is newly assigned, since that is what
+  // flips the linked location's pool_id/active flag. Running the full chain on
+  // every save — including a "mark lost" or "set up billing" click that
+  // touches none of those columns — was the reason those saves were slow.
+  const migStatusIdx = headers.map(h => String(h).toLowerCase().trim()).indexOf('migration_status');
+  const clientIdIdx = headers.map(h => String(h).toLowerCase().trim()).indexOf('client_id');
+  const alreadyLinked = migStatusIdx !== -1 && clientIdIdx !== -1 &&
+    String(data[rowIdx - 1][migStatusIdx] || '').toUpperCase() === 'MIGRATED' &&
+    String(data[rowIdx - 1][clientIdIdx] || '').trim() !== '';
+  const needsSync = !alreadyLinked || !!(payload.pool_id && String(payload.pool_id).trim());
+
+  if (needsSync) {
+    try {
+      syncQuoteToNormalized_(payload.quote_id);
+    } catch(syncErr) {
+      softSetCell_(sheet, rowIdx, 'migration_status', 'SYNC_FAILED');
+      softSetCell_(sheet, rowIdx, 'migration_notes', String(syncErr));
+      logMigration_('handleUpdateLead_', 'ERROR', 'Normalized sync failed for ' + payload.quote_id, 1, syncErr);
+    }
   }
 
   return { ok: true };
@@ -4968,17 +5058,31 @@ function addStartupPoolToRoutes_(quoteHeaders, quoteRow, poolId) {
       status:        'scheduled',
       created_by:    ''   // auth doesn't flow into this helper; left empty
     };
+    var anyCreated = false;
     [
       { visit_type: 'startup_day_1', offset: 0 },
       { visit_type: 'startup_day_2', offset: 1 },
       { visit_type: 'startup_day_3', offset: 2 }
     ].forEach(function(v) {
-      createScheduledVisitIfMissing_(poolId, v.visit_type, Object.assign({}, svBase, {
+      var res = createScheduledVisitIfMissing_(poolId, v.visit_type, Object.assign({}, svBase, {
         visit_type:     v.visit_type,
         scheduled_date: svAddDays_(startupDate, v.offset)
       }));
+      if (res && !res.skipped) anyCreated = true;
     });
     Logger.log('addStartupPoolToRoutes_: created 3 startup visits for ' + poolId);
+
+    // Notify staff who've opted in — only on an actual new schedule, not a
+    // re-save of a quote whose startup visits already exist (idempotent above).
+    // Covers both entry points that reach this function (direct quote save and
+    // builder-request approval) with one hook, since both funnel through here.
+    if (anyCreated) {
+      try {
+        staffNotifyEvent_('startup_scheduled', { customerName: customerName, poolId: poolId, startupDate: startupDate });
+      } catch (staffNotifyErr) {
+        Logger.log('staffNotifyEvent_ startup_scheduled failed: ' + staffNotifyErr);
+      }
+    }
   } catch (svErr) {
     Logger.log('addStartupPoolToRoutes_: startup visit creation failed (non-blocking): ' + svErr);
   }

@@ -364,8 +364,17 @@ async function loadFinancialHub() {
     }
     
     if (crmRes.ok) {
+      // ⚠️ ASSIGN UNCONDITIONALLY. On the very first Financial Hub visit of a
+      // session, `cachedVisits` (financial.js:323) is reliably null — nothing
+      // else writes 'fin_visits' — so the synchronous hydration branch above
+      // never runs and `_finCrmCache` is still its `[]` module default. If
+      // `crm_data` had ALREADY been warmed by home.js's prefetch and happens to
+      // match this response byte-for-byte, the old code's `changed`-gated
+      // assignment never fired either — leaving `_finCrmCache` empty even
+      // though a fresh, correct response just arrived, which is why Clients
+      // showed zero rows until a hard refresh re-ran the (working) cached path.
+      _finCrmCache = crmRes.data || [];
       if (!cachedCrm || JSON.stringify(cachedCrm) !== JSON.stringify(crmRes.data)) {
-        _finCrmCache = crmRes.data || [];
         _appCacheSet('crm_data', _finCrmCache);
         changed = true;
       }
@@ -1187,11 +1196,17 @@ function _clientsSetBillingFilter(filter) {
   _renderClientsTable();
 }
 
+const _finBillingPending = new Set();
+
 async function _clientsMarkBilling(quoteId, status) {
+  const month = _clientsCurrentMonthKey();
+  const pendingKey = quoteId + '|' + month;
+  if (_finBillingPending.has(pendingKey)) return;   // a save for this client/month is already in flight
+
   const item = (_finCrmCache || []).find(i => i.quote_id === quoteId);
   if (!item) return;
 
-  const month = _clientsCurrentMonthKey();
+  _finBillingPending.add(pendingKey);
   const log = _clientsPaymentLog(item);
   const entryIdx = log.findIndex(e => e.month === month);
   if (entryIdx > -1) log[entryIdx].status = status;
@@ -1206,24 +1221,28 @@ async function _clientsMarkBilling(quoteId, status) {
   _appCacheSet('crm_data', _finCrmCache);
   _renderClientsTab();
 
-  const res = await api({
-    action: 'update_lead',
-    token: _s.token,
-    quote_id: quoteId,
-    payment_log: log
-  });
+  try {
+    const res = await api({
+      action: 'update_lead',
+      token: _s.token,
+      quote_id: quoteId,
+      payment_log: log
+    });
 
-  if (!res.ok) {
-    item.payment_log = prevLog;
-    if (typeof _crmCache !== 'undefined') {
-      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
-      if (idx > -1) _crmCache[idx].payment_log = prevLog;
+    if (!res.ok) {
+      item.payment_log = prevLog;
+      if (typeof _crmCache !== 'undefined') {
+        const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
+        if (idx > -1) _crmCache[idx].payment_log = prevLog;
+      }
+      _appCacheSet('crm_data', _finCrmCache);
+      _renderClientsTab();
+      alert(res.error || 'Billing update failed.');
+    } else {
+      _appCacheSet('crm_data', _finCrmCache);
     }
-    _appCacheSet('crm_data', _finCrmCache);
-    _renderClientsTab();
-    alert(res.error || 'Billing update failed.');
-  } else {
-    _appCacheSet('crm_data', _finCrmCache);
+  } finally {
+    _finBillingPending.delete(pendingKey);
   }
 }
 

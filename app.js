@@ -131,9 +131,14 @@ function _refreshSessionRoles_() {
       if (res.error) { _s = null; localStorage.removeItem('mcps_s'); location.hash = ''; location.reload(); }
       return;
     }
+    // Always resync notify_prefs — cheap, and a stale copy from before this
+    // feature shipped would otherwise show "off" for a toggle that's actually
+    // on by default until the user next logs out and back in.
+    _s.notify_prefs = res.notify_prefs || {};
+
     const newRoles = res.roles || [];
     const changed = newRoles.slice().sort().join(',') !== (_s.roles || []).slice().sort().join(',');
-    if (!changed) return;
+    if (!changed) { localStorage.setItem('mcps_s', JSON.stringify(_s)); return; }
     _s.roles = newRoles;
     _s.pages = unionPages_(newRoles);
     localStorage.setItem('mcps_s', JSON.stringify(_s));
@@ -311,7 +316,14 @@ function _makeSbGroup(id, label, children) {
     const childId = c.id || `ni-${c.page}${c.hubTab ? '-'+c.hubTab : ''}`;
     let onclick;
     if (c.page === 'financial_hub' && c.hubTab) {
-      onclick = `navigateTo('financial_hub');switchFinTab('${c.hubTab}')`;
+      // ⚠️ ONE call, not two. navigateTo('financial_hub') alone (no sub-path)
+      // already calls loadFinancialHub() itself (see router.js), so following
+      // it with a separate switchFinTab() call fired every Financial Hub load
+      // twice — each one its own get_visit_history/get_crm_data round trip.
+      // navigateTo already routes a sub-path straight to switchFinTab() when
+      // given one, so folding the tab into this single call removes the
+      // duplicate instead of guarding against it after the fact.
+      onclick = `navigateTo('financial_hub/${c.hubTab}')`;
     } else if (c.hubTab) {
       onclick = `navigateTo('${c.page}');switchHubTab('${c.hubTab}')`;
     } else {

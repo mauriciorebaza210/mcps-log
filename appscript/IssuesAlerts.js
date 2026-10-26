@@ -38,6 +38,16 @@ function handleSubmitIssueAlert_(payload, userObj) {
       message, visibility, linked_pool_id, 'open', '', '', ''
     ]);
 
+    try {
+      staffNotifyEvent_('issue_alert_reported', {
+        poolId: linked_pool_id,
+        actorName: submitter_name,
+        summary: message
+      });
+    } catch (staffNotifyErr) {
+      Logger.log('staffNotifyEvent_ issue_alert_reported failed: ' + staffNotifyErr);
+    }
+
     return { ok: true, id: id };
   } catch (err) {
     Logger.log("handleSubmitIssueAlert_ error: " + err);
