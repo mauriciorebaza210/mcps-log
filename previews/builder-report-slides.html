@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Builder Startup Report · slide deck</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.58);--line:#E4EAEA;
+    --warn:#d97706;--success:#16a34a;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;}
+  .page-title{max-width:880px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+  .page-sub{max-width:760px;margin:0 auto 12px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+  .page-note{max-width:760px;margin:0 auto 40px;text-align:center;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:12px 18px;color:#3a4645;font-size:12.5px;line-height:1.55;}
+  .page-note b{color:var(--teal);}
+
+  .slide-wrap{max-width:880px;margin:0 auto 34px;}
+  .slide-label{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#5a6666;margin:0 4px 9px;}
+  .slide{aspect-ratio:16/9;border-radius:10px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.16);position:relative;background:#fff;
+    container-type:inline-size;}
+  /* everything inside a slide sizes in cqw so the 16:9 frame scales cleanly */
+  .s{position:absolute;inset:0;padding:5.4cqw 6cqw;display:flex;flex-direction:column;}
+
+  /* ── cover ── */
+  /* Cover is light: the full-colour lockup is a dark mark and must sit on white.
+     The teal band along the bottom keeps the brand weight without burying it. */
+  .cover{background:#fff;color:var(--charcoal);justify-content:center;padding-bottom:12cqw;}
+  /* .s is a column flexbox, so align-items defaults to stretch and would force the
+     lockup to full slide width while its height stays pinned — squashing a 4.4:1
+     mark to about 12:1. align-self keeps its real proportions. */
+  .cover img{height:6cqw;width:auto;align-self:flex-start;margin-bottom:3.6cqw;}
+  .cover .eyebrow{font-family:var(--fh);font-weight:700;font-size:1.35cqw;letter-spacing:.3em;text-transform:uppercase;color:var(--aqua);margin-bottom:1.6cqw;}
+  .cover h1{font-family:var(--fh);font-weight:700;font-size:5.4cqw;margin:0 0 1.4cqw;line-height:1.1;letter-spacing:-.01em;color:var(--teal);}
+  .cover .period{font-size:1.9cqw;color:#4a5656;}
+  .cover .rule{width:9cqw;height:.42cqw;background:var(--aqua);border-radius:2px;margin:2.6cqw 0;}
+  .cover .band{position:absolute;left:0;right:0;bottom:0;height:7.6cqw;background:var(--teal);display:flex;align-items:center;padding:0 6cqw;}
+  .cover .mantra{font-family:var(--fh);font-weight:700;font-size:1.2cqw;letter-spacing:.26em;text-transform:uppercase;color:var(--aqua-light);}
+
+  /* ── shared slide chrome ── */
+  .hdbar{display:flex;justify-content:space-between;align-items:baseline;border-bottom:.18cqw solid var(--line);padding-bottom:1.5cqw;margin-bottom:2.8cqw;}
+  .hdbar h2{font-family:var(--fh);font-weight:700;font-size:3.1cqw;color:var(--teal);margin:0;letter-spacing:-.01em;}
+  .hdbar .who{font-family:var(--fh);font-weight:700;font-size:1.15cqw;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);}
+
+  /* ── overview table ── */
+  .rows{flex:1;}
+  .row{display:flex;align-items:center;gap:2cqw;padding:1.7cqw 0;border-bottom:.14cqw solid var(--line);}
+  .row:last-child{border-bottom:0;}
+  .row .nm{flex:0 0 22cqw;}
+  .row .nm .n{font-family:var(--fh);font-weight:700;font-size:2.1cqw;color:var(--teal);line-height:1.2;}
+  .row .nm .a{font-size:1.3cqw;color:var(--muted);margin-top:.3cqw;}
+  .row .st{flex:1;font-size:1.55cqw;color:#3a4645;line-height:1.5;}
+  .row .st b{color:var(--teal);}
+  .pill{flex:0 0 auto;font-family:var(--fh);font-weight:700;font-size:1.05cqw;letter-spacing:.1em;text-transform:uppercase;padding:.7cqw 1.5cqw;border-radius:3cqw;white-space:nowrap;}
+  .pill.ok{background:rgba(22,163,74,.12);color:var(--success);}
+  .pill.go{background:rgba(31,167,168,.14);color:#12797a;}
+  .pill.attn{background:rgba(217,119,6,.13);color:var(--warn);}
+
+  /* ── pool detail ── */
+  .track{display:flex;margin-bottom:2.6cqw;}
+  .step{flex:1;position:relative;padding-right:.6cqw;}
+  .step .dot{width:1.15cqw;height:1.15cqw;border-radius:50%;background:var(--line);margin-bottom:1cqw;position:relative;z-index:2;box-shadow:0 0 0 .22cqw #fff, 0 0 0 .42cqw var(--line);}
+  .step.done .dot{background:var(--aqua);box-shadow:0 0 0 .22cqw #fff, 0 0 0 .42cqw var(--aqua);}
+  .step.now .dot{background:#fff;box-shadow:0 0 0 .22cqw #fff, 0 0 0 .42cqw var(--aqua);}
+  .step.blocked .dot{background:var(--warn);box-shadow:0 0 0 .22cqw #fff, 0 0 0 .42cqw var(--warn);}
+  .step::before{content:"";position:absolute;top:.5cqw;left:0;right:0;height:.2cqw;background:var(--line);z-index:1;}
+  .step.done::before{background:var(--aqua);}
+  .step:first-child::before{left:.5cqw;}
+  .step:last-child::before{right:calc(100% - .5cqw);}
+  .step .t{font-family:var(--fh);font-weight:700;font-size:1.25cqw;color:var(--teal);line-height:1.35;}
+  .step .d{font-size:1.15cqw;color:var(--muted);margin-top:.25cqw;}
+  .step.pending .t{color:var(--muted);}
+
+  .cols{flex:1;display:flex;gap:3cqw;}
+  .narr{flex:1;font-size:1.72cqw;line-height:1.68;color:#33403f;}
+  .narr b{color:var(--teal);font-weight:600;}
+  .side{flex:0 0 26cqw;}
+  .shots{display:grid;grid-template-columns:1fr 1fr;gap:.8cqw;}
+  .shot{aspect-ratio:4/3;border-radius:.8cqw;background:linear-gradient(140deg,var(--aqua-light),var(--teal));position:relative;overflow:hidden;}
+  .shot.eq{background:linear-gradient(140deg,#9fadad,#3c4a48);}
+  .shot::after{content:"";position:absolute;left:0;right:0;bottom:0;height:40%;background:rgba(255,255,255,.15);}
+  .shot .cap{position:absolute;left:0;bottom:0;z-index:2;padding:.6cqw .8cqw;font-family:var(--fh);font-weight:700;font-size:.95cqw;letter-spacing:.09em;text-transform:uppercase;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55);}
+  .caption{font-family:var(--fh);font-weight:700;font-size:1.05cqw;letter-spacing:.13em;text-transform:uppercase;color:var(--aqua);margin-bottom:.9cqw;}
+
+  .action{margin-top:2cqw;border-left:.32cqw solid var(--warn);background:rgba(217,119,6,.07);border-radius:0 .8cqw .8cqw 0;padding:1.5cqw 1.8cqw;font-size:1.5cqw;line-height:1.6;color:#5c4213;}
+  .action b{font-family:var(--fh);font-weight:700;color:var(--warn);letter-spacing:.13em;text-transform:uppercase;font-size:1.05cqw;display:block;margin-bottom:.5cqw;}
+
+  .pgnum{position:absolute;right:6cqw;bottom:3.4cqw;font-family:var(--fh);font-weight:700;font-size:1.1cqw;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<div class="page-title">Builder startup report — the deck</div>
+<div class="page-sub">Four of what would be six or seven slides. Google Slides can export the same file to PDF and PowerPoint.<br>All names, pools and events below are fictional.</div>
+<div class="page-note">
+  A deck earns its place only if MCP actually <b>opens these in a meeting</b>. If they read the update alone at a desk, the deck is a worse web page —
+  one pool per slide means a long startup gets cut down to fit, and photos compete with words for the same 16:9 rectangle.
+  Note this uses the <b>MCPS palette</b>, not the dark theme the internal ops deck uses.
+</div>
+
+<!-- ══ SLIDE 1 — COVER ══ -->
+<div class="slide-wrap">
+  <div class="slide-label">Slide 1 — Cover</div>
+  <div class="slide">
+    <div class="s cover">
+      <img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions">
+      <div class="eyebrow">Startup progress</div>
+      <h1>Mission Custom Pools</h1>
+      <div class="rule"></div>
+      <div class="period">Monday, September 1 – Sunday, September 7, 2026 · 3 pools in progress</div>
+      <div class="band"><div class="mantra">Every pool matters.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 2 — OVERVIEW ══ -->
+<div class="slide-wrap">
+  <div class="slide-label">Slide 2 — Where every pool stands</div>
+  <div class="slide">
+    <div class="s">
+      <div class="hdbar">
+        <h2>Where every pool stands</h2>
+        <div class="who">Week of Sept 1</div>
+      </div>
+      <div class="rows">
+        <div class="row">
+          <div class="nm"><div class="n">Ruiz</div><div class="a">118 Cascade Bend · MCPS-0044</div></div>
+          <div class="st">All three days done. <b>Pool school held Thursday.</b> First-month service starts Sept 11.</div>
+          <span class="pill ok">Startup complete</span>
+        </div>
+        <div class="row">
+          <div class="nm"><div class="n">Whitfield</div><div class="a">8611 Kihnu Willow · MCPS-0046</div></div>
+          <div class="st"><b>Heater will not fire</b> — gas line not connected at the meter. Pool is otherwise running and swimmable.</div>
+          <span class="pill attn">Needs MCP</span>
+        </div>
+        <div class="row">
+          <div class="nm"><div class="n">Delgado</div><div class="a">27121 Highland Crest · MCPS-0048</div></div>
+          <div class="st">Startup finished, two small fixes closed. <b>Pool school Sept 13</b>, moved once by the homeowner.</div>
+          <span class="pill go">Awaiting pool school</span>
+        </div>
+      </div>
+      <div class="pgnum">2</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 3 — POOL DETAIL (GOOD) ══ -->
+<div class="slide-wrap">
+  <div class="slide-label">Slide 3 — A pool going well</div>
+  <div class="slide">
+    <div class="s">
+      <div class="hdbar">
+        <h2>Ruiz</h2>
+        <div class="who">118 Cascade Bend · MCPS-0044</div>
+      </div>
+      <div class="track">
+        <div class="step done"><div class="dot"></div><div class="t">Day 1 · Equipment</div><div class="d">Sept 1</div></div>
+        <div class="step done"><div class="dot"></div><div class="t">Day 2 · Balance</div><div class="d">Sept 2</div></div>
+        <div class="step done"><div class="dot"></div><div class="t">Day 3 · Pool school</div><div class="d">Sept 4</div></div>
+        <div class="step now"><div class="dot"></div><div class="t">First month</div><div class="d">Starts Sept 11</div></div>
+        <div class="step pending"><div class="dot"></div><div class="t">Handoff</div><div class="d">Oct 2</div></div>
+      </div>
+      <div class="cols">
+        <div class="narr">
+          All three startup days are done and <b>pool school was held Thursday</b> with both homeowners present.<br><br>
+          The one problem we found — a split pump-lid O-ring on day 1 — was replaced on the spot and confirmed dry when we came back Tuesday. Autofill is on and holding level.<br><br>
+          Nothing needed from MCP.
+        </div>
+        <div class="side">
+          <div class="caption">Sept 1 — Day 1</div>
+          <div class="shots">
+            <div class="shot"><span class="cap">Before</span></div>
+            <div class="shot eq"><span class="cap">O-ring</span></div>
+            <div class="shot eq"><span class="cap">Equipment</span></div>
+            <div class="shot"><span class="cap">After</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pgnum">3</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SLIDE 4 — POOL DETAIL (BLOCKED) ══ -->
+<div class="slide-wrap">
+  <div class="slide-label">Slide 4 — A pool that needs MCP</div>
+  <div class="slide">
+    <div class="s">
+      <div class="hdbar">
+        <h2>Whitfield</h2>
+        <div class="who">8611 Kihnu Willow · MCPS-0046</div>
+      </div>
+      <div class="track">
+        <div class="step done"><div class="dot"></div><div class="t">Day 1 · Equipment</div><div class="d">Sept 3</div></div>
+        <div class="step done"><div class="dot"></div><div class="t">Day 2 · Balance</div><div class="d">Sept 4</div></div>
+        <div class="step now"><div class="dot"></div><div class="t">Day 3 · Pool school</div><div class="d">Sept 9</div></div>
+        <div class="step blocked"><div class="dot"></div><div class="t">Heater</div><div class="d">Waiting on gas</div></div>
+        <div class="step pending"><div class="dot"></div><div class="t">First month</div><div class="d">Not scheduled</div></div>
+      </div>
+      <div class="cols">
+        <div class="narr">
+          Equipment is running, the water is balanced and the pool is swimmable.<br><br>
+          <b>The heater will not fire — the gas line is not connected at the meter.</b> We found it on day 1 and it was still down Thursday.
+          <div class="action">
+            <b>MCP action</b>
+            Gas line connection at the meter. No contractor date on record. Pool school Sept 9 can go ahead, but we can't demonstrate the heater — usually a second trip.
+          </div>
+        </div>
+        <div class="side">
+          <div class="caption">Sept 3 — Day 1</div>
+          <div class="shots">
+            <div class="shot eq"><span class="cap">Heater</span></div>
+            <div class="shot eq"><span class="cap">Gas meter</span></div>
+            <div class="shot"><span class="cap">Before</span></div>
+            <div class="shot"><span class="cap">After</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pgnum">4</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

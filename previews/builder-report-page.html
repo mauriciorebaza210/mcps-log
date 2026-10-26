@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Builder Startup Report · web page</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.58);--line:#E4EAEA;
+    --warn:#d97706;--success:#16a34a;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#fff;font-family:var(--fb);color:var(--charcoal);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:940px;margin:0 auto;padding:0 22px;}
+
+  .protobar{background:#0b2f30;color:#bfe6e5;font-size:12px;text-align:center;padding:9px 16px;line-height:1.5;}
+  .protobar b{color:#fff;font-family:var(--fh);}
+
+  /* ── masthead ── */
+  .brandbar{background:#fff;padding:26px 0 22px;border-bottom:3px solid var(--aqua);}
+  .brandbar img{height:34px;display:block;}
+  .mast{background:var(--teal);color:#fff;padding:34px 0 34px;}
+  .mast .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--aqua-light);margin-bottom:10px;}
+  .mast h1{font-family:var(--fh);font-weight:700;font-size:30px;margin:0 0 8px;letter-spacing:-.01em;}
+  .mast .period{font-size:14px;color:rgba(255,255,255,.7);}
+
+  /* ── glance ── */
+  .glance{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:-26px 0 40px;box-shadow:0 10px 30px rgba(13,61,62,.1);}
+  .glance div{background:#fff;padding:20px 12px;text-align:center;}
+  .glance .n{font-family:var(--fh);font-weight:800;font-size:30px;color:var(--teal);line-height:1;}
+  .glance .n.attn{color:var(--warn);}
+  .glance .l{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:7px;font-weight:600;}
+
+  /* ── pool section ── */
+  .pool{padding-bottom:46px;margin-bottom:46px;border-bottom:1px solid var(--line);}
+  .pool:last-of-type{border-bottom:0;}
+  .pool-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:22px;}
+  .pool-hd h2{font-family:var(--fh);font-weight:700;font-size:23px;color:var(--teal);margin:0 0 5px;}
+  .pool-hd .addr{font-size:13px;color:var(--muted);}
+  .pill{flex:0 0 auto;font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border-radius:20px;white-space:nowrap;}
+  .pill.ok{background:rgba(22,163,74,.12);color:var(--success);}
+  .pill.go{background:rgba(31,167,168,.14);color:#12797a;}
+  .pill.attn{background:rgba(217,119,6,.13);color:var(--warn);}
+
+  /* ── milestone track ── */
+  .track{display:flex;gap:0;margin-bottom:26px;flex-wrap:wrap;}
+  .step{flex:1;min-width:104px;position:relative;padding:0 4px;}
+  .step .dot{width:13px;height:13px;border-radius:50%;background:var(--line);border:2.5px solid #fff;box-shadow:0 0 0 2px var(--line);margin-bottom:11px;position:relative;z-index:2;}
+  .step.done .dot{background:var(--aqua);box-shadow:0 0 0 2px var(--aqua);}
+  .step.now .dot{background:#fff;box-shadow:0 0 0 2px var(--aqua);}
+  .step.blocked .dot{background:var(--warn);box-shadow:0 0 0 2px var(--warn);}
+  .step::before{content:"";position:absolute;top:6px;left:0;right:0;height:2.5px;background:var(--line);z-index:1;}
+  .step.done::before{background:var(--aqua);}
+  .step:first-child::before{left:6px;}
+  .step:last-child::before{right:calc(100% - 6px);}
+  .step .t{font-family:var(--fh);font-weight:700;font-size:11px;color:var(--teal);letter-spacing:.04em;line-height:1.35;}
+  .step .d{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+  .step.pending .t{color:var(--muted);}
+
+  /* ── narrative ── */
+  .narr{font-size:15.5px;line-height:1.72;color:#33403f;margin:0 0 22px;max-width:74ch;}
+  .narr b{color:var(--teal);font-weight:600;}
+
+  .action{border-left:3px solid var(--warn);background:rgba(217,119,6,.06);border-radius:0 10px 10px 0;padding:15px 18px;margin-bottom:24px;font-size:13.5px;line-height:1.6;color:#5c4213;max-width:74ch;}
+  .action .lbl{font-family:var(--fh);font-weight:700;color:var(--warn);letter-spacing:.1em;text-transform:uppercase;font-size:10px;display:block;margin-bottom:5px;}
+  .action.info{border-left-color:var(--aqua);background:rgba(31,167,168,.06);color:#1c4a4a;}
+  .action.info .lbl{color:var(--aqua);}
+
+  /* ── day timeline ── */
+  .sect{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 16px;display:flex;align-items:center;gap:8px;}
+  .sect::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--aqua);flex:0 0 auto;}
+
+  .day{display:flex;gap:20px;padding:20px 0;border-top:1px solid var(--line);}
+  .day-d{flex:0 0 92px;}
+  .day-d .dw{font-family:var(--fh);font-weight:700;font-size:12px;color:var(--aqua);letter-spacing:.08em;text-transform:uppercase;}
+  .day-d .dd{font-family:var(--fh);font-weight:700;font-size:17px;color:var(--teal);line-height:1.2;margin-top:2px;}
+  .day-d .dy{font-size:11px;color:var(--muted);}
+  .day-b{flex:1;min-width:0;}
+  .day-b h4{font-family:var(--fh);font-weight:700;font-size:13px;color:var(--teal);letter-spacing:.05em;text-transform:uppercase;margin:0 0 9px;}
+  .day-b p{font-size:14px;line-height:1.68;color:#3a4645;margin:0 0 12px;max-width:70ch;}
+
+  .findings{list-style:none;margin:0 0 14px;padding:0;}
+  .findings li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;line-height:1.55;color:#3a4645;padding:6px 0;}
+  .findings .st{flex:0 0 auto;font-family:var(--fh);font-weight:700;font-size:9px;letter-spacing:.09em;text-transform:uppercase;padding:3px 8px;border-radius:5px;margin-top:2px;min-width:66px;text-align:center;}
+  .st.fixed{background:rgba(22,163,74,.13);color:var(--success);}
+  .st.verified{background:rgba(31,167,168,.14);color:#12797a;}
+  .st.open{background:rgba(217,119,6,.14);color:var(--warn);}
+
+  .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:9px;}
+  .shot{aspect-ratio:4/3;border-radius:9px;background:linear-gradient(140deg,var(--aqua-light),var(--teal));position:relative;overflow:hidden;}
+  .shot.eq{background:linear-gradient(140deg,#9fadad,#3c4a48);}
+  .shot::after{content:"";position:absolute;left:0;right:0;bottom:0;height:40%;background:rgba(255,255,255,.15);}
+  .shot .cap{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:7px 9px;font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+
+  /* ── pool school card ── */
+  .school{border:1px solid var(--aqua-light);background:rgba(94,214,211,.08);border-radius:12px;padding:20px 22px;margin-top:24px;display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;}
+  .school .lbl{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:10px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:7px;}
+  .school .when{font-family:var(--fh);font-weight:700;font-size:19px;color:var(--teal);line-height:1.3;}
+  .school .sub{font-size:13px;color:#33403f;margin-top:6px;line-height:1.6;max-width:52ch;}
+  .school .col{flex:1;min-width:210px;}
+  .school dl{margin:0;font-size:12.5px;line-height:1.75;}
+  .school dt{color:var(--muted);float:left;clear:left;width:96px;}
+  .school dd{margin:0 0 0 96px;color:#33403f;font-weight:600;}
+
+  /* ── how it was written ── */
+  .howto{background:var(--gray);margin-top:20px;padding:44px 0 52px;border-top:1px solid var(--line);}
+  .howto h3{font-family:var(--fh);font-weight:700;font-size:19px;color:var(--teal);margin:0 0 8px;}
+  .howto .lede{font-size:14px;color:#4a5656;line-height:1.65;margin:0 0 26px;max-width:70ch;}
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .cmp > div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;}
+  .cmp h5{font-family:var(--fh);font-weight:700;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--teal);margin:0 0 12px;}
+  .cmp .raw{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.75;color:#4a5656;white-space:pre-wrap;}
+  .cmp .out{font-size:14px;line-height:1.7;color:#33403f;}
+  .cmp .out b{color:var(--teal);}
+  .flagbox{margin-top:16px;border-left:3px solid var(--warn);background:rgba(217,119,6,.06);border-radius:0 8px 8px 0;padding:12px 15px;font-size:12.5px;line-height:1.6;color:#5c4213;}
+  .flagbox b{font-family:var(--fh);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--warn);display:block;margin-bottom:4px;}
+
+  .foot{background:var(--teal-2);color:rgba(255,255,255,.62);text-align:center;padding:34px 22px 40px;font-size:12.5px;line-height:1.7;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--aqua-light);font-size:10px;margin-bottom:10px;}
+  .foot a{color:#fff;text-decoration:none;}
+
+  @media (max-width:720px){
+    .mast h1{font-size:24px;}
+    .glance{grid-template-columns:repeat(2,1fr);}
+    .day{flex-direction:column;gap:10px;}
+    .day-d{display:flex;align-items:baseline;gap:8px;}
+    .day-d .dd{font-size:15px;}
+    .cmp{grid-template-columns:1fr;}
+    .track{gap:14px;}
+    .step{min-width:100%;padding:0;}
+    .step::before{display:none;}
+    .step .dot{margin-bottom:6px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="protobar"><b>Prototype</b> — every name, pool, date and event on this page is fictional. Photos are placeholders.</div>
+
+<div class="brandbar">
+  <div class="wrap"><img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions"></div>
+</div>
+
+<div class="mast">
+  <div class="wrap">
+    <div class="eyebrow">Startup progress</div>
+    <h1>Mission Custom Pools</h1>
+    <div class="period">Monday, September 1 – Sunday, September 7, 2026</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="glance">
+    <div><div class="n">3</div><div class="l">In progress</div></div>
+    <div><div class="n attn">1</div><div class="l">Needs you</div></div>
+    <div><div class="n">2</div><div class="l">Pool schools</div></div>
+    <div><div class="n">1</div><div class="l">Completed</div></div>
+  </div>
+
+  <!-- ═══════════ POOL 1 ═══════════ -->
+  <div class="pool">
+    <div class="pool-hd">
+      <div>
+        <h2>Ruiz</h2>
+        <div class="addr">118 Cascade Bend, San Antonio · MCPS-0044</div>
+      </div>
+      <span class="pill ok">Startup complete</span>
+    </div>
+
+    <div class="track">
+      <div class="step done"><div class="dot"></div><div class="t">Day 1<br>Equipment</div><div class="d">Sept 1</div></div>
+      <div class="step done"><div class="dot"></div><div class="t">Day 2<br>Clean &amp; balance</div><div class="d">Sept 2</div></div>
+      <div class="step done"><div class="dot"></div><div class="t">Day 3<br>Pool school</div><div class="d">Sept 4</div></div>
+      <div class="step now"><div class="dot"></div><div class="t">First month</div><div class="d">Starts Sept 11</div></div>
+      <div class="step pending"><div class="dot"></div><div class="t">Handoff</div><div class="d">Oct 2</div></div>
+    </div>
+
+    <p class="narr">All three startup days are done and <b>pool school was held Thursday</b> with both homeowners present. The one problem we found — a split pump-lid O-ring on day 1 — was replaced on the spot and confirmed dry when we came back Tuesday. Autofill is on and holding level. This pool moves to first-month service on September 11.</p>
+
+    <div class="sect">What happened, by day</div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Monday</div><div class="dd">Sept 1</div><div class="dy">Day 1</div></div>
+      <div class="day-b">
+        <h4>Equipment start</h4>
+        <p>Backwashed the filter, checked every connection and fitting, primed the pump, connected the backwash hose and turned on the autofill. Startup kit delivered to the homeowner.</p>
+        <ul class="findings">
+          <li><span class="st fixed">Fixed</span><div><b>Pump-lid O-ring split.</b> Found seeping at the lid during priming. Replaced the O-ring and re-primed; no seepage on re-check.</div></li>
+        </ul>
+        <div class="shots">
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot eq"><span class="cap">Equipment</span></div>
+          <div class="shot eq"><span class="cap">O-ring</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Tuesday</div><div class="dd">Sept 2</div><div class="dy">Day 2</div></div>
+      <div class="day-b">
+        <h4>Clean &amp; balance</h4>
+        <p>Brushed and vacuumed the whole pool, cleaned the pump and skimmer baskets, and balanced the water. Chlorine 3.2, pH 7.5, alkalinity 90.</p>
+        <ul class="findings">
+          <li><span class="st verified">Verified</span><div><b>Pump lid, no leak.</b> Re-checked yesterday's O-ring replacement after a full night of runtime. Dry.</div></li>
+        </ul>
+        <div class="shots">
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot eq"><span class="cap">Equipment</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Thursday</div><div class="dd">Sept 4</div><div class="dy">Day 3</div></div>
+      <div class="day-b">
+        <h4>Programming &amp; pool school</h4>
+        <p>Set the timers and cleaner schedule, then walked both homeowners through the equipment, the weekly cleaning routine and how to read their chemistry. Signed checklist on file.</p>
+        <div class="shots">
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="school">
+      <div class="col">
+        <div class="lbl">Pool school</div>
+        <div class="when">Held Thursday, September 4</div>
+        <div class="sub">Both homeowners attended. Signed checklist on file.</div>
+      </div>
+      <div class="col">
+        <dl>
+          <dt>Attended</dt><dd>Both homeowners</dd>
+          <dt>Held with</dt><dd>Startup day 3</dd>
+          <dt>Rescheduled</dt><dd>No</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ POOL 2 ═══════════ -->
+  <div class="pool">
+    <div class="pool-hd">
+      <div>
+        <h2>Whitfield</h2>
+        <div class="addr">8611 Kihnu Willow, San Antonio · MCPS-0046</div>
+      </div>
+      <span class="pill attn">Blocked</span>
+    </div>
+
+    <div class="track">
+      <div class="step done"><div class="dot"></div><div class="t">Day 1<br>Equipment</div><div class="d">Sept 3</div></div>
+      <div class="step done"><div class="dot"></div><div class="t">Day 2<br>Clean &amp; balance</div><div class="d">Sept 4</div></div>
+      <div class="step now"><div class="dot"></div><div class="t">Day 3<br>Pool school</div><div class="d">Sept 9</div></div>
+      <div class="step blocked"><div class="dot"></div><div class="t">Heater</div><div class="d">Waiting on gas</div></div>
+      <div class="step pending"><div class="dot"></div><div class="t">First month</div><div class="d">Not scheduled</div></div>
+    </div>
+
+    <p class="narr">Equipment is running, the water is balanced and the pool is swimmable. <b>The heater will not fire — the gas line is not connected at the meter.</b> We found it on day 1 and it was still down when we came back Thursday. Nothing on our side is waiting on this; the heater is the only open item, and it isn't ours to close.</p>
+
+    <div class="action">
+      <span class="lbl">MCP action</span>
+      Gas line connection at the meter. There is no contractor date on record. Pool school on September 9 can go ahead without it, but we won't be able to show the homeowner how the heater works — which usually means a second trip.
+    </div>
+
+    <div class="sect">What happened, by day</div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Wednesday</div><div class="dd">Sept 3</div><div class="dy">Day 1</div></div>
+      <div class="day-b">
+        <h4>Equipment start</h4>
+        <p>Backwashed the filter, checked connections and fittings, primed the pump, connected the backwash hose, turned on the autofill and delivered the startup kit.</p>
+        <ul class="findings">
+          <li><span class="st open">Open</span><div><b>Heater will not fire.</b> No gas at the appliance. Traced back to the meter — the line is not connected. Photographed the meter and the heater display code.</div></li>
+        </ul>
+        <div class="shots">
+          <div class="shot eq"><span class="cap">Heater</span></div>
+          <div class="shot eq"><span class="cap">Gas meter</span></div>
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Thursday</div><div class="dd">Sept 4</div><div class="dy">Day 2</div></div>
+      <div class="day-b">
+        <h4>Clean &amp; balance</h4>
+        <p>Brushed, vacuumed and balanced. Chlorine 3.0, pH 7.4, alkalinity 100. Re-checked the heater — still no gas at the meter.</p>
+        <ul class="findings">
+          <li><span class="st open">Still open</span><div><b>Heater.</b> No change since Wednesday. Not re-photographed.</div></li>
+        </ul>
+        <div class="shots">
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="school">
+      <div class="col">
+        <div class="lbl">Pool school</div>
+        <div class="when">Tuesday, September 9 · 10:00 AM</div>
+        <div class="sub">Riding with startup day 3. <b>Proposed — not yet confirmed with the homeowner.</b> We'll confirm and let you know if it moves.</div>
+      </div>
+      <div class="col">
+        <dl>
+          <dt>Expected</dt><dd>Homeowner</dd>
+          <dt>Held with</dt><dd>Startup day 3</dd>
+          <dt>Confirmed</dt><dd style="color:var(--warn)">Not yet</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ POOL 3 ═══════════ -->
+  <div class="pool">
+    <div class="pool-hd">
+      <div>
+        <h2>Delgado</h2>
+        <div class="addr">27121 Highland Crest, San Antonio · MCPS-0048</div>
+      </div>
+      <span class="pill go">Awaiting pool school</span>
+    </div>
+
+    <div class="track">
+      <div class="step done"><div class="dot"></div><div class="t">Day 1<br>Equipment</div><div class="d">Sept 1</div></div>
+      <div class="step done"><div class="dot"></div><div class="t">Day 2<br>Clean &amp; balance</div><div class="d">Sept 3</div></div>
+      <div class="step done"><div class="dot"></div><div class="t">Day 3<br>Programming</div><div class="d">Sept 5</div></div>
+      <div class="step now"><div class="dot"></div><div class="t">Pool school</div><div class="d">Sept 13</div></div>
+      <div class="step pending"><div class="dot"></div><div class="t">First month</div><div class="d">Not scheduled</div></div>
+    </div>
+
+    <p class="narr">Startup work is finished. Two small things came up and both are closed: a loose return eyeball fitting we tightened on day 1, and a cracked skimmer weir door we replaced on day 3. Water is balanced and the equipment is programmed. The only thing left is pool school, which the homeowner moved to the following Saturday.</p>
+
+    <div class="action info">
+      <span class="lbl">Heads up</span>
+      Pool school moved once at the homeowner's request — from Saturday September 6 to <b>Saturday September 13 at 11:00 AM</b>. Confirmed by text. Nothing needed from MCP.
+    </div>
+
+    <div class="sect">What happened, by day</div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Monday</div><div class="dd">Sept 1</div><div class="dy">Day 1</div></div>
+      <div class="day-b">
+        <h4>Equipment start</h4>
+        <p>Backwashed the filter, checked connections, primed the pump, connected the backwash hose, turned on the autofill and delivered the startup kit.</p>
+        <ul class="findings">
+          <li><span class="st fixed">Fixed</span><div><b>Return eyeball fitting loose.</b> Tightened and re-checked flow at both returns.</div></li>
+        </ul>
+        <div class="shots">
+          <div class="shot eq"><span class="cap">Equipment</span></div>
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Wednesday</div><div class="dd">Sept 3</div><div class="dy">Day 2</div></div>
+      <div class="day-b">
+        <h4>Clean &amp; balance</h4>
+        <p>Brushed, vacuumed, cleaned both baskets and balanced the water. Chlorine 3.4, pH 7.6, alkalinity 95.</p>
+        <div class="shots">
+          <div class="shot"><span class="cap">Before</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+          <div class="shot eq"><span class="cap">Equipment</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-d"><div class="dw">Friday</div><div class="dd">Sept 5</div><div class="dy">Day 3</div></div>
+      <div class="day-b">
+        <h4>Programming</h4>
+        <p>Set the timers and the cleaner schedule and ran a full cycle to confirm.</p>
+        <ul class="findings">
+          <li><span class="st fixed">Fixed</span><div><b>Skimmer weir door cracked.</b> Replaced it and confirmed it swings freely.</div></li>
+        </ul>
+        <div class="shots">
+          <div class="shot eq"><span class="cap">Weir door</span></div>
+          <div class="shot"><span class="cap">After</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="school">
+      <div class="col">
+        <div class="lbl">Pool school</div>
+        <div class="when">Saturday, September 13 · 11:00 AM</div>
+        <div class="sub">Confirmed by text with the homeowner. Its own trip — the startup days are already finished.</div>
+      </div>
+      <div class="col">
+        <dl>
+          <dt>Expected</dt><dd>Both homeowners</dd>
+          <dt>Held with</dt><dd>Own appointment</dd>
+          <dt>Rescheduled</dt><dd>Once, by homeowner</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ HOW IT WAS WRITTEN ═══════════ -->
+<div class="howto">
+  <div class="wrap">
+    <h3>How the writing gets made</h3>
+    <p class="lede">This is the part worth judging. On the left is what the technician actually entered on the Whitfield pool. On the right is what MCP would read. Same facts — the question is whether the right-hand column earns its keep.</p>
+    <div class="cmp">
+      <div>
+        <h5>What the tech entered</h5>
+        <div class="raw">Day 1 — Sept 3
+work: backwash filter, check connections,
+prime pump, autofill on, backwash hose,
+kit delivered
+finding: heater no fire. no gas at
+appliance. checked meter, line not
+hooked up. state=needs_builder
+photos: heater, gas meter, before, after
+
+Day 2 — Sept 4
+work: brush, vac, baskets, balance
+FC 3.0 pH 7.4 TA 100
+finding: heater same. no gas.
+state=needs_builder
+photos: before, after</div>
+      </div>
+      <div>
+        <h5>What MCP reads</h5>
+        <div class="out">Equipment is running, the water is balanced and the pool is swimmable. <b>The heater will not fire — the gas line is not connected at the meter.</b> We found it on day 1 and it was still down when we came back Thursday. Nothing on our side is waiting on this; the heater is the only open item, and it isn't ours to close.</div>
+        <div class="flagbox">
+          <b>Held back for review</b>
+          The draft also wanted to say the heater was "awaiting a contractor." No contractor and no date appear in any record, so that line was pulled and raised as a question instead.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  <div class="m">Every pool matters.</div>
+  Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+  <a href="#">missioncustompools.com</a> · (210) 559-2073
+</div>
+
+</body>
+</html>

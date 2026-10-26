@@ -741,6 +741,20 @@ function scheduleTemporaryWeeklyVisits(token, poolId, week1Monday, dayOfWeek, as
       });
     }
 
+    // Warm Route_Distance_Cache for every week this reassignment touches. A newly
+    // formed stop combination (this pool alongside whoever else already covers that
+    // day) has pairs Maps has never resolved; orderStopsNearestNeighbor_ requires
+    // EVERY pair cached or it silently falls back to unordered stops (see
+    // RouteOrdering.js). computeRouteData_ runs the real read pipeline and caches
+    // any new pairs as a side effect — same mechanism as backfillRouteDistances().
+    try {
+      const warmedWeeks = {};
+      visits.forEach(v => { if (v.scheduled_date && v.week_start) warmedWeeks[v.week_start] = true; });
+      Object.keys(warmedWeeks).forEach(wk => computeRouteData_(wk));
+    } catch (warmErr) {
+      Logger.log("scheduleTemporaryWeeklyVisits distance warm failed (non-blocking): " + warmErr);
+    }
+
     Logger.log("scheduleTemporaryWeeklyVisits: " + poolId + " → " + count + " visits from " + (visits[0].scheduled_date || "?"));
     return { ok: true, visits: visits, visit_count: count, cancelled_count: cancelled, start_week: startWeek };
   } catch(e) {

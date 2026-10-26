@@ -27,6 +27,13 @@ export const REQUIRED_BUCKETS = [
   'fica_payable', 'futa_payable', 'suta_payable', 'bank_checking'
 ];
 
+// Where a person opens a transaction in the QBO web app (sandbox companies live on a different host).
+export function qboAppBase() {
+  return String(process.env.QBO_ENV || '').toLowerCase() === 'production'
+    ? 'https://qbo.intuit.com'
+    : 'https://app.sandbox.qbo.intuit.com';
+}
+
 function apiBase() {
   return String(process.env.QBO_ENV || '').toLowerCase() === 'production'
     ? 'https://quickbooks.api.intuit.com'
@@ -185,7 +192,7 @@ export async function getValidAccessToken() {
 
 // Authenticated call to the QBO Accounting API. `path` is relative to the company,
 // e.g. `journalentry` or `query?query=...`.
-export async function qboFetch(path, { method = 'GET', body, accessToken, realmId } = {}) {
+export async function qboFetch(path, { method = 'GET', body, accessToken, realmId, contentType } = {}) {
   if (!accessToken || !realmId) {
     const t = await getValidAccessToken();
     accessToken = t.accessToken;
@@ -198,7 +205,7 @@ export async function qboFetch(path, { method = 'GET', body, accessToken, realmI
     headers: {
       authorization: `Bearer ${accessToken}`,
       accept: 'application/json',
-      ...(body ? { 'content-type': 'application/json' } : {})
+      ...(body ? { 'content-type': 'application/json' } : (contentType ? { 'content-type': contentType } : {}))
     },
     body: body ? JSON.stringify(body) : undefined
   });
@@ -267,4 +274,58 @@ export async function saveAccountMap(map) {
 // Buckets with no account id mapped yet.
 export function missingBuckets(map) {
   return REQUIRED_BUCKETS.filter(b => !(map[b] && map[b].account_id));
+}
+
+// ── Customer map (portal quote_id → QBO customer) ─────────────────────────────
+// Kept in its own hidden tab beside QBO_Account_Map rather than as Quotes columns,
+// so the invoice feature needs no change to the GAS or api/_repo schemas.
+const CUSTOMER_MAP_SHEET   = 'QBO_Customer_Map';
+const CUSTOMER_MAP_HEADERS = ['Quote_ID', 'QBO_Customer_ID', 'QBO_Customer_Name', 'Card_On_File', 'Updated_At'];
+
+export async function getCustomerMap() {
+  const ssId = qboConfigSpreadsheetId();
+  await ensureSheetWithHeaders(CUSTOMER_MAP_SHEET, CUSTOMER_MAP_HEADERS, ssId);
+  const rows = await readSheetRange(`${CUSTOMER_MAP_SHEET}!A2:E`, ssId);
+  const map = {};
+  rows.forEach(r => {
+    const quoteId = String(r[0] || '').trim();
+    if (!quoteId) return;
+    map[quoteId] = {
+      qbo_customer_id: String(r[1] || '').trim(),
+      qbo_customer_name: String(r[2] || '').trim(),
+      card_on_file: String(r[3] || '').trim().toLowerCase() === 'true',
+      updated_at: String(r[4] || '').trim()
+    };
+  });
+  return map;
+}
+
+// Merge `entries` ({ quote_id: { qbo_customer_id, qbo_customer_name, card_on_file } })
+// into the stored map and rewrite the tab. An entry with an empty qbo_customer_id
+// removes that client's link.
+export async function saveCustomerMap(entries) {
+  const ssId = qboConfigSpreadsheetId();
+  const map = await getCustomerMap();
+  const now = new Date().toISOString();
+  Object.entries(entries || {}).forEach(([quoteId, e]) => {
+    const id = String(quoteId || '').trim();
+    if (!id) return;
+    const prev = map[id] || {};
+    const next = {
+      qbo_customer_id: e.qbo_customer_id !== undefined ? String(e.qbo_customer_id || '').trim() : (prev.qbo_customer_id || ''),
+      qbo_customer_name: e.qbo_customer_name !== undefined ? String(e.qbo_customer_name || '').trim() : (prev.qbo_customer_name || ''),
+      card_on_file: e.card_on_file !== undefined ? !!e.card_on_file : !!prev.card_on_file,
+      updated_at: now
+    };
+    if (!next.qbo_customer_id && !next.card_on_file) delete map[id];
+    else map[id] = next;
+  });
+  const prevCount = (await readSheetRange(`${CUSTOMER_MAP_SHEET}!A2:E`, ssId)).length;
+  const rows = Object.entries(map).map(([id, e]) =>
+    [id, e.qbo_customer_id, e.qbo_customer_name, e.card_on_file ? 'TRUE' : 'FALSE', e.updated_at || now]);
+  // Rewrite the block, then blank any rows left over from a longer previous map.
+  const pad = Math.max(0, prevCount - rows.length);
+  const out = rows.concat(Array.from({ length: pad }, () => ['', '', '', '', '']));
+  if (out.length) await writeSheetRange(`${CUSTOMER_MAP_SHEET}!A2:E${out.length + 1}`, out, ssId);
+  return getCustomerMap();
 }

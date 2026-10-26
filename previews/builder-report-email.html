@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCPS — Builder Startup Report Email · 2 mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--teal:#0D3D3E;--teal-2:#082a2b;--aqua:#1FA7A8;--aqua-light:#5ED6D3;--gray:#F3F5F6;
+    --charcoal:#222;--muted:rgba(34,34,34,.6);--line:#E4EAEA;
+    --warn:#d97706;--success:#16a34a;
+    --fh:'Montserrat',sans-serif;--fb:'Open Sans',sans-serif;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#dfe6e6;font-family:var(--fb);color:var(--charcoal);padding:40px 16px 90px;}
+  .page-title{max-width:640px;margin:0 auto 8px;font-family:var(--fh);font-weight:800;color:var(--teal);font-size:22px;text-align:center;}
+  .page-sub{max-width:640px;margin:0 auto 12px;text-align:center;color:#4a5656;font-size:14px;line-height:1.6;}
+  .page-note{max-width:640px;margin:0 auto 40px;text-align:center;background:#fff;border:1px dashed var(--aqua);border-radius:10px;padding:12px 18px;color:#3a4645;font-size:12.5px;line-height:1.55;}
+  .page-note b{color:var(--teal);}
+  .variant{max-width:640px;margin:0 auto 56px;}
+  .vlabel{display:flex;align-items:center;gap:10px;margin:0 4px 14px;flex-wrap:wrap;}
+  .vlabel .tag{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--aqua);padding:5px 12px;border-radius:20px;}
+  .vlabel .name{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:15px;}
+  .vlabel .desc{color:#5a6666;font-size:13px;}
+  .subject{max-width:640px;margin:0 4px 10px;font-size:13px;color:#4a5656;}
+  .subject b{color:var(--teal);font-family:var(--fh);}
+  .email{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(13,61,62,.14);}
+
+  /* ---- header ---- */
+  .brandbar{background:#fff;padding:24px 34px 20px;border-bottom:3px solid var(--aqua);}
+  .brandbar img{height:32px;display:block;}
+  .hd{background:var(--teal);padding:26px 34px 24px;color:#fff;}
+  .hd .eyebrow{font-family:var(--fh);font-weight:700;font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--aqua-light);margin-bottom:9px;}
+  .hd h1{font-family:var(--fh);font-weight:700;font-size:22px;margin:0 0 6px;line-height:1.25;}
+  .hd .period{font-size:13px;color:rgba(255,255,255,.72);}
+
+  /* ---- glance strip ---- */
+  .glance{display:flex;border-bottom:1px solid var(--line);}
+  .glance div{flex:1;padding:18px 10px;text-align:center;border-right:1px solid var(--line);}
+  .glance div:last-child{border-right:0;}
+  .glance .n{font-family:var(--fh);font-weight:800;font-size:24px;color:var(--teal);line-height:1;}
+  .glance .n.attn{color:var(--warn);}
+  .glance .l{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:6px;font-weight:600;}
+
+  .body{padding:28px 34px 8px;}
+  .sect{font-family:var(--fh);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);margin:0 0 14px;display:flex;align-items:center;gap:8px;}
+  .sect::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--aqua);flex:0 0 auto;}
+
+  /* ---- pool block ---- */
+  .pool{border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px;}
+  .pool.attn{border-color:#f3d9ae;background:#fffdf7;}
+  .pool-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px;}
+  .pool-name{font-family:var(--fh);font-weight:700;font-size:15.5px;color:var(--teal);}
+  .pool-addr{font-size:12px;color:var(--muted);margin-bottom:12px;}
+  .pill{flex:0 0 auto;font-family:var(--fh);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:20px;white-space:nowrap;}
+  .pill.ok{background:rgba(22,163,74,.12);color:var(--success);}
+  .pill.go{background:rgba(31,167,168,.14);color:#12797a;}
+  .pill.attn{background:rgba(217,119,6,.13);color:var(--warn);}
+  .narr{font-size:13.5px;line-height:1.65;color:#3a4645;margin:0 0 12px;}
+  .narr b{color:var(--teal);font-weight:600;}
+
+  .meta{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{font-size:11.5px;color:#3a4645;background:var(--gray);border-radius:7px;padding:6px 10px;}
+  .chip b{font-family:var(--fh);color:var(--teal);font-weight:700;}
+
+  .action{margin-top:12px;border-left:3px solid var(--warn);background:rgba(217,119,6,.07);border-radius:0 8px 8px 0;padding:11px 14px;font-size:12.5px;line-height:1.55;color:#5c4213;}
+  .action b{font-family:var(--fh);font-weight:700;color:var(--warn);letter-spacing:.06em;text-transform:uppercase;font-size:10px;display:block;margin-bottom:4px;}
+
+  .cta{padding:8px 34px 30px;text-align:center;}
+  .btn{display:inline-block;text-decoration:none;font-family:var(--fh);font-weight:700;font-size:14px;color:#fff;background:var(--aqua);padding:13px 30px;border-radius:10px;box-shadow:0 8px 20px rgba(31,167,168,.3);}
+  .fine{font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5;}
+
+  .foot{padding:22px 32px 28px;text-align:center;border-top:1px solid var(--line);color:var(--muted);font-size:12px;}
+  .foot .m{font-family:var(--fh);font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--aqua);font-size:10px;margin-bottom:8px;}
+  .foot a{color:var(--teal);text-decoration:none;}
+
+  /* ---- variant B extras: full inline ---- */
+  .day{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--line);}
+  .day:last-child{border-bottom:0;}
+  .day-d{flex:0 0 62px;font-family:var(--fh);font-weight:700;font-size:11px;color:var(--aqua);letter-spacing:.06em;text-transform:uppercase;padding-top:2px;line-height:1.4;}
+  .day-b{flex:1;font-size:13px;line-height:1.6;color:#3a4645;}
+  .day-b .lbl{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:11px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:3px;}
+  .shots{display:flex;gap:6px;margin-top:9px;}
+  .shot{width:62px;height:46px;border-radius:6px;background:linear-gradient(140deg,var(--aqua-light),var(--teal));opacity:.85;position:relative;overflow:hidden;}
+  .shot::after{content:"";position:absolute;left:0;right:0;bottom:0;height:42%;background:rgba(255,255,255,.16);}
+  .shot.eq{background:linear-gradient(140deg,#9aa8a8,#43514f);}
+  .divider{height:1px;background:var(--line);margin:22px 0;}
+  .school{border:1px solid var(--aqua-light);background:rgba(94,214,211,.09);border-radius:10px;padding:14px 16px;margin-top:14px;}
+  .school .lbl{font-family:var(--fh);font-weight:700;color:var(--teal);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;}
+  .school .when{font-family:var(--fh);font-weight:700;font-size:15px;color:var(--teal);}
+  .school .sub{font-size:12px;color:#3a4645;margin-top:4px;line-height:1.55;}
+</style>
+</head>
+<body>
+
+<div class="page-title">Builder startup report — the email</div>
+<div class="page-sub">What lands in MCP's inbox. Same data, two densities.<br>All names, pools and events below are fictional.</div>
+<div class="page-note">
+  The real question these two answer: <b>does MCP read the report in the email, or click through to it?</b>
+  A carries less and links out — it survives Gmail clipping and keeps photos on the web page.
+  B is self-contained — nothing to click, but it grows with every pool and photo, and Gmail clips messages over ~102 KB.
+</div>
+
+<!-- =========================================================== -->
+<!-- VARIANT A — DIGEST + LINK                                    -->
+<!-- =========================================================== -->
+<div class="variant">
+  <div class="vlabel">
+    <span class="tag">Option A</span>
+    <span class="name">Digest + link</span>
+    <span class="desc">Scan in 20 seconds, click for the detail</span>
+  </div>
+  <div class="subject"><b>Subject:</b> Startup progress — 3 pools · week of Sept 1</div>
+
+  <div class="email">
+    <div class="brandbar"><img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions"></div>
+    <div class="hd">
+      <div class="eyebrow">Startup progress</div>
+      <h1>Mission Custom Pools</h1>
+      <div class="period">Monday, September 1 – Sunday, September 7, 2026</div>
+    </div>
+
+    <div class="glance">
+      <div><div class="n">3</div><div class="l">In progress</div></div>
+      <div><div class="n attn">1</div><div class="l">Needs you</div></div>
+      <div><div class="n">2</div><div class="l">Pool schools</div></div>
+      <div><div class="n">1</div><div class="l">Completed</div></div>
+    </div>
+
+    <div class="body">
+      <div class="sect">This week</div>
+
+      <div class="pool">
+        <div class="pool-top">
+          <div>
+            <div class="pool-name">Ruiz</div>
+            <div class="pool-addr">118 Cascade Bend · MCPS-0044</div>
+          </div>
+          <span class="pill ok">Startup complete</span>
+        </div>
+        <p class="narr">All three startup days are done. On day 1 the pump-lid O-ring was split — we replaced it and confirmed no leak when we came back Tuesday. Autofill is on and running. <b>Pool school was held Thursday</b> with both homeowners present.</p>
+        <div class="meta">
+          <span class="chip"><b>Next</b> First-month week 1 · Sept 11</span>
+          <span class="chip"><b>9</b> photos</span>
+        </div>
+      </div>
+
+      <div class="pool attn">
+        <div class="pool-top">
+          <div>
+            <div class="pool-name">Whitfield</div>
+            <div class="pool-addr">8611 Kihnu Willow · MCPS-0046</div>
+          </div>
+          <span class="pill attn">Blocked</span>
+        </div>
+        <p class="narr">Equipment is running and the pump primed on day 1. <b>The heater will not fire — the gas line is not connected at the meter.</b> We logged it Wednesday and it was still down Thursday. Cleaning and chemistry are done; the pool is swimmable.</p>
+        <div class="action">
+          <b>MCP action</b>
+          Gas line connection at the meter. No contractor date on record yet — pool school on Sept 9 can go ahead without it, but the heater can't be demonstrated.
+        </div>
+        <div class="meta" style="margin-top:12px">
+          <span class="chip"><b>Pool school</b> Sept 9, 10:00 AM — not yet confirmed</span>
+          <span class="chip"><b>6</b> photos</span>
+        </div>
+      </div>
+
+      <div class="pool">
+        <div class="pool-top">
+          <div>
+            <div class="pool-name">Delgado</div>
+            <div class="pool-addr">27121 Highland Crest · MCPS-0048</div>
+          </div>
+          <span class="pill go">Awaiting pool school</span>
+        </div>
+        <p class="narr">Startup days ran Monday, Wednesday and Friday. Two small fixes: a loose return eyeball fitting, tightened, and a cracked skimmer weir door we replaced. Water is balanced and equipment is programmed.</p>
+        <div class="action" style="border-left-color:var(--aqua);background:rgba(31,167,168,.07);color:#1a4a4a">
+          <b style="color:var(--aqua)">Heads up</b>
+          Pool school moved once at the homeowner's request — from Sept 6 to <b style="display:inline;font-size:12.5px;text-transform:none;letter-spacing:0;color:#1a4a4a">Saturday Sept 13 at 11:00 AM</b>. Confirmed by text.
+        </div>
+        <div class="meta" style="margin-top:12px">
+          <span class="chip"><b>7</b> photos</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta">
+      <a href="#" class="btn">View full report</a>
+      <div class="fine">Every visit, every photo, grouped by the day we were there.</div>
+    </div>
+
+    <div class="foot"><div class="m">Every pool matters.</div>
+      Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+      <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+  </div>
+</div>
+
+<!-- =========================================================== -->
+<!-- VARIANT B — FULL INLINE                                      -->
+<!-- =========================================================== -->
+<div class="variant">
+  <div class="vlabel">
+    <span class="tag">Option B</span>
+    <span class="name">Full inline</span>
+    <span class="desc">Nothing to click — the whole report is the email</span>
+  </div>
+  <div class="subject"><b>Subject:</b> Startup progress — 3 pools · week of Sept 1</div>
+
+  <div class="email">
+    <div class="brandbar"><img src="../assets/mcps-lockup.png" alt="Mission Custom Pool Solutions"></div>
+    <div class="hd">
+      <div class="eyebrow">Startup progress</div>
+      <h1>Mission Custom Pools</h1>
+      <div class="period">Monday, September 1 – Sunday, September 7, 2026</div>
+    </div>
+
+    <div class="glance">
+      <div><div class="n">3</div><div class="l">In progress</div></div>
+      <div><div class="n attn">1</div><div class="l">Needs you</div></div>
+      <div><div class="n">2</div><div class="l">Pool schools</div></div>
+      <div><div class="n">1</div><div class="l">Completed</div></div>
+    </div>
+
+    <div class="body">
+      <div class="sect">Ruiz · 118 Cascade Bend · MCPS-0044</div>
+      <p class="narr">All three startup days are done and pool school was held Thursday with both homeowners present. The one problem we found — a split pump-lid O-ring on day 1 — was replaced the same visit and confirmed dry on Tuesday. Autofill is on. This pool moves to first-month service on Sept 11.</p>
+
+      <div class="day">
+        <div class="day-d">Mon<br>Sept 1</div>
+        <div class="day-b">
+          <span class="lbl">Day 1 · Equipment</span>
+          Backwashed the filter, checked every connection and fitting, primed the pump, connected the backwash hose and turned on the autofill. Startup kit delivered to the homeowner. Found the pump-lid O-ring split and replaced it.
+          <div class="shots"><div class="shot"></div><div class="shot eq"></div><div class="shot"></div></div>
+        </div>
+      </div>
+      <div class="day">
+        <div class="day-d">Tue<br>Sept 2</div>
+        <div class="day-b">
+          <span class="lbl">Day 2 · Clean &amp; balance</span>
+          Brushed and vacuumed, cleaned the baskets, balanced chemistry. Re-checked the pump lid — no leak.
+          <div class="shots"><div class="shot"></div><div class="shot"></div><div class="shot eq"></div></div>
+        </div>
+      </div>
+      <div class="day">
+        <div class="day-d">Thu<br>Sept 4</div>
+        <div class="day-b">
+          <span class="lbl">Day 3 · Pool school</span>
+          Walked both homeowners through the equipment, cleaning routine and chemistry. Signed checklist on file.
+          <div class="shots"><div class="shot"></div><div class="shot"></div><div class="shot"></div></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sect">Whitfield · 8611 Kihnu Willow · MCPS-0046</div>
+      <p class="narr">Equipment is running and the pool is swimmable, but <b>the heater will not fire — the gas line is not connected at the meter.</b> We logged it Wednesday and it was still down Thursday. This one needs MCP.</p>
+
+      <div class="action">
+        <b>MCP action</b>
+        Gas line connection at the meter. No contractor date on record. Pool school on Sept 9 can proceed without it, but we won't be able to demonstrate the heater to the homeowner.
+      </div>
+
+      <div class="day" style="margin-top:6px">
+        <div class="day-d">Wed<br>Sept 3</div>
+        <div class="day-b">
+          <span class="lbl">Day 1 · Equipment</span>
+          Filter backwashed, connections checked, pump primed, autofill on, backwash hose connected, startup kit delivered. Heater would not fire — traced to an unconnected gas line at the meter.
+          <div class="shots"><div class="shot eq"></div><div class="shot eq"></div><div class="shot"></div></div>
+        </div>
+      </div>
+      <div class="day">
+        <div class="day-d">Thu<br>Sept 4</div>
+        <div class="day-b">
+          <span class="lbl">Day 2 · Clean &amp; balance</span>
+          Brushed, vacuumed and balanced. Heater re-checked, still no gas.
+          <div class="shots"><div class="shot"></div><div class="shot"></div></div>
+        </div>
+      </div>
+
+      <div class="school">
+        <div class="lbl">Pool school</div>
+        <div class="when">Tuesday, September 9 · 10:00 AM</div>
+        <div class="sub">Riding with startup day 3. Proposed — not yet confirmed with the homeowner. We'll confirm and let you know.</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="sect">Delgado · 27121 Highland Crest · MCPS-0048</div>
+      <p class="narr">Startup work is finished. Two small fixes along the way: a loose return eyeball fitting we tightened on day 1, and a cracked skimmer weir door we replaced on day 3. Water is balanced and the equipment is programmed. Only pool school is left.</p>
+
+      <div class="day">
+        <div class="day-d">Mon<br>Sept 1</div>
+        <div class="day-b">
+          <span class="lbl">Day 1 · Equipment</span>
+          Filter backwashed, pump primed, autofill on, kit delivered. Return eyeball fitting was loose — tightened and re-checked.
+          <div class="shots"><div class="shot eq"></div><div class="shot"></div></div>
+        </div>
+      </div>
+      <div class="day">
+        <div class="day-d">Wed<br>Sept 3</div>
+        <div class="day-b">
+          <span class="lbl">Day 2 · Clean &amp; balance</span>
+          Brushed, vacuumed, baskets cleaned, chemistry balanced.
+          <div class="shots"><div class="shot"></div><div class="shot"></div><div class="shot"></div></div>
+        </div>
+      </div>
+      <div class="day">
+        <div class="day-d">Fri<br>Sept 5</div>
+        <div class="day-b">
+          <span class="lbl">Day 3 · Programming</span>
+          Timers and cleaner schedule set. Skimmer weir door was cracked — replaced it.
+          <div class="shots"><div class="shot eq"></div><div class="shot"></div></div>
+        </div>
+      </div>
+
+      <div class="school">
+        <div class="lbl">Pool school</div>
+        <div class="when">Saturday, September 13 · 11:00 AM</div>
+        <div class="sub">Confirmed by text. Moved once at the homeowner's request, from Sept 6.</div>
+      </div>
+    </div>
+
+    <div class="cta" style="padding-top:24px">
+      <div class="fine" style="margin-top:0">Photos are shown at full size in the web version.<br>Reply to this email and it reaches Antonio and Mauricio directly.</div>
+    </div>
+
+    <div class="foot"><div class="m">Every pool matters.</div>
+      Mission Custom Pool Solutions LLC · San Antonio, TX<br>
+      <a href="#">missioncustompools.com</a> · (210) 559-2073</div>
+  </div>
+</div>
+
+</body>
+</html>

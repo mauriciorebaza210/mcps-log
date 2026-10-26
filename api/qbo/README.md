@@ -66,3 +66,56 @@ With `QBO_ENV=sandbox` and sandbox keys, run `vercel dev`, connect to an Intuit 
 map accounts, then record a paycheck and confirm the JE in QBO (Accounting → Journal Entries). It
 should balance, be dated on the **pay date**, and clicking *Post to QuickBooks* twice must not create
 a second entry.
+
+---
+
+# Monthly service invoices (Clients tab)
+
+Automates the monthly "duplicate last month's invoice, change the number to the new month, send" routine.
+Financial Hub → **Clients** → **Invoices · <Month>** panel.
+
+**How an invoice is built:** the client's most recent QBO invoice whose number is a month name
+("September") is copied: same item(s), description, qty, rate, tax code, terms, note to customer, billing
+email/CC/BCC and addresses. The new one is numbered with the billed month ("October"), dated today
+(America/Chicago), and created **unsent**. `TxnTaxDetail` is omitted so automated sales tax recalculates.
+Repair/startup invoices (non-month numbers) are never used as templates.
+
+**Never billed twice:** every portal-created invoice carries `PrivateNote = mcps-auto:<quote_id>:<YYYY-MM>`.
+Before creating, the client's recent invoices are checked for that note *or* a hand-made invoice with the same
+month name dated from ~10 days before the month through the end of the next month (catch-up invoices happen).
+If found, it's returned instead of creating a new one. Month names repeat across customers, so creation uses
+`?include=allowduplicatedocnum`.
+
+**Nothing is emailed without two switches:** step 1 in the UI only creates drafts; step 2 calls `invoice_send`,
+which the server refuses unless **`QBO_INVOICE_SEND=on`**. It also refuses any invoice the portal didn't create for
+that client. Leave the variable unset until a reviewed batch is ready to go out.
+
+**Card-on-file clients** (toggle per client): the QBO API can't charge stored cards, so these are listed under
+"Charge in QuickBooks" with direct links; they aren't emailed unless "Also email card-on-file clients" is ticked.
+
+**Paid detection:** on Clients tab load, portal-tracked invoices from this and last month are checked; a zero
+balance flips the client to Paid.
+
+**Customer links** live in a hidden `QBO_Customer_Map` tab (`Quote_ID`, `QBO_Customer_ID`, `QBO_Customer_Name`,
+`Card_On_File`, `Updated_At`) beside `QBO_Account_Map`. First run auto-matches by email, then exact name; a
+match is saved once confirmed.
+
+| Op | Method | Does |
+|---|---|---|
+| `customers` | GET | Active QBO customers (id, name, email) |
+| `customer_map` | GET / POST `{ entries }` | Read / merge customer links |
+| `invoice_prepare` | POST `{ clients[] }` | Read-only preview: template, existing invoice, rate mismatch |
+| `invoice_create` | POST `{ quote_id, qbo_customer_id, month_key }` | Create one unsent invoice (idempotent) |
+| `invoice_send` | POST `{ quote_id, invoice_id }` | Email through QBO, only if `QBO_INVOICE_SEND=on` |
+| `invoice_status` | POST `{ ids[] }` | Balances for paid detection |
+
+## Previewing locally
+
+On `localhost`, the Clients tab runs in **DRY RUN**: Pause / Lost / invoice day / payment-status writes and
+customer-link saves are logged to the console instead of sent to Apps Script (append `?live=1` to override).
+QuickBooks calls still go to whatever company `QBO_Tokens` holds, so preview against a **sandbox** company
+(`QBO_ENV` unset) and keep `QBO_INVOICE_SEND` unset.
+
+⚠️ `QBO_Tokens` lives in a shared spreadsheet. After production is connected, local `vercel dev` would read the
+production tokens. To keep previewing against the sandbox, point local at a separate config sheet with
+`QBO_CONFIG_SPREADSHEET_ID` in `.env.local`.

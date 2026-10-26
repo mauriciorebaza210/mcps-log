@@ -1187,44 +1187,60 @@ function _clientsSetBillingFilter(filter) {
   _renderClientsTable();
 }
 
-async function _clientsMarkBilling(quoteId, status) {
+// ── Dry run ───────────────────────────────────────────────────────────────────
+// `vercel dev` serves this page locally, but `api()` still reaches the PRODUCTION
+// Apps Script, so a "local" Pause or Lost would edit a real client. On localhost
+// every Clients-tab write is logged instead of sent, unless the URL has ?live=1.
+const _clientsDryRun = ['localhost', '127.0.0.1'].includes(location.hostname)
+  && !new URLSearchParams(location.search).has('live');
+
+async function _clientsWrite(payload, options) {
+  if (_clientsDryRun) {
+    console.info('[dry-run] not sent:', JSON.stringify(payload));
+    return { ok: true, dry_run: true };
+  }
+  try {
+    return await api({ token: _s.token, ...payload }, options);
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Patch one quote in every client-side copy (Financial Hub + Sales Hub caches).
+function _clientsPatch(quoteId, fields) {
   const item = (_finCrmCache || []).find(i => i.quote_id === quoteId);
-  if (!item) return;
-
-  const month = _clientsCurrentMonthKey();
-  const log = _clientsPaymentLog(item);
-  const entryIdx = log.findIndex(e => e.month === month);
-  if (entryIdx > -1) log[entryIdx].status = status;
-  else log.push({ month, status });
-
-  const prevLog = item.payment_log;
-  item.payment_log = log;
-  if (typeof _crmCache !== 'undefined') {
-    const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
-    if (idx > -1) _crmCache[idx].payment_log = log;
+  if (item) Object.assign(item, fields);
+  if (typeof _crmCache !== 'undefined' && _crmCache !== _finCrmCache) {
+    const other = _crmCache.find(i => i.quote_id === quoteId);
+    if (other) Object.assign(other, fields);
   }
   _appCacheSet('crm_data', _finCrmCache);
+  return item;
+}
+
+// Set this month's (or `month`'s) payment_log entry. `extra` carries QuickBooks
+// fields (qbo_invoice_id, total, …) onto the entry.
+async function _clientsMarkBilling(quoteId, status, extra = {}, month = _clientsCurrentMonthKey()) {
+  const item = (_finCrmCache || []).find(i => i.quote_id === quoteId);
+  if (!item) return { ok: false, error: 'Client not found.' };
+
+  const log = _clientsPaymentLog(item);
+  const entryIdx = log.findIndex(e => e.month === month);
+  const entry = { ...(entryIdx > -1 ? log[entryIdx] : { month }), ...extra, status };
+  if (entryIdx > -1) log[entryIdx] = entry;
+  else log.push(entry);
+
+  const prevLog = item.payment_log;
+  _clientsPatch(quoteId, { payment_log: log });
   _renderClientsTab();
 
-  const res = await api({
-    action: 'update_lead',
-    token: _s.token,
-    quote_id: quoteId,
-    payment_log: log
-  });
-
+  const res = await _clientsWrite({ action: 'update_lead', quote_id: quoteId, payment_log: log });
   if (!res.ok) {
-    item.payment_log = prevLog;
-    if (typeof _crmCache !== 'undefined') {
-      const idx = _crmCache.findIndex(i => i.quote_id === quoteId);
-      if (idx > -1) _crmCache[idx].payment_log = prevLog;
-    }
-    _appCacheSet('crm_data', _finCrmCache);
+    _clientsPatch(quoteId, { payment_log: prevLog });
     _renderClientsTab();
-    alert(res.error || 'Billing update failed.');
-  } else {
-    _appCacheSet('crm_data', _finCrmCache);
+    _clientsToast(`${res.error || 'Billing update failed.'}`, null, 'error');
   }
+  return res;
 }
 
 function _renderClientsTab() {
@@ -1237,7 +1253,9 @@ function _renderClientsTab() {
     _crmCache = [..._finCrmCache];
   }
 
-  const clients = (_finCrmCache || []).filter(r => r.status === 'ACTIVE_CUSTOMER');
+  // Paused clients ride along so the Paused filter can reactivate them; every
+  // count and the default table view below use active clients only.
+  const clients = (_finCrmCache || []).filter(r => r.status === 'ACTIVE_CUSTOMER' || r.status === 'PAUSED');
 
   // Build route and last-visit signals from service submissions.
   const cutoff = Date.now() - 60 * 24 * 60 * 60 * 1000;
@@ -1280,7 +1298,7 @@ function _renderClientsTab() {
     }
   }
 
-  const enriched = clients.map(c => {
+  let enriched = clients.map(c => {
     const normPoolId = _finNormalizePoolId(c.pool_id);
     const inRoutes = !!(normPoolId && inRouteIds.has(normPoolId));
     const thisMonthStatus = _clientsMonthStatus(c, currentMonthKey);
@@ -1293,9 +1311,15 @@ function _renderClientsTab() {
     const needsBilling = ['pending', 'none'].includes(thisMonthStatus);
     const noRoute = !inRoutes;
     const stale = lastVisitDays === null || lastVisitDays > 21;
-    const attentionScore = (needsBilling ? 4 : 0) + (dueThisWeek ? 3 : 0) + (noRoute ? 3 : 0) + (stale ? 2 : 0);
-    return { ...c, inRoutes, thisMonthStatus, monthlyRate, name, dueThisWeek, lastVisit, lastVisitDays, visitsThisMonth, needsBilling, noRoute, stale, attentionScore };
+    const noDay = !c.invoice_day;
+    const paused = c.status === 'PAUSED';
+    const attentionScore = (needsBilling ? 4 : 0) + (dueThisWeek ? 3 : 0) + (noRoute ? 3 : 0) + (stale ? 2 : 0) + (noDay ? 2 : 0);
+    return { ...c, inRoutes, thisMonthStatus, monthlyRate, name, dueThisWeek, lastVisit, lastVisitDays, visitsThisMonth, needsBilling, noRoute, stale, noDay, paused, attentionScore };
   });
+  const enrichedAll = enriched;
+  const pausedCount = enrichedAll.filter(c => c.paused).length;
+  const cleanupCount = enrichedAll.filter(c => !c.paused && (c.noDay || c.stale || c.noRoute)).length;
+  enriched = enrichedAll.filter(c => !c.paused);
 
   const totalMRR = enriched.reduce((s, c) => s + c.monthlyRate, 0);
   const inRoutesCount = enriched.filter(c => c.inRoutes).length;
@@ -1330,13 +1354,16 @@ function _renderClientsTab() {
       <div class="clients-toolbar">
         <div class="clients-quick-filters">
           ${[
+            ['cleanup', `Clean up${cleanupCount ? ` (${cleanupCount})` : ''}`],
             ['billing', 'Needs Billing'],
             ['routes', 'Not In Routes'],
             ['stale', 'Stale Visits'],
             ['due', 'Due This Week'],
-            ['paid', 'Paid']
+            ['paid', 'Paid'],
+            ['paused', `Paused${pausedCount ? ` (${pausedCount})` : ''}`]
           ].map(([key, label]) => `<button class="clients-chip ${_clientsQuickFilter===key?'active':''}" onclick="_clientsSetQuickFilter('${key}')">${label}</button>`).join('')}
         </div>
+        <div class="clients-keys">Keys: <kbd>j</kbd>/<kbd>k</kbd> move · <kbd>d</kbd> invoice day · <kbd>p</kbd> pause · <kbd>l</kbd> lost · <kbd>u</kbd> undo · <kbd>Enter</kbd> open${_clientsDryRun ? ' · <span class="clients-dryrun">DRY RUN — changes stay in this browser</span>' : ''}</div>
         <div class="clients-filter-grid">
         <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:.3rem">
           <label style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Search</label>
@@ -1375,13 +1402,15 @@ function _renderClientsTab() {
       </div>`;
   }
 
-  window._clientsEnriched = enriched;
-  _renderClientsTable(enriched);
+  window._clientsEnriched = enrichedAll;
+  _clientsRenderInvoicePanel();
+  _renderClientsTable(enrichedAll);
+  _clientsSyncPaid();
 }
 
 function _renderClientsTable(enriched) {
   const all = window._clientsEnriched || enriched || [];
-  let rows = [...all];
+  let rows = all.filter(c => _clientsQuickFilter === 'paused' ? c.paused : !c.paused);
 
   if (_clientsSearch) {
     const q = _clientsSearch.toLowerCase();
@@ -1399,6 +1428,7 @@ function _renderClientsTable(enriched) {
       rows = rows.filter(c => c.thisMonthStatus === _clientsBillingFilter);
     }
   }
+  if (_clientsQuickFilter === 'cleanup') rows = rows.filter(c => c.noDay || c.stale || c.noRoute);
   if (_clientsQuickFilter === 'billing') rows = rows.filter(c => c.needsBilling);
   if (_clientsQuickFilter === 'routes') rows = rows.filter(c => c.noRoute);
   if (_clientsQuickFilter === 'stale') rows = rows.filter(c => c.stale);
@@ -1426,7 +1456,7 @@ function _renderClientsTable(enriched) {
   </tr>`;
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">No active clients match your filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--muted)">${_clientsQuickFilter === 'paused' ? 'No paused clients.' : 'No active clients match your filters.'}</td></tr>`;
     return;
   }
 
@@ -1435,6 +1465,7 @@ function _renderClientsTable(enriched) {
     const map = {
       paid:     ['#d1fae5','#065f46','Paid'],
       invoiced: ['#fef3c7','#92400e','Invoiced'],
+      draft:    ['#e0f2fe','#075985','Draft in QBO'],
       pending:  ['#fee2e2','#991b1b','Pending'],
       none:     ['#f3f4f6','#6b7280','No Record']
     };
@@ -1459,7 +1490,7 @@ function _renderClientsTable(enriched) {
     const phone = escHtml(c.phone || '');
     const mapUrl = c.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([c.address, c.city, c.zip_code].filter(Boolean).join(', '))}` : '';
     return `
-      <tr class="clients-row" onclick="viewCRMDetail('${quote}')">
+      <tr class="clients-row${quote === _clientsFocusId ? ' clients-row--focus' : ''}" data-quote="${quote}" onclick="viewCRMDetail('${quote}')">
         <td style="padding-left:1rem">
           <div class="clients-name">${escHtml(c.name)}</div>
           <div class="clients-sub">${escHtml([c.city, c.area].filter(Boolean).join(' · ') || c.pool_id || 'No pool ID')}</div>
@@ -1471,7 +1502,9 @@ function _renderClientsTable(enriched) {
         </td>
         <td>
           <div style="font-weight:700">${c.monthlyRate ? _finFmtCurrency(c.monthlyRate) : '—'}</div>
-          ${c.invoice_day ? `<div class="clients-sub">Invoice day ${c.invoice_day}</div>` : ''}
+          <div class="clients-day" id="clients-day-${quote}">${c.invoice_day
+            ? `<button class="clients-day-btn" title="Change invoice day" onclick="event.stopPropagation();_clientsEditDay('${quote}')">Invoice day ${escHtml(String(c.invoice_day))}</button>`
+            : `<button class="clients-day-btn clients-day-btn--missing" onclick="event.stopPropagation();_clientsEditDay('${quote}')">＋ Set invoice day</button>`}</div>
           <div style="margin-top:.35rem">${billingBadge(c.thisMonthStatus, c.dueThisWeek)}</div>
         </td>
         <td>
@@ -1481,12 +1514,718 @@ function _renderClientsTable(enriched) {
         <td>${visitText(c)}</td>
         <td style="text-align:right;padding-right:1rem">
           <div class="clients-actions">
-            ${c.thisMonthStatus !== 'invoiced' && c.thisMonthStatus !== 'paid' ? `<button onclick="event.stopPropagation();_clientsMarkBilling('${quote}','invoiced')">Mark invoiced</button>` : ''}
-            ${c.thisMonthStatus !== 'paid' ? `<button onclick="event.stopPropagation();_clientsMarkBilling('${quote}','paid')">Mark paid</button>` : ''}
+            ${c.paused
+              ? `<button onclick="event.stopPropagation();_clientsSetStatus('${quote}','ACTIVE_CUSTOMER')">Reactivate</button>`
+              : `${c.thisMonthStatus !== 'invoiced' && c.thisMonthStatus !== 'paid' ? `<button onclick="event.stopPropagation();_clientsMarkBilling('${quote}','invoiced')">Mark invoiced</button>` : ''}
+            ${c.thisMonthStatus !== 'paid' ? `<button onclick="event.stopPropagation();_clientsMarkBilling('${quote}','paid')">Mark paid</button>` : ''}`}
+            <button class="clients-more" title="Pause or cancel" aria-label="More actions" onclick="event.stopPropagation();_clientsOpenMenu('${quote}', this)">⋯</button>
           </div>
         </td>
       </tr>`;
   }).join('');
+}
+
+// ── Clients: fast cleanup ─────────────────────────────────────────────────────
+// Everything here edits in place and never refetches: the cache is patched, the
+// table re-renders at once, and the write goes out in the background. That is
+// what makes a cleanup pass take seconds per client instead of a drawer each.
+
+let _clientsFocusId = '';
+const _clientsPending = {};   // quoteId → { status, prevStatus, payload, timer }
+const CLIENTS_UNDO_MS = 6000;
+
+function _clientsFind(quoteId) {
+  return (window._clientsEnriched || []).find(c => c.quote_id === quoteId)
+    || (_finCrmCache || []).find(c => c.quote_id === quoteId);
+}
+
+function _clientsName(quoteId) {
+  const c = _clientsFind(quoteId) || {};
+  return c.name || c.client_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || quoteId;
+}
+
+function _clientsToast(message, undoFn, tone) {
+  let el = document.getElementById('clients-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'clients-toast';
+    el.className = 'clients-toast';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  clearTimeout(el._hide);
+  el.className = `clients-toast show${tone === 'error' ? ' clients-toast--error' : ''}`;
+  el.innerHTML = `<span>${escHtml(message)}</span>${undoFn ? '<button type="button">Undo</button>' : ''}`;
+  if (undoFn) el.querySelector('button').onclick = () => { undoFn(); el.classList.remove('show'); };
+  el._hide = setTimeout(() => el.classList.remove('show'), undoFn ? CLIENTS_UNDO_MS : 4000);
+}
+
+// ── Invoice day, inline ──
+function _clientsEditDay(quoteId) {
+  const cell = document.getElementById(`clients-day-${quoteId}`);
+  if (!cell) return;
+  const c = _clientsFind(quoteId) || {};
+  cell.innerHTML = `<input class="clients-day-input" type="number" min="1" max="28" inputmode="numeric"
+    value="${escHtml(String(c.invoice_day || ''))}" placeholder="1–28" aria-label="Invoice day"
+    onclick="event.stopPropagation()"
+    onkeydown="event.stopPropagation();if(event.key==='Enter'){_clientsSaveDay('${quoteId}',this.value)}else if(event.key==='Escape'){this.dataset.done='1';_renderClientsTable()}"
+    onblur="_clientsSaveDay('${quoteId}',this.value)">`;
+  const input = cell.querySelector('input');
+  input.focus();
+  input.select();
+}
+
+async function _clientsSaveDay(quoteId, raw) {
+  const cell = document.getElementById(`clients-day-${quoteId}`);
+  const input = cell && cell.querySelector('input');
+  if (!input || input.dataset.done) return; // Enter saves; the blur that follows must not save again
+  input.dataset.done = '1';
+  const c = _clientsFind(quoteId) || {};
+  const day = parseInt(raw, 10);
+  if (!raw || Number(c.invoice_day) === day) { _renderClientsTab(); return; }
+  if (!(day >= 1 && day <= 28)) { _clientsToast('Invoice day must be 1–28.', null, 'error'); _renderClientsTab(); return; }
+
+  const prev = { invoice_day: c.invoice_day || '', billing_start: c.billing_start || '' };
+  const fields = { invoice_day: day };
+  if (!c.billing_start) fields.billing_start = _clientsCurrentMonthKey();
+  _clientsPatch(quoteId, fields);
+  _renderClientsTab();
+
+  const res = await _clientsWrite({ action: 'update_lead', quote_id: quoteId, ...fields });
+  if (!res.ok) {
+    _clientsPatch(quoteId, prev);
+    _renderClientsTab();
+    _clientsToast(`Couldn't save invoice day for ${_clientsName(quoteId)}: ${res.error || 'error'}`, null, 'error');
+  }
+}
+
+// ── Pause / Lost / Reactivate — applied now, written after the undo window ──
+// LOST has side effects in update_lead (sets service_end, pulls the pool off
+// routes), so undo works by never sending the write rather than reversing it.
+function _clientsSetStatus(quoteId, status, extraPayload = {}) {
+  const c = (_finCrmCache || []).find(i => i.quote_id === quoteId);
+  if (!c) return;
+  if (_clientsPending[quoteId]) _clientsCommitStatus(quoteId); // finish an earlier change first
+
+  const prevStatus = c.status;
+  _clientsPatch(quoteId, { status });
+  _clientsMoveFocusOff(quoteId);
+  _renderClientsTab();
+
+  const pending = { status, prevStatus, payload: { action: 'update_lead', quote_id: quoteId, status, ...extraPayload } };
+  pending.timer = setTimeout(() => _clientsCommitStatus(quoteId), CLIENTS_UNDO_MS);
+  _clientsPending[quoteId] = pending;
+
+  const verb = { PAUSED: 'Paused', LOST: 'Marked lost', ACTIVE_CUSTOMER: 'Reactivated' }[status] || status;
+  _clientsToast(`${verb}: ${_clientsName(quoteId)}`, () => _clientsUndoStatus(quoteId));
+}
+
+function _clientsUndoStatus(quoteId) {
+  const p = _clientsPending[quoteId];
+  if (!p) return;
+  clearTimeout(p.timer);
+  delete _clientsPending[quoteId];
+  _clientsPatch(quoteId, { status: p.prevStatus });
+  _clientsFocusId = quoteId;
+  _renderClientsTab();
+}
+
+function _clientsUndoLast() {
+  const ids = Object.keys(_clientsPending);
+  if (ids.length) _clientsUndoStatus(ids[ids.length - 1]);
+}
+
+async function _clientsCommitStatus(quoteId, keepalive) {
+  const p = _clientsPending[quoteId];
+  if (!p) return;
+  clearTimeout(p.timer);
+  delete _clientsPending[quoteId];
+  const res = await _clientsWrite(p.payload, keepalive ? { keepalive: true } : undefined);
+  if (!res.ok) {
+    _clientsPatch(quoteId, { status: p.prevStatus });
+    _renderClientsTab();
+    _clientsToast(`Couldn't update ${_clientsName(quoteId)}: ${res.error || 'error'}. Nothing was changed.`, null, 'error');
+  }
+}
+
+// Closing the tab inside the undo window still saves what was decided.
+window.addEventListener('pagehide', () => {
+  Object.keys(_clientsPending).forEach(id => _clientsCommitStatus(id, true));
+});
+
+// ── ⋯ menu ──
+function _clientsCloseMenu() {
+  const m = document.getElementById('clients-menu');
+  if (m) m.remove();
+}
+
+function _clientsOpenMenu(quoteId, anchor) {
+  _clientsCloseMenu();
+  const c = _clientsFind(quoteId) || {};
+  const menu = document.createElement('div');
+  menu.id = 'clients-menu';
+  menu.className = 'clients-menu';
+  menu.onclick = e => e.stopPropagation();
+  menu.innerHTML = c.paused || c.status === 'PAUSED'
+    ? `<button type="button" onclick="_clientsCloseMenu();_clientsSetStatus('${quoteId}','ACTIVE_CUSTOMER')">Reactivate</button>
+       <button type="button" onclick="_clientsLostForm('${quoteId}')">Lost / cancelled…</button>`
+    : `<button type="button" onclick="_clientsCloseMenu();_clientsSetStatus('${quoteId}','PAUSED')">Pause <kbd>p</kbd></button>
+       <button type="button" class="danger" onclick="_clientsLostForm('${quoteId}')">Lost / cancelled… <kbd>l</kbd></button>
+       <button type="button" onclick="_clientsCloseMenu();_clientsEditDay('${quoteId}')">Set invoice day <kbd>d</kbd></button>`;
+  menu._anchor = anchor || document.querySelector(`tr[data-quote="${quoteId}"] .clients-more`) || document.body;
+  document.body.appendChild(menu);
+  _clientsPlaceMenu(menu);
+  setTimeout(() => document.addEventListener('click', _clientsCloseMenu, { once: true }), 0);
+}
+
+// Below the ⋯ button, or above it when there isn't room (rows near the bottom).
+function _clientsPlaceMenu(menu) {
+  const r = menu._anchor.getBoundingClientRect();
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  const below = r.bottom + 4 + h <= window.innerHeight - 8;
+  const top = below ? r.bottom + 4 : Math.max(8, r.top - 4 - h);
+  menu.style.top = `${window.scrollY + top}px`;
+  menu.style.left = `${Math.max(8, Math.min(window.scrollX + r.right - w, window.scrollX + document.documentElement.clientWidth - w - 8))}px`;
+}
+
+const CLIENTS_LOST_REASONS = ['Moved', 'Price', 'Unhappy with service', 'Went with another company', 'Seasonal / no longer needed', 'Other'];
+
+function _clientsLostForm(quoteId) {
+  const menu = document.getElementById('clients-menu');
+  if (!menu) { _clientsOpenMenu(quoteId); return _clientsLostForm(quoteId); }
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+  menu.classList.add('clients-menu--form');
+  menu.innerHTML = `
+    <div class="clients-menu-title">Cancel ${escHtml(_clientsName(quoteId))}</div>
+    <div class="clients-reasons">${CLIENTS_LOST_REASONS.map((r, i) =>
+      `<button type="button" class="clients-reason${i === 0 ? ' active' : ''}" onclick="this.parentNode.querySelectorAll('.clients-reason').forEach(b=>b.classList.remove('active'));this.classList.add('active')">${escHtml(r)}</button>`).join('')}</div>
+    <label class="clients-menu-label">Last day of service <input type="date" id="clients-lost-end" value="${today}"></label>
+    <input type="text" id="clients-lost-note" placeholder="Note (optional)" onkeydown="if(event.key==='Enter')document.getElementById('clients-lost-go').click()">
+    <div class="clients-menu-row">
+      <button type="button" onclick="_clientsCloseMenu()">Keep</button>
+      <button type="button" id="clients-lost-go" class="danger solid" onclick="_clientsConfirmLost('${quoteId}')">Mark lost</button>
+    </div>
+    <div class="clients-menu-hint">Takes the pool off routes. You can undo for ${CLIENTS_UNDO_MS / 1000}s.</div>`;
+  _clientsPlaceMenu(menu);
+  const note = document.getElementById('clients-lost-note');
+  if (note) note.focus();
+}
+
+function _clientsConfirmLost(quoteId) {
+  const menu = document.getElementById('clients-menu');
+  const reason = (menu && menu.querySelector('.clients-reason.active') || {}).textContent || 'Other';
+  const end = (document.getElementById('clients-lost-end') || {}).value || '';
+  const note = ((document.getElementById('clients-lost-note') || {}).value || '').trim();
+  _clientsCloseMenu();
+  _clientsSetStatus(quoteId, 'LOST', {
+    service_end: end,
+    contact_entry: {
+      date: new Date().toISOString().slice(0, 10),
+      method: 'Cancellation',
+      outcome: `Lost — ${reason}`,
+      notes: note
+    }
+  });
+}
+
+// ── Keyboard: j/k move, d day, p pause, l lost, u undo, Enter open ──
+function _clientsVisibleIds() {
+  return [...document.querySelectorAll('#clients-tbody tr[data-quote]')].map(tr => tr.dataset.quote);
+}
+
+function _clientsMoveFocusOff(quoteId) {
+  if (_clientsFocusId !== quoteId) return;
+  const ids = _clientsVisibleIds();
+  const i = ids.indexOf(quoteId);
+  _clientsFocusId = ids[i + 1] || ids[i - 1] || '';
+}
+
+function _clientsSetFocus(quoteId) {
+  _clientsFocusId = quoteId;
+  document.querySelectorAll('#clients-tbody tr.clients-row--focus').forEach(tr => tr.classList.remove('clients-row--focus'));
+  const tr = document.querySelector(`#clients-tbody tr[data-quote="${quoteId}"]`);
+  if (tr) { tr.classList.add('clients-row--focus'); tr.scrollIntoView({ block: 'nearest' }); }
+}
+
+document.addEventListener('keydown', e => {
+  if (typeof _curPage === 'undefined' || _curPage !== 'financial_hub' || _finActiveTab !== 'clients') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const drawer = document.getElementById('lead-drawer');
+  if (drawer && drawer.classList.contains('open')) return;
+  if (document.getElementById('clients-menu')) { if (e.key === 'Escape') _clientsCloseMenu(); return; }
+
+  const ids = _clientsVisibleIds();
+  if (!ids.length) return;
+  const i = ids.indexOf(_clientsFocusId);
+  const key = e.key.toLowerCase();
+  if (key === 'j' || e.key === 'ArrowDown') { _clientsSetFocus(ids[Math.min(ids.length - 1, i + 1)]); e.preventDefault(); return; }
+  if (key === 'k' || e.key === 'ArrowUp')   { _clientsSetFocus(ids[Math.max(0, i - 1)] || ids[0]); e.preventDefault(); return; }
+  if (key === 'u') { _clientsUndoLast(); return; }
+  if (i < 0) return;
+  const id = ids[i];
+  const c = _clientsFind(id) || {};
+  if (key === 'd') { e.preventDefault(); _clientsEditDay(id); }
+  else if (key === 'p' && !c.paused) _clientsSetStatus(id, 'PAUSED');
+  else if (key === 'l') _clientsOpenMenu(id), _clientsLostForm(id);
+  else if (e.key === 'Enter') viewCRMDetail(id);
+});
+
+// ── Clients: monthly invoices ─────────────────────────────────────────────────
+// Two steps, both reviewed: (1) copy each due client's last monthly QuickBooks
+// invoice into a new UNSENT invoice numbered with the month name, (2) send.
+// The server refuses step 2 unless QBO_INVOICE_SEND=on.
+
+const _clientsInv = {
+  open: false,
+  loading: false,
+  error: '',
+  qbo: null,          // /status response
+  customers: null,    // [{ id, name, email }]
+  map: null,          // quote_id → { qbo_customer_id, qbo_customer_name, card_on_file }
+  rows: {},           // quote_id → { customerId, auto, month, prep, checked, state, msg, invoice, billAnyway }
+  alsoEmailCards: false,
+  busy: ''
+};
+
+const CLIENTS_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function _clientsMonthLabel(key) {
+  const [y, m] = String(key).split('-').map(Number);
+  return `${CLIENTS_MONTHS[m - 1] || '?'} ${y}`;
+}
+
+function _clientsPrevMonthKey(key = _clientsCurrentMonthKey()) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function _clientsQbo(op, body) {
+  try {
+    const res = body
+      ? await fetch(`/api/qbo/${op}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: _s.token, ...body }) })
+      : await fetch(`/api/qbo/${op}?token=${encodeURIComponent(_s.token)}`);
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok && json.ok === undefined) json.ok = false;
+    if (!res.ok && !json.error) json.error = `QuickBooks request failed (${res.status}).`;
+    return json;
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Due = active, has an invoice day that has arrived, billing has started, and
+// this month isn't already drafted / invoiced / paid.
+function _clientsDueClients() {
+  const monthKey = _clientsCurrentMonthKey();
+  const today = new Date().getDate();
+  return (window._clientsEnriched || []).filter(c =>
+    !c.paused &&
+    c.invoice_day && Number(c.invoice_day) <= today &&
+    (!c.billing_start || String(c.billing_start).slice(0, 7) <= monthKey) &&
+    !['draft', 'invoiced', 'paid'].includes(c.thisMonthStatus)
+  );
+}
+
+const _clientsNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+function _clientsAutoMatch(c) {
+  const customers = _clientsInv.customers || [];
+  const email = String(c.email || '').trim().toLowerCase();
+  if (email) {
+    const byEmail = customers.filter(q => q.email && q.email.toLowerCase() === email);
+    if (byEmail.length === 1) return byEmail[0].id;
+  }
+  const name = _clientsNorm(c.name);
+  if (name) {
+    const byName = customers.filter(q => _clientsNorm(q.name) === name);
+    if (byName.length === 1) return byName[0].id;
+  }
+  return '';
+}
+
+function _clientsInvToggle() {
+  _clientsInv.open = !_clientsInv.open;
+  _clientsRenderInvoicePanel();
+  if (_clientsInv.open && !_clientsInv.customers && !_clientsInv.loading) _clientsInvLoad();
+}
+
+async function _clientsInvLoad() {
+  _clientsInv.loading = true;
+  _clientsInv.error = '';
+  _clientsRenderInvoicePanel();
+
+  const status = await _clientsQbo('status');
+  _clientsInv.qbo = status;
+  if (!status.ok || !status.connected) {
+    _clientsInv.loading = false;
+    _clientsInv.error = status.ok ? '' : (status.error || 'Could not reach QuickBooks.');
+    return _clientsRenderInvoicePanel();
+  }
+  const [cust, map] = await Promise.all([_clientsQbo('customers'), _clientsQbo('customer_map')]);
+  if (!cust.ok || !map.ok) {
+    _clientsInv.loading = false;
+    _clientsInv.error = cust.error || map.error || 'Could not load QuickBooks customers.';
+    return _clientsRenderInvoicePanel();
+  }
+  _clientsInv.customers = cust.customers || [];
+  _clientsInv.map = map.map || {};
+  await _clientsInvPrepare();
+}
+
+// (Re)build rows for every due client and ask QBO what each invoice would copy.
+async function _clientsInvPrepare(onlyIds) {
+  const monthKey = _clientsCurrentMonthKey();
+  const due = _clientsDueClients();
+  due.forEach(c => {
+    if (_clientsInv.rows[c.quote_id]) return;
+    const linked = (_clientsInv.map || {})[c.quote_id];
+    const customerId = (linked && linked.qbo_customer_id) || _clientsAutoMatch(c);
+    _clientsInv.rows[c.quote_id] = {
+      customerId,
+      auto: !!customerId && !(linked && linked.qbo_customer_id),
+      month: monthKey,
+      prep: null, checked: false, state: 'idle', msg: '', invoice: null, billAnyway: false
+    };
+  });
+
+  const targets = due.filter(c => {
+    const r = _clientsInv.rows[c.quote_id];
+    return r && r.customerId && (!onlyIds || onlyIds.includes(c.quote_id));
+  });
+  _clientsInv.loading = true;
+  _clientsRenderInvoicePanel();
+  if (targets.length) {
+    const res = await _clientsQbo('invoice_prepare', {
+      clients: targets.map(c => ({
+        quote_id: c.quote_id,
+        qbo_customer_id: _clientsInv.rows[c.quote_id].customerId,
+        month_key: _clientsInv.rows[c.quote_id].month,
+        portal_rate: c.monthlyRate
+      }))
+    });
+    if (!res.ok) _clientsInv.error = res.error || 'QuickBooks lookup failed.';
+    const found = [];
+    (res.results || []).forEach(p => {
+      const r = _clientsInv.rows[p.quote_id];
+      if (!r) return;
+      r.prep = p;
+      if (p.existing) { r.invoice = p.existing; r.state = 'exists'; found.push(p.quote_id); }
+      r.checked = _clientsInvDefaultChecked(_clientsFind(p.quote_id), r);
+    });
+    // Already billed in QuickBooks (often made by hand): record it here so the
+    // client stops showing as Pending, without anyone clicking Mark invoiced.
+    for (const id of found) {
+      const r = _clientsInv.rows[id];
+      const inv = r.invoice;
+      const status = inv.total > 0 && inv.balance === 0 ? 'paid' : (inv.email_status === 'EmailSent' ? 'invoiced' : 'draft');
+      await _clientsMarkBilling(id, status, { qbo_invoice_id: inv.id, qbo_doc: inv.doc_number, total: inv.total }, r.month);
+    }
+  }
+  _clientsInv.loading = false;
+  _clientsRenderInvoicePanel();
+}
+
+function _clientsInvFlags(c, r) {
+  const flags = [];
+  if (c.stale) flags.push({ gate: true, text: c.lastVisitDays === null ? 'No visit logged' : `No visit in ${c.lastVisitDays} days` });
+  if (c.noRoute) flags.push({ gate: true, text: 'Not in routes' });
+  if (!r.customerId) flags.push({ text: 'Pick the QuickBooks customer' });
+  const p = r.prep;
+  if (p && p.ok && !p.template && !p.existing) flags.push({ text: 'No previous monthly invoice in QBO to copy' });
+  if (p && p.rate_mismatch && p.template) flags.push({ text: `QBO rate ${_finFmtCurrency(p.template.subtotal)} ≠ portal ${_finFmtCurrency(c.monthlyRate)}` });
+  if (p && p.template && !p.existing) {
+    const expected = CLIENTS_MONTHS[Number(_clientsPrevMonthKey(r.month).slice(5)) - 1];
+    if (p.template.doc_number && p.template.doc_number.toLowerCase() !== expected.toLowerCase()) {
+      flags.push({ text: `Last QBO invoice was "${p.template.doc_number}" — ${expected} may be unbilled` });
+    }
+  }
+  if (p && !p.ok) flags.push({ text: p.error || 'Lookup failed' });
+  return flags;
+}
+
+// Unchecked unless everything is clean: anything that might be churn, a wrong
+// customer, or a changed price waits for an explicit decision.
+function _clientsInvDefaultChecked(c, r) {
+  if (!c || !r.prep || !r.prep.ok) return false;
+  if (r.prep.existing) return false;
+  if (!r.prep.template) return false;
+  if (r.auto) return false;
+  return _clientsInvFlags(c, r).length === 0 || r.billAnyway;
+}
+
+function _clientsInvSetCustomer(quoteId, customerId) {
+  const r = _clientsInv.rows[quoteId];
+  if (!r) return;
+  r.customerId = customerId;
+  r.auto = false;
+  r.prep = null; r.invoice = null; r.state = 'idle'; r.checked = false;
+  _clientsInvPrepare([quoteId]);
+}
+
+function _clientsInvSetMonth(quoteId, month) {
+  const r = _clientsInv.rows[quoteId];
+  if (!r) return;
+  r.month = month;
+  r.prep = null; r.invoice = null; r.state = 'idle'; r.checked = false;
+  _clientsInvPrepare([quoteId]);
+}
+
+function _clientsInvBillAnyway(quoteId) {
+  const r = _clientsInv.rows[quoteId];
+  if (!r) return;
+  r.billAnyway = true;
+  r.auto = false; // looking at the row counts as confirming the match
+  r.checked = !!(r.prep && r.prep.template && !r.prep.existing);
+  _clientsRenderInvoicePanel();
+}
+
+async function _clientsInvSetCard(quoteId, on) {
+  const r = _clientsInv.rows[quoteId];
+  _clientsInv.map = _clientsInv.map || {};
+  _clientsInv.map[quoteId] = { ...(_clientsInv.map[quoteId] || {}), qbo_customer_id: r ? r.customerId : '', card_on_file: on };
+  _clientsRenderInvoicePanel();
+  if (_clientsDryRun) return console.info('[dry-run] not sent: customer_map', { [quoteId]: { card_on_file: on } });
+  await _clientsQbo('customer_map', { entries: { [quoteId]: { card_on_file: on, qbo_customer_id: r ? r.customerId : undefined } } });
+}
+
+// Step 1 — create unsent invoices in QuickBooks.
+async function _clientsInvCreate() {
+  const ids = Object.keys(_clientsInv.rows).filter(id => {
+    const r = _clientsInv.rows[id];
+    return r.checked && r.state !== 'draft' && r.state !== 'sent';
+  });
+  if (!ids.length) return;
+  _clientsInv.busy = 'create';
+  _clientsRenderInvoicePanel();
+
+  // Remember every confirmed customer link so next month needs no matching.
+  const entries = {};
+  ids.forEach(id => {
+    const r = _clientsInv.rows[id];
+    const cust = (_clientsInv.customers || []).find(q => q.id === r.customerId) || {};
+    const prev = (_clientsInv.map || {})[id] || {};
+    if (prev.qbo_customer_id !== r.customerId) entries[id] = { qbo_customer_id: r.customerId, qbo_customer_name: cust.name || '' };
+  });
+  if (Object.keys(entries).length) {
+    if (_clientsDryRun) console.info('[dry-run] not sent: customer_map', entries);
+    else await _clientsQbo('customer_map', { entries });
+    Object.entries(entries).forEach(([id, e]) => { _clientsInv.map[id] = { ...(_clientsInv.map[id] || {}), ...e }; });
+  }
+
+  for (const id of ids) {
+    const r = _clientsInv.rows[id];
+    r.state = 'working'; r.msg = '';
+    _clientsRenderInvoicePanel();
+    const res = await _clientsQbo('invoice_create', { quote_id: id, qbo_customer_id: r.customerId, month_key: r.month });
+    if (!res.ok) {
+      r.state = 'error'; r.msg = res.error || 'QuickBooks rejected the invoice.';
+      continue;
+    }
+    r.invoice = res.invoice;
+    const sentAlready = res.already_exists && (res.invoice.email_status === 'EmailSent' || !res.invoice.auto);
+    r.state = res.already_exists ? 'exists' : 'draft';
+    r.checked = false;
+    await _clientsMarkBilling(id, sentAlready ? 'invoiced' : 'draft', {
+      qbo_invoice_id: res.invoice.id,
+      qbo_doc: res.invoice.doc_number,
+      total: res.invoice.total,
+      created_at: new Date().toISOString()
+    }, r.month);
+  }
+  _clientsInv.busy = '';
+  _clientsRenderInvoicePanel();
+}
+
+function _clientsInvSendable() {
+  return Object.keys(_clientsInv.rows).filter(id => {
+    const r = _clientsInv.rows[id];
+    if (r.state !== 'draft' || !r.invoice || !r.invoice.auto) return false;
+    const card = ((_clientsInv.map || {})[id] || {}).card_on_file;
+    return !card || _clientsInv.alsoEmailCards;
+  });
+}
+
+// Step 2 — email the drafts through QuickBooks.
+async function _clientsInvSend() {
+  const ids = _clientsInvSendable();
+  if (!ids.length) return;
+  const list = ids.map(id => {
+    const r = _clientsInv.rows[id];
+    return `• ${_clientsName(id)} — ${_finFmtCurrency(r.invoice.total)} → ${r.invoice.email || 'NO EMAIL'}`;
+  }).join('\n');
+  if (!confirm(`Email ${ids.length} invoice${ids.length === 1 ? '' : 's'} from QuickBooks?\n\n${list}`)) return;
+
+  _clientsInv.busy = 'send';
+  _clientsRenderInvoicePanel();
+  for (const id of ids) {
+    const r = _clientsInv.rows[id];
+    r.state = 'working'; r.msg = '';
+    _clientsRenderInvoicePanel();
+    const res = await _clientsQbo('invoice_send', { quote_id: id, invoice_id: r.invoice.id });
+    if (res.send_disabled) {
+      ids.forEach(x => { if (_clientsInv.rows[x].state === 'working' || x === id) _clientsInv.rows[x].state = 'draft'; });
+      _clientsInv.error = res.error;
+      break;
+    }
+    if (!res.ok) { r.state = 'draft'; r.msg = res.error || 'Send failed.'; continue; }
+    r.invoice = { ...r.invoice, ...(res.invoice || {}) };
+    r.state = 'sent';
+    await _clientsMarkBilling(id, 'invoiced', { sent_at: new Date().toISOString() }, r.month);
+  }
+  _clientsInv.busy = '';
+  _clientsRenderInvoicePanel();
+}
+
+function _clientsRenderInvoicePanel() {
+  let host = document.getElementById('clients-invoice-panel');
+  if (!host) {
+    const filters = document.getElementById('clients-filters');
+    if (!filters) return;
+    host = document.createElement('div');
+    host.id = 'clients-invoice-panel';
+    filters.parentNode.insertBefore(host, filters);
+  }
+  if (typeof isAdmin === 'function' && !isAdmin()) { host.innerHTML = ''; return; }
+
+  const due = _clientsDueClients();
+  const rowsWithState = Object.keys(_clientsInv.rows);
+  const monthKey = _clientsCurrentMonthKey();
+  const head = `
+    <button class="clients-inv-head" onclick="_clientsInvToggle()" aria-expanded="${_clientsInv.open}">
+      <span class="clients-inv-title">Invoices · ${escHtml(_clientsMonthLabel(monthKey))}</span>
+      <span class="clients-inv-count">${due.length ? `${due.length} ready to invoice` : 'Nobody due right now'}</span>
+      ${_clientsDryRun ? '<span class="clients-dryrun">DRY RUN</span>' : ''}
+      <span class="clients-inv-caret">${_clientsInv.open ? '▾' : '▸'}</span>
+    </button>`;
+  if (!_clientsInv.open) { host.innerHTML = `<div class="clients-inv">${head}</div>`; return; }
+
+  let body = '';
+  const q = _clientsInv.qbo;
+  if (_clientsInv.loading && !_clientsInv.customers) {
+    body = `<div class="clients-inv-msg">Checking QuickBooks…</div>`;
+  } else if (q && q.ok && !q.connected) {
+    body = `<div class="clients-inv-msg">QuickBooks isn't connected.
+      <button class="clients-inv-btn" onclick="window.open('/api/qbo/connect?token=${encodeURIComponent(_s.token)}','_blank')">Connect QuickBooks</button>
+      <button class="clients-inv-btn ghost" onclick="_clientsInv.customers=null;_clientsInvLoad()">I connected — refresh</button></div>`;
+  } else if (_clientsInv.error && !_clientsInv.customers) {
+    body = `<div class="clients-inv-msg error">${escHtml(_clientsInv.error)} <button class="clients-inv-btn ghost" onclick="_clientsInvLoad()">Retry</button></div>`;
+  } else {
+    const ids = [...new Set([...due.map(c => c.quote_id), ...rowsWithState.filter(id => _clientsInv.rows[id].state !== 'idle')])];
+    const customers = _clientsInv.customers || [];
+    const custOptions = sel => `<option value="">— pick customer —</option>` + customers
+      .slice().sort((a, b) => a.name.localeCompare(b.name))
+      .map(cu => `<option value="${escHtml(cu.id)}" ${cu.id === sel ? 'selected' : ''}>${escHtml(cu.name)}${cu.email ? ` · ${escHtml(cu.email)}` : ''}</option>`).join('');
+    const monthOptions = sel => [monthKey, _clientsPrevMonthKey()].map(k =>
+      `<option value="${k}" ${k === sel ? 'selected' : ''}>${escHtml(CLIENTS_MONTHS[Number(k.slice(5)) - 1])}</option>`).join('');
+
+    const rowsHtml = ids.map(id => {
+      const c = _clientsFind(id) || {};
+      const r = _clientsInv.rows[id];
+      if (!r) return '';
+      const flags = _clientsInvFlags(c, r);
+      const gated = flags.some(f => f.gate) && !r.billAnyway;
+      const card = ((_clientsInv.map || {})[id] || {}).card_on_file;
+      const tpl = r.prep && r.prep.template;
+      const inv = r.invoice;
+      const locked = ['working', 'draft', 'sent', 'exists'].includes(r.state);
+      const canCheck = !locked && r.customerId && tpl && !(r.prep && r.prep.existing);
+
+      let result = '';
+      if (r.state === 'working') result = '<span class="clients-inv-state">Working…</span>';
+      else if (inv && r.state === 'exists') result = `<span class="clients-inv-state ok">Already in QBO · ${escHtml(inv.doc_number)} · ${_finFmtCurrency(inv.total)}</span> <a href="${escHtml(inv.qbo_url)}" target="_blank" rel="noopener">Open</a>${inv.balance > 0 && inv.email_status !== 'EmailSent' ? '<div class="clients-sub">Not emailed yet — send it from QBO</div>' : ''}`;
+      else if (inv && r.state === 'draft') result = `<span class="clients-inv-state draft">Draft · ${_finFmtCurrency(inv.subtotal)} + ${_finFmtCurrency(inv.tax)} tax = <strong>${_finFmtCurrency(inv.total)}</strong></span><div class="clients-sub">to ${escHtml(inv.email || 'no email on file')}</div><a href="${escHtml(inv.qbo_url)}" target="_blank" rel="noopener">Open in QBO</a>`;
+      else if (inv && r.state === 'sent') result = `<span class="clients-inv-state ok">Sent · ${_finFmtCurrency(inv.total)}</span> <a href="${escHtml(inv.qbo_url)}" target="_blank" rel="noopener">Open</a>`;
+      if (r.msg) result += `<div class="clients-inv-err">${escHtml(r.msg)}</div>`;
+
+      return `
+        <tr class="${gated ? 'gated' : ''}">
+          <td><input type="checkbox" ${r.checked ? 'checked' : ''} ${canCheck ? '' : 'disabled'} aria-label="Include ${escHtml(c.name || id)}"
+                onchange="_clientsInv.rows['${id}'].checked=this.checked;_clientsInv.rows['${id}'].auto=false;_clientsRenderInvoicePanel()"></td>
+          <td>
+            <div class="clients-name" style="font-size:.92rem">${escHtml(c.name || id)}</div>
+            <div class="clients-sub">Invoice day ${escHtml(String(c.invoice_day || '—'))} · portal ${c.monthlyRate ? _finFmtCurrency(c.monthlyRate) : '—'}</div>
+            ${flags.map(f => `<div class="clients-inv-flag${f.gate ? ' gate' : ''}">${f.gate ? 'Check first: ' : '⚠ '}${escHtml(f.text)}</div>`).join('')}
+            ${gated && !locked ? `<div class="clients-inv-gate">
+                <button onclick="_clientsInvBillAnyway('${id}')">Bill anyway</button>
+                <button onclick="_clientsSetStatus('${id}','PAUSED')">Pause</button>
+                <button class="danger" onclick="event.stopPropagation();_clientsOpenMenu('${id}', this);_clientsLostForm('${id}')">Lost…</button>
+              </div>` : ''}
+          </td>
+          <td>
+            ${locked ? escHtml(((customers.find(cu => cu.id === r.customerId)) || {}).name || r.customerId)
+              : `<select class="si clients-inv-select" onchange="_clientsInvSetCustomer('${id}', this.value)">${custOptions(r.customerId)}</select>`}
+            ${r.auto && !locked ? '<div class="clients-sub">Auto-matched — confirm by ticking</div>' : ''}
+            <label class="clients-inv-card"><input type="checkbox" ${card ? 'checked' : ''} onchange="_clientsInvSetCard('${id}', this.checked)"> Card on file</label>
+          </td>
+          <td>${locked ? escHtml(CLIENTS_MONTHS[Number(r.month.slice(5)) - 1])
+              : `<select class="si clients-inv-select" onchange="_clientsInvSetMonth('${id}', this.value)">${monthOptions(r.month)}</select>`}</td>
+          <td>${tpl ? `<div>${escHtml(tpl.lines.map(l => l.item).join(', ') || 'Item')}</div>
+              <div class="clients-sub">${_finFmtCurrency(tpl.subtotal)} + tax · copied from "${escHtml(tpl.doc_number)}" (${escHtml(tpl.txn_date)})</div>`
+              : (r.customerId && !r.prep && _clientsInv.loading ? '<span class="clients-sub">Looking up…</span>' : '<span class="clients-sub">—</span>')}</td>
+          <td>${result}</td>
+        </tr>`;
+    }).join('');
+
+    const toCreate = ids.filter(id => _clientsInv.rows[id] && _clientsInv.rows[id].checked).length;
+    const sendable = _clientsInvSendable().length;
+    const cardDrafts = ids.filter(id => {
+      const r = _clientsInv.rows[id];
+      return r && r.invoice && (r.state === 'draft' || r.state === 'sent') && ((_clientsInv.map || {})[id] || {}).card_on_file;
+    });
+
+    body = `
+      ${_clientsInv.error ? `<div class="clients-inv-msg error">${escHtml(_clientsInv.error)}</div>` : ''}
+      ${ids.length ? `<div class="clients-inv-table-wrap"><table class="clients-inv-table">
+        <thead><tr><th></th><th>Client</th><th>QuickBooks customer</th><th>Month</th><th>Copies</th><th>Result</th></tr></thead>
+        <tbody>${rowsHtml}</tbody></table></div>`
+        : `<div class="clients-inv-msg">Everyone due this month is drafted, invoiced, or paid.</div>`}
+      <div class="clients-inv-actions">
+        <button class="clients-inv-btn" ${toCreate && !_clientsInv.busy ? '' : 'disabled'} onclick="_clientsInvCreate()">
+          ${_clientsInv.busy === 'create' ? 'Creating…' : `1 · Create ${toCreate || ''} draft${toCreate === 1 ? '' : 's'} in QuickBooks`}</button>
+        <span class="clients-sub">Nothing is emailed in this step. Open any draft in QBO to check it.</span>
+      </div>
+      <div class="clients-inv-actions">
+        <button class="clients-inv-btn send" ${sendable && !_clientsInv.busy ? '' : 'disabled'} onclick="_clientsInvSend()">
+          ${_clientsInv.busy === 'send' ? 'Sending…' : `2 · Send ${sendable || ''} invoice${sendable === 1 ? '' : 's'}`}</button>
+        <label class="clients-inv-card"><input type="checkbox" ${_clientsInv.alsoEmailCards ? 'checked' : ''} onchange="_clientsInv.alsoEmailCards=this.checked;_clientsRenderInvoicePanel()"> Also email card-on-file clients</label>
+      </div>
+      ${cardDrafts.length ? `<div class="clients-inv-cards"><strong>Charge in QuickBooks</strong> (Receive payment → saved card):
+        ${cardDrafts.map(id => { const r = _clientsInv.rows[id]; return `<a href="${escHtml(r.invoice.qbo_url)}" target="_blank" rel="noopener">${escHtml(_clientsName(id))} · ${_finFmtCurrency(r.invoice.total)}</a>`; }).join('')}
+        <div class="clients-sub">They flip to Paid here on their own once the charge clears.</div></div>` : ''}`;
+  }
+  host.innerHTML = `<div class="clients-inv open">${head}<div class="clients-inv-body">${body}</div></div>`;
+}
+
+// ── Paid auto-sync ──
+// Portal-tracked QBO invoices from this month and last; any with a zero balance
+// in QuickBooks was paid (payment link or a charged card) → mark Paid here.
+let _clientsPaidSyncAt = 0;
+async function _clientsSyncPaid() {
+  if (typeof isAdmin === 'function' && !isAdmin()) return;
+  if (Date.now() - _clientsPaidSyncAt < 5 * 60 * 1000) return;
+  _clientsPaidSyncAt = Date.now();
+
+  const months = [_clientsCurrentMonthKey(), _clientsPrevMonthKey()];
+  const open = [];
+  (_finCrmCache || []).forEach(c => {
+    _clientsPaymentLog(c).forEach(e => {
+      if (months.includes(e.month) && e.qbo_invoice_id && ['draft', 'invoiced'].includes(e.status)) {
+        open.push({ quoteId: c.quote_id, month: e.month, id: String(e.qbo_invoice_id) });
+      }
+    });
+  });
+  if (!open.length) return;
+  const res = await _clientsQbo('invoice_status', { ids: open.map(o => o.id) });
+  if (!res.ok) return;
+  for (const o of open) {
+    const s = (res.invoices || {})[o.id];
+    if (s && s.total > 0 && s.balance === 0) {
+      await _clientsMarkBilling(o.quoteId, 'paid', { paid_detected_at: new Date().toISOString() }, o.month);
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

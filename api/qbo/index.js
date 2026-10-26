@@ -18,7 +18,8 @@
 import { sendJson, validatePortalToken, requireAdminPortalToken } from '../_sheets.js';
 import {
   getConnectionStatus, getAccountMap, saveAccountMap, missingBuckets, REQUIRED_BUCKETS,
-  buildAuthorizeUrl, verifyState, exchangeCodeAndStore, disconnect, qboFetch
+  buildAuthorizeUrl, verifyState, exchangeCodeAndStore, disconnect, qboFetch,
+  getCustomerMap, saveCustomerMap, qboAppBase
 } from './_qbo.js';
 
 // ── status ────────────────────────────────────────────────────────────────────
@@ -273,6 +274,325 @@ async function opJournal(req, res) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MONTHLY SERVICE INVOICES
+// ══════════════════════════════════════════════════════════════════════════════
+// Automates what was done by hand every month: open the client's last monthly
+// invoice in QBO, duplicate it, change the invoice no. to the new month name
+// ("September" → "October"), save, send.
+//
+// The month name IS the invoice number on every monthly invoice, and it repeats
+// across customers, so DocNumber cannot be the idempotency key the way PR-<id> is
+// for payroll. Every invoice we create carries PrivateNote "mcps-auto:<quote>:<YYYY-MM>"
+// instead, and before creating we also treat a hand-made invoice with the same
+// month name, dated in or just after that month, as "already billed".
+//
+// Creating never emails anyone. Sending is its own op and is refused unless the
+// QBO_INVOICE_SEND env var is "on", so no bug in the batch UI can reach a client.
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+
+function monthNameFromKey(monthKey) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(monthKey || ''));
+  if (!m) return '';
+  return MONTH_NAMES[Number(m[2]) - 1] || '';
+}
+
+function isMonthDocNumber(docNumber) {
+  const d = String(docNumber || '').trim().toLowerCase();
+  return MONTH_NAMES.some(n => n.toLowerCase() === d);
+}
+
+function autoNoteKey(quoteId, monthKey) {
+  return `mcps-auto:${quoteId}:${monthKey}`;
+}
+
+// Texas business day, not the server's UTC day — an invoice made at 8pm CT must
+// not be dated tomorrow.
+function todayCentral() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+}
+
+// A hand-made invoice counts as this month's if it's numbered with the month name
+// and dated from ~10 days before the month through the end of the following month
+// (catch-up invoices happen: "August" dated 9/21).
+function inBillingWindow(txnDate, monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, 1) - 10 * 86400000);
+  const end = new Date(Date.UTC(y, m + 1, 0));
+  const d = new Date(String(txnDate || '') + 'T00:00:00Z');
+  return !isNaN(d) && d >= start && d <= end;
+}
+
+const qboEsc = s => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+async function recentInvoices(customerId) {
+  const q = `select * from Invoice where CustomerRef = '${qboEsc(customerId)}' orderby TxnDate desc maxresults 25`;
+  const json = await qboFetch(`query?query=${encodeURIComponent(q)}`);
+  return (json.QueryResponse && json.QueryResponse.Invoice) || [];
+}
+
+// From a customer's recent invoices: the one already covering monthKey (if any)
+// and the most recent OTHER monthly invoice to copy from.
+function pickInvoices(invoices, quoteId, monthKey) {
+  const monthName = monthNameFromKey(monthKey).toLowerCase();
+  const key = autoNoteKey(quoteId, monthKey);
+  const existing = invoices.find(inv =>
+    String(inv.PrivateNote || '').includes(key) ||
+    (String(inv.DocNumber || '').trim().toLowerCase() === monthName && inBillingWindow(inv.TxnDate, monthKey))
+  ) || null;
+  const template = invoices.find(inv => isMonthDocNumber(inv.DocNumber) && (!existing || inv.Id !== existing.Id)) || null;
+  return { existing, template };
+}
+
+function itemLines(inv) {
+  return ((inv && inv.Line) || []).filter(l => l.DetailType === 'SalesItemLineDetail' && l.SalesItemLineDetail);
+}
+
+function invoiceSummary(inv) {
+  if (!inv) return null;
+  const lines = itemLines(inv);
+  return {
+    id: inv.Id,
+    doc_number: inv.DocNumber || '',
+    txn_date: inv.TxnDate || '',
+    subtotal: cents(lines.reduce((s, l) => s + (Number(l.Amount) || 0), 0)),
+    tax: cents(inv.TxnTaxDetail && inv.TxnTaxDetail.TotalTax),
+    total: cents(inv.TotalAmt),
+    balance: cents(inv.Balance),
+    email: (inv.BillEmail && inv.BillEmail.Address) || '',
+    email_status: inv.EmailStatus || '',
+    auto: String(inv.PrivateNote || '').includes('mcps-auto:'),
+    lines: lines.map(l => ({
+      item: (l.SalesItemLineDetail.ItemRef && l.SalesItemLineDetail.ItemRef.name) || '',
+      description: l.Description || '',
+      qty: Number(l.SalesItemLineDetail.Qty) || 1,
+      rate: cents(l.SalesItemLineDetail.UnitPrice),
+      amount: cents(l.Amount),
+      taxable: !!(l.SalesItemLineDetail.TaxCodeRef && l.SalesItemLineDetail.TaxCodeRef.value && l.SalesItemLineDetail.TaxCodeRef.value !== 'NON')
+    })),
+    qbo_url: `${qboAppBase()}/app/invoice?txnId=${inv.Id}`
+  };
+}
+
+function stripIds(addr) {
+  if (!addr || typeof addr !== 'object') return undefined;
+  const { Id, ...rest } = addr;
+  return rest;
+}
+
+// ── customers ─────────────────────────────────────────────────────────────────
+// GET /api/qbo/customers?token=<admin> → every active QBO customer, for matching.
+async function opCustomers(req, res) {
+  try {
+    if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await requireAdminPortalToken(req, res);
+    if (!session) return;
+
+    const customers = [];
+    for (let start = 1; start < 10000; start += 1000) {
+      const q = `select Id, DisplayName, CompanyName, GivenName, FamilyName, PrimaryEmailAddr from Customer where Active = true startposition ${start} maxresults 1000`;
+      const json = await qboFetch(`query?query=${encodeURIComponent(q)}`);
+      const page = (json.QueryResponse && json.QueryResponse.Customer) || [];
+      page.forEach(c => customers.push({
+        id: c.Id,
+        name: c.DisplayName || c.CompanyName || [c.GivenName, c.FamilyName].filter(Boolean).join(' '),
+        email: (c.PrimaryEmailAddr && c.PrimaryEmailAddr.Address) || ''
+      }));
+      if (page.length < 1000) break;
+    }
+    return sendJson(res, 200, { ok: true, customers });
+  } catch (error) {
+    console.error('qbo/customers failed', error);
+    return sendJson(res, 502, { ok: false, error: 'Could not load QuickBooks customers.' });
+  }
+}
+
+// ── customer_map ──────────────────────────────────────────────────────────────
+// GET  /api/qbo/customer_map?token=<admin>          → { map: { quote_id: {...} } }
+// POST /api/qbo/customer_map { token, entries }     → merge + save
+async function opCustomerMap(req, res) {
+  try {
+    const session = await requireAdminPortalToken(req, res);
+    if (!session) return;
+    if (req.method === 'GET') return sendJson(res, 200, { ok: true, map: await getCustomerMap() });
+    if (req.method === 'POST') {
+      const map = await saveCustomerMap((req.body && req.body.entries) || {});
+      return sendJson(res, 200, { ok: true, map });
+    }
+    return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+  } catch (error) {
+    console.error('qbo/customer_map failed', error);
+    return sendJson(res, 500, { ok: false, error: 'Could not read or save the customer links.' });
+  }
+}
+
+// ── invoice_prepare ───────────────────────────────────────────────────────────
+// POST /api/qbo/invoice_prepare { token, clients: [{ quote_id, qbo_customer_id, month_key, portal_rate }] }
+// Read-only. For each client: the invoice it would be copied from, whether this
+// month is already billed in QBO, and whether last month's rate matches the portal.
+async function opInvoicePrepare(req, res) {
+  try {
+    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await requireAdminPortalToken(req, res);
+    if (!session) return;
+
+    const clients = Array.isArray(req.body && req.body.clients) ? req.body.clients.slice(0, 100) : [];
+    const results = [];
+    // Small parallel batches: QBO allows ~10 concurrent requests per company.
+    for (let i = 0; i < clients.length; i += 5) {
+      const batch = clients.slice(i, i + 5);
+      const out = await Promise.all(batch.map(async c => {
+        const quoteId = String(c.quote_id || '').trim();
+        const customerId = String(c.qbo_customer_id || '').trim();
+        const monthKey = String(c.month_key || '').trim();
+        if (!quoteId || !customerId || !monthNameFromKey(monthKey)) {
+          return { quote_id: quoteId, ok: false, error: 'Missing client, QuickBooks customer, or month.' };
+        }
+        try {
+          const { existing, template } = pickInvoices(await recentInvoices(customerId), quoteId, monthKey);
+          const tpl = invoiceSummary(template);
+          const portalRate = cents(c.portal_rate);
+          return {
+            quote_id: quoteId,
+            ok: true,
+            month_name: monthNameFromKey(monthKey),
+            existing: invoiceSummary(existing),
+            template: tpl,
+            rate_mismatch: !!(tpl && portalRate > 0 && Math.abs(tpl.subtotal - portalRate) > 0.01)
+          };
+        } catch (e) {
+          console.error('qbo/invoice_prepare client failed', quoteId, e);
+          return { quote_id: quoteId, ok: false, error: 'QuickBooks lookup failed.' };
+        }
+      }));
+      results.push(...out);
+    }
+    return sendJson(res, 200, { ok: true, results });
+  } catch (error) {
+    console.error('qbo/invoice_prepare failed', error);
+    return sendJson(res, 502, { ok: false, error: 'Could not read invoices from QuickBooks.' });
+  }
+}
+
+// ── invoice_create ────────────────────────────────────────────────────────────
+// POST /api/qbo/invoice_create { token, quote_id, qbo_customer_id, month_key }
+// Creates ONE unsent invoice copied from the client's last monthly invoice.
+// Idempotent: if this month is already billed, returns that invoice instead.
+async function opInvoiceCreate(req, res) {
+  try {
+    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await requireAdminPortalToken(req, res);
+    if (!session) return;
+
+    const quoteId = String((req.body && req.body.quote_id) || '').trim();
+    const customerId = String((req.body && req.body.qbo_customer_id) || '').trim();
+    const monthKey = String((req.body && req.body.month_key) || '').trim();
+    const monthName = monthNameFromKey(monthKey);
+    if (!quoteId || !customerId || !monthName) {
+      return sendJson(res, 400, { ok: false, error: 'quote_id, qbo_customer_id and month_key (YYYY-MM) are required.' });
+    }
+
+    const { existing, template } = pickInvoices(await recentInvoices(customerId), quoteId, monthKey);
+    if (existing) return sendJson(res, 200, { ok: true, already_exists: true, invoice: invoiceSummary(existing) });
+    if (!template) {
+      return sendJson(res, 422, { ok: false, error: 'No previous monthly invoice to copy for this customer. Make the first one in QuickBooks.' });
+    }
+
+    const lines = itemLines(template).map(l => {
+      const d = l.SalesItemLineDetail;
+      const detail = { ItemRef: d.ItemRef, Qty: d.Qty, UnitPrice: d.UnitPrice };
+      if (d.TaxCodeRef) detail.TaxCodeRef = d.TaxCodeRef;
+      if (d.ClassRef) detail.ClassRef = d.ClassRef;
+      return { DetailType: 'SalesItemLineDetail', Amount: l.Amount, Description: l.Description, SalesItemLineDetail: detail };
+    });
+    if (!lines.length) return sendJson(res, 422, { ok: false, error: 'The previous invoice has no product lines to copy.' });
+
+    const body = {
+      CustomerRef: { value: customerId },
+      DocNumber: monthName,
+      TxnDate: todayCentral(),
+      Line: lines,
+      PrivateNote: autoNoteKey(quoteId, monthKey),
+      EmailStatus: 'NotSet'
+      // TxnTaxDetail deliberately omitted: automated sales tax recalculates it.
+    };
+    const copy = ['SalesTermRef', 'CustomerMemo', 'BillEmail', 'BillEmailCc', 'BillEmailBcc', 'ClassRef',
+      'DepartmentRef', 'AllowOnlineCreditCardPayment', 'AllowOnlineACHPayment', 'GlobalTaxCalculation'];
+    copy.forEach(k => { if (template[k] !== undefined && template[k] !== null) body[k] = template[k]; });
+    ['BillAddr', 'ShipAddr', 'ShipFromAddr'].forEach(k => { const a = stripIds(template[k]); if (a) body[k] = a; });
+
+    // Every monthly invoice is numbered with the month name, so the number
+    // legitimately repeats across customers.
+    const created = await qboFetch('invoice?include=allowduplicatedocnum', { method: 'POST', body });
+    const inv = created.Invoice || {};
+    return sendJson(res, 200, { ok: true, created: true, invoice: invoiceSummary(inv), template_id: template.Id });
+  } catch (error) {
+    console.error('qbo/invoice_create failed', error);
+    return sendJson(res, 502, { ok: false, error: 'QuickBooks rejected the invoice. Open the client in QBO and check their last invoice.' });
+  }
+}
+
+// ── invoice_send ──────────────────────────────────────────────────────────────
+// POST /api/qbo/invoice_send { token, invoice_id, quote_id }
+// Emails an invoice through QBO. Off unless QBO_INVOICE_SEND=on, and only for
+// invoices this portal created (mcps-auto note) that still have a balance.
+async function opInvoiceSend(req, res) {
+  try {
+    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await requireAdminPortalToken(req, res);
+    if (!session) return;
+
+    if (String(process.env.QBO_INVOICE_SEND || '').toLowerCase() !== 'on') {
+      return sendJson(res, 403, { ok: false, send_disabled: true, error: 'Sending is turned off. Invoices stay as unsent drafts in QuickBooks until QBO_INVOICE_SEND is on.' });
+    }
+
+    const invoiceId = String((req.body && req.body.invoice_id) || '').replace(/[^0-9]/g, '');
+    const quoteId = String((req.body && req.body.quote_id) || '').trim();
+    if (!invoiceId || !quoteId) return sendJson(res, 400, { ok: false, error: 'invoice_id and quote_id are required.' });
+
+    const current = (await qboFetch(`invoice/${invoiceId}`)).Invoice || {};
+    if (!String(current.PrivateNote || '').includes(`mcps-auto:${quoteId}:`)) {
+      return sendJson(res, 409, { ok: false, error: 'That invoice was not created by the portal for this client.' });
+    }
+    if (!(current.BillEmail && current.BillEmail.Address)) {
+      return sendJson(res, 422, { ok: false, error: 'This invoice has no billing email in QuickBooks.' });
+    }
+    const sent = await qboFetch(`invoice/${invoiceId}/send`, { method: 'POST', contentType: 'application/octet-stream' });
+    return sendJson(res, 200, { ok: true, invoice: invoiceSummary(sent.Invoice || current) });
+  } catch (error) {
+    console.error('qbo/invoice_send failed', error);
+    return sendJson(res, 502, { ok: false, error: 'QuickBooks could not send the invoice.' });
+  }
+}
+
+// ── invoice_status ────────────────────────────────────────────────────────────
+// POST /api/qbo/invoice_status { token, ids: [...] } → { invoices: { id: { balance, total, email_status } } }
+async function opInvoiceStatus(req, res) {
+  try {
+    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await requireAdminPortalToken(req, res);
+    if (!session) return;
+
+    const ids = [...new Set((Array.isArray(req.body && req.body.ids) ? req.body.ids : [])
+      .map(id => String(id).replace(/[^0-9]/g, '')).filter(Boolean))].slice(0, 200);
+    const invoices = {};
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50).map(id => `'${id}'`).join(',');
+      const q = `select Id, Balance, TotalAmt, EmailStatus from Invoice where Id in (${chunk})`;
+      const json = await qboFetch(`query?query=${encodeURIComponent(q)}`);
+      ((json.QueryResponse && json.QueryResponse.Invoice) || []).forEach(inv => {
+        invoices[inv.Id] = { balance: cents(inv.Balance), total: cents(inv.TotalAmt), email_status: inv.EmailStatus || '' };
+      });
+    }
+    return sendJson(res, 200, { ok: true, invoices });
+  } catch (error) {
+    console.error('qbo/invoice_status failed', error);
+    return sendJson(res, 502, { ok: false, error: 'Could not read invoice balances from QuickBooks.' });
+  }
+}
+
 // ── dispatch ──────────────────────────────────────────────────────────────────
 // `op` arrives from the vercel.json rewrite, so it is the old path segment.
 // An unknown op is a 404 rather than a fallthrough: a typo'd endpoint should
@@ -284,7 +604,13 @@ const OPS = {
   disconnect: opDisconnect,
   accounts: opAccounts,
   map: opMap,
-  journal: opJournal
+  journal: opJournal,
+  customers: opCustomers,
+  customer_map: opCustomerMap,
+  invoice_prepare: opInvoicePrepare,
+  invoice_create: opInvoiceCreate,
+  invoice_send: opInvoiceSend,
+  invoice_status: opInvoiceStatus
 };
 
 export default async function handler(req, res) {
