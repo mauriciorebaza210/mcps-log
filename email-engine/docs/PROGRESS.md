@@ -6,12 +6,8 @@ Resume in any Claude Code session with `/email-engine`.
 ## Now
 - **Checkpoint in progress:** CP0 `setup`
 - **Done in CP0:** worktree + branch; plan approved and committed here; this log; `/email-engine` command; memory note; `email-engine/` hidden from Vercel.
-- **Next action:** update the mockup to v3 (`previews/lifecycle-email-mockup.html`, published at https://claude.ai/artifact/K3PVxvC3B82UisqAASpWxz):
-  - remove the "When it sends" column from the Emails table (it moves to the drawer)
-  - detailed, evidence-graded tracking: per-email funnel by confidence, per-link clicks, scanner-like hits, a per-delivery event list, CSV export
-  - a resolver for `reconcile`/`unknown` deliveries, with the quiescence timer on Resend
-  - pause switches for the engine and per bucket
-  - emphasize B/C, with other buckets shown as deferred
+- **Mockup v3 published** (same link): the "When it sends" column has moved into the email drawer; detailed evidence-graded tracking (results tiles, funnel, by-day table, per-link verified/unverified/scanner hits, per-recipient event history, Copy CSV); an Engine card with pause switches and a health line; "Needs attention" for unclear sends (It was sent / Don't send / Resend locked until quiescence); B + C shown first, the other 8 emails marked deferred.
+- **Next action:** Mau reviews mockup v3. Then run `/email-engine checkpoint` to close CP0 and start CP1 (Phase 0 spikes).
 - **Blocked on / waiting for:** Mau's sign-off on mockup v3 (the last CP0 exit criterion).
 - **Open decisions (not blocking yet):** what counts as a "positive service milestone" (A Reviews Request); Referral Campaign timing.
 

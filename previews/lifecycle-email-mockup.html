@@ -191,7 +191,35 @@ tfoot td{font-weight:700;border-top:2px solid var(--border);border-bottom:0}
 .cfg dd{margin:0;font-weight:600;min-width:0;overflow-wrap:anywhere}
 .callout{border:1px solid var(--border);border-left:4px solid var(--gold);background:var(--card);border-radius:var(--r-sm);padding:10px 14px;font-size:14px;margin-bottom:14px}
 
+/* v3: tracking detail, evidence confidence, engine controls */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpi{border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;background:var(--surface);min-width:0}
+.kpi b{display:block;font-family:var(--f-display);font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi span{font-size:13px;font-weight:600}
+.kpi small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.conf{display:inline-block;font-family:var(--f-cond);font-weight:700;font-size:11.5px;letter-spacing:.05em;padding:1px 7px;border-radius:999px;white-space:nowrap}
+.conf.high{background:var(--ok-bg);color:var(--ok)}
+.conf.medium{background:var(--info-bg);color:var(--info)}
+.conf.low{background:var(--idle-bg);color:var(--idle)}
+.rcp{border-top:1px solid var(--border)}
+.rcp:first-of-type{border-top:0}
+.rcp summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:9px 12px;cursor:pointer;list-style:none;align-items:center}
+.rcp summary::-webkit-details-marker{display:none}
+.rcp summary:hover{background:var(--tint)}
+.rcp .badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.rcp .evlist{padding:0 12px 10px}
+.rcp table td,.rcp table th{padding:6px 8px;font-size:13px}
+.snippet{font-style:italic;color:var(--muted)}
+tr.deferred td{opacity:.6}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:4px 16px 14px}
+.ctrl label{display:inline-flex;gap:9px;align-items:center;font-weight:600}
+.health{display:flex;flex-wrap:wrap;gap:6px 16px;padding:0 16px 14px;font-size:13.5px;color:var(--muted)}
+.health b{color:var(--ok);font-weight:700}
+.att{list-style:none;margin:0;padding:0 16px 14px;display:flex;flex-direction:column;gap:10px}
+.att li{border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:var(--r-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.att li.unknown{border-left-color:var(--bad)}
 @media (max-width:760px){
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cols,.cols.c32,.grid2{grid-template-columns:minmax(0,1fr)}
   .kv{grid-template-columns:1fr}
   .kv dt{margin-top:6px}
@@ -212,6 +240,7 @@ tfoot td{font-weight:700;border-top:2px solid var(--border);border-bottom:0}
     <div class="status-strip">
       <span class="pill test"><span class="dot"></span>Test mode on · all mail goes to mauricio@</span>
       <span class="pill sender">Sends from antonio@mcpoolsolutions.org</span>
+      <span class="pill sender">Priority: MCP Legacy + MCP Startup</span>
     </div>
   </div>
   <nav class="tabs" id="tabs" aria-label="Sections"></nav>
@@ -320,6 +349,46 @@ let RUNS = [
   {at:'Oct 23 · 9:00 AM', sent:4, skipped:2, failed:1, why:'Done'},
 ];
 
+// ───────────────────────── Evidence (tracking) ─────────────────────────
+// Raw observations are kept exactly as recorded. The confidence label comes
+// from a versioned classifier, so it can be recomputed if the rules change.
+const NOW_TIME = '9:30 AM';
+const CLASSIFIER = 'v1';
+const LINKS = {quote:'Get your free quote', maint:'Get your maintenance quote', call:'Call button', site:'missioncustompools.com'};
+const EV_DEFAULTS = {
+  open:{time:'19:42', sec:40000, ua:'Gmail image proxy'},
+  click:{time:'18:05', sec:30000, ua:'Safari · iPhone', link:'quote', beacon:true},
+  reply:{time:'18:20'}, auto_reply:{time:'10:03'}, unsubscribe:{time:'07:15'},
+};
+function classify(v){
+  if (v.type==='open') return (/privacy/i.test(v.ua) || v.sec < 10) ? 'low' : 'medium';
+  if (v.type==='click') {
+    if (v.beacon) return 'high';
+    if (v.method==='HEAD' || /scan|defender|proofpoint|mimecast|barracuda/i.test(v.ua) || v.sec < 60 || v.burst >= 3) return 'low';
+    return 'medium';
+  }
+  return '';
+}
+function evsOf(c){
+  return c.ev.map(v=>{ const x = Object.assign({type:v[0], key:v[1], date:v[2], time:'', sec:99999, ua:'', link:'', method:'GET', beacon:false, burst:1, snippet:''}, EV_DEFAULTS[v[0]]||{}, v[3]||{}); x.conf = classify(x); return x; });
+}
+const addEv = (id, ...evs) => CONTACTS.find(c=>c.id===id).ev.push(...evs);
+addEv('c01', ['open','b_intro','2026-10-20',{time:'07:58', sec:6, ua:'Apple Mail privacy proxy'}],
+             ['click','b_intro','2026-10-20',{time:'07:58', sec:4, ua:'Microsoft Defender link scan', method:'HEAD', beacon:false}]);
+addEv('c02', ['click','b_intro','2026-10-23',{time:'09:01', sec:12, ua:'Proofpoint URL Defense', beacon:false, burst:3}]);
+addEv('c11', ['click','b_intro','2026-10-23',{time:'21:14', sec:126000, ua:'Chrome · Windows', beacon:false}]);
+addEv('c07', ['auto_reply','b_followup','2026-10-14',{snippet:'Out of office until Nov 2. I will reply when I return.'}]);
+addEv('c13', ['open','c_welcome','2026-10-09',{time:'09:05', sec:5, ua:'Apple Mail privacy proxy'}]);
+addEv('c14', ['reply','c_progress#2','2026-10-13',{snippet:'Water looks amazing, thank you!'}]);
+CONTACTS.find(c=>c.id==='c03').ev.find(v=>v[0]==='reply')[3] = {snippet:'Hi Tony, yes, we’d love a quote for weekly service. We’re home most afternoons.'};
+CONTACTS.find(c=>c.id==='c09').ev.find(v=>v[0]==='click')[3] = {time:'12:41', ua:'Chrome · Android'};
+CONTACTS.find(c=>c.id==='c14').ev.find(v=>v[0]==='click')[3] = {link:'maint'};
+
+// Deliveries that hit a problem mid-send. They never auto-retry.
+CONTACTS.find(c=>c.id==='c05').inflight = {b_intro:{state:'unknown', authorized:'9:04 AM', unlock:'9:40 AM', note:'The run ended during the send. No copy found in Tony’s Sent folder after two checks.'}};
+CONTACTS.find(c=>c.id==='c12').inflight = {c_welcome:{state:'reconcile', authorized:'9:03 AM', unlock:'9:39 AM', note:'Gmail timed out during the send. Checking Tony’s Sent folder again at 9:43 AM.'}};
+let PAUSE = {all:false, B:false, C:false};
+
 // ───────────────────────── Date helpers ─────────────────────────
 const D = s => new Date(s + 'T12:00:00Z');
 const addDays = (s,n) => { const x = D(s); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
@@ -371,6 +440,9 @@ function planContact(c, list){
       prevDate = due;
       if (c.review!=='confirmed') { row.status='excluded'; row.reason='Needs review'; }
       else if (c.status!=='active') { row.status='excluded'; row.reason=STATUS_LABEL[c.status]; }
+      else if (c.inflight && c.inflight[key]) { row.status='excluded'; row.reason = c.inflight[key].state==='cancelled' ? 'Cancelled by operator' : 'Needs attention (send outcome unclear)'; }
+      else if (PAUSE.all) { row.status='excluded'; row.reason='Engine paused'; }
+      else if (PAUSE[c.bucket]) { row.status='excluded'; row.reason='Bucket '+c.bucket+' paused'; }
       else if (!e.active) { row.status='excluded'; row.reason='Email is a draft'; }
       else if (tplStatus(e)!=='LIVE') { row.status='excluded'; row.reason='Template not approved'; }
       else if (e.subs.length && !e.subs.includes(sub)) { row.status='excluded'; row.reason='Sub-bucket '+sub; }
@@ -488,7 +560,7 @@ function cadenceText(e, list){
 function stopText(e){ const m = Object.fromEntries(STOPS); return e.stops.length ? 'Stops if ' + e.stops.map(s=>m[s].replace(/^They /,'they ').replace(/^Their /,'their ')).join(', ').replace(/, ([^,]*)$/,', or $1') : 'Never stops early'; }
 
 // ───────────────────────── Shell ─────────────────────────
-let TAB = 'emails', CHIP = 'all', BUCKET_F = 'all';
+let TAB = 'emails', CHIP = 'all', BUCKET_F = 'bc';
 const TABS = [['contacts','Contacts'],['emails','Emails'],['activity','Activity']];
 function renderTabs(){
   const nr = CONTACTS.filter(c=>c.review==='needs_review').length;
@@ -508,39 +580,47 @@ function stats(e){
   const rows = rowsFor(e);
   const sent = rows.filter(r=>r.status==='sent');
   const keys = occKeys(e);
-  const evs = CONTACTS.flatMap(c=>c.ev.filter(v=>keys.includes(v[1])).map(v=>({c, type:v[0], key:v[1], date:v[2]})));
-  const uniq = t => new Set(evs.filter(v=>v.type===t).map(v=>v.c.id+v.key)).size;
+  const evs = CONTACTS.flatMap(c=>evsOf(c).filter(v=>keys.includes(v.key)).map(v=>Object.assign(v,{c})));
+  const uniq = f => new Set(evs.filter(f).map(v=>v.c.id+'|'+v.key)).size;
   const in30 = r => r.status==='upcoming' && diff(r.due,TODAY)<=30;
   return { rows, sent:sent.length, due:rows.filter(r=>r.status==='due').length, next:rows.filter(r=>in30(r)||r.status==='later').length,
-    blocked:rows.filter(r=>r.status==='blocked').length, opened:uniq('open'), clicked:uniq('click'), replied:uniq('reply'), unsub:uniq('unsubscribe'), evs };
+    blocked:rows.filter(r=>r.status==='blocked').length,
+    opened:uniq(v=>v.type==='open'&&v.conf!=='low'), lowOpens:evs.filter(v=>v.type==='open'&&v.conf==='low').length,
+    clicked:uniq(v=>v.type==='click'&&v.conf==='high'), unverified:uniq(v=>v.type==='click'&&v.conf==='medium'),
+    scans:evs.filter(v=>v.type==='click'&&v.conf==='low').length,
+    replied:uniq(v=>v.type==='reply'), auto:uniq(v=>v.type==='auto_reply'), unsub:uniq(v=>v.type==='unsubscribe'), evs };
 }
+const DEFERRED = b => !['B','C'].includes(b);
 const pct = (a,b) => b ? Math.round(a/b*100)+'%' : '—';
 function tplTag(s){ return `<span class="tag t-${s.toLowerCase()}">${s}</span>`; }
 
 function viewEmails(){
-  const list = EMAILS.filter(e=>BUCKET_F==='all'||e.bucket===BUCKET_F).sort((a,b)=>a.bucket.localeCompare(b.bucket)||a.step-b.step);
+  const pick = { bc:e=>!DEFERRED(e.bucket), B:e=>e.bucket==='B', C:e=>e.bucket==='C', deferred:e=>DEFERRED(e.bucket) }[BUCKET_F];
+  const list = EMAILS.filter(pick).sort((a,b)=>a.bucket.localeCompare(b.bucket)||a.step-b.step);
   const S = list.map(e=>[e,stats(e)]);
   const tot = k => S.reduce((n,[,s])=>n+s[k],0);
-  const bucketsUsed = [...new Set(EMAILS.map(e=>e.bucket))].sort();
+  const n = f => EMAILS.filter(f).length;
   document.getElementById('view').innerHTML = `
   <div class="bar">
     <div class="chips">
-      <button class="chip ${BUCKET_F==='all'?'active':''}" data-bf="all">All buckets <strong>${EMAILS.length}</strong></button>
-      ${bucketsUsed.map(b=>`<button class="chip ${BUCKET_F===b?'active':''}" data-bf="${b}">${b} · ${BUCKETS[b].name} <strong>${EMAILS.filter(e=>e.bucket===b).length}</strong></button>`).join('')}
+      <button class="chip ${BUCKET_F==='bc'?'active':''}" data-bf="bc">B + C · priority <strong>${n(e=>!DEFERRED(e.bucket))}</strong></button>
+      <button class="chip ${BUCKET_F==='B'?'active':''}" data-bf="B">B · MCP Legacy <strong>${n(e=>e.bucket==='B')}</strong></button>
+      <button class="chip ${BUCKET_F==='C'?'active':''}" data-bf="C">C · MCP New <strong>${n(e=>e.bucket==='C')}</strong></button>
+      <button class="chip ${BUCKET_F==='deferred'?'active':''}" data-bf="deferred">Other buckets · after B/C go-live <strong>${n(e=>DEFERRED(e.bucket))}</strong></button>
     </div>
     <button class="btn primary" data-new>+ New email</button>
   </div>
+  ${BUCKET_F==='deferred'?'<div class="callout">These 8 emails are planned and saved as drafts. Work on them starts after MCP Legacy and MCP Startup are live.</div>':''}
   <div class="card scroll">
     <table>
-      <thead><tr><th>Email</th><th>Bucket</th><th>When it sends</th><th>Template</th><th>On</th>
-        <th class="num">Due now</th><th class="num">Next 30d</th><th class="num">Sent</th><th class="num hide-sm">Opened*</th><th class="num">Clicked</th><th class="num">Replies</th><th></th></tr></thead>
+      <thead><tr><th>Email</th><th>Bucket</th><th>Template</th><th>On</th>
+        <th class="num">Due now</th><th class="num">Next 30d</th><th class="num">Sent</th><th class="num hide-sm">Opened (est.)</th><th class="num">Verified clicks</th><th class="num">Replies</th><th></th></tr></thead>
       <tbody>${S.map(([e,s])=>`
-        <tr class="click" data-open="${e.id}">
+        <tr class="click ${DEFERRED(e.bucket)?'deferred':''}" data-open="${e.id}">
           <td><div class="em-name">${esc(e.name)}</div><div class="em-sub">${esc(e.subject)}</div></td>
           <td><span class="bucket">${e.bucket}</span> <span class="muted small">${e.subs.join(', ')}</span></td>
-          <td class="small">${esc(cadenceText(e))}</td>
-          <td>${tplTag(tplStatus(e))}</td>
-          <td><button class="switch ${e.active?'on':''}" data-toggle="${e.id}" aria-label="Active" aria-pressed="${e.active}"></button></td>
+          <td>${DEFERRED(e.bucket)?'<span class="tag t-idle">DEFERRED</span>':tplTag(tplStatus(e))}</td>
+          <td>${DEFERRED(e.bucket)?'<span class="muted">—</span>':`<button class="switch ${e.active?'on':''}" data-toggle="${e.id}" aria-label="Active" aria-pressed="${e.active}"></button>`}</td>
           <td class="num"><b>${s.due||'—'}</b>${s.blocked?` <span class="tag t-missing" title="Blocked">${s.blocked} blocked</span>`:''}</td>
           <td class="num">${s.next||'—'}</td>
           <td class="num">${s.sent||'—'}</td>
@@ -549,10 +629,10 @@ function viewEmails(){
           <td class="num">${s.replied||'—'}</td>
           <td><button class="btn small" data-edit="${e.id}">Edit</button></td>
         </tr>`).join('')}</tbody>
-      <tfoot><tr><td colspan="5">Totals</td><td class="num">${tot('due')}</td><td class="num">${tot('next')}</td><td class="num">${tot('sent')}</td><td class="num hide-sm">${pct(tot('opened'),tot('sent'))}</td><td class="num">${pct(tot('clicked'),tot('sent'))}</td><td class="num">${tot('replied')}</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="4">Totals</td><td class="num">${tot('due')}</td><td class="num">${tot('next')}</td><td class="num">${tot('sent')}</td><td class="num hide-sm">${pct(tot('opened'),tot('sent'))}</td><td class="num">${pct(tot('clicked'),tot('sent'))}</td><td class="num">${tot('replied')}</td><td></td></tr></tfoot>
     </table>
   </div>
-  <p class="muted small">*Opens are approximate (Apple Mail loads images automatically). Clicks and replies are the reliable signals. Click a row for audience and tracking.</p>`;
+  <p class="muted small">Opens are estimates, and automatic image loads are left out. Verified clicks means the quote page actually loaded in a browser; security-scanner hits are excluded. Click a row for timing, audience and full tracking.</p>`;
 }
 document.getElementById('view').addEventListener('click',ev=>{
   const t = ev.target;
@@ -565,6 +645,9 @@ document.getElementById('view').addEventListener('click',ev=>{
   const op = t.closest('[data-open]'); if (op) return openEmailDrawer(op.dataset.open);
   const ch = t.closest('[data-chip]'); if (ch){ CHIP=ch.dataset.chip; return render(); }
   const cf = t.closest('[data-confirm]'); if (cf){ confirmContact(cf.dataset.confirm); return; }
+  const pz = t.closest('[data-pause]'); if (pz){ const k=pz.dataset.pause; PAUSE[k]=!PAUSE[k];
+    toast(k==='all' ? (PAUSE.all?'Engine paused. Nothing sends until you resume.':'Engine resumed.') : `Bucket ${k} ${PAUSE[k]?'paused':'resumed'}.`); return render(); }
+  const rc = t.closest('[data-recon]'); if (rc){ return reconAction(...rc.dataset.recon.split('|')); }
   const oc = t.closest('[data-contact]'); if (oc) return openContactDrawer(oc.dataset.contact);
   if (t.closest('[data-run]')) return simulateRun();
 });
@@ -591,6 +674,8 @@ function openEmailDrawer(id, tab){
     const dt = t.closest('[data-drtab]'); if (dt){ DR_TAB=dt.dataset.drtab; return openEmailDrawer(id); }
     const wz = t.closest('[data-wz]'); if (wz){ closeOverlay(); return openWizard(wz.dataset.wz); }
     const ap = t.closest('[data-approve]'); if (ap){ approve(e); return openEmailDrawer(id); }
+    if (t.closest('[data-csv]')) return copyCsv(e, s);
+    if (t.closest('details')) return;
     const oc = t.closest('[data-contact]'); if (oc){ return openContactDrawer(oc.dataset.contact); }
   };
   const pick = document.getElementById('pv-contact');
@@ -650,19 +735,77 @@ function spark(vals){
     <path d="${line}" fill="none" stroke="var(--teal-light)" stroke-width="2"/>
     <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="var(--teal-light)"/></svg>`;
 }
+// Plain-language line for one raw observation.
+function evText(v){
+  const what = labelForKey(v.key);
+  switch (v.type) {
+    case 'open': return v.conf==='low' ? `Image loaded automatically (${v.ua}) · not counted as an open` : `Opened (estimated) · ${v.ua}`;
+    case 'click':
+      if (v.conf==='high') return `Clicked “${LINKS[v.link]||v.link}” · the page loaded in a browser (${v.ua})`;
+      if (v.conf==='medium') return `Link hit on “${LINKS[v.link]||v.link}” · the page never confirmed it loaded`;
+      return `Security scanner checked “${LINKS[v.link]||v.link}” (${v.ua}) · ignored`;
+    case 'reply': return `Replied: “${v.snippet}”`;
+    case 'auto_reply': return `Automatic reply · ignored (“${v.snippet}”)`;
+    case 'unsubscribe': return `Unsubscribed from ${what}`;
+  }
+  return v.type;
+}
+const CONF_LABEL = {high:'VERIFIED', medium:'UNVERIFIED', low:'AUTOMATIC'};
+function confTag(v){ return v.conf ? `<span class="conf ${v.conf}">${CONF_LABEL[v.conf]}</span>` : ''; }
 function drTracking(e,s){
-  const steps = [['Sent',s.sent],['Opened*',s.opened],['Clicked',s.clicked],['Replied',s.replied],['Unsubscribed',s.unsub]];
+  const steps = [['Sent',s.sent],['Opened (est.)',s.opened],['Verified click',s.clicked],['Replied',s.replied],['Unsubscribed',s.unsub]];
   const days = Array.from({length:21},(_,i)=>addDays(TODAY,i-20));
   const per = days.map(d=>s.rows.filter(r=>r.status==='sent'&&r.date===d).length);
   const sentRows = s.rows.filter(r=>r.status==='sent').sort((a,b)=>b.date.localeCompare(a.date));
-  const has = (r,t)=>s.evs.some(v=>v.c===r.c&&v.key===r.key&&v.type===t);
-  return `<div><div class="section-t">Funnel</div><div class="funnel">${steps.map(([l,v])=>`
-      <div class="f-row"><span>${l}</span><div class="f-track"><div class="f-fill" style="width:${s.sent?Math.max(v?3:0,v/s.sent*100):0}%"></div></div><span class="v">${v} <small>${pct(v,s.sent)}</small></span></div>`).join('')}</div>
-      <p class="muted small" style="margin:6px 0 0">*Opens are approximate.</p></div>
+  const evFor = r => s.evs.filter(v=>v.c===r.c&&v.key===r.key).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const dayRows = days.slice().reverse().map(d=>({d, sent:s.rows.filter(r=>r.status==='sent'&&r.date===d).length,
+      opens:s.evs.filter(v=>v.date===d&&v.type==='open'&&v.conf!=='low').length, clicks:s.evs.filter(v=>v.date===d&&v.type==='click'&&v.conf==='high').length,
+      replies:s.evs.filter(v=>v.date===d&&v.type==='reply').length})).filter(x=>x.sent||x.opens||x.clicks||x.replies);
+  const linkIds = [...new Set(s.evs.filter(v=>v.type==='click').map(v=>v.link))];
+  return `
+    <div class="inline" style="justify-content:space-between"><div class="section-t" style="margin:0">Results</div><button class="btn small" data-csv>Copy CSV</button></div>
+    <div class="kpis">
+      <div class="kpi"><span>Sent</span><b>${s.sent}</b><small>${s.due} due next run</small></div>
+      <div class="kpi"><span>Opened (est.)</span><b>${pct(s.opened,s.sent)}</b><small>${s.opened} people · ${s.lowOpens} automatic loads left out</small></div>
+      <div class="kpi"><span>Verified clicks</span><b>${pct(s.clicked,s.sent)}</b><small>${s.clicked} people · ${s.unverified} unverified · ${s.scans} scanner hits</small></div>
+      <div class="kpi"><span>Replies</span><b>${s.replied}</b><small>${s.auto} auto-replies ignored · ${s.unsub} unsubscribed</small></div>
+    </div>
+    <div><div class="section-t">Funnel</div><div class="funnel">${steps.map(([l,v])=>`
+      <div class="f-row"><span>${l}</span><div class="f-track"><div class="f-fill" style="width:${s.sent?Math.max(v?3:0,v/s.sent*100):0}%"></div></div><span class="v">${v} <small>${pct(v,s.sent)}</small></span></div>`).join('')}</div></div>
     <div><div class="section-t"><span>Sends per day</span><span>last 21 days</span></div>${spark(per)}<div class="tl-axis"><span>${fmt(days[0])}</span><span>${fmt(TODAY)}</span></div></div>
-    <div><div class="section-t">Recipients</div><div class="group scroll"><table>
-      <thead><tr><th>Contact</th><th>Sent</th><th>Opened</th><th>Clicked</th><th>Status</th></tr></thead>
-      <tbody>${sentRows.length? sentRows.map(r=>`<tr class="click" data-contact="${r.c.id}"><td>${esc(fullName(r.c))}${r.e.repeatCount>1?` <span class="muted small">${esc(r.key.split('#')[1]?'#'+r.key.split('#')[1]:'')}</span>`:''}</td><td>${fmt(r.date)}</td><td>${has(r,'open')?'✓':'—'}</td><td>${has(r,'click')?'✓':'—'}</td><td>${has(r,'reply')?'<span class="tag t-info">Replied</span>':has(r,'unsubscribe')?'<span class="tag t-missing">Unsubscribed</span>':`<span class="tag t-idle">${esc(STATUS_LABEL[r.c.status])}</span>`}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">Nothing sent yet.</td></tr>'}</tbody></table></div></div>`;
+    <div><div class="section-t">By day</div><div class="group scroll"><table>
+      <thead><tr><th>Date</th><th class="num">Sent</th><th class="num">Opens (est.)</th><th class="num">Verified clicks</th><th class="num">Replies</th></tr></thead>
+      <tbody>${dayRows.length? dayRows.map(x=>`<tr><td>${fmtLong(x.d)}</td><td class="num">${x.sent||'—'}</td><td class="num">${x.opens||'—'}</td><td class="num">${x.clicks||'—'}</td><td class="num">${x.replies||'—'}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">No activity in the last 21 days.</td></tr>'}</tbody></table></div></div>
+    <div><div class="section-t">Links</div><div class="group scroll"><table>
+      <thead><tr><th>Link</th><th class="num">Verified</th><th class="num">Unverified</th><th class="num">Scanner hits</th></tr></thead>
+      <tbody>${linkIds.length? linkIds.map(l=>{ const c = cf => s.evs.filter(v=>v.type==='click'&&v.link===l&&v.conf===cf).length;
+        return `<tr><td>${esc(LINKS[l]||l)}</td><td class="num">${c('high')||'—'}</td><td class="num">${c('medium')||'—'}</td><td class="num">${c('low')||'—'}</td></tr>`; }).join('') : '<tr><td colspan="4" class="muted">No link activity yet.</td></tr>'}</tbody></table></div></div>
+    <div><div class="section-t"><span>Recipients</span><span>tap a row for every event</span></div><div class="group">
+      ${sentRows.length? sentRows.map(r=>{ const ev = evFor(r);
+        const op = ev.filter(v=>v.type==='open'&&v.conf!=='low').length, ck = ev.some(v=>v.type==='click'&&v.conf==='high'), rp = ev.find(v=>v.type==='reply');
+        return `<details class="rcp"><summary><span><b>${esc(fullName(r.c))}</b>${r.e.repeatCount>1?` <span class="muted small">· ${esc(r.label.replace(r.e.name,'').trim())}</span>`:''}<br><span class="muted small">Sent ${fmtLong(r.date)}, 9:0${r.key.length%9} AM</span></span>
+          <span class="badges">${op?`<span class="conf medium">OPENED ×${op}</span>`:''}${ck?'<span class="conf high">CLICKED</span>':''}${rp?'<span class="conf high">REPLIED</span>':''}${ev.some(v=>v.type==='unsubscribe')?'<span class="tag t-missing">UNSUBSCRIBED</span>':''}${!ev.length?'<span class="muted small">No activity</span>':''}</span></summary>
+          <div class="evlist"><table><thead><tr><th>When</th><th>What happened</th><th>Evidence</th></tr></thead><tbody>
+            <tr><td>${fmt(r.date)}</td><td>Sent to ${esc(TEST_TO)} (for ${esc(r.c.email)})</td><td></td></tr>
+            ${ev.map(v=>`<tr><td>${fmt(v.date)} ${esc(v.time)}</td><td>${esc(evText(v))}</td><td>${confTag(v)}</td></tr>`).join('')}
+          </tbody></table><button class="btn link small" data-contact="${r.c.id}">Open contact timeline →</button></div></details>`; }).join('') : '<div class="empty">Nothing sent yet.</div>'}
+    </div></div>
+    <p class="muted small">Evidence rules ${CLASSIFIER}: every raw event is kept, so these labels can be recalculated if the rules change. Only verified clicks, replies, form requests and unsubscribes can stop a sequence.</p>`;
+}
+function copyCsv(e, s){
+  const lines = [['contact','email','delivery','event','date','time','evidence','link','client']];
+  s.rows.filter(r=>r.status==='sent').forEach(r=>{
+    lines.push([fullName(r.c), r.c.email, r.key, 'sent', r.date, '', '', '', '']);
+    s.evs.filter(v=>v.c===r.c&&v.key===r.key).forEach(v=>lines.push([fullName(r.c), r.c.email, r.key, v.type, v.date, v.time, v.conf, v.link, v.ua]));
+  });
+  const csv = lines.map(l=>l.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const done = () => toast(`Copied ${lines.length-1} rows as CSV. Paste into Sheets or Excel.`);
+  try { navigator.clipboard.writeText(csv).then(done, ()=>showCsv(csv)); } catch(_) { showCsv(csv); }
+}
+function showCsv(csv){
+  const b = document.querySelector('.dr-body'); if (!b) return;
+  b.insertAdjacentHTML('afterbegin', `<div class="field"><label for="csv-out">CSV (select all and copy)</label><textarea class="inp" id="csv-out" rows="6">${esc(csv)}</textarea></div>`);
+  const ta = document.getElementById('csv-out'); ta.focus(); ta.select();
 }
 function approve(e){ const t=tplFor(e); if(t){ t.status='LIVE'; toast(`${t.file} moved to Live. Approved by Mau, ${fmt(TODAY)}.`);} }
 
@@ -923,7 +1066,9 @@ function saveWizard(activate){
 // ───────────────────────── Contacts tab ─────────────────────────
 function nextFor(c){ const r = planContact(c, EMAILS).find(r=>['due','later','upcoming','blocked'].includes(r.status)); return r; }
 function lastActivity(c){
-  const dates = [...Object.entries(c.sent).map(([k,d])=>({d,t:'Sent '+labelForKey(k)})), ...c.ev.map(v=>({d:v[2], t:({open:'Opened',click:'Clicked',reply:'Replied',unsubscribe:'Unsubscribed'})[v[0]]+' '+labelForKey(v[1])}))];
+  const short = {open:'Opened', click:'Clicked', reply:'Replied to', unsubscribe:'Unsubscribed from'};
+  const dates = [...Object.entries(c.sent).map(([k,d])=>({d,t:'Sent '+labelForKey(k)})),
+    ...evsOf(c).filter(v=>short[v.type] && !(v.conf==='low') && !(v.type==='click'&&v.conf!=='high')).map(v=>({d:v.date, t:short[v.type]+' '+labelForKey(v.key)}))];
   return dates.sort((a,b)=>b.d.localeCompare(a.d))[0];
 }
 function labelForKey(k){ const [id,n] = k.split('#'); const e = EMAILS.find(x=>x.id===id); return e ? e.name+(n?' '+n:'') : k; }
@@ -964,9 +1109,9 @@ function openContactDrawer(id){
   const items = [
     ...(c.start? [{d:c.start, t:'Confirmed into bucket '+c.bucket, k:'in'}]:[]),
     ...Object.entries(c.sent).map(([k,d])=>({d, t:'Sent · '+labelForKey(k), k:'sent'})),
-    ...c.ev.map(v=>({d:v[2], t:({open:'Opened',click:'Clicked quote link in',reply:'Replied to',unsubscribe:'Unsubscribed from'})[v[0]]+' · '+labelForKey(v[1]), k:v[0]})),
-  ].sort((a,b)=>b.d.localeCompare(a.d));
-  const icon = {in:['+','t-idle'], sent:['→','t-info'], open:['◉','t-idle'], click:['↗','t-live'], reply:['↩','t-live'], unsubscribe:['×','t-missing']};
+    ...evsOf(c).map(v=>({d:v.date, time:v.time, t:labelForKey(v.key)+' · '+evText(v), k: v.type==='click'&&v.conf!=='high' ? 'scan' : v.type, v})),
+  ].sort((a,b)=>(b.d+(b.time||'')).localeCompare(a.d+(a.time||'')));
+  const icon = {in:['+','t-idle'], sent:['→','t-info'], open:['◉','t-idle'], click:['↗','t-live'], scan:['·','t-idle'], reply:['↩','t-live'], auto_reply:['↺','t-idle'], unsubscribe:['×','t-missing']};
   const plan = planContact(c, EMAILS).filter(r=>r.status!=='sent');
   document.getElementById('overlay').innerHTML = `
   <div class="scrim" data-close></div>
@@ -985,7 +1130,8 @@ function openContactDrawer(id){
         ${c.status!=='opted_out'?`<button class="btn small" data-cact="unsub" style="color:var(--bad)">Unsubscribe</button>`:''}
       </div>
       <div><div class="section-t">Coming up</div><div class="group"><ul>${plan.length? plan.map(r=>`<li><span>${esc(r.label)}</span><span class="r">${r.status==='due'?'<b>next run</b>':r.status==='upcoming'?fmtLong(r.due):r.status==='blocked'?'<span class="err">'+esc(r.reason)+'</span>':esc(r.reason)}</span></li>`).join(''):'<li class="muted">Nothing left in this sequence.</li>'}</ul></div></div>
-      <div><div class="section-t">Timeline</div><ul class="ctl">${items.map(i=>`<li><span class="ic tag ${icon[i.k][1]}">${icon[i.k][0]}</span><span>${esc(i.t)}</span><time>${fmt(i.d)}</time></li>`).join('') || '<li class="muted">Nothing yet.</li>'}</ul></div>
+      <div><div class="section-t">Timeline</div><ul class="ctl">${items.map(i=>`<li><span class="ic tag ${icon[i.k][1]}">${icon[i.k][0]}</span><span>${esc(i.t)} ${i.v?confTag(i.v):''}</span><time>${fmt(i.d)}${i.time?' '+esc(i.time):''}</time></li>`).join('') || '<li class="muted">Nothing yet.</li>'}</ul></div>
+      ${c.bucket==='C' && c.ev.some(v=>v[0]==='reply') ? '<div class="callout">Replies from startup customers don’t stop their emails. They’re flagged to Tony as customer conversations.</div>':''}
     </div>
   </aside>`;
   const ov = document.getElementById('overlay');
@@ -1008,13 +1154,28 @@ function viewActivity(){
   const rows = allRows();
   const q = rows.filter(r=>['due','later','blocked'].includes(r.status)).sort((a,b)=>({due:0,later:1,blocked:2})[a.status]-({due:0,later:1,blocked:2})[b.status]);
   const recent = rows.filter(r=>r.status==='sent').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  const att = CONTACTS.flatMap(c=>Object.entries(c.inflight||{}).filter(([,d])=>d.state!=='cancelled').map(([key,d])=>({c,key,d})));
+  const sw = (k,label) => `<label><button class="switch ${PAUSE[k]?'':'on'}" data-pause="${k}" aria-pressed="${!PAUSE[k]}" aria-label="${label}"></button>${label} <span class="muted small">${PAUSE[k]?'paused':'running'}</span></label>`;
   document.getElementById('view').innerHTML = `
+  <div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Engine</h3><small>it’s ${NOW_TIME} · test mode</small></div>
+    <div class="ctrl">${sw('all','Whole engine')}${sw('B','B · MCP Legacy')}${sw('C','C · MCP New')}</div>
+    <div class="health"><span>Last successful run: <b>today 9:06 AM</b></span><span>Independent health check: <b>OK</b> at 10:00 AM yesterday</span><span>Sending as: <b>antonio@</b> (verified)</span></div></div>
+  ${att.length?`<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>Needs attention</h3><small>${att.length} send${att.length>1?'s':''} with an unclear outcome · never retried automatically</small></div>
+    <ul class="att">${att.map(({c,key,d})=>`<li class="${d.state}"><div class="inline" style="justify-content:space-between"><span><b>${esc(fullName(c))}</b> · ${esc(labelForKey(key))}</span>
+        <span class="tag ${d.state==='unknown'?'t-missing':'t-pending'}">${d.state==='unknown'?'NEEDS A DECISION':'CHECKING'}</span></div>
+      <span class="small">Send started ${esc(d.authorized)}. ${esc(d.note)}</span>
+      ${d.state==='unknown'?`<div class="inline"><button class="btn small" data-recon="${c.id}|${key}|mark">It was sent</button>
+        <button class="btn small" disabled title="Locked until any earlier attempt has definitely finished">Resend · unlocks ${esc(d.unlock)}</button>
+        <button class="btn small" data-recon="${c.id}|${key}|cancel">Don’t send</button></div>
+        <span class="muted small">Check Tony’s Sent folder for “${esc(fullName(c))}” first. Resend stays locked until ${esc(d.unlock)}, so an earlier attempt can’t still be going out.</span>`
+      : '<span class="muted small">Nothing to do yet. If no copy shows up, this moves to “needs a decision”.</span>'}</li>`).join('')}</ul></div>`:''}
   <div class="grid2">
     <div class="stack">
       <div class="card"><div class="card-h"><h3>Next run · ${fmtLong(TODAY)}, 9:00 AM</h3><button class="btn primary small" data-run>Run now</button></div>
         <div class="scroll"><table><thead><tr><th>Contact</th><th>Email</th><th>Goes to</th><th>Status</th></tr></thead>
         <tbody>${q.length? q.map(r=>`<tr class="click" data-contact="${r.c.id}"><td>${esc(fullName(r.c))}</td><td>${esc(r.label)}</td><td class="small">${TEST_TO}<br><span class="muted">for ${esc(r.c.email)}</span></td>
-          <td>${r.status==='due'?'<span class="tag t-live">SENDS</span>':r.status==='later'?'<span class="tag t-idle">TOMORROW</span><div class="em-sub">1 email per day</div>':'<span class="tag t-missing">BLOCKED</span><div class="em-sub err">'+esc(r.reason)+'</div>'}</td></tr>`).join('') : '<tr><td colspan="4" class="muted">Nobody is due. Run now will send nothing.</td></tr>'}</tbody></table></div></div>
+          <td>${r.status==='due'?'<span class="tag t-live">SENDS</span>':r.status==='later'?'<span class="tag t-idle">TOMORROW</span><div class="em-sub">1 email per day</div>':'<span class="tag t-missing">BLOCKED</span><div class="em-sub err">'+esc(r.reason)+'</div>'}</td></tr>`).join('')
+          : `<tr><td colspan="4" class="muted">${PAUSE.all?'The engine is paused. Nothing will send until you resume it.':'Nobody is due. Run now will send nothing.'}</td></tr>`}</tbody></table></div></div>
       <div class="card"><div class="card-h"><h3>Recently sent</h3><small>send log</small></div><div class="scroll"><table><thead><tr><th>When</th><th>Contact</th><th>Email</th></tr></thead>
         <tbody>${recent.map(r=>`<tr class="click" data-contact="${r.c.id}"><td>${fmt(r.date)}</td><td>${esc(fullName(r.c))}</td><td>${esc(r.label)}</td></tr>`).join('')}</tbody></table></div></div>
     </div>
@@ -1026,11 +1187,19 @@ function viewActivity(){
         <li><span class="ic tag t-missing">!</span><span><b>Oct 23</b> · Gmail rejected one send (temporary). Retried and sent Oct 24.</span><time>Oct 23</time></li></ul></div>
       <div class="card"><div class="card-h"><h3>Settings</h3><small>Config sheet</small></div><dl class="cfg">
         <dt>Daily send cap</dt><dd>50</dd><dt>Test mode</dt><dd>On</dd><dt>Test inbox</dt><dd>${TEST_TO}</dd>
-        <dt>Runs</dt><dd>Daily at 9:00 AM<div class="em-sub" style="font-weight:400">Switches to hourly when New Leads goes live, so inquiry replies can go out the same day.</div></dd><dt>Sends as</dt><dd>${SENDER.email}</dd><dt>Gmail reserve</dt><dd>200 kept for agreements &amp; reports</dd></dl></div>
+        <dt>Runs</dt><dd>Daily at 9:00 AM<div class="em-sub" style="font-weight:400">Switches to hourly when New Leads goes live, so inquiry replies can go out the same day.</div></dd><dt>Sends as</dt><dd>${SENDER.email}</dd><dt>Gmail reserve</dt><dd>200 kept for Tony’s own mail</dd>
+        <dt>Per person</dt><dd>1 lifecycle email a day<div class="em-sub" style="font-weight:400">Also holds if a Comms campaign emailed them today (best-effort).</div></dd></dl></div>
     </div>
   </div>`;
 }
+function reconAction(cid, key, act){
+  const c = CONTACTS.find(x=>x.id===cid);
+  if (act==='mark') { c.sent[key]=TODAY; delete c.inflight[key]; toast(`Marked as sent. ${c.first}’s sequence continues from today.`); }
+  if (act==='cancel') { c.inflight[key].state='cancelled'; toast(`Won’t send ${labelForKey(key)} to ${c.first}. Logged in the change history.`); }
+  render();
+}
 function simulateRun(){
+  if (PAUSE.all) { toast('The engine is paused. Nothing was sent.'); return; }
   const due = allRows().filter(r=>r.status==='due');
   due.forEach(r=>{ r.c.sent[r.key]=TODAY; if (r.e.onSendSub) r.c.sub=r.e.onSendSub; });
   const skipped = allRows().filter(r=>r.status==='later').length;
