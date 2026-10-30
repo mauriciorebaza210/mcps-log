@@ -14,6 +14,8 @@
 
 # Apps Script backend — deployed via clasp, never served over HTTP.
 appscript/
+# Lifecycle email engine (separate GAS project) and its plan/progress docs.
+email-engine/
 
 # Design mockups and email previews. Nothing in the app links to them.
 previews/

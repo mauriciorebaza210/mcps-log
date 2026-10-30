@@ -1,0 +1,720 @@
+# Lifecycle Email Engine: contracts first, then a narrow B/C slice
+
+## Context
+Mau is building an email engine to demo to Tony. Contacts sit in 6 lifecycle buckets, and each bucket runs a timed, per-contact sequence of approved emails, with detailed tracking (sent, opened, clicked, replied) and enterprise-speed pages.
+
+This plan has been through two reviews. The first produced the contract sections. The second (8.5/10) approved Phase 0 and asked for eight corrections before production work. All eight are integrated here:
+1. Lock boundaries vs. stop requests
+2. Retry vs. reconcile by send stage
+3. Suppression vs. enrollment vs. step-level stops
+4. Reply classification precedence and shared threads
+5. Evidence and confidence instead of "confirmed"
+6. Authenticated read path
+7. An honest security boundary, plus rollback compatibility
+8. One consistent rule for scheduling and versioning
+
+Guarantees stay **provisional** until the Phase 0 spikes measure them. Performance numbers are **targets, unproven until benchmarked**.
+
+**Review traceability (second review → where it's resolved)**
+| # | Correction | Resolved in | Acceptance rows |
+|---|---|---|---|
+| 1 | Unsubscribe vs. single-writer lock | *Lock boundaries*: run lease ≠ script lock; script lock only for short sections with no external calls; Inbox ingest path never waits on a run; pre-send gate re-checks the Inbox, CacheService flag and `Comms_Optouts` before draft creation and before `send()` | 9 (sandbox), 10, 7, 8 |
+| 2 | Unsafe "transient → eligible" | *State machines*: Stage A retries preparation only. Stage B (after `send()` is invoked) → reconcile, never eligible. Stage C retries bookkeeping only. Full UUID token persisted before `createDraft`. Orphan-draft recovery. Settled: nothing in `sending` is ever automatically resent; Phase 0 only sets the grace periods and quiescence | 1–6, 15, 41 |
+| 3 | Stop model vs. category policy | *Stop model*: person suppression by scope (all / marketing), enrollment termination, and branch/step stops as separate layers. C Maintenance stops only `marketing_branch` | 18, 19; worked examples 14–16 |
+| 4 | Reply precedence + shared threads | *Tracking → Replies*: precedence is sender → bounce → automation → contact → other. Dedupe by `gmail_message_id`, per-thread cursors, attribution to the latest prior delivery | 20, 21 |
+| 5 | "Confirmed click" overstates | *Tracking*: raw observations kept, versioned classifier, low/medium/high confidence; "browser-verified" wording; beacon loss stated as an accepted limitation; external CTAs go through a `/go` interstitial | 22, 23 |
+| 6 | Read path security | *Read-path security*: Bearer auth on every read, Permissions check, per-permission redaction after cache, `private, no-store` + `Vary`, per-user browser cache cleared on logout or user change | 31 |
+| 7 | Owner-only claim, rollback | *Security boundary & rollback*: trusted maintainers stated explicitly; property-hash audit; read-compatibility ranges; expand → migrate → contract; rollback floor | 32, 33 |
+| R4-1 | Journal must govern crash recovery | *Journal* section: authoritative ordered record, `op_id`s, `applied_seq`, catch-up replay before any claim or authorization, Gmail only after both writes, Journal-driven secondary writes, fail-closed pause; implemented in Phase 1 | 42–45, 39 |
+| R4-2 | Fencing can't revoke an authorized Gmail call | *Lock boundaries* (fencing limit contract) + *State machines* (quiescence-gated Resend) | 35a, 35b, 46 |
+| R4-c | Cleanup of contradictory text | Row count, Phase 0 verdict, traceability, cutoff wording, example 13, the permitted in-lock operations with latency budget, Journal in Phase 1, minimum runbook as a production gate | — |
+| R3-1 | Stale worker after lease expiry | *Lock boundaries*: lease `generation` fencing token checked at every claim, transition and authorization; a stale worker stops; `sending` is only ever reconciled | 35 |
+| R3-2 | Ambiguous sends stay manual | *Guarantees* + *State machines*: `sending` never returns to eligibility, unconditionally; Phase 0 results are guidance only; demo wording changed | 41, 1–6 |
+| R3-3 | Precise unsubscribe cutoff | *Guarantees* + *Lock boundaries*: the authorization point is `drafted → sending` under the lock, ordered against ingestion | 36–38 |
+| R3-4 | Restore beyond a Sent search | *Operations*: an independent write-ahead Journal, replay after the backup's `journal_seq`, accepted recovery-point loss stated | 39 |
+| R3-5 | Test isolation incl. shared suppression | *Execution modes*: mode taken from the signed delivery identity; test writes never touch `Comms_Optouts` or `sup:prod:` | 40 |
+| R3-a | Ambiguous `editor+` / `operator+` | *Configuration & authorization*: explicit capabilities, union of roles, no inheritance | 31 |
+| R3-b | Performance acceptance | *Performance*: mandatory launch budgets (gate) vs. aspirational targets, with the fallback | Verification 5 |
+| 8 | Scheduling vs. revision consistency | *Decisions* (best-effort Comms frequency, same local day); *Scheduling* (per-enrollment `rule_rev` with publish scope, run snapshot binds rules **and** content, `max_hold_days` + `hard_deadline`); every recovered draft passes the full gate; performance marked unproven and benchmarked by bytes and ranges | 12, 13, 15, 24, 25; worked example 13 |
+
+**Exploration facts this relies on**
+- **Stack.** The portal is vanilla JS plus plain Vercel functions, at exactly 12 functions (the Hobby cap).
+- **Fast Vercel read path.** `api/_sheets.js` has a service-account token, `readSheetRanges` (one batchGet), `getCached`, `sendJson`, `validatePortalSession` (10-min cache) and `requireAdminPortalToken`.
+- **Frontend cache:** `_appCacheGet/_appCacheSet/_appCacheRemove` in `app.js`.
+- **Comms engine:**
+  - `Comms_Optouts` (scopes `all`/`marketing_announcements`, tombstones) and `Comms_Log` (`email`, `sent_at`)
+  - the parsers `cbParseBounce_` (`appscript/CommsBounces.js:35`) and `cbLooksLikeAutoReply_` (`:78`)
+  - attribution in `CommsReport.js`
+- **Signed relay pattern:** `api/_lib/notify.js` ↔ `ServiceRequestNotify.js`, with HMAC + ts + nonce.
+- **Quote-form prefill:** `mintLinkToken`/`verifyLinkToken` in `api/service-request.js`.
+- **UMD precedent:** `js/lib/pricing.js`.
+- **`SEC` is public**, so it is never used for auth.
+- **GAS deploy:** the portal's `.clasp.json` pushes only `appscript/`.
+- **Tests:** plain Node scripts in `tests/`. Node is v24.
+
+## Decisions
+| Topic | Decision |
+|---|---|
+| Timing source | Mau's Oct 19 notebook (matrix below) |
+| Frequency | ≤1 lifecycle email per contact per **local calendar day**, enforced inside the engine. Coordination with Comms is **best-effort**: the engine holds if `Comms_Log` shows a send to that address on the same local day. Same-second races across projects are possible, and the UI labels this "best-effort" |
+| Re-entry | B never re-runs for a person; returning contacts go to Needs review. Each sequence has its own `reentry` policy |
+| Click stop | B stops only on **high-confidence** click evidence (a browser-verified landing). Lower-confidence hits are recorded, never stop anything |
+| Approvals | Permission-based. The two-person rule is an option (`require_second_approver`), off by default |
+| Sender | Tony's account (antonio@mcpoolsolutions.org) |
+| Engine location | Separate Apps Script project owned by Tony, bound to a new "MCPS Email Engine" spreadsheet |
+| Functions | Merge `api/quotes/*` into one function. `api/email.js` handles everything else (11 total) |
+| UI | Admin page "Lifecycle Email". The main Emails table has no "When it sends" column |
+| Trust boundary | Project editors (Tony as owner, Mau as editor) are **trusted maintainers**. App permissions govern portal users only (see Security) |
+
+## Priority: MCP Legacy (B) and MCP Startup (C) first
+- **Until B and C are live in production, all build, test and UI effort goes to those two sequences.** That means 7 emails:
+  - B: MCP x MCPS Intro, MCPS Follow Up, Personal Check-In
+  - C: Welcome Email, Startup Progress ×4, Maintenance Invitation, Final Transition
+- **Deferred until after B/C go-live:**
+  - the `event`, `monthly` and business-day timing in `decide()` and in the wizard (only A/D/E need them)
+  - templates for A/D/E/F, hourly runs, the `/go` interstitial
+- **Reserved now** so A/D/E/F stay cheap later: their Sheet columns and the 8 draft step rows (seeded, inactive). Nothing on them is built yet.
+- **Order inside the priority:**
+  1. B Intro + C Welcome (the sandbox slice)
+  2. B Follow Up / Check-In + C Progress / Maintenance / Final Transition
+  3. B/C contact loading: import of the legacy list into B; startup requests into C with live `Scheduled_Visits` dates
+
+## Working on this across sessions (resume anytime)
+- **The plan lives in the repo, not in a chat.** On the `feat/email-engine` branch (worktree `../mcps-log-email-engine`):
+  - **`email-engine/docs/PLAN.md`:** this plan. Any change gets a dated line in its *Plan changes* section; nothing is edited silently.
+  - **`email-engine/docs/PROGRESS.md`:** the living status, with these sections:
+    - **Now:** current checkpoint, the exact next action, blockers, decisions waiting on Mau or Tony
+    - **Checkpoint log:** date, tag, commit, evidence, what's next
+    - **Parking lot:** sidetracks and tweaks to come back to
+    - **Session notes**
+  - Both files are committed (`tasks/` is gitignored, so they live next to the engine code; `email-engine/` is in `.vercelignore`).
+- **`/email-engine` command.** A user-level skill (`~/.claude/skills/email-engine/SKILL.md`) works from any Claude Code session, in any folder:
+  - **`/email-engine`:** reads PROGRESS.md (Now) and the active phase of PLAN.md, checks git status and commits since the last checkpoint tag, then says where we are and the next action.
+  - **`/email-engine park "<note>"`:** before switching to other work, commits any WIP on the branch (`WIP:` message, explicit paths) and records the stopping point, plus the note, in PROGRESS.md.
+  - **`/email-engine checkpoint`:** verifies the current checkpoint's exit criteria (runs the tests), then commits, tags it, logs the evidence and updates *Now*.
+  - **`/email-engine tweak "<change>"`:** applies a plan change to PLAN.md with a dated *Plan changes* entry, and flags any checkpoint it affects.
+- **A memory note** (`project_email_engine.md` + its MEMORY.md line) points at the worktree and the command, so a fresh chat knows this project exists.
+- **Sidetracks don't disturb it.** Unrelated portal work happens in the main checkout (`~/mcps-log`), so the email-engine worktree stays exactly where we left it.
+
+## Checkpoints
+At each checkpoint:
+1. All exit criteria pass.
+2. Commit on `feat/email-engine`.
+3. Annotated tag `ee/cpN-<name>`.
+4. PROGRESS.md entry (evidence: test output, spike report, screenshots).
+5. Memory note updated.
+
+The tag is the rollback point (`git checkout ee/cpN-…`). Nothing reaches `main` or production without Mau's explicit go.
+
+| CP | Name | Exit criteria |
+|---|---|---|
+| 0 | `setup` | Worktree; PLAN.md + PROGRESS.md committed; `/email-engine` skill and memory note in place; mockup v3 (no "When it sends", detailed evidence-graded tracking, `unknown` resolver, pause switches) **signed off by Mau** |
+| 1 | `spikes` | Phase 0 spike report committed (project ownership, send boundary, G/G2, quiescence margin, lock-hold p95, bytes per read, `Comms_*` tabs live); Guarantees section updated to match the findings |
+| 2 | `rules` | `lifecycle-rules.js` `decide()` for enrollment/startup/previous anchors, holds, deadlines and the stop model; worked examples 1–7, 9, 11–16 pass under `npm run test:ee` (discovery proven) |
+| 3 | `journal` | Journal + fenced lease + delivery stages + reconcile + quiescence Resend; the FG matrix rows (incl. 42–46 fault injection) pass |
+| 4 | `sandbox-send` | Engine project deployed in the sandbox; B Intro + C Welcome revisions approved; the test-delivery sends arrive branded; SB rows pass (1–5, 9, 35a/b, 36–40) |
+| 5 | `tracking-api` | `api/email.js` (authenticated reads, c/o/beacon/u, heartbeat) + quotes merge; `vercel build` + import checks; API rows pass; quote flows OK on preview |
+| 6 | `slice-demo` | Minimal Lifecycle page; **mandatory performance budgets pass**; demo script run for Tony. *Reviewer approval boundary* |
+| 7 | `bc-complete` | All 7 B/C emails approved; wizard for B/C (enrollment/startup/previous anchors only); minimum runbook done; full matrix green. **Go-live decision meeting with Mau and Tony** |
+| 8 | `bc-live` | Portal GAS changes deployed; production enabled for B/C with test mode off; first week monitored, with no `unknown` deliveries left unresolved |
+| 9 | `bc-contacts` | Legacy list imported into B (via Needs review); C sync from startup requests with live dates |
+| 10+ | other buckets | Phase 4 items: event/monthly/business-day timing, then D, E, F, A |
+
+## Guarantees
+- **No automatic duplicates (unconditional for this release).** Once a delivery enters `sending`, it **never automatically returns to send eligibility**, whatever any experiment shows.
+- **Interrupted execution resolves by evidence.** The delivery ends up `sent` (its token is found in Sent), `reconcile` (waiting for the grace period), or `unknown` (a human decides).
+- **Exactly-one delivery cannot be guaranteed.** If execution dies just before Gmail accepts the message, it stays unsent until a human resolves it. At this volume that tradeoff is accepted. Phase 0 results are operational guidance (grace periods, runbook), not proof.
+- **Unsubscribe cutoff (precise).** A successfully recorded unsubscribe blocks every **send authorization** that comes after it. A delivery that was already authorized or in flight may complete. The authorization point and its ordering are defined under *Lock boundaries*.
+- **Stop signals:**
+  - Durable: unsubscribe, form submit, replies and bounces (the mailbox can be re-scanned).
+  - Best-effort: browser-verified clicks. A lost beacon means a click doesn't stop B; this limitation is accepted and documented.
+  - Opens and redirect hits never stop anything.
+- **Suppression fails closed.** If opt-outs can't be read, nothing sends.
+
+## Architecture
+```
+Browser (portal) ── Authorization: Bearer token ──► Vercel api/email.js (1 fn)
+  render from per-user cache, then revalidate        op=read    authn + permission → bounded batchGet of engine SS → redact → private,no-store
+  shared lifecycle-rules.js for instant previews     op=admin   authn + permission → signed relay → engine ee_* (writes)
+                                                     op=c|o     302 / GIF immediately; waitUntil → signed → ee_track
+                                                     op=beacon  landing-page evidence, sync → ee_track
+                                                     op=u       GET page; POST sync → ee_unsubscribe
+                                                     op=heartbeat (Vercel Cron) reads engine SS directly → portal GAS ee_alert
+Engine GAS project (Tony)
+  ingest path (ee_track, ee_unsubscribe): NO run lease; short script lock; append to Inbox (+ Comms_Optouts) + CacheService flag
+  run path (trigger / Run now): run lease → per-delivery short critical sections → Gmail (Tony)
+```
+
+### Lock boundaries (correction 1)
+- **The run lease is not the script lock, and it is fenced.** A run holds a *run lease*: a `PropertiesService` record `{run_id, owner, expires, generation}` that is acquired and renewed inside brief `LockService.getScriptLock()` sections.
+  - `generation` is a **monotonically increasing fencing token**, incremented on every acquire.
+  - **Every claim, every state transition and every authorization** re-checks, under the script lock, that the worker's generation is still current.
+  - A worker whose generation is stale **stops immediately**. It initiates no external action (no `createDraft`, no `send()`) and writes nothing further.
+  - If a replacement worker finds a delivery in `sending`, it **reconciles** it and never sends it again.
+- **Send authorization is the single cutoff point.** It is the `drafted → sending` transition, a short critical section under the script lock that:
+  1. verifies the lease generation
+  2. checks the suppression cache flag and the Inbox for this contact (both written only under the same lock)
+  3. re-reads `Comms_Optouts`
+  4. checks enrollment and branch status, pause and kill switches, and the owner guard
+  5. writes `sending` + `send_invoked_at` and flushes
+
+  The lock is released and **only then** is `draft.send()` called.
+- **Ordering.**
+  - Our own unsubscribe ingestion also takes the script lock, so it is strictly ordered against authorizations: recorded before → this delivery is cancelled; recorded after → this delivery may complete, and every later authorization is blocked.
+  - Opt-outs that Comms writes from the portal project are seen at the next authorization's `Comms_Optouts` read (best-effort ordering for that external source).
+- **The script lock is held only for short critical sections:**
+  - claiming one delivery
+  - one state transition (Journal append + main-sheet apply + `flush()`)
+  - one ingest append
+- **Permitted inside the lock:**
+  - `SpreadsheetApp` reads and writes on the engine spreadsheet, the Journal spreadsheet, and the `Comms_Optouts`/`Comms_Log` spreadsheet
+  - `PropertiesService`
+  - `CacheService`
+- **Never permitted inside the lock:** `GmailApp`, `DriveApp`, `UrlFetchApp`.
+- **Latency is measured.** The permitted operations are remote calls, so they count toward critical-section latency. Phase 0 measures lock-hold p50/p95 per section type. Budget: **p95 < 2 s**; a breach is a Phase 1 blocker.
+- **Fencing limit (stated contract).** A stale worker cannot obtain a new authorization or commit any state change. **A Gmail call that was already authorized may still complete** after the worker loses its lease, because Gmail does not check our token. That delivery stays in `sending`/`reconcile` and is unavailable for another send. Human **Resend** is gated by quiescence (see State machines).
+- **Stop requests have their own durable path.**
+  - `ee_unsubscribe`, `ee_track` and the form/reply events append to an **Inbox** sheet (append-only).
+  - Unsubscribes also append to `Comms_Optouts` and set the CacheService key `sup:{email_norm}` (6 h).
+  - The request returns only after the append has been flushed. Ingest waits on the script lock only, which is never held across a send.
+- **Pre-send gate.** Immediately before draft creation, *and again* immediately before `send()`, the run checks for that contact:
+  - the CacheService suppression flag
+  - the Inbox (TextFinder on `email_norm` / `contact_id`, rows newer than the run's last-processed cursor)
+  - `Comms_Optouts`
+  - the enrollment and step status
+  - the pause and kill switches
+
+  **A recorded stop therefore blocks every send authorization that comes after it** (the cutoff defined above), even while a run is mid-loop. The run also folds Inbox rows into enrollment state at start and between sends, so a pending stop is processed first.
+
+### Journal: the authoritative ordered record (R4-1)
+- **Authority.** The **Journal** (a separate spreadsheet file, append-only, hash-chained: each record stores `prev_hash`) is the **authoritative, ordered record**. The main spreadsheet is its **materialized state** and read model.
+- **Every state change** is: Journal append → apply to the main sheet → advance the checkpoint. All three happen inside one short critical section.
+- **Stable operation IDs.**
+  - Every operation carries an `op_id` generated *before* its first attempt. Ingest uses the request nonce or `event_id`; transitions use `delivery_id` + target state + attempt.
+  - **Uncertain append (lost acknowledgement):** before retrying, look up `op_id` in the Journal (TextFinder). If found, treat it as appended; never append twice.
+- **Applied checkpoint.**
+  - `applied_seq` (stored in the main sheet's `Meta` and mirrored in PropertiesService) advances **only after** the main-sheet write for that `journal_seq` has flushed.
+  - Each materialized row stores `last_seq`, and apply skips any record with `seq ≤ last_seq`, which makes replay idempotent.
+- **Catch-up before acting.**
+  - A worker that acquires the lease **replays all outstanding records** (`applied_seq` < Journal head) **before** any claim or authorization.
+  - Every authorization section re-checks that `applied_seq` equals the head.
+  - A record written as `sending` but never applied becomes `sending` on replay, and is then reconciled. **Restarting the engine can never make an authorized delivery eligible again.**
+- **Gmail only after both writes.** The worker calls Gmail only if the Journal append **and** the main-sheet apply both succeeded. If the apply failed, it aborts without calling Gmail. Replay then materializes `sending`, which goes to reconcile and then `unknown` ("authorized, no evidence").
+- **Secondary writes are Journal-driven.**
+  - An unsubscribe record carries `secondary: comms_optouts`. The applier appends to `Comms_Optouts` with the `op_id` in its `source` column (checking for that `op_id` first, so it's idempotent), then journals `secondary_applied`.
+  - Replay re-applies any secondary write that was interrupted.
+- **Fail closed.**
+  - If the Journal can't be read, the head can't be determined, or replay finds a gap, a hash mismatch or an unknown record type, the engine **pauses itself**: no authorizations, plus an alert.
+  - **Unsubscribe while the Journal is down:**
+    - The request writes directly to `Comms_Optouts` and the `sup:prod:` cache, and records an `ingest_fallback` entry in PropertiesService. It reports success only if at least one durable store recorded it.
+    - Sending stays closed until the Journal is healthy and the fallback entries have been journaled.
+
+## Domain model (engine spreadsheet)
+- **Contacts** (a person):
+  - Identity: `contact_id, email_norm, alt_emails`
+  - Details: `first_name, last_name, phone, address, language`
+  - Bucket: `bucket, sub_bucket, tags, review_status`
+  - Flags: `is_test, pool_school, pool_school_date`
+  - Links: `source, quote_id, pool_id`
+  - Anchor dates: `startup_date, startup_source, events_json`
+  - Housekeeping: `created_at, updated_at`
+- **Suppressions** (person level, by scope):
+  - Scope `all`: unsubscribe-all, hard bounce, repeated soft bounce. Blocks every delivery.
+  - Scope `marketing`: marketing-only unsubscribe. Blocks marketing deliveries only.
+  - Read from `Comms_Optouts` (shared) and from the Inbox and CacheService (fresh), with a local mirror for audit.
+- **Rulesets:** immutable published rule versions `{rule_rev, json, published_at, published_by}`. The draft editing state lives in `Sequences`/`Steps`.
+- **Sequences:** `sequence_id, bucket, reentry: never|after_days:N|always, status`.
+- **Steps:**
+  - Identity: `step_id` (stable, never reused), `sequence_id, order, name, category (service|marketing), status (active|draft|retired)`
+  - Audience: `audience_filter`
+  - Timing: `anchor, event, month_day, offset, unit, repeat_every, repeat_count, window_days, max_hold_days` (default 2), `hard_deadline` (an offset relative to the anchor, optional)
+  - Rules: `requires`, `stop_rules` (see Stop model), `on_send_sub_bucket`
+  - Content: `published_revision_id`
+  - Concurrency: `rev`
+- **Enrollments:**
+  - Columns: `enrollment_id, contact_id, sequence_id, rule_rev, mode`
+  - State: `status (active|waiting_anchor|paused|completed|stopped), enrolled_at, anchor_snapshot_json, stop_reason, stopped_at`
+  - Branch state: `stopped_branches` (e.g. `["marketing"]`)
+- **Deliveries:**
+  - Identity: `delivery_id`, `delivery_token` (full UUID v4 with prefix, for example `dlv_3f2b…`; written **before** draft creation), key `{enrollment_id}:{step_id}:{occurrence}`, `mode`
+  - State: `state, attempt, lease_until, draft_id, message_id, thread_id, send_invoked_at`
+  - Binding: `revision_id, shell_version, run_id`
+  - Timing: `due_date, original_due_date, held_days, deadline`
+  - Result: `sent_at, error, reconcile_notes`
+- **Threads:** `thread_id, last_processed_message_id, last_scanned_at`. Replies are scanned per *thread*, not per delivery (correction 4).
+- **Decisions:** scheduling outcomes (`due|held|skipped|suppressed|expired|waiting_anchor`), kept separate from delivery state. Only changes are logged.
+- **Inbox:** stop/ingest requests, append-only: `inbox_id, type, contact_id, email_norm, delivery_id, payload, received_at, processed_at`.
+- **Events** (raw observations, append-only, **one sheet per month** so reads stay bounded):
+  - Columns: `event_id, gmail_message_id, delivery_id, enrollment_id, mode, type, link_id, received_at, seconds_since_send, method, ua_raw (90 d), ua_family, ip_prefix_hash (30 d), beacon_present, burst_count, source`
+- **Engagement** (derived per delivery):
+  - Columns: `classifier_version`, open/click/reply summaries with **confidence levels**, `scanner_like_hits`
+  - Recomputable from Events when the classifier changes.
+- **Runs, ChangeLog, Config** (operational, `config_rev`), **Fields**, **Permissions**, **SecurityAudit** (property-hash change log).
+
+## Stop model (correction 3)
+Three layers, evaluated separately:
+
+| Layer | Trigger | Effect |
+|---|---|---|
+| **Person suppression** | Unsubscribe-all, bounce | Every delivery blocked; all enrollments → `stopped` |
+| | Marketing unsubscribe | Marketing deliveries → outcome `suppressed`. **Enrollment continues**, and its service steps still send |
+| **Enrollment termination** | bucket change, conversion, `prerequisite_expired`, manual, completion | The enrollment ends |
+| **Branch / step stop** | Per-step `stop_rules: [{signal, min_confidence, stops: enrollment|marketing_branch|[step_ids]}]` | Only the named branch or steps stop |
+
+- **B (all marketing):** a reply, a high-confidence click or a form submit on any B step stops the `enrollment`.
+- **C:**
+  - Maintenance Invitation: a high-confidence click or form submit stops the **`marketing_branch`**, so no further maintenance pitches. Progress and Final Transition (service) still send.
+  - A reply to any C email stops nothing; it's flagged to Tony as a customer conversation.
+  - A marketing opt-out suppresses the Maintenance Invitation only.
+
+## State machines
+**Enrollment:** `waiting_anchor ⇄ active → completed | stopped`, plus `active ⇄ paused`. Branch stops live in `stopped_branches` and don't change `status`.
+
+**Delivery: retry vs. reconcile by stage (correction 2):**
+```
+Stage A: preparation (nothing has reached Gmail's send path)
+  claimed: delivery_token persisted + flushed
+     │  render; createDraft(token in body)
+     ▼
+  drafted: draft_id persisted + flushed
+  A transient error in Stage A is retried safely (max 3, backoff).
+  Recovery of a stale 'claimed': search drafts for the token → delete any orphan → back to eligible.
+
+Stage B: send invoked (outcome may be ambiguous)
+  sending: persisted + flushed, send_invoked_at set
+     │  draft.send()
+     ├─ returns message → Stage C
+     └─ exception / timeout / execution killed → reconcile   (NEVER back to eligible)
+  reconcile (Sent searched after grace G, again after G2; G and G2 measured in Phase 0):
+     token found in Sent → sent (capture message_id / thread_id)
+     not found after G2 (draft present or not) → unknown (human: Mark sent / Resend / Cancel)
+     A delivery that has been in `sending` NEVER returns to automatic eligibility.
+  Human Resend (quiescence gate, R4-2):
+     allowed only when BOTH hold:
+       - now ≥ authorized_at + max execution lifetime (6 min) + safety margin (30 min)
+       - the Sent search after G2 found nothing
+     Before then, the button is disabled with the time it unlocks ("an earlier attempt could still be running until 10:42").
+     After quiescence, the UI still says "Gmail may have accepted the earlier attempt; check Tony's Sent folder".
+     Resend journals a new attempt with a new token, then passes the full pre-send gate.
+  A stale worker (lease generation superseded) cannot move any delivery out of `sending`;
+  only the current worker's reconcile, or a human, can.
+
+Stage C: accepted (Gmail returned the message)
+  sent: message_id / thread_id written. A bookkeeping write failure retries the BOOKKEEPING only
+        (message ids kept in a PropertiesService journal until written). Never resent.
+
+Any resend (automatic or human) first passes the full pre-send gate:
+  suppression (all sources) · enrollment + branch status · step not retired · bucket unchanged ·
+  revision not revoked + integrity hash · pause / kill switch · owner guard · mode.
+  If any check fails → cancelled (draft deleted).
+```
+
+## Scheduling semantics (correction 8)
+- **Clock.** `decide({now, tz:'America/Chicago', rulesets, contentMap, snapshot})` is pure. Dates are local calendar dates, so DST never moves a date. A business day is Mon–Fri minus the Config `holidays`.
+- **Rule versions.**
+  - Each enrollment follows its own `rule_rev`.
+  - Publishing a change creates a new ruleset revision and asks for its scope: **"apply to active enrollments"**, which migrates their `rule_rev` (unsent steps re-plan), or **"new enrollments only"**, which leaves existing ones on their old `rule_rev`.
+  - `decide()` evaluates each enrollment under its own revision.
+- **Run snapshot.** At run start the run captures the ruleset revisions **and the published-content map**. Every claim in the run binds content from that snapshot, and publishes take effect on the next run. Rules and content therefore change together, at run boundaries.
+- **"Previous"** means the actual send date of the `requires` step. Holds and late sends shift chained steps; startup- and event-anchored steps don't move.
+- **Collision priority:** earliest `original_due_date`, then lower `order`. A held delivery outranks newly due ones (no starvation).
+- **Holds:**
+  - A hold extends the window by at most `max_hold_days`.
+  - `hard_deadline` is absolute (for example, Welcome must send no later than startup − 1). Past it, the outcome is `expired` regardless of holds.
+  - Nothing stays eligible forever.
+- **Expiry:** the outcome is `expired`, and steps that `require` it expire too. If no sendable steps remain, the enrollment stops with `prerequisite_expired` and is flagged.
+- **Missing anchor:** `waiting_anchor`. The engine never guesses.
+- **Anchor moves:** unsent deliveries re-plan; sent ones are never re-sent. If an anchor moves after a step was sent, the Activity tab flags it.
+
+**Worked examples** (unit tests):
+
+| # | Situation | Expected |
+|---|---|---|
+| 1 | B confirmed Mon Oct 26 | Intro Oct 26 (Day 1) → Follow Up Oct 30 → Check-In Nov 8 |
+| 2 | Intro sent late, Oct 28 | Follow Up Nov 1 |
+| 3 | Intro blocked 8 days (window 7) | Intro `expired`; Follow Up / Check-In expired; enrollment `stopped: prerequisite_expired`, flagged |
+| 4 | C startup Oct 28 | Welcome due Oct 25; hard deadline Oct 27 |
+| 5 | Startup moved to Nov 4 before Welcome | Welcome Nov 1; Progress Nov 11, 18, 25, Dec 2 |
+| 6 | Startup moved after Welcome sent | No re-send; Progress re-planned; Activity flag |
+| 7 | Startup Sep 28 collisions | Progress #3 Oct 19, Maintenance Oct 20; Progress #4 Oct 26, Final Transition Oct 27 |
+| 8 | Comms emailed the contact today (local) | Lifecycle delivery held to tomorrow (best-effort) |
+| 9 | C without a startup date | `waiting_anchor` |
+| 10 | D confirmed Fri Oct 23 | Personalized Intro Mon Oct 26 |
+| 11 | Follow Up +4 → +6 published "active enrollments", Intro sent Oct 26 | Follow Up Nov 1. With "new enrollments only": Oct 30 |
+| 12 | Contact returns to B | No new enrollment; Needs review |
+| 13 | Welcome held 2 days in a row by collisions/Comms (max_hold 1, matching the matrix) | Expires at the hold cap or hard deadline (startup −1), whichever comes first; flagged |
+| 14 | C marketing opt-out | Maintenance `suppressed`; Progress ×4 and Final Transition send |
+| 15 | High-confidence click on Maintenance | No further marketing C steps; Final Transition sends |
+| 16 | Form submit from Maintenance | Same as #15 |
+
+## Email matrix (all 15; B and C active in the MVP)
+| Step | Bkt | Cat | Anchor → due | Window / hold / deadline | Requires | Stop rules |
+|---|---|---|---|---|---|---|
+| MCP x MCPS Intro | B | mkt | enrollment +0 | 7 / 2 / — | — | reply, click≥high, form → enrollment |
+| MCPS Follow Up | B | mkt | previous +4 | 7 / 2 / — | Intro | same |
+| Personal Check-In | B | mkt | previous +9 | 7 / 2 / — | Follow Up | same |
+| Welcome Email | C | svc | startup −3 | 2 / 1 / startup −1 | — | — |
+| Startup Progress ×4 | C | svc | startup +7, every 7 | 3 / 2 / next occurrence −1 | — | — |
+| Maintenance Invitation | C | mkt | startup +21 | 5 / 2 / — | — | click≥high, form → marketing_branch |
+| Final Transition | C | svc | startup +28 | 5 / 2 / — | — | — |
+| Referral Campaign | A | mkt | tbd | — | — | tbd |
+| Reviews Request | A | mkt | event service_milestone +1 | 7 / 2 / — | — | reply, click≥high (via `/go` interstitial) → enrollment |
+| Customer Newsletter | A | mkt | monthly 1st | 5 / 0 / month end | — | — |
+| Personalized Intro | D | mkt | enrollment +1 bd | 1 / 1 / — | — | reply, click≥high, form → enrollment |
+| Referral Follow Up | D | mkt | enrollment +5 bd | 2 / 1 / — | Personalized Intro | same |
+| Inquiry Response | E | svc | event inquiry +0 | 0 / 0 / same day | — | — (needs hourly runs) |
+| Proposal Follow-Up | E | mkt | event proposal_sent +2 bd | 1 / 1 / — | — | reply, form → enrollment |
+| Reintroduction | F | mkt | enrollment +60 | 30 / 2 / — | — | reply, click≥high, form → enrollment |
+
+- Every step: person suppression by scope applies; `bucket_changed` ends the enrollment.
+- Content requirements:
+  - B CTAs go to `/service`.
+  - Welcome requires `StartupDate` + `Address` and uses `{{block:PoolSchool}}`.
+  - Progress subjects include the week number (to avoid threading).
+  - No task lists anywhere.
+
+## Versioning contract
+- **Immutable revision.** Approving publishes an immutable **Revision**:
+  - Identity: `revision_id, step_id, rev_no, parent_revision_id`
+  - Content: `subject, details_box`, body file per language (copied into `Revisions/`, view-only), `sha256` per file
+  - Dependencies: `block_revision_ids`, `fields_snapshot`, `shell_version`
+  - Approval: `editor, approver, approved_at, content_hash`
+  - Status: `published|superseded|revoked`
+- **Integrity.** Content is re-hashed at send; a mismatch makes the delivery `failed: integrity`.
+- **Binding.** A delivery binds content **from its run's snapshot** at claim time.
+- **Recovery.** A recovered draft keeps its bound revision **unless that revision is `revoked`**, in which case it is cancelled. Superseded content stays sendable, because it was approved.
+- **Rollback** publishes a new revision whose parent points at the restored content.
+- **Shell.** The shell is code (`SHELL_VERSION`, changed via PR), and the version used is recorded on each delivery.
+- **Approval** requires the `approver` permission. When `require_second_approver` is on, the approver must differ from the editor.
+
+## Cross-engine coordination
+- **Shared key:** `email_norm` (lowercase + trim).
+- **Suppression:**
+  - Read fresh at both gates (see Lock boundaries).
+  - Writes are append-only to `Comms_Optouts`, so no lost updates.
+  - If the source is unreadable, nothing sends (`suppression_unavailable`, alert).
+- **Frequency with Comms:** same local calendar day check against `Comms_Log`. Best-effort, as stated in Decisions and shown in the UI.
+- **Quota:** separate mailboxes (Comms bulk uses the portal's account; lifecycle uses Tony's). The engine re-reads `MailApp.getRemainingDailyQuota()` before each send and keeps a reserve of 200.
+- **Phase 0:** confirm `Comms_Optouts` and `Comms_Log` exist live. If they don't, ask before creating tabs.
+
+## Tracking: evidence and confidence (corrections 4 + 5)
+- **Raw observations are kept and never overwritten.** The classifier is versioned, and Engagement is recomputed when the classifier changes.
+- **Opens:**
+  - Every pixel request is stored with `seconds_since_send`, `ua_family` and proxy type.
+  - Confidence:
+    - low: very early, or a known prefetch proxy such as Apple MPP
+    - medium: a Gmail or other image proxy
+    - nothing higher: no open is ever "proof"
+  - The UI shows "Opened (estimated)" with confidence breakdown, unique and total counts, and first and last times.
+- **Clicks:**
+  - Signals: redirect hits (with `seconds_since_send`, method, UA, burst count), plus the **landing-page beacon** (`beacon_present`).
+  - Confidence:
+    - high: browser-verified, meaning a beacon from a first-party landing with a normal UA, with no burst
+    - medium: a redirect hit that isn't scanner-like
+    - low: HEAD requests, scanner UAs, bursts, or very early hits
+  - Labels say "Browser-verified click", never "human".
+  - Stop rules require `min_confidence: high`.
+- **CTA coverage:** only **first-party** CTAs can drive stops. External destinations (such as a Google review link) go through a first-party `/go/<link_id>` interstitial that fires the beacon and then redirects. That's needed for A Reviews; B and C CTAs all point at `/service`.
+- **Durability:**
+  - Beacons are sent synchronously with 3 retries, then queued in localStorage for the next visit.
+  - **If the visitor closes the page and never returns, that click is lost.** This is accepted and documented: the worst case is that the next B step sends, while reply and form stops still work. The future fix is to move ingestion to a durable queue (Vercel Queues).
+- **Replies (precedence is explicit):** for each new Gmail message in a scanned thread, dedupe by `gmail_message_id` (one event per inbound message, ever), then check in order:
+  1. From Tony or his aliases → ignore.
+  2. Mailer-daemon/postmaster, or a DSN content type → **bounce** path.
+  3. `Auto-Submitted` ≠ `no`, `X-Autoreply`/`X-Autorespond`, `Precedence: auto_reply|bulk|junk`, or `cbLooksLikeAutoReply_` → **auto_reply** (no stop).
+  4. From `email_norm` or `alt_emails` → **reply**.
+  5. Anything else → **reply_other** (stops conservatively for marketing; flagged).
+- **Shared threads:** an inbound message is attributed to the **latest delivery in that thread sent before the message's date**, and to that delivery's enrollment only. Per-thread cursors stop one message from becoming several stop decisions.
+- **Tracking UI:**
+  - **Per email:** funnel by confidence, a day-by-day table and chart, per-link breakdown, a scanner-like section, CSV export (permission-gated).
+  - **Per delivery:** the raw event list.
+  - **Per contact:** a timeline across enrollments.
+
+## Read-path security (correction 6)
+- **Every `op=read` request** (overview, contacts, drawers, tracking detail, reply snippets, exports) requires `Authorization: Bearer <portal token>`, never in the query string. It is validated by `validatePortalSession` and checked against the engine Permissions sheet (read directly by Vercel).
+- **The service account is infrastructure access only.**
+- **Redaction by permission:**
+
+| Permission | Sees |
+|---|---|
+| Capability | Sees |
+|---|---|
+| `view_aggregates` | aggregates, contact names |
+| `view_pii` | emails, addresses, reply snippets |
+| `export` | CSV export |
+
+  Redaction happens after cache retrieval (see Configuration & authorization for the role → capability map).
+- **Caching:**
+  - The server-side cache key is `dataset:range-set:data_version`, holding raw data in function memory only.
+  - Per-permission views are computed per request, so there is never a shared cache entry for a filtered view.
+  - Responses carry `Cache-Control: private, no-store` and `Vary: Authorization`. Nothing is CDN-cached.
+- **Browser cache:**
+  - localStorage keys are prefixed `mcps_lc:{username}:`.
+  - `doLogout()` and any session-user change clear every `mcps_lc:` key; this is a small edit in `js/lib/auth.js`.
+  - Cached payloads already follow the user's permission level.
+
+## Security boundary & rollback (correction 7)
+- **Trusted maintainers.** Tony (owner) and Mau (editor) can change code and Script Properties. This is accepted as the security boundary, and the app never claims "owner-only" enforcement for them.
+- **Detection.** Each run hashes the security properties and logs any change to SecurityAudit, which also triggers an alert.
+- **Portal users** are governed by app permissions only, and they can never reach security config.
+- **Schema compatibility:** code declares `SCHEMA_READ_MIN..SCHEMA_READ_MAX`.
+  - **Additive** migrations stay inside the range in both directions.
+  - **Semantic** migrations (a field's meaning changes, state machine changes, config shape changes) use **expand → migrate → contract** across 3 releases:
+    - In the expand release, code reads and writes both forms.
+    - The rollback floor is declared per release, and the deploy script refuses a rollback below it.
+  - Last-resort recovery is a backup restore.
+- **Tested:** an additive migration rolled back one release, and a semantic expand/contract with rollback at each stage, each followed by a full run on the migrated data.
+
+## Execution modes
+- **Simulation:** `decide()` plus rendering, with no writes. Powers the wizard, the audience panels and the next-run queue.
+- **Test delivery:**
+  - Only to allowlisted recipients. Uses test contacts (`is_test`) with their own enrollments, deliveries and events (`mode=test`).
+  - **Mode is never taken from the request.** It is derived from the signed delivery identity (the link HMAC covers the mode) and from the delivery row it resolves to.
+  - **Isolation at every write boundary:**
+    - **Unsubscribe and bounce:** test mode writes only to the engine's `Suppressions_Test`, never to `Comms_Optouts`.
+    - **Cache keys:** `sup:{mode}:{email_norm}`.
+    - **Inbox rows and event dedupe keys** include the mode.
+    - **Replies and bounces** are attributed through the thread → delivery mapping, so the delivery's mode wins even when the address also belongs to a production contact.
+    - **Production gates** read only production suppression sources.
+  - The demo uses this mode.
+- **Production:** requires `engine_enabled`, the owner guard, and the `operator` permission for Run now.
+
+## Configuration & authorization
+- **Operational edits** (`ee_update_config`, step changes, activation) are:
+  - validated by a server-side schema
+  - checked for conflicts with `rev`/`config_rev` (409 on conflict)
+  - previewed for impact: affected enrollments, newly due today, and 7-day volume before and after
+- **Actor:** the username from the Vercel-validated session, carried in the signed relay. Every edit is written to the ChangeLog.
+- **Permissions are explicit capabilities, with no inheritance.** A user can hold several roles; their capabilities are the union.
+
+| Role | Capabilities |
+|---|---|
+| viewer | `view_aggregates` |
+| editor | `view_aggregates`, `view_pii`, `edit_drafts`, `edit_contacts` |
+| approver | `view_aggregates`, `view_pii`, `approve_publish`, `activate_steps` |
+| operator | `view_aggregates`, `view_pii`, `export`, `run_now`, `pause`, `resolve_unknown`, `edit_config` |
+
+- Redaction is keyed on `view_pii` (emails, addresses, reply snippets). Export requires `export`. Every `ee_*` action declares the capability it needs.
+
+## Performance
+- **Mandatory launch budgets.** Live sends and the Tony rollout are **blocked** until all of these pass, with auth included, at 2× the initial workload:
+  - fresh overview read p95 < 1.5 s
+  - cached paint < 500 ms
+  - write acknowledgement p95 < 5 s
+  - overview payload fetched from Sheets < 1 MB
+  - engine run < 200 s
+- **Fallback if a mandatory budget fails:**
+  1. The engine writes a precomputed read-model sheet after each run and ingest batch, so reads become a single small range.
+  2. If that still fails, move Events and Engagement to a Marketplace database. This needs Mau's approval, because it changes the "Sheets only" constraint.
+- **Aspirational targets** (reported, not gating):
+  - Page paint from cache: < 300 ms
+  - Fresh read: p95 < 800 ms cold, < 150 ms warm (auth included)
+  - Drawer: < 100 ms (prefetched)
+  - Tracking detail: lazy, p95 < 800 ms
+  - Wizard recompute: < 50 ms at 5k contacts
+  - Write acknowledgement: p95 < 3 s, with an optimistic UI
+- **Bounded backend cost:**
+  - Reads touch only Contacts, Steps, Enrollments (active), Deliveries (last 60 days), the Engagement summary and the current Runs, **never raw Events**.
+  - Events are monthly sheets; older Deliveries are archived to `Deliveries_YYYY`.
+  - **The benchmarks record bytes fetched and ranges scanned per op, as well as latency.**
+
+## Operations
+- **Workload model** (initial):
+  - About 110 B and ≤40 active C enrollments.
+  - Typical day: ≤40 sends and ≤1k events, with B bursts paced by a cap of 50/day.
+- **Benchmarks:** a synthetic generator (5k contacts, 20k deliveries, 200k events) measures run duration, per-send overhead, read latency, bytes and ranges, and reply-scan cost.
+- **Migration triggers:**
+  - run > 150 s on 3 consecutive runs
+  - an Events month > 100k rows
+  - read p95 > 1.5 s for 7 days
+  - > 500 sends/day
+  - Sheets 429 errors on more than one day a week
+- **SLOs:**
+
+| Objective | Target |
+|---|---|
+| Unsubscribe | journaled before the page returns; blocks every later send authorization |
+| Due deliveries | attempted by 12:00 local |
+| Successful run | at least one every 26 h |
+| `unknown` / `reconcile` deliveries | resolved within 24 h |
+
+  Owners: Mau primary, Tony secondary.
+- **Independent heartbeat:** Vercel Cron runs daily at 10:00 CT. It reads the engine spreadsheet directly, alerts via portal GAS `ee_alert` (a different project and account), and shows a portal banner.
+- **Retention:**
+  - `ua_raw` 90 days. Raw IPs are never stored; a salted /24 hash is kept 30 days.
+  - Links are stored as `link_id`. Events are kept 13 months, then aggregated.
+  - Deliveries, Revisions and ChangeLog are kept 3 years.
+  - Deletion requests purge PII, keeping a hashed suppression entry.
+- **Journal coverage** (see *Journal* under Architecture for the protocol). It records everything needed to resume safely:
+  - contact creates and changes
+  - enrollment create, stop and branch stop
+  - delivery claim and every state transition, with the full identity (contact, enrollment, step, occurrence, `revision_id`, `rule_rev`, token)
+  - Inbox events (unsubscribes, form submits, replies)
+  - approvals and revisions
+  - config and permission changes
+- **Backup / restore:**
+  - Nightly copies of the main spreadsheet and the Journal, 30 kept. Each main backup records the `journal_seq` it includes.
+  - **Restore:** pause → restore the main spreadsheet → **replay Journal records after the backup's `journal_seq`** (idempotent by record id) → verify `sent` deliveries against Sent tokens → resume.
+  - **Accepted recovery-point loss:** only if the Journal itself is lost at the same time. Then the engine stays paused until a human rebuilds the state from Sent and the Inbox (runbook).
+
+## Deployment
+- **Portal changes:**
+  - GAS: the `ROLE_ACCESS` page entry and the `ee_alert` action. Deploy via the memory procedure: diff live (including `BuilderReports.js`), `gas-verify` baseline/check, `clasp push --force` (fail on "Skipping push"), `clasp deploy -i <pinned>`. Rollback with `-V <prev>`.
+  - Frontend: the `auth.js` logout cache-clear.
+- **Engine project setup** (proved in Phase 0):
+  1. Tony creates the spreadsheet and its bound script.
+  2. Tony shares them with Mau (editor) and the spreadsheet with the service account (viewer). Tony needs editor access to the Settings spreadsheet.
+  3. Tony deploys the web app as "Execute as me".
+  4. Tony runs `eeSetup`, `eeSetupDrive` and `eeInstall`.
+  5. Verify that `ee_whoami` still returns antonio@ after a redeploy by Mau. If not, redeploys are Tony's job (documented). The owner guard holds either way.
+- **Guarded deploy** (`scripts/ee-deploy.mjs`):
+  - Asserts that the scriptId and deployment id match the expected constants.
+  - Syncs the rules file and checks its hash.
+  - Runs `npm run test:ee`, then the schema range and rollback-floor checks.
+  - Pushes with `clasp push --force` and fails on "Skipping push".
+  - Deploys with `clasp deploy -i`, then asserts the version via `ee_health`.
+  - `--rollback <v>` refuses to go below the rollback floor.
+- **Tests:**
+  - `npm run test:ee` = `node --test "tests/email-engine-*.test.js"` (Node 24 expands the glob; each file runs in its own process).
+  - Discovery is proven by temporarily failing one file.
+  - Concurrency and Gmail rows use the sandbox integration suite (`npm run test:ee:sandbox`, run in Tony's or a sandbox account).
+
+## Build order
+**Phase 0: discovery spikes (approved)**
+1. Project creation, binding, ownership, web-app identity after a redeploy, trigger ownership.
+2. Gmail send-boundary investigation in a sandbox mailbox:
+   - `draft.send()` removes the draft.
+   - **Interrupted sends:** execution killed mid-`send()` near the time limit, repeated N times.
+   - **Delayed sends:** time from `send()` to appearing in Sent, and Sent-search indexing latency (sets G and G2).
+   - **Orphan drafts:** crash between `createDraft` and saving `draft_id`; are they findable by token search?
+   - `getHeader('Auto-Submitted')` and the precedence headers.
+   - Execution-lifetime observations, to confirm the quiescence margin. (Settled: a surviving draft never permits an automatic resend. These results are operational guidance only.)
+3. Concurrency:
+   - An unsubscribe web-app call during a long run completes within the target.
+   - **Lock-hold p50/p95** for each critical-section type (Journal append + apply + flush, claim, ingest), including the remote spreadsheet and properties calls.
+4. Service-account read and bytes per op on a synthetic spreadsheet.
+5. `Comms_Optouts` and `Comms_Log` exist live.
+6. The Node test glob works.
+
+**Phase 1: core contracts, no UI**
+- `js/lib/lifecycle-rules.js` (`decide()`, rulesets, holds and deadlines, stop model).
+- Engine:
+  - data model and migrations
+  - **the Journal:** `op_id`s, hash chain, `applied_seq` checkpoint, catch-up replay, Journal-driven secondary writes, fail-closed pause, unsubscribe fallback
+  - fenced run lease plus short critical sections
+  - Inbox ingest
+  - the delivery stages, reconcile, and the quiescence-gated Resend
+  - revisions and integrity; suppression and frequency
+  - modes; owner guard and kill switch; SecurityAudit
+- The fake harness, with **fault injection between every Journal append and main-sheet write**.
+- Worked examples 1–16, and the failure matrix rows that can run without a mailbox.
+
+**Phase 2: narrow B/C slice + Tony demo**
+- B Intro and C Welcome revisions.
+- `api/email.js` (authenticated reads with redaction) and the quotes merge; `/service` beacon.
+- Minimal page:
+  - Emails overview (no "When it sends")
+  - Drawer: Audience, Template + history, and full evidence-graded Tracking
+  - Activity: queue, Run now, reconcile/`unknown` resolver, runs, errors, heartbeat
+  - Contacts: list, Needs review, timeline
+- First, update the mockup to match.
+
+**Phase 3: full B/C + wizard**
+- The remaining bodies; the 5-step wizard (scope prompt, category, stop rules, holds and deadlines, impact preview, diff, 409 handling); config editing; Permissions view; ChangeLog UI.
+
+**Phase 4: after B/C are live (CP8+)**
+- Contact sync (C from startup requests with live `Scheduled_Visits` dates; A, E, F) into Needs review.
+- Bucket rules, attribution, image upload to Blob, `/go` interstitial, hourly runs, then E go-live. Durable ingestion queue if click loss proves material.
+
+**Minimum runbook (a gate before production is enabled)** `email-engine/RUNBOOK.md` covers:
+- pausing the engine or one bucket
+- resolving `reconcile`/`unknown` deliveries, including quiescence and checking Tony's Sent folder
+- Journal fail-closed recovery
+- restore + Journal replay
+- the owner-guard and lease-stuck procedures
+
+**Fuller docs (after the slice):** `emails/README.md` (template syntax, revisions, adding steps), secret rotation, owner change.
+
+## Failure acceptance matrix
+**FG** = fake Gmail counting real `send()` invocations. **SB** = sandbox mailbox integration (counts messages in Sent by token). **API** = Vercel handler tests.
+
+| # | Scenario | Expected | Test |
+|---|---|---|---|
+| 1 | Gmail accepts, process dies before `sent` is written | Reconcile finds the token in Sent → `sent`; **external count = 1** | FG+SB |
+| 2 | Dies after `drafted`, before `send()` | Stage A recovery; one send after the full gate | FG+SB |
+| 3 | Dies after `createDraft`, before `draft_id` is saved | Orphan found by token and deleted; exactly one later send | FG+SB |
+| 4 | `send()` throws or times out | → `reconcile`, **never eligible**; resolved by evidence or human | FG+SB |
+| 5 | Delayed send (appears in Sent after the timeout) | Reconcile waits G/G2 and finds it; no duplicate | SB |
+| 6 | Draft gone, token not in Sent | `unknown`; no automatic action; alert | FG |
+| 7 | Trigger and Run now overlap | Run lease refuses the second; count unchanged | FG+SB |
+| 8 | Resume trigger fires twice | The second refuses the lease, or finds claimed rows | FG |
+| 9 | **Unsubscribe for a later recipient during a multi-contact run** | Recorded within target; that recipient gets no further email | **SB** |
+| 10 | Unsubscribe after `send()` returned | That send stands; no further sends | FG |
+| 11 | Suppression unreadable | 0 sends; alert | FG |
+| 12 | Content published mid-run | The run binds snapshot content; the new content applies next run | FG |
+| 13 | Rules published mid-run | Snapshot rules this run; per-scope re-plan next run | FG |
+| 14 | Revision file altered | `failed: integrity`; no send | FG |
+| 15 | Recovered draft after retire / bucket change / pause / revoke / opt-out | Cancelled; draft deleted | FG |
+| 16 | Contact exits and re-enters B | No new enrollment; Needs review | FG |
+| 17 | Startup moved after Welcome | No re-send; re-plan | FG |
+| 18 | C marketing opt-out | Maintenance suppressed; service steps send | FG |
+| 19 | Maintenance high-confidence click / form | Marketing branch stopped; Final Transition sends | FG |
+| 20 | Out-of-office from the contact's own address | `auto_reply`; no stop | FG |
+| 21 | One reply in a thread shared by 2 deliveries | One event, attributed to the latest prior delivery | FG |
+| 22 | Tracking request duplicated / forged / scanner-like | Deduped / 400 with no event / low confidence, no stop | API |
+| 23 | Beacon lost (page closed) | No stop; next B step sends (documented limitation) | API+FG |
+| 24 | Comms sent today (same local day) | Held (best-effort) | FG |
+| 25 | Hold cap or hard deadline reached | `expired`; flagged | FG |
+| 26 | Quota or cap hit mid-run | Clean stop; continues next run | FG |
+| 27 | Non-owner identity | Refuses; 0 sends | FG |
+| 28 | Test-mode click or reply | Only the test enrollment changes | FG |
+| 29 | Kill switch | 0 sends; simulation works | FG |
+| 30 | Concurrent step edits | 409 | API |
+| 31 | Read without a token / as viewer / logout | 401 / redacted fields / `mcps_lc:` cache cleared; headers `private, no-store` | API+UI |
+| 32 | Rollback after an additive migration, and at each expand/contract stage | Full run passes; deploy refuses below the floor | FG |
+| 33 | Security property changed | SecurityAudit entry + alert | FG |
+| 34 | Backup restored mid-week | Paused until replay and reconcile finish; no duplicates | SB |
+| 35a | **Stale worker before authorization:** A stalls while preparing, its lease expires, B takes over, then A resumes | A's generation check fails at authorization: no new `send()`, no writes; **external count unchanged** | **SB** + FG |
+| 35b | **Stale worker after authorization, before Gmail:** A is paused after `sending` is committed and its lease expires; B takes over; then A resumes and calls Gmail | Per the contract, A's already-authorized send **may complete** (count ≤ 1). A's later `sent` write is rejected (stale generation). B sees `sending`, reconciles, and finds the token in Sent → `sent`. No second send; Resend stays disabled until quiescence | **SB** + FG |
+| 36 | Unsubscribe recorded **before** authorization | That delivery is cancelled (draft deleted) | SB |
+| 37 | Unsubscribe recorded **just after** authorization | That delivery may complete; every later authorization for the contact is blocked | SB |
+| 38 | Unsubscribe **during the Gmail call** | Same as #37; logged as "in-flight at opt-out" | SB |
+| 39 | **Restore after post-backup activity:** new contact + enrollment, a successful send, then a form stop, all missing from the restored backup | Journal replay restores the contact, enrollment, `sent` delivery and stop; no duplicate enrollment or delivery; the stop holds | SB |
+| 40 | **Test isolation:** a test delivery to an address that also belongs to a production contact gets an unsubscribe, a bounce, a click and a reply | Production `Comms_Optouts`, the `sup:prod:` cache, production enrollments and production engagement are all unchanged | SB + API |
+| 41 | Interrupted after `sending` (no evidence in Sent) | `reconcile` → `unknown`; never automatically eligible | FG + SB |
+| 42 | **Fault between Journal append and main-sheet write**, injected at each transition (claim, drafted, **sending**, sent, enrollment create, branch stop, unsubscribe, approval) | After restart, catch-up replay materializes the journaled state before any claim. An authorized delivery is never eligible again; state is consistent | FG |
+| 43 | Journal append succeeded but its acknowledgement was lost | The retry finds the `op_id` and doesn't append twice | FG |
+| 44 | Journal unreadable, or hash chain broken, or a seq gap | The engine pauses itself, with no authorizations, and alerts. An unsubscribe is still recorded via the fallback (`Comms_Optouts` + cache) | FG |
+| 45 | `Comms_Optouts` secondary write interrupted | Replay applies it exactly once (`op_id` in `source`) | FG |
+| 46 | Human Resend before quiescence | Refused, with the unlock time shown; allowed after quiescence and a clean Sent search | FG + UI |
+
+## How changes work later
+| Change | Where | Code? |
+|---|---|---|
+| Copy | Wizard → draft → approve (immutable revision) | No |
+| Timing, stops, audience | Wizard, with impact preview and scope ("active" vs "new enrollments") | No |
+| Add / retire a step | Wizard (never delete) | No |
+| Start a bucket | Approve revisions, activate steps | No |
+| Pause | Activity switches | No |
+| Undo content | History → Roll back | No |
+| Sender, secrets, two-person rule | Script Properties (trusted maintainers; changes audited) | No |
+| Merge field | Fields registry | No |
+| Brand / footer | `SHELL_VERSION`, via PR | Yes |
+
+## Verification
+1. **Phase 0:** a written spike report with measured G/G2, the interrupted-send results, lock-wait timings, and bytes per read. The guarantees section is updated to match the findings.
+2. `npm run test:ee` (discovery proven) and the sandbox suite pass. All matrix rows (1–46, including 35a/35b) pass, and the existing `tests/` still pass.
+3. `vercel build` + node import of `api/email.js` and `api/quotes/index.js`. Quote flows work on preview. The performance targets are measured (latency, bytes, ranges) and either met or reported with their gap.
+4. **Demo (test-delivery mode):**
+   - 3 test contacts; approve the B Intro and C Welcome (with revision history).
+   - Run now; branded mail arrives.
+   - A browser-verified click stops B; a scanner-like hit doesn't.
+   - A reply stops; an out-of-office doesn't.
+   - An unsubscribe during a run blocks every later authorization.
+   - **Interrupted execution causes no automatic duplicate.** The delivery ends `sent`, `reconcile` or `unknown`, according to the evidence.
+   - Running twice gives the same external count.
+5. **Mandatory performance budgets pass.** This is a launch gate; aspirational targets are reported separately.
+
+## Plan changes
+Every change to this plan gets a dated line here (use `/email-engine tweak "<change>"`).
+- 2026-10-29: Plan approved (third review, 9.3/10: approved to build through the sandbox B/C slice). Priority set to MCP Legacy (B) + MCP Startup (C); resume protocol and checkpoints CP0–CP10 added.

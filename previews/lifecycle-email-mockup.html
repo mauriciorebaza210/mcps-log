@@ -1,0 +1,1045 @@
+<title>Lifecycle Email</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=Oswald:wght@600;700&display=swap">
+<style>
+/* Layout: the portal's admin page — title bar, underline tabs, chip row, card tables; a right drawer and a centered wizard sheet sit above it. */
+:root{
+  --bg:#F5F4EB; --card:#ffffff; --surface:#f8fafc; --text:#0f172a; --muted:#64748b; --border:#e2e8f0;
+  --teal:#0d4d44; --teal-mid:#1a7a6e; --teal-light:#2aa89a; --accent:#0d4d44; --gold:#c8a84b;
+  --btn:#0d4d44; --btn-text:#ffffff; --tint:rgba(42,168,154,.10); --scrim:rgba(15,23,42,.45);
+  --ok:#15803d; --ok-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7; --bad:#b91c1c; --bad-bg:#fee2e2;
+  --info:#075985; --info-bg:#e0f2fe; --idle:#475569; --idle-bg:#f1f5f9;
+  --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-cond:'Barlow Condensed','Arial Narrow',Arial,sans-serif;
+  --f-display:'Oswald','Arial Narrow',Arial,sans-serif;
+  --r-sm:8px; --r-md:12px; --r-lg:18px;
+  --shadow:0 2px 8px rgba(0,0,0,.08); --shadow-lg:0 12px 40px rgba(0,0,0,.22);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1513; --card:#17201e; --surface:#131b19; --text:#e5ece9; --muted:#94a5a1; --border:#2a3633;
+  --accent:#4cc3b3; --btn:#1f8a7c; --btn-text:#ffffff; --tint:rgba(76,195,179,.12); --scrim:rgba(0,0,0,.6);
+  --ok:#4ade80; --ok-bg:rgba(74,222,128,.14); --warn:#fbbf24; --warn-bg:rgba(251,191,36,.14); --bad:#f87171; --bad-bg:rgba(248,113,113,.14);
+  --info:#7dd3fc; --info-bg:rgba(125,211,252,.13); --idle:#a3b1ae; --idle-bg:rgba(148,165,161,.13);
+  --shadow:0 2px 8px rgba(0,0,0,.4); --shadow-lg:0 12px 40px rgba(0,0,0,.6); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1513; --card:#17201e; --surface:#131b19; --text:#e5ece9; --muted:#94a5a1; --border:#2a3633;
+  --accent:#4cc3b3; --btn:#1f8a7c; --btn-text:#ffffff; --tint:rgba(76,195,179,.12); --scrim:rgba(0,0,0,.6);
+  --ok:#4ade80; --ok-bg:rgba(74,222,128,.14); --warn:#fbbf24; --warn-bg:rgba(251,191,36,.14); --bad:#f87171; --bad-bg:rgba(248,113,113,.14);
+  --info:#7dd3fc; --info-bg:rgba(125,211,252,.13); --idle:#a3b1ae; --idle-bg:rgba(148,165,161,.13);
+  --shadow:0 2px 8px rgba(0,0,0,.4); --shadow-lg:0 12px 40px rgba(0,0,0,.6); color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--teal-light);outline-offset:2px}
+
+.mock-note{display:inline-flex;gap:6px;align-items:center;font-family:var(--f-cond);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);background:var(--warn-bg);padding:3px 10px;border-radius:999px}
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between;margin:10px 0 14px}
+.top h1{font-family:var(--f-display);font-size:28px;letter-spacing:.01em;margin:0;text-wrap:balance}
+.top p{margin:2px 0 0;color:var(--muted)}
+.status-strip{display:flex;flex-wrap:wrap;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-cond);font-weight:700;font-size:13px;letter-spacing:.04em;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.pill.test{background:var(--warn-bg);color:var(--warn)}
+.pill.sender{background:var(--info-bg);color:var(--info)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:16px;overflow-x:auto}
+.tab{background:none;border:0;padding:10px 16px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .n{font-family:var(--f-cond);font-size:12px;background:var(--idle-bg);color:var(--idle);border-radius:999px;padding:1px 7px;margin-left:6px}
+
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1.5px solid var(--border);background:var(--card);border-radius:999px;padding:5px 12px;font-family:var(--f-cond);font-weight:700;font-size:14px;letter-spacing:.03em;color:var(--muted);display:inline-flex;gap:7px;align-items:center}
+.chip strong{color:var(--text);font-variant-numeric:tabular-nums}
+.chip.active{border-color:var(--accent);color:var(--accent);background:var(--tint)}
+.btn{border:1.5px solid var(--border);background:var(--card);border-radius:var(--r-sm);padding:8px 14px;font-weight:600;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.btn:hover{border-color:var(--teal-light)}
+.btn.primary{background:var(--btn);border-color:var(--btn);color:var(--btn-text)}
+.btn.primary:hover{filter:brightness(1.1)}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#1b1606}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn.link{border:0;background:none;color:var(--accent);padding:4px 6px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--shadow)}
+.card-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:14px 16px 6px}
+.card-h h3{margin:0;font-family:var(--f-display);font-size:17px;letter-spacing:.02em}
+.card-h small{color:var(--muted)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-family:var(--f-cond);font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;font-weight:700}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--tint)}
+td.num,th.num{text-align:right}
+tfoot td{font-weight:700;border-top:2px solid var(--border);border-bottom:0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.em-name{font-weight:700}
+.em-sub{font-size:12.5px;color:var(--muted)}
+
+.tag{display:inline-block;font-family:var(--f-cond);font-weight:700;font-size:12px;letter-spacing:.06em;padding:2px 8px;border-radius:5px;white-space:nowrap}
+.t-live{background:var(--ok-bg);color:var(--ok)}
+.t-pending{background:var(--warn-bg);color:var(--warn)}
+.t-missing{background:var(--bad-bg);color:var(--bad)}
+.t-info{background:var(--info-bg);color:var(--info)}
+.t-idle{background:var(--idle-bg);color:var(--idle)}
+.bucket{display:inline-grid;place-items:center;min-width:26px;height:22px;padding:0 6px;border-radius:5px;font-family:var(--f-cond);font-weight:700;font-size:13px;background:var(--tint);color:var(--accent)}
+
+.switch{position:relative;width:38px;height:22px;border-radius:999px;border:0;background:var(--border);padding:0;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
+.switch.on{background:var(--teal-light)}
+.switch.on::after{left:19px}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(600px,100%);background:var(--card);z-index:41;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.dr-h{padding:16px 18px 10px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.dr-h h2{margin:0;font-family:var(--f-display);font-size:22px}
+.dr-h .sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+.x{border:0;background:var(--surface);width:34px;height:34px;border-radius:50%;font-size:18px;line-height:1;flex:none}
+.dr-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);overflow-x:auto}
+.dr-tabs .tab{padding:9px 12px;font-size:14px}
+.dr-body{padding:16px 18px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;font-size:14.5px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;min-width:0}
+.section-t{font-family:var(--f-cond);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;display:flex;justify-content:space-between;gap:8px}
+.group{border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden}
+.group-h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface);font-weight:700;font-size:14px}
+.group ul{list-style:none;margin:0;padding:0}
+.group li{display:flex;justify-content:space-between;gap:10px;padding:7px 12px;border-top:1px solid var(--border);font-size:14px}
+.group li .r{color:var(--muted);text-align:right}
+.empty{padding:8px 12px;color:var(--muted);font-size:13.5px;border-top:1px solid var(--border)}
+
+/* Funnel + sparkline */
+.funnel{display:flex;flex-direction:column;gap:7px}
+.f-row{display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center;font-size:14px}
+.f-track{height:14px;background:var(--surface);border-radius:4px;overflow:hidden;border:1px solid var(--border)}
+.f-fill{height:100%;background:var(--teal-light);border-radius:3px}
+.f-row .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.f-row .v small{color:var(--muted);font-weight:500}
+
+/* Wizard */
+.sheet{position:fixed;z-index:51;left:50%;top:50%;transform:translate(-50%,-50%);width:min(940px,calc(100% - 24px));max-height:calc(100% - 32px);background:var(--card);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;overflow:hidden}
+.sheet-scrim{z-index:50}
+.wz-h{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:14px 18px 0}
+.wz-h h2{margin:0;font-family:var(--f-display);font-size:21px}
+.stepper{display:flex;gap:6px;padding:12px 18px 12px;border-bottom:1px solid var(--border);overflow-x:auto}
+.st{display:flex;align-items:center;gap:7px;border:0;background:none;padding:6px 10px 6px 6px;border-radius:999px;color:var(--muted);font-weight:600;white-space:nowrap}
+.st .c{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-cond);font-weight:700;font-size:13px;border:1.5px solid var(--border);background:var(--card)}
+.st.done .c{background:var(--teal-light);border-color:var(--teal-light);color:#fff}
+.st.cur{background:var(--tint);color:var(--accent)}
+.st.cur .c{border-color:var(--accent);color:var(--accent)}
+.wz-body{padding:18px;overflow-y:auto;flex:1}
+.wz-f{display:flex;justify-content:space-between;gap:10px;padding:12px 18px;border-top:1px solid var(--border);background:var(--surface);flex-wrap:wrap}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.cols.c32{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.field>label,.field>.lbl{font-weight:600;font-size:14px}
+.field .hint{font-size:12.5px;color:var(--muted)}
+.inp{border:1.5px solid var(--border);background:var(--surface);border-radius:var(--r-sm);padding:8px 10px;width:100%;min-width:0}
+.inp:focus{outline:none;border-color:var(--teal-mid);background:var(--card)}
+.inline{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.inline .inp{width:auto}
+.inp.n{width:76px}
+.checks{display:flex;flex-wrap:wrap;gap:6px}
+.ck{display:inline-flex;gap:7px;align-items:center;border:1.5px solid var(--border);border-radius:999px;padding:5px 11px;font-size:14px;background:var(--card)}
+.ck input{accent-color:var(--teal-mid);margin:0}
+.ck.on{border-color:var(--teal-light);background:var(--tint)}
+.big-count{display:flex;align-items:baseline;gap:8px;padding:14px 14px 4px}
+.big-count b{font-family:var(--f-display);font-size:40px;line-height:1;color:var(--accent)}
+.sentence{background:var(--tint);border-radius:var(--r-sm);padding:10px 12px;font-size:15px}
+.err{color:var(--bad)}
+.okc{color:var(--ok)}
+.checklist{list-style:none;padding:0;margin:8px 0 0;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.mf{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.mf button{border:1px dashed var(--border);background:var(--surface);border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:2px 7px;color:var(--accent)}
+
+/* Timeline (sequence) */
+.tl{position:relative;height:96px;margin:6px 8px 4px}
+.tl-line{position:absolute;left:0;right:0;top:40px;height:2px;background:var(--border)}
+.tl-pt{position:absolute;top:31px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;width:96px;text-align:center}
+.tl-pt i{width:18px;height:18px;border-radius:50%;background:var(--card);border:3px solid var(--teal-light)}
+.tl-pt.me i{background:var(--gold);border-color:var(--gold);box-shadow:0 0 0 4px rgba(200,168,75,.25)}
+.tl-pt span{font-size:12px;line-height:1.2}
+.tl-pt b{font-family:var(--f-cond);font-size:12px;color:var(--muted);position:absolute;top:-22px;white-space:nowrap}
+.tl-axis{display:flex;justify-content:space-between;font-family:var(--f-cond);font-size:12px;color:var(--muted)}
+
+/* Contact timeline */
+.ctl{list-style:none;margin:0;padding:0;position:relative}
+.ctl li{display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:6px 0;font-size:14px;align-items:start}
+.ctl .ic{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;font-family:var(--f-cond)}
+.ctl time{color:var(--muted);font-size:13px;white-space:nowrap}
+
+/* Email preview (an email is always light — deliberate fixed palette) */
+.preview-frame{border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;background:#E9EDEE;max-height:560px;overflow-y:auto}
+.preview-meta{font-size:13px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);display:grid;gap:2px}
+.preview-meta b{font-weight:600}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:var(--r-sm);z-index:80;box-shadow:var(--shadow-lg);font-weight:600;max-width:calc(100% - 32px)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:16px}
+.cfg{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;padding:4px 16px 16px;font-size:14px}
+.cfg dt{color:var(--muted)}
+.cfg dd{margin:0;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.callout{border:1px solid var(--border);border-left:4px solid var(--gold);background:var(--card);border-radius:var(--r-sm);padding:10px 14px;font-size:14px;margin-bottom:14px}
+
+@media (max-width:760px){
+  .cols,.cols.c32,.grid2{grid-template-columns:minmax(0,1fr)}
+  .kv{grid-template-columns:1fr}
+  .kv dt{margin-top:6px}
+  .sheet{top:0;left:0;transform:none;width:100%;max-height:100%;height:100%;border-radius:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .hide-sm{display:none}
+  .tl-pt{width:70px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <span class="mock-note"><span class="dot"></span> Clickable mockup · example contacts, not real data</span>
+  <div class="top">
+    <div>
+      <h1>Lifecycle Email</h1>
+      <p>Automatic email sequences for each customer bucket. Engine runs daily at 9:00&nbsp;AM.</p>
+    </div>
+    <div class="status-strip">
+      <span class="pill test"><span class="dot"></span>Test mode on · all mail goes to mauricio@</span>
+      <span class="pill sender">Sends from antonio@mcpoolsolutions.org</span>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+  <main id="view"></main>
+</div>
+<div id="overlay"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+// ───────────────────────── Example data ─────────────────────────
+const TODAY = '2026-10-26';
+const SENDER = { name:'Tony', email:'antonio@mcpoolsolutions.org' };
+const TEST_TO = 'mauricio@mcpoolsolutions.org';
+const BUCKETS = {
+  A:{name:'Current MCPS customers', subs:[]},
+  B:{name:'MCP Legacy', subs:['B1','B2','B3','B4'], subNames:{B1:'Never contacted',B2:'Introduced, no response',B3:'Interested',B4:'Declined / opted out'}},
+  C:{name:'MCP New Pool', subs:[]},
+  D:{name:'Referrals', subs:[]}, E:{name:'New leads', subs:[]}, F:{name:'Inactive', subs:[]}
+};
+const STOPS = [
+  ['replied','They reply'],['clicked','They click the quote link'],['form_submitted','They submit a request form'],
+  ['opted_out','They unsubscribe'],['bucket_changed','Their bucket changes']
+];
+const STATUS_LABEL = {active:'Active',paused:'Paused',replied:'Replied',clicked:'Clicked quote',form_submitted:'Form submitted',converted:'Converted',opted_out:'Opted out'};
+
+const TEMPLATES = [
+  {file:'B - MCP Legacy/intro.html', bucket:'B', status:'LIVE', body:
+`<h1>The Mission continues.</h1>
+<p>Hi {{FirstName}},</p>
+<p>Mission Custom Pools built your pool, and we want it to keep looking the way it did on day one. Mission Custom Pool Solutions is our service company, run by the same family that builds our pools.</p>
+<p>Our technicians care for pools across San Antonio every week, and every visit is completed following our standard procedures.</p>
+{{button:Get your free quote}}
+<p>Or just reply to this email and I'll get back to you personally.</p>`},
+  {file:'B - MCP Legacy/followup.html', bucket:'B', status:'LIVE', body:
+`<p>Hi {{FirstName}},</p>
+<p>I wanted to follow up on my note from last week. If your pool needs a little attention before the season changes, we'd be glad to take a look.</p>
+{{button:Get your free quote}}
+<p>A quick reply works too. I read every one.</p>`},
+  {file:'B - MCP Legacy/checkin.html', bucket:'B', status:'PENDING', body:
+`<p>Hi {{FirstName}},</p>
+<p>It's {{SenderName}} from Mission Custom Pool Solutions. I'm checking in personally, since you built with Mission and we'd love to keep caring for your pool.</p>
+<p>If now isn't the right time, no problem at all. Just reply and let me know what would help.</p>`},
+  {file:'C - MCP New/welcome.html', bucket:'C', status:'LIVE', body:
+`<h1>Welcome to the family, {{FirstName}}.</h1>
+<p>Your new pool is almost ready. Our technician will complete your startup following our standard procedures, and we'll send you a short update every week during your first month.</p>
+{{block:PoolSchool}}
+<p>Questions before then? Reply to this email and our team will help.</p>`},
+  {file:'C - MCP New/progress.html', bucket:'C', status:'LIVE', body:
+`<p>Hi {{FirstName}},</p>
+<p>Here's your weekly startup update. Your technician visited this week and completed the service following our standard procedures. Everything is on track.</p>
+<p>Reply anytime if you notice anything you'd like us to look at.</p>`},
+  {file:'C - MCP New/maintenance-invite.html', bucket:'C', status:'LIVE', body:
+`<h1>Keep it this way.</h1>
+<p>Hi {{FirstName}}, your startup is almost done. Most new pool owners keep weekly service with us so the water stays balanced and the equipment stays covered.</p>
+{{button:Get your maintenance quote}}`},
+];
+const BLOCKS = { PoolSchool:{flag:'pool_school', html:
+`<div style="border:1px solid #CFE7E6;background:#F1FAF9;border-radius:6px;padding:12px 14px;margin:14px 0;"><strong style="color:#0D3D3E;">Pool School · {{PoolSchoolDate}}</strong><br>You're signed up for Pool School. We'll walk you through your new pool and how to keep it looking its best.</div>`}};
+
+// The 15 emails from the Oct 19 notebook (page 8). B and C are the MVP; the
+// rest are seeded as drafts so the whole map is visible from day one.
+const ALL_STOPS = ['replied','clicked','form_submitted','opted_out','bucket_changed'];
+const em = o => Object.assign({subs:[], anchor:'enrollment', event:'', monthDay:1, offset:0, unit:'calendar', repeatEvery:0, repeatCount:1, window:3,
+  stops:ALL_STOPS.slice(), onSendSub:'', subject:'', details:'', template:null, active:false}, o);
+let EMAILS = [
+  em({id:'a_referral', name:'Referral Campaign', bucket:'A', step:1, anchor:'tbd', note:'Timing TBD'}),
+  em({id:'a_reviews', name:'Reviews Request', bucket:'A', step:2, anchor:'event', event:'service_milestone', offset:1, window:7, subject:'How are we doing, {{FirstName}}?'}),
+  em({id:'a_news', name:'Customer Newsletter', bucket:'A', step:3, anchor:'monthly', monthDay:1, window:5, stops:['opted_out','bucket_changed'], subject:'MCPS monthly · {{FirstName}}'}),
+  em({id:'b_intro', name:'MCP x MCPS Intro', bucket:'B', step:1, subs:['B1'], anchor:'enrollment', offset:0, window:7, onSendSub:'B2', subject:'Your Mission pool, {{FirstName}}', template:'B - MCP Legacy/intro.html', active:true}),
+  em({id:'b_followup', name:'MCPS Follow Up', bucket:'B', step:2, subs:['B2'], anchor:'previous', offset:4, window:7, subject:'Following up, {{FirstName}}', template:'B - MCP Legacy/followup.html', active:true}),
+  em({id:'b_checkin', name:'Personal Check-In', bucket:'B', step:3, subs:['B2'], anchor:'previous', offset:9, window:7, subject:'Checking in', template:'B - MCP Legacy/checkin.html'}),
+  em({id:'c_welcome', name:'Welcome Email', bucket:'C', step:1, anchor:'startup', offset:-3, window:2, stops:['opted_out','bucket_changed'], subject:'Welcome to Mission Custom Pool Solutions', details:'Startup begins: {{StartupDate}}|Pool address: {{Address}}', template:'C - MCP New/welcome.html', active:true}),
+  em({id:'c_progress', name:'Startup Progress', bucket:'C', step:2, anchor:'startup', offset:7, repeatEvery:7, repeatCount:4, window:3, stops:['opted_out','bucket_changed'], subject:'Your weekly startup update', template:'C - MCP New/progress.html', active:true}),
+  em({id:'c_maint', name:'Maintenance Invitation', bucket:'C', step:3, anchor:'startup', offset:21, window:5, stops:['opted_out','bucket_changed'], subject:'Keep your new pool this way', template:'C - MCP New/maintenance-invite.html', active:true}),
+  em({id:'c_final', name:'Final Transition', bucket:'C', step:4, anchor:'startup', offset:28, window:5, stops:['opted_out','bucket_changed'], subject:'Your startup is complete'}),
+  em({id:'d_intro', name:'Personalized Intro', bucket:'D', step:1, anchor:'enrollment', offset:1, unit:'business', window:1, subject:'{{FirstName}}, a friend sent you our way'}),
+  em({id:'d_followup', name:'Referral Follow Up', bucket:'D', step:2, anchor:'enrollment', offset:5, unit:'business', window:2, subject:'Following up, {{FirstName}}'}),
+  em({id:'e_inquiry', name:'Inquiry Response', bucket:'E', step:1, anchor:'event', event:'inquiry', offset:0, window:0, subject:'Thanks for reaching out, {{FirstName}}'}),
+  em({id:'e_proposal', name:'Proposal Follow-Up', bucket:'E', step:2, anchor:'event', event:'proposal_sent', offset:2, unit:'business', window:1, subject:'Any questions about your proposal?'}),
+  em({id:'f_reintro', name:'Reintroduction', bucket:'F', step:1, anchor:'enrollment', offset:60, window:30, subject:'It’s been a while, {{FirstName}}'}),
+];
+const EVENTS = {inquiry:'An inquiry comes in', proposal_sent:'Their proposal is sent', service_milestone:'They hit a positive service milestone', referral:'A referral comes in'};
+
+let CONTACTS = [
+  {id:'c01', first:'Maria', last:'Lopez', email:'maria.lopez@example.com', address:'118 Canyon Oak, Boerne', bucket:'B', sub:'B2', review:'confirmed', status:'active', start:'2026-10-20', sent:{b_intro:'2026-10-20'}, ev:[['open','b_intro','2026-10-20']]},
+  {id:'c02', first:'James', last:'Carter', email:'jcarter@example.com', address:'2204 Sendero Rdg, San Antonio', bucket:'B', sub:'B2', review:'confirmed', status:'active', start:'2026-10-23', sent:{b_intro:'2026-10-23'}, ev:[]},
+  {id:'c03', first:'Ana', last:'Ruiz', email:'ana.ruiz@example.com', address:'7 Mesa Verde, Helotes', bucket:'B', sub:'B2', review:'confirmed', status:'replied', start:'2026-10-08', sent:{b_intro:'2026-10-08', b_followup:'2026-10-12'}, ev:[['open','b_intro','2026-10-09'],['open','b_followup','2026-10-12'],['reply','b_followup','2026-10-13']]},
+  {id:'c04', first:'David', last:'Nguyen', email:'dnguyen@example.com', address:'930 Bluff Trl, San Antonio', bucket:'B', sub:'B1', review:'confirmed', status:'active', start:'2026-10-26', sent:{}, ev:[]},
+  {id:'c05', first:'Linda', last:'Patel', email:'lpatel@example.com', address:'41 Fair Oaks Pkwy, Fair Oaks Ranch', bucket:'B', sub:'B1', review:'confirmed', status:'active', start:'2026-10-26', sent:{}, ev:[]},
+  {id:'c06', first:'Robert', last:'Hill', email:'rhill@example.com', address:'1502 Cypress Pt, Schertz', bucket:'B', sub:'B1', review:'needs_review', status:'active', start:'', sent:{}, ev:[]},
+  {id:'c07', first:'Patricia', last:'Moore', email:'pmoore@example.com', address:'66 Stone Gate, San Antonio', bucket:'B', sub:'B2', review:'confirmed', status:'active', start:'2026-10-10', sent:{b_intro:'2026-10-10', b_followup:'2026-10-14'}, ev:[['open','b_intro','2026-10-10']]},
+  {id:'c08', first:'Michael', last:'Brooks', email:'mbrooks@example.com', address:'800 Elm Ck, Cibolo', bucket:'B', sub:'B4', review:'confirmed', status:'opted_out', start:'2026-10-05', sent:{b_intro:'2026-10-05'}, ev:[['unsubscribe','b_intro','2026-10-07']]},
+  {id:'c09', first:'Karen', last:'Flores', email:'kflores@example.com', address:'12 Rio Bend, New Braunfels', bucket:'B', sub:'B3', review:'confirmed', status:'clicked', start:'2026-10-12', sent:{b_intro:'2026-10-12'}, ev:[['open','b_intro','2026-10-12'],['click','b_intro','2026-10-13']]},
+  {id:'c10', first:'Steven', last:'Reed', email:'sreed@example.com', address:'3 Ridge Ln, Bulverde', bucket:'B', sub:'B2', review:'confirmed', status:'paused', start:'2026-10-14', sent:{b_intro:'2026-10-14'}, ev:[]},
+  {id:'c11', first:'Jennifer', last:'Diaz', email:'jdiaz@example.com', address:'505 Pecan Vly, San Antonio', bucket:'B', sub:'B2', review:'confirmed', status:'active', start:'2026-10-22', sent:{b_intro:'2026-10-22'}, ev:[['open','b_intro','2026-10-22']]},
+  {id:'c12', first:'Rosa', last:'Garza', email:'rgarza@example.com', address:'27 Agave Way, Boerne', bucket:'C', sub:'', review:'confirmed', status:'active', start:'2026-10-19', startup:'2026-10-28', pool_school:'Y', pool_school_date:'Nov 8, 10:00 AM', sent:{}, ev:[]},
+  {id:'c13', first:'Tom', last:'Alvarez', email:'talvarez@example.com', address:'915 Hacienda Dr, San Antonio', bucket:'C', sub:'', review:'confirmed', status:'active', start:'2026-10-01', startup:'2026-10-12', pool_school:'N', sent:{c_welcome:'2026-10-09','c_progress#1':'2026-10-19'}, ev:[['open','c_welcome','2026-10-09'],['open','c_progress#1','2026-10-19']]},
+  {id:'c14', first:'Grace', last:'Kim', email:'gkim@example.com', address:'44 Lantana Ct, Helotes', bucket:'C', sub:'', review:'confirmed', status:'active', start:'2026-09-15', startup:'2026-09-28', pool_school:'Y', pool_school_date:'Oct 4, 10:00 AM', sent:{c_welcome:'2026-09-25','c_progress#1':'2026-10-05','c_progress#2':'2026-10-12','c_progress#3':'2026-10-19',c_maint:'2026-10-20'}, ev:[['open','c_welcome','2026-09-25'],['open','c_maint','2026-10-20'],['click','c_maint','2026-10-20']]},
+  {id:'c15', first:'Luis', last:'Romero', email:'lromero@example.com', address:'', bucket:'C', sub:'', review:'confirmed', status:'active', start:'2026-10-20', startup:'2026-10-29', pool_school:'N', sent:{}, ev:[]},
+  {id:'c16', first:'Emily', last:'Sanchez', email:'esanchez@example.com', address:'210 Cielo Vista, San Antonio', bucket:'C', sub:'', review:'needs_review', status:'active', start:'', startup:'2026-11-10', pool_school:'Y', pool_school_date:'Nov 21, 10:00 AM', sent:{}, ev:[]},
+];
+
+let RUNS = [
+  {at:'Oct 25 · 9:00 AM', sent:3, skipped:1, failed:0, why:'Done'},
+  {at:'Oct 24 · 9:00 AM', sent:2, skipped:0, failed:0, why:'Done'},
+  {at:'Oct 23 · 9:00 AM', sent:4, skipped:2, failed:1, why:'Done'},
+];
+
+// ───────────────────────── Date helpers ─────────────────────────
+const D = s => new Date(s + 'T12:00:00Z');
+const addDays = (s,n) => { const x = D(s); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
+const diff = (a,b) => Math.round((D(a)-D(b))/864e5);
+const fmt = s => s ? D(s).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'}) : '';
+const fmtLong = s => s ? D(s).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'}) : '';
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fullName = c => c.first + ' ' + c.last;
+
+// ───────────────────────── The engine's decision ─────────────────────────
+// One function decides who gets what. The overview counts, the wizard's
+// audience panel, the drawer, and the Activity queue all call it, which is
+// what keeps "what you see" and "what gets sent" from ever disagreeing.
+function chainFor(bucket, list){ return list.filter(e=>e.bucket===bucket).sort((a,b)=>a.step-b.step); }
+function tplFor(e){ return TEMPLATES.find(t=>t.file===e.template) || null; }
+function tplStatus(e){ const t = tplFor(e); return t ? t.status : 'MISSING'; }
+function occKeys(e){
+  if (e.anchor==='monthly') return [e.id+'#'+TODAY.slice(0,7)];
+  return e.repeatCount>1 ? Array.from({length:e.repeatCount},(_,k)=>e.id+'#'+(k+1)) : [e.id];
+}
+// Business days skip Saturday and Sunday.
+function shiftDays(s, n, unit){
+  if (unit!=='business') return addDays(s, n);
+  let x = s, left = Math.abs(n); const step = n<0 ? -1 : 1;
+  while (left > 0) { x = addDays(x, step); const dow = D(x).getUTCDay(); if (dow!==0 && dow!==6) left--; }
+  return x;
+}
+function baseDate(e, c, prevDate){
+  switch (e.anchor) {
+    case 'enrollment': return c.start || null;
+    case 'startup':    return c.startup || null;
+    case 'previous':   return prevDate;
+    case 'event':      return (c.events||{})[e.event] || null;
+    case 'monthly':    return TODAY.slice(0,8) + String(e.monthDay).padStart(2,'0');
+    default:           return null;
+  }
+}
+const NO_BASE = {startup:'No startup date', event:'Waiting for the trigger event', tbd:'Timing not set yet', enrollment:'Not enrolled', previous:'Not enrolled'};
+
+function planContact(c, list){
+  const rows = []; let prevDate = null; let sub = c.sub;
+  for (const e of chainFor(c.bucket, list)) {
+    occKeys(e).forEach((key,k)=>{
+      const label = e.repeatCount>1 ? `${e.name} (${k+1} of ${e.repeatCount})` : e.name;
+      const base = baseDate(e, c, prevDate);
+      const due = base ? (e.anchor==='monthly' ? base : shiftDays(base, e.offset + k*e.repeatEvery, e.unit)) : null;
+      const row = {c, e, key, label, due, status:'', reason:''};
+      if (c.sent[key]) { row.status='sent'; row.date=c.sent[key]; prevDate=c.sent[key]; rows.push(row); return; }
+      prevDate = due;
+      if (c.review!=='confirmed') { row.status='excluded'; row.reason='Needs review'; }
+      else if (c.status!=='active') { row.status='excluded'; row.reason=STATUS_LABEL[c.status]; }
+      else if (!e.active) { row.status='excluded'; row.reason='Email is a draft'; }
+      else if (tplStatus(e)!=='LIVE') { row.status='excluded'; row.reason='Template not approved'; }
+      else if (e.subs.length && !e.subs.includes(sub)) { row.status='excluded'; row.reason='Sub-bucket '+sub; }
+      else if (!due) { row.status='excluded'; row.reason= NO_BASE[e.anchor] || 'Not enrolled'; }
+      else {
+        const late = diff(TODAY, due);
+        if (late < 0) row.status='upcoming';
+        else if (late > e.window) { row.status='excluded'; row.reason='Send window passed'; }
+        else {
+          const missing = missingFields(e, c);
+          if (missing.length) { row.status='blocked'; row.reason='Missing '+missing.join(', '); }
+          else row.status='due';
+        }
+      }
+      rows.push(row);
+    });
+    if (e.onSendSub) sub = e.onSendSub;
+  }
+  // One email per contact per day. Anything else due waits for the next run.
+  const sentToday = Object.values(c.sent).includes(TODAY);
+  let first = !sentToday;
+  rows.forEach(r=>{ if (r.status==='due') { if (first) first=false; else { r.status='later'; r.reason='Next run (1 email per day)'; } } });
+  return rows;
+}
+function allRows(list){ return CONTACTS.flatMap(c=>planContact(c, list || EMAILS)); }
+function rowsFor(e, list){ return allRows(list).filter(r=>r.e.id===e.id); }
+const people = rows => new Set(rows.map(r=>r.c.id)).size;
+
+// ───────────────────────── Rendering the email ─────────────────────────
+const FIELD_MAP = {
+  FirstName:c=>c.first, LastName:c=>c.last, Email:c=>c.email, Address:c=>c.address,
+  StartupDate:c=>c.startup?fmtLong(c.startup):'', PoolSchoolDate:c=>c.pool_school_date||'', SenderName:()=>SENDER.name
+};
+function fieldsIn(text){ const out=[]; String(text||'').replace(/{{\s*([^}]+?)\s*}}/g,(_,f)=>{out.push(f);}); return out; }
+function allText(e){ const t = tplFor(e); let s = (e.subject||'')+' '+(e.details||'')+' '+(t?t.body:''); return s; }
+function unknownFields(e){
+  return [...new Set(fieldsIn(allText(e)).filter(f=>{
+    if (f.startsWith('block:')) return !BLOCKS[f.slice(6)];
+    if (f.startsWith('button:')) return false;
+    return !FIELD_MAP[f];
+  }))];
+}
+function missingFields(e, c){
+  const fs = fieldsIn(allText(e)).filter(f=>FIELD_MAP[f]);
+  // Fields inside a block only count when that block will be included.
+  Object.entries(BLOCKS).forEach(([n,b])=>{ if (allText(e).includes('{{block:'+n+'}}') && c[b.flag]==='Y') fs.push(...fieldsIn(b.html).filter(f=>FIELD_MAP[f])); });
+  return [...new Set(fs.filter(f=>!String(FIELD_MAP[f](c)||'').trim()))];
+}
+function merge(s, c){ return String(s).replace(/{{\s*([A-Za-z]+)\s*}}/g,(m,f)=>FIELD_MAP[f]? esc(FIELD_MAP[f](c)) || '<mark style="background:#fee2e2;color:#b91c1c">['+f+' missing]</mark>' : m); }
+function renderBody(body, c){
+  let b = body.replace(/[ \t]*{{\s*block:(\w+)\s*}}[ \t]*\n?/g,(m,n)=> BLOCKS[n] && c[BLOCKS[n].flag]==='Y' ? BLOCKS[n].html+'\n' : '');
+  b = b.replace(/{{\s*button:([^}]+?)\s*}}/g,(m,label)=>`<table role="presentation" cellpadding="0" cellspacing="0" style="margin:18px 0;"><tr><td style="background:#1FA7A8;border-radius:6px;"><a href="#" style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-weight:bold;font-size:15px;color:#ffffff;text-decoration:none;">${esc(label)}</a></td></tr></table>`);
+  b = b.replace(/<h1>/g,'<h1 style="font-family:Georgia,\'Times New Roman\',serif;font-size:26px;line-height:1.2;color:#0D3D3E;margin:0 0 14px;">')
+       .replace(/<p>/g,'<p style="margin:0 0 14px;">');
+  return merge(b, c);
+}
+function renderEmail(e, c){
+  const t = tplFor(e);
+  if (!t) return '<div style="padding:40px;text-align:center;font-family:Arial,sans-serif;color:#5A6A6A;background:#fff;">No template yet. Upload a body in step 4.</div>';
+  const details = (e.details||'').split('|').filter(Boolean).map(line=>`<div style="padding:2px 0;">${merge(esc(line).replace(/{{(\w+)}}/g,'{{$1}}'), c)}</div>`).join('');
+  return `
+<div style="background:#E9EDEE;padding:18px 10px;font-family:'Open Sans',Arial,Helvetica,sans-serif;color:#2E3A3A;">
+  <div style="background:#FFF4D6;border:1px dashed #C8A84B;color:#5b4a12;font-size:12.5px;padding:7px 10px;border-radius:6px;max-width:600px;margin:0 auto 10px;">TEST MODE · Intended for ${esc(fullName(c))} &lt;${esc(c.email)}&gt;</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;">
+    <tr><td align="center" style="padding:22px 24px 12px;">
+      <div style="font-family:Georgia,serif;font-weight:bold;font-size:20px;color:#0D3D3E;letter-spacing:.02em;">MCPS</div>
+      <div style="font-family:Arial,sans-serif;font-size:10px;letter-spacing:.18em;color:#5A6A6A;">MISSION CUSTOM POOL SOLUTIONS</div>
+    </td></tr>
+    <tr><td style="padding:0 24px;"><div style="height:3px;background:#1FA7A8;border-radius:2px;"></div></td></tr>
+    <tr><td style="padding:22px 26px 6px;font-size:15.5px;line-height:1.6;">${renderBody(t.body, c)}
+      ${details ? `<div style="background:#F3F5F6;border-radius:6px;padding:12px 14px;margin:6px 0 16px;font-size:14.5px;color:#0D3D3E;">${details}</div>` : ''}
+      <p style="margin:6px 0 18px;">${esc(SENDER.name)}<br><span style="color:#7A8888;font-size:13.5px;">Mission Custom Pool Solutions · (210) 559-2073</span></p>
+    </td></tr>
+    <tr><td style="background:#0D3D3E;padding:16px 24px;font-size:12px;line-height:1.55;color:#B9CDCD;">
+      <b style="color:#fff;font-size:13.5px;">Mission Custom Pool Solutions</b><br>Every pool matters.<br>[Business address · set before going live]<br>
+      <a href="#" style="color:#5ED6D3;">Unsubscribe</a>
+    </td></tr>
+  </table>
+</div>`;
+}
+
+// ───────────────────────── Cadence in plain English ─────────────────────────
+const EVENT_PHRASE = {inquiry:'an inquiry comes in', proposal_sent:'their proposal is sent', service_milestone:'a positive service milestone', referral:'a referral comes in'};
+const ord = n => n + (['th','st','nd','rd'][(n%100-20)%10] || ['th','st','nd','rd'][n%100] || 'th');
+// "Day N" the way the notebook counts it: Day 1 is the day they're confirmed.
+function chainDay(e, list){
+  let day = null;
+  for (const x of chainFor(e.bucket, list||EMAILS)) {
+    if (x.unit==='business') day = null;
+    else if (x.anchor==='enrollment') day = x.offset + 1;
+    else if (x.anchor==='previous' && day!=null) day += x.offset;
+    else day = null;
+    if (x.id===e.id) return day;
+  }
+  return null;
+}
+function cadenceText(e, list){
+  // Where the notebook gives a range ("1–3 days before", "60–90 days", "2–3
+  // business days"), the send window is that range, so say it that way.
+  const ranged = e.window>0 && e.repeatCount<2 && ((e.anchor==='startup' && e.offset<0) || e.offset>=30 || (e.anchor==='event' && e.unit==='business'));
+  const n = Math.abs(e.offset), unitW = e.unit==='business' ? 'business day' : 'day';
+  const lo = e.offset<0 ? Math.max(0, n - e.window) : n, hi = e.offset<0 ? n : n + e.window;
+  const d = ranged ? `${lo}–${hi} ${unitW}s` : n + ' ' + unitW + (n===1?'':'s');
+  const dayN = ranged ? null : chainDay(e, list);
+  let s;
+  if (e.anchor==='tbd') return 'Timing to be decided';
+  if (e.anchor==='monthly') s = `Monthly, on the ${ord(e.monthDay)}`;
+  else if (e.anchor==='enrollment') s = e.offset===0 ? 'Day 1, when they’re confirmed' : `${d} after they’re confirmed` + (dayN?` (day ${dayN})`:'');
+  else if (e.anchor==='startup') s = e.offset===0 ? 'On the startup date' : e.offset<0 ? `${d} before startup` : `${d} after startup`;
+  else if (e.anchor==='event') s = e.offset===0 ? `The same day ${EVENT_PHRASE[e.event]||'the event happens'}` : `${d} after ${EVENT_PHRASE[e.event]||'the event'}`;
+  else { const prev = chainFor(e.bucket, list||EMAILS).filter(x=>x.step<e.step).pop(); s = (dayN?`Day ${dayN} · `:'') + `${d} after ${prev?prev.name:'the previous email'}`; }
+  if (e.repeatCount>1 && e.anchor!=='monthly') s += `, then every ${e.repeatEvery} days (${e.repeatCount} total)`;
+  return s;
+}
+function stopText(e){ const m = Object.fromEntries(STOPS); return e.stops.length ? 'Stops if ' + e.stops.map(s=>m[s].replace(/^They /,'they ').replace(/^Their /,'their ')).join(', ').replace(/, ([^,]*)$/,', or $1') : 'Never stops early'; }
+
+// ───────────────────────── Shell ─────────────────────────
+let TAB = 'emails', CHIP = 'all', BUCKET_F = 'all';
+const TABS = [['contacts','Contacts'],['emails','Emails'],['activity','Activity']];
+function renderTabs(){
+  const nr = CONTACTS.filter(c=>c.review==='needs_review').length;
+  const due = allRows().filter(r=>r.status==='due').length;
+  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>{
+    const n = k==='contacts'&&nr ? `<span class="n">${nr} to review</span>` : k==='activity'&&due ? `<span class="n">${due} due</span>` : k==='emails' ? `<span class="n">${EMAILS.length}</span>`:'';
+    return `<button class="tab ${TAB===k?'active':''}" data-tab="${k}">${l}${n}</button>`;
+  }).join('');
+}
+function go(t){ TAB=t; try{ history.replaceState(null,'','#'+t); }catch(_){} render(); }
+function render(){ renderTabs(); ({contacts:viewContacts, emails:viewEmails, activity:viewActivity})[TAB](); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,3200); }
+document.getElementById('tabs').addEventListener('click',ev=>{ const b=ev.target.closest('[data-tab]'); if(b) go(b.dataset.tab); });
+
+// ───────────────────────── Emails tab ─────────────────────────
+function stats(e){
+  const rows = rowsFor(e);
+  const sent = rows.filter(r=>r.status==='sent');
+  const keys = occKeys(e);
+  const evs = CONTACTS.flatMap(c=>c.ev.filter(v=>keys.includes(v[1])).map(v=>({c, type:v[0], key:v[1], date:v[2]})));
+  const uniq = t => new Set(evs.filter(v=>v.type===t).map(v=>v.c.id+v.key)).size;
+  const in30 = r => r.status==='upcoming' && diff(r.due,TODAY)<=30;
+  return { rows, sent:sent.length, due:rows.filter(r=>r.status==='due').length, next:rows.filter(r=>in30(r)||r.status==='later').length,
+    blocked:rows.filter(r=>r.status==='blocked').length, opened:uniq('open'), clicked:uniq('click'), replied:uniq('reply'), unsub:uniq('unsubscribe'), evs };
+}
+const pct = (a,b) => b ? Math.round(a/b*100)+'%' : '—';
+function tplTag(s){ return `<span class="tag t-${s.toLowerCase()}">${s}</span>`; }
+
+function viewEmails(){
+  const list = EMAILS.filter(e=>BUCKET_F==='all'||e.bucket===BUCKET_F).sort((a,b)=>a.bucket.localeCompare(b.bucket)||a.step-b.step);
+  const S = list.map(e=>[e,stats(e)]);
+  const tot = k => S.reduce((n,[,s])=>n+s[k],0);
+  const bucketsUsed = [...new Set(EMAILS.map(e=>e.bucket))].sort();
+  document.getElementById('view').innerHTML = `
+  <div class="bar">
+    <div class="chips">
+      <button class="chip ${BUCKET_F==='all'?'active':''}" data-bf="all">All buckets <strong>${EMAILS.length}</strong></button>
+      ${bucketsUsed.map(b=>`<button class="chip ${BUCKET_F===b?'active':''}" data-bf="${b}">${b} · ${BUCKETS[b].name} <strong>${EMAILS.filter(e=>e.bucket===b).length}</strong></button>`).join('')}
+    </div>
+    <button class="btn primary" data-new>+ New email</button>
+  </div>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>Email</th><th>Bucket</th><th>When it sends</th><th>Template</th><th>On</th>
+        <th class="num">Due now</th><th class="num">Next 30d</th><th class="num">Sent</th><th class="num hide-sm">Opened*</th><th class="num">Clicked</th><th class="num">Replies</th><th></th></tr></thead>
+      <tbody>${S.map(([e,s])=>`
+        <tr class="click" data-open="${e.id}">
+          <td><div class="em-name">${esc(e.name)}</div><div class="em-sub">${esc(e.subject)}</div></td>
+          <td><span class="bucket">${e.bucket}</span> <span class="muted small">${e.subs.join(', ')}</span></td>
+          <td class="small">${esc(cadenceText(e))}</td>
+          <td>${tplTag(tplStatus(e))}</td>
+          <td><button class="switch ${e.active?'on':''}" data-toggle="${e.id}" aria-label="Active" aria-pressed="${e.active}"></button></td>
+          <td class="num"><b>${s.due||'—'}</b>${s.blocked?` <span class="tag t-missing" title="Blocked">${s.blocked} blocked</span>`:''}</td>
+          <td class="num">${s.next||'—'}</td>
+          <td class="num">${s.sent||'—'}</td>
+          <td class="num hide-sm">${pct(s.opened,s.sent)}</td>
+          <td class="num">${pct(s.clicked,s.sent)}</td>
+          <td class="num">${s.replied||'—'}</td>
+          <td><button class="btn small" data-edit="${e.id}">Edit</button></td>
+        </tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="5">Totals</td><td class="num">${tot('due')}</td><td class="num">${tot('next')}</td><td class="num">${tot('sent')}</td><td class="num hide-sm">${pct(tot('opened'),tot('sent'))}</td><td class="num">${pct(tot('clicked'),tot('sent'))}</td><td class="num">${tot('replied')}</td><td></td></tr></tfoot>
+    </table>
+  </div>
+  <p class="muted small">*Opens are approximate (Apple Mail loads images automatically). Clicks and replies are the reliable signals. Click a row for audience and tracking.</p>`;
+}
+document.getElementById('view').addEventListener('click',ev=>{
+  const t = ev.target;
+  const bf = t.closest('[data-bf]'); if (bf){ BUCKET_F=bf.dataset.bf; return render(); }
+  const tg = t.closest('[data-toggle]'); if (tg){ const e=EMAILS.find(x=>x.id===tg.dataset.toggle);
+    if (!e.active && tplStatus(e)!=='LIVE'){ toast('Approve the template before turning this email on.'); return; }
+    e.active=!e.active; toast(`${e.name} is ${e.active?'on':'off'}.`); return render(); }
+  const ed = t.closest('[data-edit]'); if (ed){ return openWizard(ed.dataset.edit); }
+  if (t.closest('[data-new]')) return openWizard(null);
+  const op = t.closest('[data-open]'); if (op) return openEmailDrawer(op.dataset.open);
+  const ch = t.closest('[data-chip]'); if (ch){ CHIP=ch.dataset.chip; return render(); }
+  const cf = t.closest('[data-confirm]'); if (cf){ confirmContact(cf.dataset.confirm); return; }
+  const oc = t.closest('[data-contact]'); if (oc) return openContactDrawer(oc.dataset.contact);
+  if (t.closest('[data-run]')) return simulateRun();
+});
+
+// ───────────────────────── Email drawer ─────────────────────────
+let DR_TAB = 'audience';
+function openEmailDrawer(id, tab){
+  DR_TAB = tab || DR_TAB;
+  const e = EMAILS.find(x=>x.id===id); const s = stats(e);
+  const tabs = [['setup','Setup'],['audience','Audience'],['template','Template'],['tracking','Tracking']];
+  const body = {setup:drSetup, audience:drAudience, template:drTemplate, tracking:drTracking}[DR_TAB](e,s);
+  document.getElementById('overlay').innerHTML = `
+  <div class="scrim" data-close></div>
+  <aside class="drawer" role="dialog" aria-label="${esc(e.name)}">
+    <div class="dr-h"><div><h2>${esc(e.name)}</h2><div class="sub"><span class="bucket">${e.bucket}</span> ${esc(BUCKETS[e.bucket].name)} · ${esc(cadenceText(e))}</div></div>
+      <div class="inline"><button class="btn small" data-wz="${e.id}">Edit in wizard</button><button class="x" data-close aria-label="Close">×</button></div></div>
+    <div class="dr-tabs">${tabs.map(([k,l])=>`<button class="tab ${DR_TAB===k?'active':''}" data-drtab="${k}">${l}</button>`).join('')}</div>
+    <div class="dr-body">${body}</div>
+  </aside>`;
+  const ov = document.getElementById('overlay');
+  ov.onclick = ev => {
+    const t = ev.target;
+    if (t.closest('[data-close]')) return closeOverlay();
+    const dt = t.closest('[data-drtab]'); if (dt){ DR_TAB=dt.dataset.drtab; return openEmailDrawer(id); }
+    const wz = t.closest('[data-wz]'); if (wz){ closeOverlay(); return openWizard(wz.dataset.wz); }
+    const ap = t.closest('[data-approve]'); if (ap){ approve(e); return openEmailDrawer(id); }
+    const oc = t.closest('[data-contact]'); if (oc){ return openContactDrawer(oc.dataset.contact); }
+  };
+  const pick = document.getElementById('pv-contact');
+  if (pick) pick.onchange = () => { document.getElementById('pv').innerHTML = renderEmail(e, CONTACTS.find(c=>c.id===pick.value)); };
+}
+function closeOverlay(){ const ov=document.getElementById('overlay'); ov.innerHTML=''; ov.onclick=null; render(); }
+function drSetup(e){
+  return `<dl class="kv">
+    <dt>Bucket</dt><dd><span class="bucket">${e.bucket}</span> ${esc(BUCKETS[e.bucket].name)}</dd>
+    <dt>Audience filter</dt><dd>${e.subs.length? 'Sub-bucket ' + e.subs.join(', ') : 'Everyone in the bucket'}</dd>
+    <dt>Subject</dt><dd>${esc(e.subject)}</dd>
+    <dt>When it sends</dt><dd>${esc(cadenceText(e))}</dd>
+    <dt>Late sends</dt><dd>Skipped if more than ${e.window} days late</dd>
+    <dt>Stop rules</dt><dd>${esc(stopText(e))}</dd>
+    <dt>After sending</dt><dd>${e.onSendSub? 'Move contact to '+e.onSendSub : 'No change'}</dd>
+    <dt>Template</dt><dd>${tplTag(tplStatus(e))} <span class="muted small">${esc(e.template||'none')}</span></dd>
+    <dt>Status</dt><dd>${e.active?'<span class="tag t-live">ON</span>':'<span class="tag t-idle">DRAFT</span>'}</dd>
+  </dl>`;
+}
+function audienceGroups(rows){
+  const g = (title, rs, right, open=true) => `<div class="group"><div class="group-h"><span>${title}</span><span class="tag ${open?'t-info':'t-idle'}">${rs.length}</span></div>
+    ${rs.length? `<ul>${rs.map(r=>`<li><a href="#" class="btn link" style="padding:0" data-contact="${r.c.id}">${esc(fullName(r.c))}${r.e.repeatCount>1?` <span class="muted small">· ${esc(r.label.replace(r.e.name,'').trim())}</span>`:''}</a><span class="r">${right(r)}</span></li>`).join('')}</ul>` : '<div class="empty">None</div>'}</div>`;
+  const by = st => rows.filter(r=>st.includes(r.status));
+  const up = by(['upcoming']).sort((a,b)=>a.due.localeCompare(b.due));
+  return `
+   ${g('Due on the next run', by(['due']), r=> diff(TODAY,r.due)>0 ? `due ${fmt(r.due)} · ${diff(TODAY,r.due)}d late` : 'today')}
+   ${by(['blocked']).length? g('<span class="err">Blocked — fix the contact</span>', by(['blocked']), r=>`<span class="err">${esc(r.reason)}</span>`) : ''}
+   ${g('Upcoming', [...by(['later']), ...up], r=> r.status==='later' ? esc(r.reason) : fmtLong(r.due))}
+   ${g('Already sent', by(['sent']), r=>fmt(r.date), false)}
+   ${g('Not receiving', by(['excluded']), r=>esc(r.reason), false)}`;
+}
+function drAudience(e,s){
+  const receiving = people(s.rows.filter(r=>['due','upcoming','later'].includes(r.status)));
+  return `<div class="card"><div class="big-count"><b>${receiving}</b><span>contacts will receive this<br><span class="muted small">${s.due} on the next run · ${s.sent} already sent</span></span></div><div style="padding:0 14px 12px" class="muted small">Same rules the engine uses when it sends.</div></div>${audienceGroups(s.rows)}`;
+}
+function drTemplate(e){
+  const st = tplStatus(e);
+  const opts = CONTACTS.filter(c=>c.bucket===e.bucket);
+  const pick = opts.find(c=>c.pool_school==='Y') || opts[0];
+  return `<div class="inline" style="justify-content:space-between">
+      <div>${tplTag(st)} <span class="muted small">${esc(e.template||'No file')}</span></div>
+      ${st==='PENDING'?`<button class="btn gold small" data-approve>Approve · move to Live</button>`:''}
+    </div>
+    <div class="field" style="margin:0"><label for="pv-contact">Preview as</label>
+      <select class="inp" id="pv-contact">${opts.map(c=>`<option value="${c.id}" ${c===pick?'selected':''}>${esc(fullName(c))}${c.pool_school==='Y'?' · pool school':c.bucket==='C'?' · no pool school':''}</option>`).join('')}</select></div>
+    <div class="preview-meta"><div><b>From</b> ${SENDER.name} &lt;${SENDER.email}&gt;</div><div><b>To</b> ${TEST_TO} (test mode)</div><div><b>Subject</b> ${merge(esc(e.subject), pick)}</div></div>
+    <div class="preview-frame" id="pv">${renderEmail(e, pick)}</div>`;
+}
+function spark(vals){
+  const w=520,h=70,p=6,max=Math.max(1,...vals); const step=(w-2*p)/(vals.length-1);
+  const pts = vals.map((v,i)=>[p+i*step, h-p-(v/max)*(h-2*p)]);
+  const line = pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  const last = pts[pts.length-1];
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" role="img" aria-label="Sends per day, last 21 days" style="display:block">
+    <line x1="${p}" x2="${w-p}" y1="${h-p}" y2="${h-p}" stroke="var(--border)"/>
+    <path d="${line} L ${last[0]} ${h-p} L ${p} ${h-p} Z" fill="var(--tint)"/>
+    <path d="${line}" fill="none" stroke="var(--teal-light)" stroke-width="2"/>
+    <circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="var(--teal-light)"/></svg>`;
+}
+function drTracking(e,s){
+  const steps = [['Sent',s.sent],['Opened*',s.opened],['Clicked',s.clicked],['Replied',s.replied],['Unsubscribed',s.unsub]];
+  const days = Array.from({length:21},(_,i)=>addDays(TODAY,i-20));
+  const per = days.map(d=>s.rows.filter(r=>r.status==='sent'&&r.date===d).length);
+  const sentRows = s.rows.filter(r=>r.status==='sent').sort((a,b)=>b.date.localeCompare(a.date));
+  const has = (r,t)=>s.evs.some(v=>v.c===r.c&&v.key===r.key&&v.type===t);
+  return `<div><div class="section-t">Funnel</div><div class="funnel">${steps.map(([l,v])=>`
+      <div class="f-row"><span>${l}</span><div class="f-track"><div class="f-fill" style="width:${s.sent?Math.max(v?3:0,v/s.sent*100):0}%"></div></div><span class="v">${v} <small>${pct(v,s.sent)}</small></span></div>`).join('')}</div>
+      <p class="muted small" style="margin:6px 0 0">*Opens are approximate.</p></div>
+    <div><div class="section-t"><span>Sends per day</span><span>last 21 days</span></div>${spark(per)}<div class="tl-axis"><span>${fmt(days[0])}</span><span>${fmt(TODAY)}</span></div></div>
+    <div><div class="section-t">Recipients</div><div class="group scroll"><table>
+      <thead><tr><th>Contact</th><th>Sent</th><th>Opened</th><th>Clicked</th><th>Status</th></tr></thead>
+      <tbody>${sentRows.length? sentRows.map(r=>`<tr class="click" data-contact="${r.c.id}"><td>${esc(fullName(r.c))}${r.e.repeatCount>1?` <span class="muted small">${esc(r.key.split('#')[1]?'#'+r.key.split('#')[1]:'')}</span>`:''}</td><td>${fmt(r.date)}</td><td>${has(r,'open')?'✓':'—'}</td><td>${has(r,'click')?'✓':'—'}</td><td>${has(r,'reply')?'<span class="tag t-info">Replied</span>':has(r,'unsubscribe')?'<span class="tag t-missing">Unsubscribed</span>':`<span class="tag t-idle">${esc(STATUS_LABEL[r.c.status])}</span>`}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">Nothing sent yet.</td></tr>'}</tbody></table></div></div>`;
+}
+function approve(e){ const t=tplFor(e); if(t){ t.status='LIVE'; toast(`${t.file} moved to Live. Approved by Mau, ${fmt(TODAY)}.`);} }
+
+// ───────────────────────── Wizard ─────────────────────────
+let WZ = null;
+const WZ_STEPS = ['Basics','Audience','Cadence','Content','Review'];
+function openWizard(id){
+  const src = id ? EMAILS.find(e=>e.id===id) : null;
+  const draft = src ? JSON.parse(JSON.stringify(src)) : {id:'new_'+Date.now(), name:'', bucket:'B', step:chainFor('B',EMAILS).length+1, subs:[], anchor:'previous', offset:7, repeatEvery:7, repeatCount:1, window:3, stops:STOPS.map(s=>s[0]), onSendSub:'', subject:'', details:'', template:null, active:false, _new:true};
+  WZ = {step:0, d:draft, src, tplChanged:false};
+  drawWizard();
+}
+function wzList(){ const d=WZ.d; return [...EMAILS.filter(e=>e.id!==d.id), d]; }
+function drawWizard(){
+  const d = WZ.d, i = WZ.step;
+  const body = [wzBasics, wzAudience, wzCadence, wzContent, wzReview][i]();
+  document.getElementById('overlay').innerHTML = `
+  <div class="scrim sheet-scrim"></div>
+  <section class="sheet" role="dialog" aria-label="Email setup">
+    <div class="wz-h"><h2>${WZ.src? 'Edit · '+esc(WZ.src.name) : 'New email'}</h2><button class="x" data-wclose aria-label="Close">×</button></div>
+    <div class="stepper">${WZ_STEPS.map((s,k)=>`<button class="st ${k<i?'done':''} ${k===i?'cur':''}" data-goto="${k}" ${k>i&&!canLeave(i)?'disabled':''}><span class="c">${k<i?'✓':k+1}</span>${s}</button>`).join('')}</div>
+    <div class="wz-body" id="wzb">${body}</div>
+    <div class="wz-f">
+      <button class="btn" data-back ${i===0?'disabled':''}>← Back</button>
+      <span class="muted small" id="wz-msg" style="align-self:center">${esc(blockReason(i)||'')}</span>
+      ${i<4? `<button class="btn primary" data-next ${canLeave(i)?'':'disabled'}>Next →</button>` : `<span class="inline"><button class="btn" data-save>Save as draft</button><button class="btn gold" data-activate ${activateBlock()?'disabled':''}>Approve &amp; activate</button></span>`}
+    </div>
+  </section>`;
+  const ov = document.getElementById('overlay');
+  ov.onclick = wzClick; ov.oninput = wzInput; ov.onchange = wzInput;
+}
+function blockReason(i){
+  const d = WZ.d;
+  if (i===0 && !d.name.trim()) return 'Give the email a name.';
+  if (i===3 && !d.subject.trim()) return 'Add a subject line.';
+  if (i===3 && unknownFields(d).length) return 'Fix the unknown merge fields.';
+  if (i===4 && activateBlock()) return activateBlock();
+  return '';
+}
+function canLeave(i){ return i===4 || !blockReason(i); }
+function activateBlock(){ const d=WZ.d; if(!d.template) return 'Needs a template before it can go live.'; if(unknownFields(d).length) return 'Unknown merge fields.'; return ''; }
+function wzClick(ev){
+  const t = ev.target;
+  if (t.closest('[data-wclose]')) { WZ=null; return closeOverlay(); }
+  if (t.closest('[data-back]')) { WZ.step--; return drawWizard(); }
+  if (t.closest('[data-next]')) { if (canLeave(WZ.step)) { WZ.step++; drawWizard(); } return; }
+  const g = t.closest('[data-goto]'); if (g && !g.disabled){ const k=+g.dataset.goto; if (k<=WZ.step || [...Array(k).keys()].every(canLeave)) { WZ.step=k; drawWizard(); } return; }
+  const mf = t.closest('[data-mf]'); if (mf){ const inp=document.getElementById('wz-subject'); const pos=inp.selectionStart??inp.value.length; inp.value=inp.value.slice(0,pos)+'{{'+mf.dataset.mf+'}}'+inp.value.slice(pos); WZ.d.subject=inp.value; inp.focus(); return refreshContent(); }
+  if (t.closest('[data-test]')) return toast(`Test sent to ${TEST_TO} (mockup — nothing was sent).`);
+  if (t.closest('[data-save]')) return saveWizard(false);
+  if (t.closest('[data-activate]')) return saveWizard(true);
+}
+function wzInput(ev){
+  const t = ev.target, d = WZ.d, k = t.dataset.k;
+  if (!k) { if (t.id==='wz-upload' && t.files[0]) return uploadBody(t.files[0]); if (t.id==='wz-pv') return refreshContent(); return; }
+  if (k==='subs'||k==='stops'){ const set=new Set(d[k]); t.checked?set.add(t.value):set.delete(t.value); d[k]=[...set]; }
+  else if (['offset','repeatEvery','repeatCount','window','step','monthDay'].includes(k)) d[k] = parseInt(t.value||'0',10)||0;
+  else if (k==='repeat') { d.repeatCount = t.checked ? Math.max(2,d.repeatCount) : 1; }
+  else if (k==='template'){ d.template = t.value||null; WZ.tplChanged=true; }
+  else if (k==='bucket'){ d.bucket=t.value; d.subs=[]; d.step=chainFor(t.value,EMAILS.filter(e=>e.id!==d.id)).length+1; if(d.anchor==='startup'&&t.value!=='C') d.anchor='previous'; d.template=null; }
+  else d[k] = t.value;
+  if (ev.type==='input' && (t.tagName==='INPUT' && (t.type==='text'||t.type==='number'))) { partialRefresh(); return; }
+  drawWizard();
+}
+// Text inputs refresh only the live panels so the cursor isn't lost.
+function partialRefresh(){
+  const i = WZ.step; const msg=document.getElementById('wz-msg'); if(msg) msg.textContent = blockReason(i)||'';
+  const nx=document.querySelector('[data-next]'); if(nx) nx.disabled=!canLeave(i);
+  if (i===2) { document.getElementById('wz-sum').innerHTML = cadenceSummary(); }
+  if (i===3) refreshContent();
+}
+function wzBasics(){
+  const d = WZ.d; const others = chainFor(d.bucket, EMAILS.filter(e=>e.id!==d.id));
+  return `<div class="cols">
+    <div>
+      <div class="field"><label for="wz-name">Email name</label><input class="inp" id="wz-name" data-k="name" value="${esc(d.name)}" placeholder="e.g. Spring reminder"><span class="hint">Only your team sees this.</span></div>
+      <div class="field"><label for="wz-bucket">Which bucket is this for?</label>
+        <select class="inp" id="wz-bucket" data-k="bucket">${Object.entries(BUCKETS).map(([k,b])=>`<option value="${k}" ${d.bucket===k?'selected':''}>${k} · ${b.name}</option>`).join('')}</select></div>
+      <div class="field"><label for="wz-step">Position in the ${d.bucket} sequence</label>
+        <select class="inp" id="wz-step" data-k="step">${Array.from({length:others.length+1},(_,k)=>k+1).map(n=>`<option value="${n}" ${d.step===n?'selected':''}>${n===1?'First email':'After '+esc(others[n-2].name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="wz-desc">Internal note</label><input class="inp" id="wz-desc" data-k="note" value="${esc(d.note||'')}" placeholder="What is this email for?"></div>
+    </div>
+    <div><div class="section-t">The ${d.bucket} sequence today</div>
+      <div class="group"><ul>${chainFor(d.bucket, wzList()).map(e=>`<li><span>${e.id===d.id?'<b>'+esc(e.name||'This email')+'</b> ← this one':esc(e.name)}</span><span class="r">${esc(cadenceText(e, wzList()))}</span></li>`).join('') || '<li class="muted">No emails yet. This will be the first.</li>'}</ul></div>
+      <p class="muted small">Adding an email to any bucket happens here, with no code. Only emails that are on and have a Live template ever send.</p>
+    </div></div>`;
+}
+function wzAudience(){
+  const d = WZ.d; const b = BUCKETS[d.bucket];
+  const rows = CONTACTS.filter(c=>c.bucket===d.bucket).flatMap(c=>planContact(c, wzList())).filter(r=>r.e.id===d.id);
+  const receiving = people(rows.filter(r=>['due','upcoming','later'].includes(r.status)));
+  const inBucket = CONTACTS.filter(c=>c.bucket===d.bucket).length;
+  return `<div class="cols c32">
+    <div>
+      <div class="field"><span class="lbl">Who in ${d.bucket} · ${esc(b.name)} should get it?</span>
+        ${b.subs.length? `<div class="checks">${b.subs.map(s=>`<label class="ck ${d.subs.includes(s)?'on':''}"><input type="checkbox" data-k="subs" value="${s}" ${d.subs.includes(s)?'checked':''}>${s} · ${b.subNames[s]}</label>`).join('')}</div>
+        <span class="hint">Leave all unchecked to include the whole bucket. Sub-bucket is checked at send time, after earlier emails move people along.</span>` : '<span class="hint">This bucket has no sub-buckets. Everyone in it is included.</span>'}</div>
+      <div class="callout">Only <b>confirmed</b> contacts are ever emailed. Anyone who unsubscribed, replied, or was paused is left out automatically.</div>
+    </div>
+    <div class="card">
+      <div class="big-count"><b>${receiving}</b><span>of ${inBucket} in bucket ${d.bucket} will receive this</span></div>
+      <div style="padding:0 12px 12px" class="stack">${audienceGroups(rows)}</div>
+    </div></div>`;
+}
+function cadenceSummary(){
+  const d = WZ.d; const list = wzList();
+  const chain = chainFor(d.bucket, list);
+  // Days on a shared axis: B counts from confirmation, C from startup date.
+  const pts = []; let prev = 0;
+  chain.forEach(e=>{ occKeys(e).forEach((key,k)=>{ const day = (e.anchor==='previous'? prev : 0) + e.offset + k*e.repeatEvery; pts.push({e,k,day}); prev = day; }); });
+  const min = Math.min(0,...pts.map(p=>p.day)), max = Math.max(1,...pts.map(p=>p.day));
+  const pos = v => 4 + (v-min)/(max-min)*92;
+  // Startup sequences count from the startup date (day 0); the rest count the
+  // notebook's way, where day 1 is the day they're confirmed.
+  const fromStartup = chain.some(e=>e.anchor==='startup');
+  if (!fromStartup) pts.forEach(p=>p.day += 1);
+  const axis = fromStartup ? 'day 0 = startup' : 'day 1 = confirmed';
+  const samples = CONTACTS.filter(c=>c.bucket===d.bucket && c.review==='confirmed').flatMap(c=>planContact(c,list)).filter(r=>r.e.id===d.id).slice(0,3);
+  const lateTxt = d.window===0 ? 'Skipped if it can’t go out that day.' : `Skipped if more than ${d.window} day${d.window===1?'':'s'} late.`;
+  if (d.anchor==='monthly' || d.anchor==='tbd') return `<div class="sentence"><b>${esc(cadenceText(d, list))}.</b> ${esc(stopText(d))}. ${lateTxt}</div>
+    <p class="muted small">${d.anchor==='monthly'?'Monthly emails go to everyone in the bucket on the same date, so there’s no per-contact timeline.':'Pick when this email should send.'}</p>`;
+  return `<div class="sentence"><b>${esc(cadenceText(d, list))}.</b> ${esc(stopText(d))}. ${lateTxt}</div>
+    <div class="section-t" style="margin-top:14px"><span>Where it lands in the ${d.bucket} sequence</span><span>${axis}</span></div>
+    <div class="scroll"><div class="tl" style="min-width:${Math.max(420, pts.length*84)}px">
+      <div class="tl-line"></div>
+      ${pts.map((p,ix)=>`<div class="tl-pt ${p.e.id===d.id?'me':''}" style="left:${pos(p.day)}%;${ix%2?'top:31px':''}"><b>day ${p.day}</b><i></i><span>${esc((p.e.name||'This email'))}${p.e.repeatCount>1?' '+(p.k+1):''}</span></div>`).join('')}
+    </div></div>
+    <div class="section-t" style="margin-top:8px">Sample dates</div>
+    <div class="group"><ul>${samples.length? samples.map(r=>`<li><span>${esc(fullName(r.c))}${r.e.repeatCount>1?' · '+esc(r.label.replace(r.e.name,'').trim()):''}</span><span class="r">${r.status==='sent'?'sent '+fmt(r.date): r.due? fmtLong(r.due)+(r.status==='excluded'?' · '+esc(r.reason):'') : esc(r.reason)}</span></li>`).join('') : '<li class="muted">No confirmed contacts in this bucket yet.</li>'}</ul></div>`;
+}
+function wzCadence(){
+  const d = WZ.d; const prev = chainFor(d.bucket, wzList()).filter(e=>e.step<d.step && e.id!==d.id).pop();
+  return `<div class="cols">
+    <div>
+      <div class="field"><label for="wz-anchor">Start counting from</label>
+        <select class="inp" id="wz-anchor" data-k="anchor">
+          <option value="enrollment" ${d.anchor==='enrollment'?'selected':''}>When they’re confirmed into the bucket</option>
+          ${d.bucket==='C'?`<option value="startup" ${d.anchor==='startup'?'selected':''}>Their startup date</option>`:''}
+          ${prev?`<option value="previous" ${d.anchor==='previous'?'selected':''}>When ${esc(prev.name)} was sent</option>`:''}
+          <option value="event" ${d.anchor==='event'?'selected':''}>When something happens…</option>
+          <option value="monthly" ${d.anchor==='monthly'?'selected':''}>A fixed day every month</option>
+          ${d.anchor==='tbd'?'<option value="tbd" selected>Not decided yet</option>':''}
+        </select></div>
+      ${d.anchor==='event'?`<div class="field"><label for="wz-event">What happens</label>
+        <select class="inp" id="wz-event" data-k="event"><option value="">Choose…</option>${Object.entries(EVENTS).map(([k,l])=>`<option value="${k}" ${d.event===k?'selected':''}>${l}</option>`).join('')}</select>
+        <span class="hint">The portal records these automatically (inquiry form, proposal sent, visit milestones).</span></div>`:''}
+      ${d.anchor==='monthly'?`<div class="field"><span class="lbl">Send on day</span>
+        <div class="inline"><input class="inp n" type="number" min="1" max="28" data-k="monthDay" value="${d.monthDay}"><span>of each month, to everyone in the bucket</span></div></div>`
+      : d.anchor==='tbd' ? '' : `<div class="field"><span class="lbl">Send</span>
+        <div class="inline"><input class="inp n" type="number" id="wz-offset" data-k="offset" value="${d.offset}">
+          <select class="inp" data-k="unit"><option value="calendar" ${d.unit!=='business'?'selected':''}>days</option><option value="business" ${d.unit==='business'?'selected':''}>business days</option></select>
+          <span>${d.anchor==='startup'?'(negative = before startup)':'later'}</span></div>
+        <span class="hint">0 = the same day. Business days skip weekends.</span></div>`}
+      <div class="field"><label class="ck ${d.repeatCount>1?'on':''}" style="align-self:flex-start"><input type="checkbox" data-k="repeat" ${d.repeatCount>1?'checked':''}>Repeat this email</label>
+        ${d.repeatCount>1?`<div class="inline">every <input class="inp n" type="number" min="1" data-k="repeatEvery" value="${d.repeatEvery}"> days, <input class="inp n" type="number" min="2" data-k="repeatCount" value="${d.repeatCount}"> times total</div>`:''}</div>
+      <div class="field"><span class="lbl">If the engine is late (quota, outage)</span>
+        <div class="inline">skip it when more than <input class="inp n" type="number" min="0" data-k="window" value="${d.window}"> days late</div>
+        <span class="hint">Stops a "welcome" from arriving after startup has already happened.</span></div>
+      <div class="field"><span class="lbl">Stop the sequence if</span>
+        <div class="checks">${STOPS.map(([k,l])=>`<label class="ck ${d.stops.includes(k)?'on':''}"><input type="checkbox" data-k="stops" value="${k}" ${d.stops.includes(k)?'checked':''}>${l}</label>`).join('')}</div></div>
+      ${BUCKETS[d.bucket].subs.length?`<div class="field"><label for="wz-onsend">After it sends, move the contact to</label>
+        <select class="inp" id="wz-onsend" data-k="onSendSub"><option value="">Don’t change sub-bucket</option>${BUCKETS[d.bucket].subs.map(s=>`<option ${d.onSendSub===s?'selected':''}>${s}</option>`).join('')}</select></div>`:''}
+    </div>
+    <div id="wz-sum">${cadenceSummary()}</div></div>`;
+}
+const MF_CHIPS = ['FirstName','LastName','Address','StartupDate','PoolSchoolDate','SenderName'];
+function contentChecks(d, c){
+  const unk = unknownFields(d); const miss = c ? missingFields(d,c) : [];
+  return `<ul class="checklist">
+    <li class="${d.subject.trim()?'okc':'err'}">${d.subject.trim()?'✓':'✗'} Subject line</li>
+    <li class="${d.template?'okc':'err'}">${d.template?'✓':'✗'} Body template${d.template?'':' (pick or upload one)'}</li>
+    <li class="${unk.length?'err':'okc'}">${unk.length?'✗ Unknown fields: '+unk.map(f=>'{{'+esc(f)+'}}').join(' ')+'. These would block every send.':'✓ All merge fields recognized'}</li>
+    ${c?`<li class="${miss.length?'err':'okc'}">${miss.length?'✗ '+esc(c.first)+' is missing '+miss.join(', ')+'. Their send would be blocked and logged.':'✓ '+esc(c.first)+' has every value this email needs'}</li>`:''}
+    <li class="okc">✓ Images hosted on mcps-email-assets.vercel.app, with alt text</li></ul>`;
+}
+function wzContent(){
+  const d = WZ.d; const files = TEMPLATES.filter(t=>t.bucket===d.bucket);
+  const opts = CONTACTS.filter(c=>c.bucket===d.bucket);
+  const c = opts.find(x=>x.pool_school==='Y') || opts[0];
+  return `<div class="cols c32">
+    <div>
+      <div class="field"><label for="wz-subject">Subject line</label><input class="inp" id="wz-subject" data-k="subject" value="${esc(d.subject)}" placeholder="Plain and professional">
+        <div class="mf">${MF_CHIPS.map(f=>`<button type="button" data-mf="${f}">{{${f}}}</button>`).join('')}</div></div>
+      <div class="field"><label for="wz-tpl">Body</label>
+        <select class="inp" id="wz-tpl" data-k="template"><option value="">Choose a file…</option>${files.map(t=>`<option value="${esc(t.file)}" ${d.template===t.file?'selected':''}>${esc(t.file.split('/')[1])} · ${t.status}</option>`).join('')}</select>
+        <span class="hint">Files live in Drive › Email Templates. Body only: the logo, details box, signature and footer are added automatically.</span>
+        <label class="btn small" style="align-self:flex-start;margin-top:4px">Upload new body (.html)<input type="file" id="wz-upload" accept=".html,.htm,text/html" hidden></label></div>
+      <div class="field"><label for="wz-details">Gray details box (optional)</label><input class="inp" id="wz-details" data-k="details" value="${esc(d.details)}" placeholder="Startup begins: {{StartupDate}}"><span class="hint">Separate lines with |</span></div>
+      <div id="wz-checks">${contentChecks(d,c)}</div>
+      <button class="btn small" data-test style="margin-top:10px">Send test to me</button>
+    </div>
+    <div>
+      <div class="field" style="margin-bottom:8px"><label for="wz-pv">Preview as</label>
+        <select class="inp" id="wz-pv">${opts.map(x=>`<option value="${x.id}" ${x===c?'selected':''}>${esc(fullName(x))}${x.pool_school==='Y'?' · pool school':x.bucket==='C'?' · no pool school':''}</option>`).join('')}</select></div>
+      <div class="preview-meta"><div><b>Subject</b> <span id="wz-subj-pv">${merge(esc(d.subject),c)}</span></div></div>
+      <div class="preview-frame" id="wz-preview">${renderEmail(d,c)}</div>
+    </div></div>`;
+}
+function refreshContent(){
+  const d = WZ.d; const sel = document.getElementById('wz-pv'); if (!sel) return;
+  const c = CONTACTS.find(x=>x.id===sel.value);
+  document.getElementById('wz-preview').innerHTML = renderEmail(d,c);
+  document.getElementById('wz-subj-pv').innerHTML = merge(esc(d.subject),c);
+  document.getElementById('wz-checks').innerHTML = contentChecks(d,c);
+  const msg=document.getElementById('wz-msg'); if(msg) msg.textContent = blockReason(3)||'';
+  const nx=document.querySelector('[data-next]'); if(nx) nx.disabled=!canLeave(3);
+}
+function uploadBody(file){
+  const r = new FileReader();
+  r.onload = () => { const folder = WZ.d.bucket==='B'?'B - MCP Legacy':WZ.d.bucket==='C'?'C - MCP New':WZ.d.bucket+' - '+BUCKETS[WZ.d.bucket].name;
+    const name = folder+'/'+file.name; TEMPLATES = TEMPLATES.filter(t=>t.file!==name);
+    TEMPLATES.push({file:name, bucket:WZ.d.bucket, status:'PENDING', body:String(r.result)}); WZ.d.template=name; WZ.tplChanged=true;
+    toast(`${file.name} uploaded to Pending.`); drawWizard(); };
+  r.readAsText(file);
+}
+function wzReview(){
+  const d = WZ.d; const list = wzList();
+  const rows = CONTACTS.filter(c=>c.bucket===d.bucket).flatMap(c=>planContact(c, list.map(e=> e.id===d.id? {...e, active:true} : e))).filter(r=>r.e.id===d.id);
+  // Count as if approved and on, so the summary shows what activating would do.
+  const tpl = tplFor(d); const was = tpl && tpl.status; if (tpl) tpl.status='LIVE';
+  const live = CONTACTS.filter(c=>c.bucket===d.bucket).flatMap(c=>planContact(c, list.map(e=> e.id===d.id? {...e, active:true} : e))).filter(r=>r.e.id===d.id);
+  if (tpl) tpl.status = was;
+  const recv = live.filter(r=>['due','upcoming','later'].includes(r.status));
+  const firsts = live.filter(r=>r.status==='upcoming').sort((a,b)=>a.due.localeCompare(b.due));
+  const dueNext = live.filter(r=>r.status==='due').length;
+  return `<div class="cols">
+    <div class="card" style="padding:16px">
+      <div class="section-t">Summary</div>
+      <dl class="kv">
+        <dt>Email</dt><dd><b>${esc(d.name)}</b></dd>
+        <dt>Bucket</dt><dd><span class="bucket">${d.bucket}</span> ${esc(BUCKETS[d.bucket].name)}${d.subs.length?' · '+d.subs.join(', '):''}</dd>
+        <dt>Recipients</dt><dd><b>${people(recv)}</b> contacts · <b>${dueNext}</b> on the next run (${fmtLong(TODAY)}, 9:00 AM)</dd>
+        <dt>First upcoming</dt><dd>${firsts[0]? fmtLong(firsts[0].due)+' · '+esc(fullName(firsts[0].c)) : '—'}</dd>
+        <dt>When</dt><dd>${esc(cadenceText(d, list))}</dd>
+        <dt>Stops</dt><dd>${esc(stopText(d))}</dd>
+        <dt>Subject</dt><dd>${esc(d.subject)}</dd>
+        <dt>Template</dt><dd>${d.template? tplTag(tplStatus(d))+' <span class="muted small">'+esc(d.template)+'</span>' : '<span class="err">None</span>'}</dd>
+      </dl>
+    </div>
+    <div class="stack">
+      <div class="callout"><b>Approve &amp; activate</b> moves the template from Pending to Live and turns the email on. It starts with the next run.<br><br><b>Save as draft</b> keeps it off. Nobody receives anything.</div>
+      ${WZ.src && WZ.src.active ? `<div class="callout">Changing timing never re-sends an email someone already got. Each contact gets each email once, tracked in the send log.</div>`:''}
+      ${dueNext>3? `<div class="callout">Daily cap is 50 emails. ${dueNext} are due now and fit under it.</div>`:''}
+    </div></div>`;
+}
+function saveWizard(activate){
+  const d = WZ.d; delete d._new;
+  if (activate) { const t=tplFor(d); if (t) t.status='LIVE'; d.active=true; }
+  else d.active = false;
+  // Keep step numbers tidy inside the bucket.
+  const others = chainFor(d.bucket, EMAILS.filter(e=>e.id!==d.id));
+  others.splice(d.step-1, 0, d); others.forEach((e,k)=>e.step=k+1);
+  EMAILS = [...EMAILS.filter(e=>e.id!==d.id && e.bucket!==d.bucket), ...others];
+  toast(activate ? `${d.name} approved and on. It starts with the next run.` : `${d.name} saved as a draft.`);
+  WZ = null; TAB='emails'; closeOverlay();
+}
+
+// ───────────────────────── Contacts tab ─────────────────────────
+function nextFor(c){ const r = planContact(c, EMAILS).find(r=>['due','later','upcoming','blocked'].includes(r.status)); return r; }
+function lastActivity(c){
+  const dates = [...Object.entries(c.sent).map(([k,d])=>({d,t:'Sent '+labelForKey(k)})), ...c.ev.map(v=>({d:v[2], t:({open:'Opened',click:'Clicked',reply:'Replied',unsubscribe:'Unsubscribed'})[v[0]]+' '+labelForKey(v[1])}))];
+  return dates.sort((a,b)=>b.d.localeCompare(a.d))[0];
+}
+function labelForKey(k){ const [id,n] = k.split('#'); const e = EMAILS.find(x=>x.id===id); return e ? e.name+(n?' '+n:'') : k; }
+function viewContacts(){
+  const count = f => CONTACTS.filter(f).length;
+  const chips = [
+    ['all','All',()=>true], ['review','Needs review',c=>c.review==='needs_review'],
+    ['B','B · MCP Legacy',c=>c.bucket==='B'], ['C','C · MCP New',c=>c.bucket==='C'],
+    ['active','Active',c=>c.review==='confirmed'&&c.status==='active'], ['replied','Replied',c=>c.status==='replied'],
+    ['clicked','Clicked',c=>c.status==='clicked'], ['paused','Paused',c=>c.status==='paused'], ['opted_out','Opted out',c=>c.status==='opted_out'],
+  ];
+  const f = (chips.find(x=>x[0]===CHIP)||chips[0])[2];
+  const list = CONTACTS.filter(f);
+  const reviewQ = CONTACTS.filter(c=>c.review==='needs_review');
+  document.getElementById('view').innerHTML = `
+  ${reviewQ.length && CHIP!=='review' ? `<div class="callout"><b>${reviewQ.length} contacts need review</b> before they can be emailed: ${reviewQ.map(c=>esc(fullName(c))).join(', ')}. <button class="btn link" data-chip="review">Review now</button></div>`:''}
+  <div class="bar"><div class="chips">${chips.map(([k,l,fn])=>`<button class="chip ${CHIP===k?'active':''}" data-chip="${k}">${l} <strong>${count(fn)}</strong></button>`).join('')}</div>
+    <button class="btn primary" onclick="toast('Add contact opens a form (mockup).')">+ Add contact</button></div>
+  <div class="card scroll"><table>
+    <thead><tr><th>Name</th><th>Bucket</th><th>Status</th><th>Next email</th><th class="hide-sm">Last activity</th><th></th></tr></thead>
+    <tbody>${list.map(c=>{ const n = nextFor(c); const la = lastActivity(c);
+      return `<tr class="click" data-contact="${c.id}">
+        <td><div class="em-name">${esc(fullName(c))}</div><div class="em-sub">${esc(c.email)}</div></td>
+        <td><span class="bucket">${c.bucket}</span> <span class="small muted">${c.sub||(c.startup?'startup '+fmt(c.startup):'')}${c.pool_school==='Y'?' · pool school':''}</span></td>
+        <td>${c.review==='needs_review'?'<span class="tag t-pending">NEEDS REVIEW</span>':`<span class="tag ${c.status==='active'?'t-live':c.status==='opted_out'?'t-missing':'t-idle'}">${esc(STATUS_LABEL[c.status]).toUpperCase()}</span>`}</td>
+        <td class="small">${n? `${esc(n.label)} · ${n.status==='due'?'<b>today</b>':n.status==='blocked'?'<span class="err">blocked</span>':n.status==='later'?'next run':fmt(n.due)}` : '<span class="muted">—</span>'}</td>
+        <td class="small muted hide-sm">${la? esc(la.t)+' · '+fmt(la.d) : '—'}</td>
+        <td>${c.review==='needs_review'?`<button class="btn small primary" data-confirm="${c.id}">Confirm</button>`:''}</td></tr>`; }).join('') || '<tr><td colspan="6" class="muted">No contacts match.</td></tr>'}</tbody></table></div>`;
+}
+function confirmContact(id){
+  const c = CONTACTS.find(x=>x.id===id); c.review='confirmed'; if (!c.start) c.start=TODAY;
+  const n = nextFor(c);
+  toast(`${c.first} confirmed. ${n? n.label+(n.status==='due'?' goes out on the next run.':' is scheduled for '+fmt(n.due)+'.') : ''}`);
+  render();
+}
+function openContactDrawer(id){
+  const c = CONTACTS.find(x=>x.id===id);
+  const items = [
+    ...(c.start? [{d:c.start, t:'Confirmed into bucket '+c.bucket, k:'in'}]:[]),
+    ...Object.entries(c.sent).map(([k,d])=>({d, t:'Sent · '+labelForKey(k), k:'sent'})),
+    ...c.ev.map(v=>({d:v[2], t:({open:'Opened',click:'Clicked quote link in',reply:'Replied to',unsubscribe:'Unsubscribed from'})[v[0]]+' · '+labelForKey(v[1]), k:v[0]})),
+  ].sort((a,b)=>b.d.localeCompare(a.d));
+  const icon = {in:['+','t-idle'], sent:['→','t-info'], open:['◉','t-idle'], click:['↗','t-live'], reply:['↩','t-live'], unsubscribe:['×','t-missing']};
+  const plan = planContact(c, EMAILS).filter(r=>r.status!=='sent');
+  document.getElementById('overlay').innerHTML = `
+  <div class="scrim" data-close></div>
+  <aside class="drawer" role="dialog" aria-label="${esc(fullName(c))}">
+    <div class="dr-h"><div><h2>${esc(fullName(c))}</h2><div class="sub">${esc(c.email)} · ${esc(c.address||'no address on file')}</div></div><button class="x" data-close aria-label="Close">×</button></div>
+    <div class="dr-body">
+      <dl class="kv">
+        <dt>Bucket</dt><dd><select class="inp" id="cd-bucket" style="width:auto">${Object.entries(BUCKETS).map(([k,b])=>`<option value="${k}" ${c.bucket===k?'selected':''}>${k} · ${b.name}</option>`).join('')}</select> ${c.sub?`<span class="tag t-info">${c.sub}</span>`:''}</dd>
+        <dt>Status</dt><dd>${c.review==='needs_review'?'<span class="tag t-pending">NEEDS REVIEW</span>':`<span class="tag t-idle">${esc(STATUS_LABEL[c.status]).toUpperCase()}</span>`}</dd>
+        ${c.startup?`<dt>Startup date</dt><dd>${fmtLong(c.startup)}</dd><dt>Pool school</dt><dd>${c.pool_school==='Y'?'Yes · '+esc(c.pool_school_date):'No'}</dd>`:''}
+      </dl>
+      <div class="inline">
+        ${c.review==='needs_review'?`<button class="btn primary small" data-cact="confirm">Confirm</button>`:''}
+        ${c.status==='active'?`<button class="btn small" data-cact="pause">Pause</button>`:c.status==='paused'?`<button class="btn small" data-cact="resume">Resume</button>`:''}
+        <button class="btn small" data-cact="convert">Mark converted (→ A)</button>
+        ${c.status!=='opted_out'?`<button class="btn small" data-cact="unsub" style="color:var(--bad)">Unsubscribe</button>`:''}
+      </div>
+      <div><div class="section-t">Coming up</div><div class="group"><ul>${plan.length? plan.map(r=>`<li><span>${esc(r.label)}</span><span class="r">${r.status==='due'?'<b>next run</b>':r.status==='upcoming'?fmtLong(r.due):r.status==='blocked'?'<span class="err">'+esc(r.reason)+'</span>':esc(r.reason)}</span></li>`).join(''):'<li class="muted">Nothing left in this sequence.</li>'}</ul></div></div>
+      <div><div class="section-t">Timeline</div><ul class="ctl">${items.map(i=>`<li><span class="ic tag ${icon[i.k][1]}">${icon[i.k][0]}</span><span>${esc(i.t)}</span><time>${fmt(i.d)}</time></li>`).join('') || '<li class="muted">Nothing yet.</li>'}</ul></div>
+    </div>
+  </aside>`;
+  const ov = document.getElementById('overlay');
+  ov.onclick = ev => {
+    if (ev.target.closest('[data-close]')) return closeOverlay();
+    const a = ev.target.closest('[data-cact]'); if (!a) return;
+    const k = a.dataset.cact;
+    if (k==='confirm') { c.review='confirmed'; if(!c.start) c.start=TODAY; toast(c.first+' confirmed.'); }
+    if (k==='pause') { c.status='paused'; toast(c.first+' paused. No emails until resumed.'); }
+    if (k==='resume') { c.status='active'; toast(c.first+' resumed.'); }
+    if (k==='convert') { c.bucket='A'; c.sub=''; c.status='converted'; toast(c.first+' moved to A · Current customers. Sequence stopped.'); }
+    if (k==='unsub') { c.status='opted_out'; if (c.bucket==='B') c.sub='B4'; c.ev.push(['unsubscribe', Object.keys(c.sent).pop()||'', TODAY]); toast(c.first+' unsubscribed and added to the opt-out list.'); }
+    openContactDrawer(id);
+  };
+  ov.onchange = ev => { if (ev.target.id==='cd-bucket'){ c.bucket=ev.target.value; c.sub = c.bucket==='B'?'B1':''; toast(`${c.first} moved to bucket ${c.bucket}. Old sequence stopped.`); openContactDrawer(id); } };
+}
+
+// ───────────────────────── Activity tab ─────────────────────────
+function viewActivity(){
+  const rows = allRows();
+  const q = rows.filter(r=>['due','later','blocked'].includes(r.status)).sort((a,b)=>({due:0,later:1,blocked:2})[a.status]-({due:0,later:1,blocked:2})[b.status]);
+  const recent = rows.filter(r=>r.status==='sent').sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+  document.getElementById('view').innerHTML = `
+  <div class="grid2">
+    <div class="stack">
+      <div class="card"><div class="card-h"><h3>Next run · ${fmtLong(TODAY)}, 9:00 AM</h3><button class="btn primary small" data-run>Run now</button></div>
+        <div class="scroll"><table><thead><tr><th>Contact</th><th>Email</th><th>Goes to</th><th>Status</th></tr></thead>
+        <tbody>${q.length? q.map(r=>`<tr class="click" data-contact="${r.c.id}"><td>${esc(fullName(r.c))}</td><td>${esc(r.label)}</td><td class="small">${TEST_TO}<br><span class="muted">for ${esc(r.c.email)}</span></td>
+          <td>${r.status==='due'?'<span class="tag t-live">SENDS</span>':r.status==='later'?'<span class="tag t-idle">TOMORROW</span><div class="em-sub">1 email per day</div>':'<span class="tag t-missing">BLOCKED</span><div class="em-sub err">'+esc(r.reason)+'</div>'}</td></tr>`).join('') : '<tr><td colspan="4" class="muted">Nobody is due. Run now will send nothing.</td></tr>'}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>Recently sent</h3><small>send log</small></div><div class="scroll"><table><thead><tr><th>When</th><th>Contact</th><th>Email</th></tr></thead>
+        <tbody>${recent.map(r=>`<tr class="click" data-contact="${r.c.id}"><td>${fmt(r.date)}</td><td>${esc(fullName(r.c))}</td><td>${esc(r.label)}</td></tr>`).join('')}</tbody></table></div></div>
+    </div>
+    <div class="stack">
+      <div class="card"><div class="card-h"><h3>Runs</h3><small>last 5</small></div><div class="scroll"><table><thead><tr><th>Run</th><th class="num">Sent</th><th class="num">Skipped</th><th class="num">Failed</th></tr></thead>
+        <tbody>${RUNS.slice(0,5).map(r=>`<tr><td class="small">${esc(r.at)}<div class="em-sub">${esc(r.why)}</div></td><td class="num">${r.sent}</td><td class="num">${r.skipped}</td><td class="num ${r.failed?'err':''}">${r.failed}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h3>Errors</h3></div><ul class="ctl" style="padding:0 16px 12px">
+        ${q.filter(r=>r.status==='blocked').map(r=>`<li><span class="ic tag t-missing">!</span><span><b>${esc(fullName(r.c))}</b> · ${esc(r.label)}: ${esc(r.reason)}. Add it on the contact to unblock.</span><time>today</time></li>`).join('')}
+        <li><span class="ic tag t-missing">!</span><span><b>Oct 23</b> · Gmail rejected one send (temporary). Retried and sent Oct 24.</span><time>Oct 23</time></li></ul></div>
+      <div class="card"><div class="card-h"><h3>Settings</h3><small>Config sheet</small></div><dl class="cfg">
+        <dt>Daily send cap</dt><dd>50</dd><dt>Test mode</dt><dd>On</dd><dt>Test inbox</dt><dd>${TEST_TO}</dd>
+        <dt>Runs</dt><dd>Daily at 9:00 AM<div class="em-sub" style="font-weight:400">Switches to hourly when New Leads goes live, so inquiry replies can go out the same day.</div></dd><dt>Sends as</dt><dd>${SENDER.email}</dd><dt>Gmail reserve</dt><dd>200 kept for agreements &amp; reports</dd></dl></div>
+    </div>
+  </div>`;
+}
+function simulateRun(){
+  const due = allRows().filter(r=>r.status==='due');
+  due.forEach(r=>{ r.c.sent[r.key]=TODAY; if (r.e.onSendSub) r.c.sub=r.e.onSendSub; });
+  const skipped = allRows().filter(r=>r.status==='later').length;
+  RUNS.unshift({at:'Oct 26 · now', sent:due.length, skipped, failed:0, why: due.length? 'Done' : 'Nothing new to send (no double-sends)'});
+  toast(due.length ? `Run finished: ${due.length} sent to the test inbox, ${skipped} wait for tomorrow.` : 'Run finished: 0 sent. Everyone due today already got their email.');
+  render();
+}
+
+// ───────────────────────── Boot ─────────────────────────
+const h = (location.hash||'').slice(1); if (TABS.some(t=>t[0]===h)) TAB=h;
+render();
+</script>
