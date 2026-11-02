@@ -693,6 +693,19 @@ Any resend (automatic or human) first passes the full pre-send gate:
 
 **Phase 3: full B/C + wizard**
 - The remaining bodies; the 5-step wizard (scope prompt, category, stop rules, holds and deadlines, impact preview, diff, 409 handling); config editing; Permissions view; ChangeLog UI.
+- **Email editor in the wizard's Content step** (Mau, 2026-11-02: click-to-edit + HTML mode):
+  - **Edit text (default; safe for Tony):**
+    - Click any text in the live preview and type. Headlines, paragraphs, the Pool School block and button labels are editable.
+    - The layout, images, links and the branded shell stay locked.
+    - Merge fields show as chips that can be moved or deleted but not mistyped; a chip picker adds new ones.
+    - Pasted text arrives as plain text.
+  - **Edit HTML (advanced, for Mau):** a code editor beside the live preview, for changing layout or adding blocks and buttons.
+  - **Both modes:**
+    - Run the same `email-render.js` checks on every keystroke and show the errors inline (unknown field, missing block, unsafe HTML, non-https image).
+    - Use "Preview as" to switch contacts (e.g. pool school vs. none).
+    - Save a **draft** only. A draft goes live through approval as a new immutable revision, and the previous one stays in history for rollback.
+    - Concurrent edits get the 409 conflict check.
+  - **Locked in both modes:** the shell (logo, footer, address, unsubscribe) is code (`SHELL_VERSION`), not editable from the portal.
 
 **Phase 4: after B/C are live (CP8+)**
 - Contact sync (C from startup requests with live `Scheduled_Visits` dates; A, E, F) into Needs review.
@@ -806,3 +819,4 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
 - 2026-11-02: Phase 0 spike results (SPIKES.md). Grace periods set to G = 2 min, G2 = 15 min (spike 2b). Recovery must treat `getDraft(missing)` as throwing (spike 2a). Timing-based kills couldn't interrupt a call (spike 2c), so the sandbox rows for interrupted sends and orphan drafts (1, 3, 4) use deterministic fault injection. Unsubscribe ordering held 6/6 and lock-hold p95 is inside the 2 s budget (spike 3); authorize is the section to watch. Settings spreadsheet = "Chem Log", `1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U`, with both `Comms_Optouts` and `Comms_Log` present (spike 5). Guarantees unchanged.
 - 2026-11-02: Spike 1 result: the web app runs as whoever deployed it last. Every deploy is now done as Tony (clasp named login), and the deploy script asserts `effective_user = antonio@` after each deploy, rolling back if wrong. Engine spreadsheet, script and deployment created under antonio@; IDs recorded under Deployment.
 - 2026-11-02: Spike 4 results: at launch size every page read is ≤ 360 KB and ≤ 0.41 s, so the mandatory read budgets are met. Reads now request only the columns each page shows, with `prettyPrint=false`; the tracking drawer reads per-delivery events from `Engagement.events_json`, never raw Events; Deliveries archiving is required; new migration trigger: narrow overview > 1 MB (~3,000 contacts). Guarantees section notes that Phase 0 confirmed them.
+- 2026-11-02: Footer address set to 4640 South Flores Road, Elmendorf, TX 78112 (same as Mission Custom Pools; `email-engine/seed/config.json`). The portal email editor will be click-to-edit text in the live preview plus an HTML mode, both saving drafts that need approval (Phase 3 / CP7).
