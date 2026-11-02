@@ -251,7 +251,17 @@ function EE_createCore(env) {
       try { env.alert('delivery_failed', row.delivery_id + ': ' + why); } catch (e2) { /* the state is recorded */ }
       return null;
     }
-    var draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token });
+    var draftId;
+    try {
+      draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token });
+    } catch (e) {
+      if (e && e.killed) throw e;
+      // Gmail refused (permissions, quota, outage). The delivery stays `claimed`:
+      // the next run's recovery searches drafts by token and starts it fresh.
+      var err = new Error('gmail_error: ' + String(e && e.message || e).slice(0, 300));
+      err.gmailError = true;
+      throw err;
+    }
     return fenced(lease, function () { return commitDelivery(row, { state: 'drafted', draft_id: draftId }); });
   }
   // The authorization cutoff: drafted → sending, the last check before Gmail.
@@ -399,7 +409,12 @@ function EE_createCore(env) {
           var remaining = env.quota();
           if (remaining <= reserve) { summary.quota_remaining = remaining; summary.quota_reserve = reserve; return stop('quota_reserve'); }
           if (!renewLease(lease)) return stop('lease_lost');
-          var r = processOne(lease, queue[i]);
+          var r;
+          try { r = processOne(lease, queue[i]); }
+          catch (e) {
+            if (!(e && e.gmailError)) throw e;
+            r = { result: 'error', reason: e.message, fatal: true };   // stop cleanly: one Gmail failure likely affects the rest
+          }
           if (r.result === 'sent') summary.sent++;
           else if (r.result === 'reconcile') summary.reconcile++;
           else if (r.result === 'cancelled') summary.cancelled++;

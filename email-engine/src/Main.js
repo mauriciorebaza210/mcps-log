@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp4-2';
+var EE_VERSION = 'cp4-3';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -67,8 +67,18 @@ function EE_sentToday_(env) {
 function EE_run_(trigger) {
   var x = EE_core_();
   var cfg = EE_config_(x.env.store);
-  var summary = EE_runDay(x.core, x.env, function () { return EE_readSnapshot_(x.env); }, {
-    trigger: trigger, dailyCap: Number(cfg.daily_cap || 50), budgetMs: 270000, sentToday: EE_sentToday_(x.env) });
+  var started = new Date().toISOString(), summary;
+  try {
+    summary = EE_runDay(x.core, x.env, function () { return EE_readSnapshot_(x.env); }, {
+      trigger: trigger, dailyCap: Number(cfg.daily_cap || 50), budgetMs: 270000, sentToday: EE_sentToday_(x.env) });
+  } catch (e) {
+    // Unexpected failure: still log the run and alert, then surface the error.
+    var why = String(e && e.message || e).slice(0, 300);
+    try { x.env.store.upsert('Runs', { run_id: 'crash_' + Utilities.getUuid(), trigger: trigger, owner: x.env.user(),
+      started_at: started, finished_at: new Date().toISOString(), stopped_reason: 'crashed: ' + why }); } catch (e2) { /* best effort */ }
+    try { x.env.alert('run_crashed', why); } catch (e3) { /* best effort */ }
+    throw e;
+  }
   try {
     x.env.store.upsert('Runs', { run_id: summary.run_id, trigger: trigger, owner: x.env.user(), started_at: summary.started_at,
       finished_at: summary.finished_at, sent: summary.sent, skipped: summary.skipped, cancelled: summary.cancelled,

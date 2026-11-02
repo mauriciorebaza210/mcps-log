@@ -426,3 +426,17 @@ test('Contacts and enrollments are journaled: replay rebuilds them (row 39 groun
   assert.equal(fresh.tables.Enrollments.find(e => e.enrollment_id === 'e9').contact_id, 'c9', 'merged, not replaced');
   assert.ok(fresh.tables.Contacts && fresh.tables.Contacts.some(c => c.contact_id === 'c9'));
 });
+
+test('Gmail refusing to create a draft stops the run cleanly; the next run recovers the delivery', () => {
+  const w = fakeWorld(); enroll(w, 'e1'); enroll(w, 'e2');
+  const real = w.env.gmail.createDraft;
+  w.env.gmail.createDraft = () => { throw new Error('The script does not have permission to perform that action'); };
+  const s = runPlan(w, [item('e1:b_intro:1'), item('e2:b_intro:1', { enrollment_id: 'e2', email_norm: 'b@example.com' })]);
+  assert.match(s.stopped_reason, /^gmail_error: The script does not have permission/);
+  assert.ok(w.alerts.some(a => a.startsWith('run_stopped:gmail_error')));
+  assert.equal(w.delivery('e1:b_intro:1').state, 'claimed'); assert.equal(w.delivery('e2:b_intro:1'), undefined, 'stopped before the next one');
+  w.env.gmail.createDraft = real; w.now += 8 * MIN;
+  assert.equal(runPlan(w, [item('e1:b_intro:1'), item('e2:b_intro:1', { enrollment_id: 'e2', email_norm: 'b@example.com' })]).sent, 2);
+  assert.equal(w.delivery('e1:b_intro:1').attempt, 2, 'recovered like the real sandbox run');
+  assert.equal(w.outbox.length, 2);
+});
