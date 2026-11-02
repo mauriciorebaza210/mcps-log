@@ -623,13 +623,18 @@ Any resend (automatic or human) first passes the full pre-send gate:
   2. Tony shares them with Mau (editor) and the spreadsheet with the service account (viewer). Tony needs editor access to the Settings spreadsheet.
   3. Tony deploys the web app as "Execute as me".
   4. Tony runs `eeSetup`, `eeSetupDrive` and `eeInstall`.
-  5. Verify that `ee_whoami` still returns antonio@ after a redeploy by Mau. If not, redeploys are Tony's job (documented). The owner guard holds either way.
+  5. **Measured in spike 1 (2026-11-02): the web app runs as whoever deployed it last.** After Mau redeployed, it ran as `mauricio@`. After Tony redeployed the same code, it ran as `antonio@` again. So **Mau edits and pushes code, and every deploy is done as Tony.** Triggers run as the person who installed them (Tony's ran as `antonio@`).
+  - **Project IDs** (created under antonio@ on 2026-11-02, spike code for now):
+    - spreadsheet "MCPS Email Engine": `1mR0Y0dlJLgqh3Zbyg9bQ45S9JtZXWx7pzOSoEh6sNSk`
+    - script: `1LTV5PyIU7_NqlPsGy6EZd0L5rgXUHzgPf9WGiBjEP2yq6iAQQWR6qZ78`
+    - web app deployment: `AKfycby4cJlb1hFupST63Wdjp6R1EeURsSgCGbpqcKkfFfadLMKrbbjS7kzTB7STAyAZsBpx`
 - **Guarded deploy** (`scripts/ee-deploy.mjs`):
   - Asserts that the scriptId and deployment id match the expected constants.
   - Syncs the rules file and checks its hash.
   - Runs `npm run test:ee`, then the schema range and rollback-floor checks.
   - Pushes with `clasp push --force` and fails on "Skipping push".
-  - Deploys with `clasp deploy -i`, then asserts the version via `ee_health`.
+  - Deploys **as Tony**, using clasp's named login (`clasp --user tony deploy -i <deployment id>`, after a one-time `clasp --user tony login`). Pushing code can use either login.
+  - Then calls `ee_whoami`/`ee_health` and asserts **both the new version and `effective_user = antonio@`**. If the identity is wrong, it immediately redeploys the previous version as Tony and fails loudly. A deploy made any other way (e.g. by Mau in the browser) is caught by the same check on the next run, and by the owner guard, which refuses to send.
   - `--rollback <v>` refuses to go below the rollback floor.
 - **Tests:**
   - `npm run test:ee` = `node --test "tests/email-engine-*.test.js"` (Node 24 expands the glob; each file runs in its own process).
@@ -789,3 +794,4 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
 - 2026-10-29: **C startup visit emails added** (Mau): Welcome gets Safety Guidelines + Startup Guide attachments; each startup day sends On the Way + a customer Startup Day Log; the last startup day sends a Startup Summary (summary report + pool school scheduling). Added: *Event-triggered emails* and *Attachments* sections, 3 C event steps in the matrix, failure rows 47–55, and CP7 split into `bc-scheduled` → `startup-events` → `bc-live` (CP11+ for other buckets). Event-triggered sending pulled forward from Phase 4. Welcome's PoolSchool block no longer needs a date. Sandbox slice (CP4–CP6) unchanged. Open: what the "3-1 report" is and what else the summary contains; who the startup emails come from.
 - 2026-11-02: Answers from Mau: the "3-1 report" is the 3-day startup summary (portal-built from the three day logs); the Startup Summary email's other contents come from its assigned template; **every email sends from Tony's address**; PDFs live in an **Attachment Library** with their own versions and approvals, so they can be added after launch and revised without re-approving each email. Added failure rows 56–57; CP7 no longer requires the PDFs.
 - 2026-11-02: Phase 0 spike results (SPIKES.md). Grace periods set to G = 2 min, G2 = 15 min (spike 2b). Recovery must treat `getDraft(missing)` as throwing (spike 2a). Timing-based kills couldn't interrupt a call (spike 2c), so the sandbox rows for interrupted sends and orphan drafts (1, 3, 4) use deterministic fault injection. Unsubscribe ordering held 6/6 and lock-hold p95 is inside the 2 s budget (spike 3); authorize is the section to watch. Settings spreadsheet = "Chem Log", `1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U`, with both `Comms_Optouts` and `Comms_Log` present (spike 5). Guarantees unchanged.
+- 2026-11-02: Spike 1 result: the web app runs as whoever deployed it last. Every deploy is now done as Tony (clasp named login), and the deploy script asserts `effective_user = antonio@` after each deploy, rolling back if wrong. Engine spreadsheet, script and deployment created under antonio@; IDs recorded under Deployment.

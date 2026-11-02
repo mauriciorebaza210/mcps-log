@@ -4,7 +4,7 @@ Each spike records what was measured, how, and what it changes in PLAN.md. CP1 c
 
 | # | Spike | Status | Result in one line |
 |---|---|---|---|
-| 1 | Engine project ownership, binding, web-app identity after redeploy, trigger ownership | waiting on Tony (~15 min) | |
+| 1 | Engine project ownership, binding, web-app identity after redeploy, trigger ownership | **done 2026-11-02** | web app runs as whoever deployed last; every deploy must be done as Tony |
 | 2a | Draft removed on send | **done 2026-11-02** | 8/8 drafts gone after `send()`; `getDraft(missing)` throws "Not found" |
 | 2b | Sent-search latency (sets G/G2) | **done 2026-11-02** | every message found on the first search, ≤ 8.5 s after sending |
 | 2c | Interrupted sends and orphan drafts | **done, inconclusive** | no call was cut off mid-flight (0/8); see below |
@@ -15,6 +15,27 @@ Each spike records what was measured, how, and what it changes in PLAN.md. CP1 c
 | 6 | Node test glob discovers the whole suite | **done 2026-11-02** | `node --test "<glob>"` correct; plain `node <glob>` skips files |
 
 Raw data: `EE Phase 0 Spike Results` spreadsheet in Mau's Drive (downloaded copy: `~/Downloads/EE Phase 0 Spike Results.xlsx`). The spike runs were made in Mau's account (mauricio@), in a throwaway standalone project, on 2026-11-02 between 10:16 and 11:35 CT.
+
+## 1. Engine identity (done 2026-11-02)
+Created under antonio@ in an Incognito window (a window with two accounts signed in failed with "unable to open the file", `authuser=1`). Run by Mau using Tony's login. Each identity was recorded by the script itself in the `spike1` tab of the engine spreadsheet, and read back through the portal's service account.
+
+| Step | Done as | Code version | Ran as |
+|---|---|---|---|
+| Editor run | Tony | v1 | `antonio@` ✔ |
+| Web app, called anonymously from Claude's machine | (deployed by Tony) | v1 | `antonio@` ✔ |
+| Time trigger, installed by Tony | Tony | v1 | `antonio@` ✔ |
+| Editor run | Mau | v2 | `mauricio@` (expected) |
+| Web app after **Mau** redeployed | (deployed by Mau) | v2 | **`mauricio@`** ✖ |
+| Web app after **Tony** redeployed the same code | (deployed by Tony) | v2 | `antonio@` ✔ |
+| Triggers visible to Mau | Mau | v2 | not measured: "An unknown error has occurred" (Google documents that each user sees only their own triggers) |
+
+**Conclusion:** a web app set to "Execute as: Me" runs as **the person who deployed it last**, not the person who created it. Code can come from anyone with edit access, but **every deploy must be done as Tony**.
+- The guarded deploy script deploys with clasp's named login (`clasp --user tony deploy`) and checks `effective_user = antonio@` after every deploy, rolling back if it's wrong.
+- The engine's owner guard (refuse to send unless running as `engine_owner_email`) is essential, not just a precaution: a single deploy from Mau's browser would otherwise move all sending to Mau's Gmail.
+
+Also confirmed: the portal's service account (`mcps-portal-sheets@…`) can read the engine spreadsheet once shared as Viewer: a small range read in 0.6 s.
+
+Project IDs are recorded in PLAN.md → Deployment → Engine project setup.
 
 ## 2a. Draft removed on send
 - 8 drafts created and sent with `draft.send()`. After every send, the draft was **gone** from `GmailApp.getDrafts()`.
@@ -82,6 +103,5 @@ Inside *authorize*, p95 by step: Inbox lookup 590 ms, opt-out lookup (separate s
 **Conclusion:** `npm run test:ee` = `node --test "tests/email-engine-*.test.js"` is correct. No plan change needed.
 
 ## Still open for CP1
-- **Spike 1** (Tony, ~15 min): engine project ownership, web-app identity after a redeploy by Mau, trigger ownership.
 - **Spike 4**: read latency and bytes per op through the service account, on a synthetic engine spreadsheet.
 - Optional: re-run 2d with the bounce fix.
