@@ -7,8 +7,7 @@ Total hands-on time is about 10 minutes, plus about 80 minutes of waiting for sp
 ## Setup (once, ~2 min)
 1. Go to https://script.google.com and click **New project**. Name it `EE Phase 0 Spikes`.
 2. Delete the sample code, then paste in all of `Code.gs` (this folder).
-3. For spike 5: open the portal's Settings spreadsheet (the one the portal's Apps Script is attached to). Copy the long ID from its URL (`/d/<ID>/edit`) and paste it between the quotes on the `SETTINGS_SS_ID` line. This spike only reads; it changes nothing.
-4. Click **Save**.
+3. Click **Save**. (Leave `SETTINGS_SS_ID` blank: spike 5 finds the Settings spreadsheet itself.)
 
 ## Run (pick a function from the dropdown next to ▶ Run)
 The first run asks for permissions: Gmail, Sheets, Drive, triggers. Approve them; it's your own project.

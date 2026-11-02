@@ -21,7 +21,7 @@
 
 const P = PropertiesService.getScriptProperties();
 const SUBJECT_TAG = '[EE spike]';
-// Paste the Settings spreadsheet ID (the one the portal's Apps Script is bound to).
+// Optional: the Settings spreadsheet ID. Leave blank and spike 5 finds it for you.
 const SETTINGS_SS_ID = '';
 
 function me_() { return Session.getEffectiveUser().getEmail(); }
@@ -281,9 +281,28 @@ function spike3_report() {
 }
 
 // ───────── Spike 5: shared Comms tabs (read-only) ─────────
+// The portal's Settings spreadsheet is the one its Apps Script is bound to; its
+// ID isn't written anywhere in the code. If SETTINGS_SS_ID is blank, find it:
+// it's edited constantly (service logs), and it's the only one with the
+// portal's own Portal_Schema + Chemical_Usage_Log tabs. Read-only.
+function findSettingsSs_() {
+  const since = new Date(Date.now() - 7 * 864e5).toISOString();
+  const files = DriveApp.searchFiles('mimeType = "application/vnd.google-apps.spreadsheet" and modifiedDate > "' + since + '" and trashed = false');
+  const hits = []; let checked = 0;
+  while (files.hasNext() && checked < 300) {
+    const f = files.next(); checked++;
+    try {
+      const ss = SpreadsheetApp.openById(f.getId());
+      if (ss.getSheetByName('Portal_Schema') && ss.getSheetByName('Chemical_Usage_Log')) hits.push({ id: f.getId(), name: f.getName(), url: f.getUrl() });
+    } catch (e) { /* no access or not openable: skip */ }
+  }
+  hits.forEach(h => log_('5_settings_found', h));
+  Logger.log('Checked %s recently edited spreadsheets; matches: %s', checked, JSON.stringify(hits));
+  if (hits.length !== 1) throw new Error(hits.length ? 'More than one match; see tab 5_settings_found and paste the right ID into SETTINGS_SS_ID.' : 'No match. Paste the Settings spreadsheet ID into SETTINGS_SS_ID.');
+  return hits[0].id;
+}
 function spike5_checkComms() {
-  if (!SETTINGS_SS_ID) throw new Error('Paste the Settings spreadsheet ID into SETTINGS_SS_ID first.');
-  const ss = SpreadsheetApp.openById(SETTINGS_SS_ID);
+  const ss = SpreadsheetApp.openById(SETTINGS_SS_ID || findSettingsSs_());
   ['Comms_Optouts', 'Comms_Log'].forEach(name => {
     const sh = ss.getSheetByName(name);
     log_('5_comms_tabs', { tab: name, exists: !!sh, rows: sh ? sh.getLastRow() - 1 : '',
