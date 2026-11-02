@@ -119,7 +119,7 @@ The tag is the rollback point (`git checkout ee/cpN-…`). Nothing reaches `main
 | 4 | `sandbox-send` | Engine project deployed in the sandbox; B Intro + C Welcome revisions approved; the test-delivery sends arrive branded; SB rows pass (1–5, 9, 35a/b, 36–40) |
 | 5 | `tracking-api` | `api/email.js` (authenticated reads, c/o/beacon/u, heartbeat) + quotes merge; `vercel build` + import checks; API rows pass; quote flows OK on preview |
 | 6 | `slice-demo` | Minimal Lifecycle page; **mandatory performance budgets pass**; demo script run for Tony. *Reviewer approval boundary* |
-| 7 | `bc-scheduled` | All 7 scheduled B/C emails approved (Welcome with its two versioned attachments); wizard for B/C (enrollment/startup/previous anchors); minimum runbook done; matrix green. *B may go live from here if Mau and Tony choose; it doesn't depend on the startup events* |
+| 7 | `bc-scheduled` | All 7 scheduled B/C emails approved; Attachment Library working (the Welcome PDFs can be added now or later); wizard for B/C (enrollment/startup/previous anchors); minimum runbook done; matrix green. *B may go live from here if Mau and Tony choose; it doesn't depend on the startup events* |
 | 8 | `startup-events` | Event pipeline (signed `ee_event`, immediate delivery, visit-keyed occurrences, hard deadlines, dynamic attachments); portal: startup OTW routed to the engine, customer Startup Log, Startup Summary report, pool school booking page; event matrix rows 47–55 green; OTW latency budget met |
 | 9 | `bc-live` | **Go-live decision with Mau and Tony.** Portal GAS changes deployed; production enabled for B/C with test mode off; first week monitored, with no `unknown` deliveries left unresolved |
 | 10 | `bc-contacts` | Legacy list imported into B (via Needs review); C sync from startup requests with live dates |
@@ -377,11 +377,12 @@ Any resend (automatic or human) first passes the full pre-send gate:
 - Every step: person suppression by scope applies; `bucket_changed` ends the enrollment.
 - Content requirements:
   - B CTAs go to `/service`.
-  - Welcome requires `StartupDate` + `Address` and uses `{{block:PoolSchool}}`. Static attachments: **Safety Guidelines** and **Startup Guide** PDFs.
+  - Welcome requires `StartupDate` + `Address` and uses `{{block:PoolSchool}}`. Attachment items: **Safety Guidelines** and **Startup Guide** (from the Attachment Library; these can be added after launch).
+  - **Every email in this plan sends from Tony's address** (antonio@mcpoolsolutions.org), including the startup visit emails. On the Way names the tech in the body ("{{TechName}} is on the way").
     - The pool school date isn't known at Welcome time; it's booked from the Startup Summary. So the PoolSchool block says the customer will pick a time on their last startup day, and needs no date field.
   - Startup On the Way: fields `{{TechName}}`, `{{VisitDay}}` (1/2/3), `{{ArrivalWindow}}`.
   - Startup Day Log: fields `{{VisitDay}}`, `{{TechName}}`; dynamic attachment (or link) = that day's customer Startup Log.
-  - Startup Summary: dynamic attachment = the Startup Summary report; CTA = pool school booking link (first-party, so clicks can be browser-verified). The "3-1 report" and any other contents are still to be defined by Mau (open decision).
+  - Startup Summary: the email body is whatever template is assigned to this step (editable and approved like every other email). Dynamic attachment = the **3-1 report**, a summary of the 3 startup days that the portal builds from the three Startup Day Logs. CTA = pool school booking link (first-party, so clicks can be browser-verified). The 3-1 report's layout is portal work in CP8.
   - Progress subjects include the week number (to avoid threading).
   - No task lists anywhere.
 
@@ -409,7 +410,15 @@ Any resend (automatic or human) first passes the full pre-send gate:
 - **Missing data.** A required event field that is missing (e.g. no `TechName`) → `blocked` + an immediate alert, because these emails are time-sensitive.
 
 ## Attachments (part of the versioning contract)
-- **Static attachments** (e.g. Welcome's Safety Guidelines and Startup Guide) belong to the **Revision**. They are copied into `Revisions/`, view-only, with a `sha256`. Approving the email approves its attachments. Replacing a PDF means publishing a new revision.
+- **Static attachments live in an Attachment Library** (Mau, 2026-11-02), so PDFs can be added later and revised without re-approving every email.
+  - Each library item (e.g. "Safety Guidelines", "Startup Guide") has its own immutable **versions**:
+    - copied into `Attachments/{item}/v-N.pdf`, view-only, with a `sha256`
+    - each version records its uploader, approver and approval time
+  - Uploading a revised PDF creates a pending version. Approving it (the `approve_publish` capability, with the two-person rule if it's on) makes it the item's published version.
+  - **Emails reference items, not files.** A step's revision lists `attachment_items`, so approving the email approves *which* items it carries. The item's published version is bound from the **run snapshot** at claim time, exactly like content, and the delivery records `attachment_versions` + hashes.
+  - **Emails don't need attachments to go live.** Welcome can launch without its PDFs. Adding an item to an email later is an ordinary email edit and needs re-approval; revising a PDF that's already attached needs only the PDF's approval.
+  - **Rollback:** re-publish an older version as a new version (history is kept). Retiring an item removes it from future sends; any email that still references it shows a warning in the wizard.
+  - **UI:** an Attachments panel in the Emails tab (upload, versions, approve, roll back, "used by" list) and an attachment picker in the wizard's Content step.
 - **Dynamic attachments** (Day Log, Summary report) come from the event payload as Drive file IDs.
   - The engine accepts only files inside the allowlisted portal output folders, ≤10 MB each, ≤20 MB per email.
   - It hashes each file at claim time, and the delivery records `attachment_hashes`.
@@ -744,6 +753,8 @@ Any resend (automatic or human) first passes the full pre-send gate:
 | 53 | Static attachment changed in Drive after approval | `failed: attachment`, no send, alert | FG |
 | 54 | Dynamic attachment outside the allowlisted folder, or oversize | Rejected; `failed: attachment`; alert | FG |
 | 55 | Event steps on a day a scheduled C email is due | The event email doesn't consume the 1-per-day limit; the scheduled one still sends | FG |
+| 56 | A new Safety Guidelines version is approved mid-run | This run's deliveries carry the snapshot version; the next run carries the new one; each delivery records which | FG |
+| 57 | Welcome is approved and live with no attachment items | Sends normally; adding the items later requires the email's re-approval; revising an attached PDF needs only the PDF's approval | FG |
 
 ## How changes work later
 | Change | Where | Code? |
@@ -760,7 +771,7 @@ Any resend (automatic or human) first passes the full pre-send gate:
 
 ## Verification
 1. **Phase 0:** a written spike report with measured G/G2, the interrupted-send results, lock-wait timings, and bytes per read. The guarantees section is updated to match the findings.
-2. `npm run test:ee` (discovery proven) and the sandbox suite pass. All matrix rows (1–46, including 35a/35b; plus 47–55 by CP8) pass, and the existing `tests/` still pass.
+2. `npm run test:ee` (discovery proven) and the sandbox suite pass. All matrix rows (1–46, including 35a/35b; plus 47–55 by CP8, 56–57 by CP7) pass, and the existing `tests/` still pass.
 3. `vercel build` + node import of `api/email.js` and `api/quotes/index.js`. Quote flows work on preview. The performance targets are measured (latency, bytes, ranges) and either met or reported with their gap.
 4. **Demo (test-delivery mode):**
    - 3 test contacts; approve the B Intro and C Welcome (with revision history).
@@ -776,3 +787,4 @@ Any resend (automatic or human) first passes the full pre-send gate:
 Every change to this plan gets a dated line here (use `/email-engine tweak "<change>"`).
 - 2026-10-29: Plan approved (third review, 9.3/10: approved to build through the sandbox B/C slice). Priority set to MCP Legacy (B) + MCP Startup (C); resume protocol and checkpoints CP0–CP10 added.
 - 2026-10-29: **C startup visit emails added** (Mau): Welcome gets Safety Guidelines + Startup Guide attachments; each startup day sends On the Way + a customer Startup Day Log; the last startup day sends a Startup Summary (summary report + pool school scheduling). Added: *Event-triggered emails* and *Attachments* sections, 3 C event steps in the matrix, failure rows 47–55, and CP7 split into `bc-scheduled` → `startup-events` → `bc-live` (CP11+ for other buckets). Event-triggered sending pulled forward from Phase 4. Welcome's PoolSchool block no longer needs a date. Sandbox slice (CP4–CP6) unchanged. Open: what the "3-1 report" is and what else the summary contains; who the startup emails come from.
+- 2026-11-02: Answers from Mau: the "3-1 report" is the 3-day startup summary (portal-built from the three day logs); the Startup Summary email's other contents come from its assigned template; **every email sends from Tony's address**; PDFs live in an **Attachment Library** with their own versions and approvals, so they can be added after launch and revised without re-approving each email. Added failure rows 56–57; CP7 no longer requires the PDFs.

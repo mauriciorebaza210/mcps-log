@@ -9,7 +9,8 @@ Resume in any Claude Code session with `/email-engine`.
 - **Mockup v3 published** (same link): the "When it sends" column has moved into the email drawer; detailed evidence-graded tracking (results tiles, funnel, by-day table, per-link verified/unverified/scanner hits, per-recipient event history, Copy CSV); an Engine card with pause switches and a health line; "Needs attention" for unclear sends (It was sent / Don't send / Resend locked until quiescence); B + C shown first, the other 8 emails marked deferred.
 - **Next action:** Mau reviews mockup v3. Then run `/email-engine checkpoint` to close CP0 and start CP1 (Phase 0 spikes).
 - **Blocked on / waiting for:** Mau's sign-off on mockup v3 (the last CP0 exit criterion).
-- **Open decisions (not blocking yet):** (1) what the "3-1 report" is and what else goes in the Startup Summary (needed by CP8); (2) who the startup visit emails come from: Tony, a shared address (service@ doesn't exist yet), or the tech's name (needed by CP8); (3) final Safety Guidelines + Startup Guide PDFs (needed by CP7); (4) A "positive service milestone"; (5) Referral Campaign timing.
+- **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
+- **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library.
 
 ## Checkpoint log
 | CP | Tag | Date | Commit | Evidence | Next |
