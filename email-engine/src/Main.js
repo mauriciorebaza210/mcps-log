@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp4-1';
+var EE_VERSION = 'cp4-2';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -79,6 +79,19 @@ function EE_run_(trigger) {
   return summary;
 }
 function eeRunNow() { return EE_run_('manual'); }
+
+// What the engine sees right now: identity, Gmail quota, settings, row counts.
+function eeDiagnostics() {
+  var env = EE_env(), cfg = EE_config_(env.store);
+  var d = { effective_user: env.user(), owner: env.config.ownerEmail(), mail_quota_remaining: MailApp.getRemainingDailyQuota(),
+    quota_reserve: env.config.quotaReserve(), engine_mode: cfg.engine_mode, engine_enabled: cfg.engine_enabled,
+    applied_seq: Number(env.meta.get('applied_seq') || 0), journal_head: (env.journal.last() || { seq: 0 }).seq,
+    safety_pause: env.props.get('EE_SAFETY_PAUSE') || '',
+    rows: { contacts: env.store.rows('Contacts').length, enrollments: env.store.rows('Enrollments').length,
+      deliveries: env.store.rows('Deliveries').length, revisions: env.store.rows('Revisions').length } };
+  Logger.log(JSON.stringify(d, null, 2));
+  return d;
+}
 function EE_dailyTrigger() { return EE_run_('daily'); }
 
 function eeInstall() {

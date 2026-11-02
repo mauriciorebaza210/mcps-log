@@ -452,7 +452,7 @@ Any resend (automatic or human) first passes the full pre-send gate:
   - Writes are append-only to `Comms_Optouts`, so no lost updates.
   - If the source is unreadable, nothing sends (`suppression_unavailable`, alert).
 - **Frequency with Comms:** same local calendar day check against `Comms_Log`. Best-effort, as stated in Decisions and shown in the UI.
-- **Quota:** separate mailboxes (Comms bulk uses the portal's account; lifecycle uses Tony's). The engine re-reads `MailApp.getRemainingDailyQuota()` before each send and keeps a reserve of 200.
+- **Quota:** separate mailboxes (Comms bulk uses the portal's account; lifecycle uses Tony's). The engine re-reads `MailApp.getRemainingDailyQuota()` before each send and stops at a reserve (Config `quota_reserve`, default 20). That quota counts only script-sent mail on Tony's account, not the mail Tony sends himself, so the reserve only keeps room for the engine's own alerts (corrected 2026-11-02: the original 200 blocked every send on Tony's account).
 - **Phase 0:** confirm `Comms_Optouts` and `Comms_Log` exist live. If they don't, ask before creating tabs.
 
 ## Tracking: evidence and confidence (corrections 4 + 5)
@@ -820,3 +820,4 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
 - 2026-11-02: Spike 1 result: the web app runs as whoever deployed it last. Every deploy is now done as Tony (clasp named login), and the deploy script asserts `effective_user = antonio@` after each deploy, rolling back if wrong. Engine spreadsheet, script and deployment created under antonio@; IDs recorded under Deployment.
 - 2026-11-02: Spike 4 results: at launch size every page read is ≤ 360 KB and ≤ 0.41 s, so the mandatory read budgets are met. Reads now request only the columns each page shows, with `prettyPrint=false`; the tracking drawer reads per-delivery events from `Engagement.events_json`, never raw Events; Deliveries archiving is required; new migration trigger: narrow overview > 1 MB (~3,000 contacts). Guarantees section notes that Phase 0 confirmed them.
 - 2026-11-02: Footer address set to 4640 South Flores Road, Elmendorf, TX 78112 (same as Mission Custom Pools; `email-engine/seed/config.json`). The portal email editor will be click-to-edit text in the live preview plus an HTML mode, both saving drafts that need approval (Phase 3 / CP7).
+- 2026-11-02: First sandbox run stopped at the quota guard. The reserve of 200 assumed a 1,500/day quota and the wrong reason (Tony's own mail doesn't count against Apps Script's quota). Now Config `quota_reserve`, default 20; a quota stop reports the remaining quota and the reserve; `eeDiagnostics()` shows the live numbers.

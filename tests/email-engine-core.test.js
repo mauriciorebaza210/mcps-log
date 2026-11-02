@@ -232,8 +232,10 @@ test('Row 15: a recovered draft re-passes the full gate (retire, bucket pause, r
 test('Row 26: quota reserve and daily cap stop cleanly; the next run continues', () => {
   const w = fakeWorld(); ['e1', 'e2', 'e3'].forEach(e => enroll(w, e));
   const plan = ['e1', 'e2', 'e3'].map((e, i) => item(e + ':b_intro:1', { enrollment_id: e, contact_id: 'c' + i, email_norm: e + '@example.com' }));
-  w.quota = 200;
-  assert.equal(runPlan(w, plan).stopped_reason, 'quota_reserve');
+  w.quota = 20;                                         // at the default reserve
+  const q = runPlan(w, plan);
+  assert.equal(q.stopped_reason, 'quota_reserve');
+  assert.deepEqual([q.quota_remaining, q.quota_reserve], [20, 20], 'the stop reports the numbers');
   assert.equal(w.outbox.length, 0);
   w.quota = 1500;
   const s = runPlan(w, plan, { dailyCap: 2 });

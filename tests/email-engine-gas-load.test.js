@@ -17,7 +17,7 @@ test('All engine files load together like Apps Script, and expose the entry poin
   // Concatenate like Apps Script does: one scope, so a duplicate `const`/`let`/`function` would surface here.
   const all = files.map(f => fs.readFileSync(path.join(SRC, f), 'utf8') + '\n').join('');
   vm.runInContext(all, ctx, { filename: 'email-engine/src (all files)' });
-  for (const fn of ['eeSetup', 'eeAddTestContacts', 'eeApprove', 'eeApproveBIntro', 'eeApproveCWelcome', 'eeRunNow', 'eeInstall', 'EE_dailyTrigger', 'doGet', 'doPost',
+  for (const fn of ['eeSetup', 'eeAddTestContacts', 'eeApprove', 'eeApproveBIntro', 'eeApproveCWelcome', 'eeRunNow', 'eeDiagnostics', 'eeInstall', 'EE_dailyTrigger', 'doGet', 'doPost',
     'EE_createCore', 'EE_planDay', 'EE_runDay', 'EE_env']) {
     assert.equal(typeof ctx[fn], 'function', fn);
   }

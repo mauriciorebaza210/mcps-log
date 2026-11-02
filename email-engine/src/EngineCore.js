@@ -19,7 +19,8 @@ var EE_CONST = {
   GRACE_G_MS: 2 * 60 * 1000,              // spike 2b: sent mail searchable within 8.5 s
   GRACE_G2_MS: 15 * 60 * 1000,
   QUIESCENCE_MS: (6 + 30) * 60 * 1000,    // execution lifetime + safety margin
-  QUOTA_RESERVE: 200,                     // left in Tony's mailbox for his own mail
+  QUOTA_RESERVE: 20,                      // default; Config quota_reserve overrides. Apps Script's daily quota counts
+                                          // only script-sent mail (not Tony's own Gmail), so this just keeps room for alerts
   SUPPRESSION_CACHE_S: 21600,
   GENESIS: 'genesis'
 };
@@ -394,7 +395,9 @@ function EE_createCore(env) {
         for (var i = 0; i < queue.length; i++) {
           if (opts.budgetMs && env.now() - started > opts.budgetMs) return stop('time_budget');
           if (opts.dailyCap && sentToday + summary.sent >= opts.dailyCap) return stop('daily_cap');
-          if (env.quota() <= C.QUOTA_RESERVE) return stop('quota_reserve');
+          var reserve = env.config.quotaReserve ? Number(env.config.quotaReserve()) : C.QUOTA_RESERVE;
+          var remaining = env.quota();
+          if (remaining <= reserve) { summary.quota_remaining = remaining; summary.quota_reserve = reserve; return stop('quota_reserve'); }
           if (!renewLease(lease)) return stop('lease_lost');
           var r = processOne(lease, queue[i]);
           if (r.result === 'sent') summary.sent++;

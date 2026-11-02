@@ -209,6 +209,7 @@ function EE_env() {
     config: {
       ownerEmail: function () { return props.getProperty('EE_OWNER_EMAIL') || ''; },
       engineEnabled: function () { return String(EE_config_(store).engine_enabled) !== 'false'; },
+      quotaReserve: function () { var v = EE_config_(store).quota_reserve; return v === undefined || v === '' ? 20 : Number(v); },
       pausedBuckets: function () { return String(EE_config_(store).paused_buckets || '').split(',').map(function (s) { return s.trim(); }).filter(String); }
     },
     stepStatus: function (stepId) {

@@ -44,7 +44,8 @@ function eeSetup() {
     sender_display_name: cfg.sender_name + ' | ' + cfg.business.name,
     business_name: cfg.business.name, business_address: cfg.business.address, business_phone: cfg.business.phone,
     business_website: cfg.business.website, link_quote: cfg.links.quote,
-    test_recipients: cfg.test_recipients.join(','), alert_email: 'mauricio@mcpoolsolutions.org', paused_buckets: '' };
+    test_recipients: cfg.test_recipients.join(','), alert_email: 'mauricio@mcpoolsolutions.org', paused_buckets: '',
+    quota_reserve: '20' };
   Object.keys(seedCfg).forEach(function (k) {
     if (!env.store.get('Config', k)) { env.store.upsert('Config', { key: k, value: seedCfg[k] }); log.push('config ' + k + ' = ' + seedCfg[k]); }
   });
