@@ -1,0 +1,48 @@
+{
+  "_comment": "B (MCP Legacy) and C (MCP New Pool) scheduled steps, from PLAN.md → Email matrix. Seeds the engine's Steps sheet; tests/email-engine-rules.test.js runs the worked examples against this exact file. Event-triggered C steps (On the Way, Day Log, Summary) arrive in CP8.",
+  "rule_rev": "bc-1",
+  "sequences": [
+    { "sequence_id": "B", "bucket": "B", "reentry": "never" },
+    { "sequence_id": "C", "bucket": "C", "reentry": "never" }
+  ],
+  "steps": [
+    { "step_id": "b_intro", "sequence_id": "B", "order": 1, "name": "MCP x MCPS Intro", "category": "marketing", "status": "active",
+      "anchor": "enrollment", "offset": 0, "unit": "calendar", "window_days": 7, "max_hold_days": 2,
+      "audience_filter": { "sub_buckets": ["B1"] }, "on_send_sub_bucket": "B2",
+      "stop_rules": [
+        { "signal": "reply", "stops": "enrollment" },
+        { "signal": "click", "min_confidence": "high", "stops": "enrollment" },
+        { "signal": "form", "stops": "enrollment" }
+      ] },
+    { "step_id": "b_followup", "sequence_id": "B", "order": 2, "name": "MCPS Follow Up", "category": "marketing", "status": "active",
+      "anchor": "previous", "requires": "b_intro", "offset": 4, "unit": "calendar", "window_days": 7, "max_hold_days": 2,
+      "audience_filter": { "sub_buckets": ["B2"] },
+      "stop_rules": [
+        { "signal": "reply", "stops": "enrollment" },
+        { "signal": "click", "min_confidence": "high", "stops": "enrollment" },
+        { "signal": "form", "stops": "enrollment" }
+      ] },
+    { "step_id": "b_checkin", "sequence_id": "B", "order": 3, "name": "Personal Check-In", "category": "marketing", "status": "active",
+      "anchor": "previous", "requires": "b_followup", "offset": 9, "unit": "calendar", "window_days": 7, "max_hold_days": 2,
+      "audience_filter": { "sub_buckets": ["B2"] },
+      "stop_rules": [
+        { "signal": "reply", "stops": "enrollment" },
+        { "signal": "click", "min_confidence": "high", "stops": "enrollment" },
+        { "signal": "form", "stops": "enrollment" }
+      ] },
+    { "step_id": "c_welcome", "sequence_id": "C", "order": 1, "name": "Welcome Email", "category": "service", "status": "active",
+      "anchor": "startup", "offset": -3, "unit": "calendar", "window_days": 2, "max_hold_days": 1,
+      "hard_deadline": { "from": "anchor", "offset": -1 }, "stop_rules": [] },
+    { "step_id": "c_progress", "sequence_id": "C", "order": 2, "name": "Startup Progress", "category": "service", "status": "active",
+      "anchor": "startup", "offset": 7, "repeat_every": 7, "repeat_count": 4, "unit": "calendar", "window_days": 3, "max_hold_days": 2,
+      "hard_deadline": { "from": "next_occurrence", "offset": -1 }, "stop_rules": [] },
+    { "step_id": "c_maint", "sequence_id": "C", "order": 3, "name": "Maintenance Invitation", "category": "marketing", "status": "active",
+      "anchor": "startup", "offset": 21, "unit": "calendar", "window_days": 5, "max_hold_days": 2,
+      "stop_rules": [
+        { "signal": "click", "min_confidence": "high", "stops": "marketing_branch" },
+        { "signal": "form", "stops": "marketing_branch" }
+      ] },
+    { "step_id": "c_final", "sequence_id": "C", "order": 4, "name": "Final Transition", "category": "service", "status": "active",
+      "anchor": "startup", "offset": 28, "unit": "calendar", "window_days": 5, "max_hold_days": 2, "stop_rules": [] }
+  ]
+}
