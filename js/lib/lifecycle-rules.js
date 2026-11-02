@@ -34,7 +34,11 @@
   // see PLAN.md → State machines (nothing in `sending` returns to eligibility).
   var IN_FLIGHT = { claimed: 1, drafted: 1, sending: 1, reconcile: 1, unknown: 1 };
   // Outcomes that still count as "this enrollment has work left".
-  var OPEN = { due: 1, held: 1, upcoming: 1, paused: 1, in_flight: 1, waiting_anchor: 1 };
+  var OPEN = { due: 1, held: 1, upcoming: 1, paused: 1, in_flight: 1, waiting_anchor: 1, failed: 1 };
+  // Attempt ended without a send (lease recovery, or the pre-send gate said no):
+  // the step is simply planned again. `abandoned` (an operator chose "Don't
+  // send") and `failed` (needs a person) are never re-planned automatically.
+  var REOPENED = { released: 1, cancelled: 1 };
 
   // ── Dates: local calendar dates as YYYY-MM-DD strings ───────────────────────
   // Days are counted on UTC midnights of the local date, so DST never moves one.
@@ -98,7 +102,7 @@
     });
   }
 
-  function hardDeadline(step, base, k, nextDue) {
+  function hardDeadline(step, base, nextDue) {
     var h = step.hard_deadline;
     if (!h || !base) return null;
     if (h.from === 'anchor') return addDays(base, h.offset);
@@ -151,13 +155,14 @@
       for (var k = 0; k < count; k++) {
         var occ = k + 1, key = deliveryKey(en.enrollment_id, step.step_id, occ);
         var rec = ctx.deliveries[key];
+        if (rec && REOPENED[rec.state]) rec = null;
         var d = { key: key, enrollment_id: en.enrollment_id, contact_id: en.contact_id, mode: state.mode,
           step_id: step.step_id, occurrence: occ, order: step.order, category: step.category,
           due: null, last_send_day: null, outcome: '', reason: '', held_days: ctx.holds[key] || 0 };
         if (base && !unsupported) {
           d.due = addDays(base, step.offset + k * (step.repeat_every || 0));
           var nextDue = k + 1 < count ? addDays(base, step.offset + (k + 1) * (step.repeat_every || 0)) : null;
-          var deadline = hardDeadline(step, base, k, nextDue);
+          var deadline = hardDeadline(step, base, nextDue);
           var byWindow = addDays(d.due, (step.window_days || 0) + Math.min(d.held_days, step.max_hold_days || 0));
           d.last_send_day = earlier(byWindow, deadline);
           d.deadline_binding = !!deadline && deadline <= byWindow;
@@ -168,6 +173,10 @@
           if (step.anchor === 'startup') startupSent = true;
         } else if (rec && IN_FLIGHT[rec.state]) {
           d.outcome = 'in_flight'; d.reason = rec.state;
+        } else if (rec && rec.state === 'abandoned') {
+          d.outcome = 'excluded'; d.reason = 'abandoned_by_operator';
+        } else if (rec && rec.state === 'failed') {
+          d.outcome = 'failed'; d.reason = rec.error || 'failed';
         } else if (unsupported) {
           d.outcome = 'excluded'; d.reason = 'unsupported_in_this_release';
         } else if (step.status === 'retired') {

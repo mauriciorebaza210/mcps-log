@@ -287,3 +287,14 @@ test('"Today" is the America/Chicago calendar date, across the DST change', () =
   assert.equal(L.addDays('2026-11-01', 1), '2026-11-02');
   assert.equal(L.addDays('2026-03-08', 1), '2026-03-09');
 });
+
+test('Ended attempts: released/cancelled re-plan; abandoned and failed never do', () => {
+  const w = world([contact('c1', 'B')], [enrollment('e1', 'c1', 'B', '2026-10-26')]);
+  const expect = { released: 'due', cancelled: 'due', abandoned: 'excluded', failed: 'failed' };
+  for (const [state, outcome] of Object.entries(expect)) {
+    w.deliveries = [{ key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', state, error: 'attachment' }];
+    assert.equal(outcomeOn(w, '2026-10-26', 'e1:b_intro:1').outcome, outcome, state);
+  }
+  w.deliveries = [{ key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', state: 'failed' }];
+  assert.notEqual(L.decide(Object.assign({}, w, { today: '2026-11-20' })).enrollments[0].status, 'completed');
+});
