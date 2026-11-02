@@ -4,18 +4,20 @@ Plan: [PLAN.md](PLAN.md) · Branch: `feat/email-engine` · Worktree: `~/mcps-log
 Resume in any Claude Code session with `/email-engine`.
 
 ## Now
-- **Checkpoint in progress:** CP0 `setup`
-- **Done in CP0:** worktree + branch; plan approved and committed here; this log; `/email-engine` command; memory note; `email-engine/` hidden from Vercel.
-- **Mockup v3 published** (same link): the "When it sends" column has moved into the email drawer; detailed evidence-graded tracking (results tiles, funnel, by-day table, per-link verified/unverified/scanner hits, per-recipient event history, Copy CSV); an Engine card with pause switches and a health line; "Needs attention" for unclear sends (It was sent / Don't send / Resend locked until quiescence); B + C shown first, the other 8 emails marked deferred.
-- **Next action:** Mau reviews mockup v3. Then run `/email-engine checkpoint` to close CP0 and start CP1 (Phase 0 spikes).
-- **Blocked on / waiting for:** Mau's sign-off on mockup v3 (the last CP0 exit criterion).
+- **Checkpoint in progress:** CP1 `spikes` (Phase 0 discovery)
+- **Goal:** measure the things the guarantees depend on before writing engine code. Results go in `email-engine/docs/SPIKES.md`, and the Guarantees section of PLAN.md is updated to match.
+- **Next action:** spike 6 (Node test glob) and the spike scripts for spikes 2–4, which can be written now and run in a Google account.
+- **Blocked on / waiting for:**
+  - Which Google account runs the send-boundary spikes (2–3)? Mau's account is fine, sending only to himself.
+  - Tony's time (~15 min) to create the engine spreadsheet + script under antonio@ and deploy the web app (spike 1).
+  - A look at the live Settings spreadsheet for the `Comms_Optouts` and `Comms_Log` tabs (spike 5).
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library.
 
 ## Checkpoint log
 | CP | Tag | Date | Commit | Evidence | Next |
 |---|---|---|---|---|---|
-| | | | | | |
+| CP0 | `ee/cp0-setup` | 2026-11-02 | (this commit) | Worktree + branch; PLAN.md + PROGRESS.md committed; `/email-engine` skill; memory note; mockup v3 signed off by Mau (claude.ai/artifact/K3PVxvC3B82UisqAASpWxz) | CP1 spikes |
 
 ## Parking lot
 Sidetracks and tweaks to come back to. Add with `/email-engine park "<note>"`.
