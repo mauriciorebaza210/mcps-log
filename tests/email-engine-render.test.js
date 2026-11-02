@@ -18,9 +18,10 @@ const tpl = rel => fs.readFileSync(path.join(ROOT, 'email-engine', 'templates', 
 const BLOCKS = Object.fromEntries(Object.entries(CONTENT.blocks).map(([k, b]) => [k, { flag: b.flag, html: tpl(b.html) }]));
 const revisionFor = stepId => { const c = CONTENT.steps[stepId]; return { subject: c.subject, preheader: c.preheader, details_box: c.details_box, body_html: tpl(c.body) }; };
 
+const CONFIG = JSON.parse(fs.readFileSync(path.join(ROOT, 'email-engine', 'seed', 'config.json'), 'utf8'));
 const CONTEXT = {
-  sender_name: 'Tony',
-  business: { name: 'Mission Custom Pool Solutions', address: '123 Example St, San Antonio, TX 78201', phone: '(210) 559-2073', website: 'https://missioncustompools.com' },
+  sender_name: CONFIG.sender_name,
+  business: CONFIG.business,
   unsubscribeUrl: 'https://mcps-log.vercel.app/api/t/u?d=TEST',
   openPixelUrl: 'https://mcps-log.vercel.app/api/t/o?d=TEST',
   deliveryToken: 'dlv_0123456789abcdef0123456789abcdef',
@@ -40,7 +41,7 @@ test('B Intro renders for a real contact: branded shell, merge fields, tracked C
   assert.match(r.html, /Hi Maria,/);
   assert.match(r.html, /mcps-lockup\.png/);                                    // shell logo
   assert.match(r.html, /Every pool matters\./);
-  assert.match(r.html, /123 Example St, San Antonio/);                         // footer address
+  assert.match(r.html, /4640 South Flores Road, Elmendorf, TX 78112/);       // footer address (Mau, 2026-11-02)
   assert.match(r.html, /href="https:\/\/mcps-log\.vercel\.app\/api\/t\/u\?d=TEST"/);
   assert.match(r.html, /Get your free quote/);
   assert.match(r.html, /api\/t\/c\?l=button1&amp;u=https%3A%2F%2Fmcps-log\.vercel\.app%2Fservice%3Fc%3Db_intro/);

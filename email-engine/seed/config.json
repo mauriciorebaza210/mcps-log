@@ -1,0 +1,16 @@
+{
+  "_comment": "Operational settings seeded into the engine's Config tab (editable later from the portal, validated and logged). Security settings (owner email, sender aliases, secrets, the two-person rule) live in Script Properties instead; see PLAN.md → Configuration & authorization.",
+  "business": {
+    "name": "Mission Custom Pool Solutions",
+    "address": "4640 South Flores Road, Elmendorf, TX 78112",
+    "phone": "(210) 559-2073",
+    "website": "https://missioncustompools.com"
+  },
+  "sender_name": "Tony",
+  "timezone": "America/Chicago",
+  "run_schedule": "daily@9",
+  "daily_cap": 50,
+  "test_mode": true,
+  "test_recipients": ["mauricio@mcpoolsolutions.org"],
+  "links": { "quote": "https://mcps-log.vercel.app/service" }
+}
