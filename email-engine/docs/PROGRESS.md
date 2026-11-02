@@ -6,7 +6,8 @@ Resume in any Claude Code session with `/email-engine`.
 ## Now
 - **Checkpoint in progress:** CP1 `spikes` (Phase 0 discovery)
 - **Goal:** measure the things the guarantees depend on before writing engine code. Results go in `email-engine/docs/SPIKES.md`, and the Guarantees section of PLAN.md is updated to match.
-- **Next action:** spike 6 (Node test glob) and the spike scripts for spikes 2–4, which can be written now and run in a Google account.
+- **Done:** spike 6 (Node test glob). Result in SPIKES.md: the planned `node --test` command is correct, and the plain `node <glob>` form silently skips files.
+- **Next action:** write the spike scripts for spikes 2–4, then run them in the chosen Google account.
 - **Blocked on / waiting for:**
   - Which Google account runs the send-boundary spikes (2–3)? Mau's account is fine, sending only to himself.
   - Tony's time (~15 min) to create the engine spreadsheet + script under antonio@ and deploy the web app (spike 1).
