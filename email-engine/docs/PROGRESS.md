@@ -13,8 +13,9 @@ Resume in any Claude Code session with `/email-engine`.
   4. **4d Guarded deploy:** `scripts/ee-deploy.mjs` + a one-time `clasp --user tony login` (Mau, in a terminal).
   5. **4e Sandbox sends:** as Tony, run setup, approve both revisions, add test contacts (Mau's address), Run now.
   6. **4f Sandbox suite:** the SB rows with deterministic fault injection, in a separate sandbox spreadsheet so the engine's real sheets stay clean.
-- **Next action:** 4d, the guarded deploy script; then Mau runs `clasp --user tony login` once.
-- **Blocked on / waiting for:** nothing until 4d (Mau's `clasp --user tony login`).
+- **Built:** 4d guarded deploy, `npm run ee:deploy "<what changed>"` (`scripts/ee-deploy.mjs`): it checks the project, the deployment and the Tony login, syncs, runs the tests, pushes, deploys as Tony, then checks the live engine runs as antonio@ on the new version, rolling back if not.
+- **Next action:** Mau: turn on the Apps Script API for Tony and run `clasp --user tony login` once. Then Claude runs the first deploy, and Mau runs the 4e steps as Tony.
+- **Blocked on / waiting for:** the one-time Tony login for clasp (Mau).
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library; test emails may go to Mau.
 
