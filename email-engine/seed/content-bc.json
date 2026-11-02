@@ -1,0 +1,13 @@
+{
+  "_comment": "First drafts for the B Intro and C Welcome (CP4). Bodies live in email-engine/templates/; approval publishes an immutable revision of subject + body + blocks + fields.",
+  "steps": {
+    "b_intro":   { "subject": "An introduction from Mission Custom Pools",
+                   "preheader": "Meet Mission Custom Pool Solutions, the service side of the family that built your pool.",
+                   "body": "B/b_intro.html", "details_box": "", "blocks": [] },
+    "c_welcome": { "subject": "Welcome to Mission Custom Pool Solutions",
+                   "preheader": "Your startup date and what happens next.",
+                   "body": "C/c_welcome.html", "details_box": "Startup begins: {{StartupDate}}|Pool address: {{Address}}",
+                   "blocks": ["PoolSchool"] }
+  },
+  "blocks": { "PoolSchool": { "flag": "pool_school", "html": "blocks/PoolSchool.html" } }
+}

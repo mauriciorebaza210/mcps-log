@@ -1,0 +1,10 @@
+{
+  "_comment": "Merge-field registry (PLAN.md → Domain model → Fields). A field with a fallback never blocks a send; a required field that's empty blocks it and is logged.",
+  "fields": [
+    { "field": "FirstName",   "source": "contact", "key": "first_name",   "fallback": "there" },
+    { "field": "LastName",    "source": "contact", "key": "last_name",    "fallback": "" },
+    { "field": "Address",     "source": "contact", "key": "address",      "required": true },
+    { "field": "StartupDate", "source": "contact", "key": "startup_date", "required": true, "format": "long_date" },
+    { "field": "SenderName",  "source": "context", "key": "sender_name",  "required": true }
+  ]
+}

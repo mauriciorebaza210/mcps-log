@@ -1,0 +1,237 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// EMAIL RENDER: approved body + the branded MCPS shell + a contact = one email.
+//
+// Loads the same three ways as lifecycle-rules.js (browser global
+// MCPS_EMAIL_RENDER, require/import, Apps Script copy), so the portal's
+// preview and the engine's send produce the identical email.
+//
+// Pure: no I/O. Everything an email needs is an argument. If anything is
+// missing or unsafe, render() returns ok:false with every error and no email:
+// an unknown {{field}}, a required value that's empty, a missing block, a
+// leftover "{{", an image that isn't https or has no alt text, styles or
+// scripts inside a body, or no business address in the footer (CAN-SPAM).
+// The engine records those errors and never sends a partial email.
+//
+// Template syntax (bodies are body-only HTML; the shell is added here):
+//   {{FirstName}}                a field from the Fields registry, HTML-escaped
+//   {{block:PoolSchool}}         an optional block, included when the contact's
+//                                flag (e.g. pool_school = Y) is set; otherwise it
+//                                disappears with its surrounding whitespace
+//   {{button:Label|quote}}       a CTA button to the named link (here: quote)
+//   {{details}}                  where the grey details box goes (default: after the body)
+// Every <a href> is passed through context.trackLink, so clicks can be counted
+// (tel: and mailto: links are left alone).
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function (root, factory) {
+  var api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.MCPS_EMAIL_RENDER = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  var ASSET = 'https://mcps-email-assets.vercel.app/';
+  var BRAND = { teal: '#0D3D3E', aqua: '#1FA7A8', page: '#E9EDEE', panel: '#F3F5F6', ink: '#2E3A3A', muted: '#5A6A6A', faint: '#7A8888' };
+  var FONT_BODY = "'Open Sans',Helvetica,Arial,sans-serif";
+  var FONT_LABEL = "'Montserrat',Arial,Helvetica,sans-serif";
+  var FONT_HEAD = "Georgia,'Times New Roman',serif";
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  // "2026-10-28" -> "Wednesday, October 28". Date-only values are formatted in
+  // UTC so the day never shifts with the reader's timezone.
+  function longDate(v) {
+    var m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return String(v || '');
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return DAYS[d.getUTCDay()] + ', ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCDate();
+  }
+  var FORMATS = { long_date: longDate };
+
+  // Resolve one {{Field}} from the registry. Returns {value} or {error}.
+  function fieldValue(name, reg, contact, ctx) {
+    var def = reg[name];
+    if (!def) return { error: 'unknown field {{' + name + '}}' };
+    var raw = def.source === 'context' ? ctx[def.key] : contact[def.key];
+    var value = raw == null ? '' : String(raw).trim();
+    if (value && def.format && FORMATS[def.format]) value = FORMATS[def.format](value);
+    if (!value) {
+      if (def.required) return { error: 'missing required ' + name + ' (' + def.key + ')' };
+      value = def.fallback || '';
+    }
+    return { value: value };
+  }
+  function mergeText(text, reg, contact, ctx, errors, used) {
+    return String(text || '').replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, function (m, name) {
+      var r = fieldValue(name, reg, contact, ctx);
+      if (r.error) { errors.push(r.error); return ''; }
+      if (used.indexOf(name) === -1) used.push(name);
+      return esc(r.value);
+    });
+  }
+
+  function button(label, href) {
+    return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 8px;"><tr><td align="center" style="border-radius:7px;background-color:' + BRAND.teal + ';">' +
+      '<a href="' + href + '" target="_blank" style="display:inline-block;padding:18px 40px;font-family:' + FONT_LABEL + ';font-size:16px;font-weight:700;line-height:1;color:#FFFFFF;text-decoration:none;border-radius:7px;">' + esc(label) + '</a>' +
+      '</td></tr></table>';
+  }
+  // Bodies are written as plain tags; email clients need the styles inline.
+  var INLINE = {
+    h1: 'margin:0 0 16px;font-family:' + FONT_HEAD + ';font-size:27px;line-height:1.22;font-weight:bold;color:' + BRAND.teal + ';text-align:center;',
+    h2: 'margin:22px 0 8px;font-family:' + FONT_LABEL + ';font-size:16px;line-height:1.35;font-weight:700;color:' + BRAND.teal + ';',
+    p: 'margin:0 0 16px;font-family:' + FONT_BODY + ';font-size:15.5px;line-height:1.68;color:' + BRAND.ink + ';',
+    a: 'color:' + BRAND.aqua + ';text-decoration:underline;',
+    strong: 'color:' + BRAND.teal + ';'
+  };
+  function inlineStyles(html) {
+    return html.replace(/<(h1|h2|p|a|strong)(\s[^>]*)?>/gi, function (m, tag, attrs) {
+      attrs = attrs || '';
+      if (/\sstyle\s*=/i.test(attrs)) return m;                // an explicit style wins
+      return '<' + tag + attrs + ' style="' + INLINE[tag.toLowerCase()] + '">';
+    });
+  }
+
+  // Email-safety checks on the author's body and blocks (not on the shell).
+  function checkSafety(html, where, errors) {
+    if (/<\s*(style|script|link|iframe|form|object|embed)\b/i.test(html)) errors.push(where + ': style, script, link, iframe and form tags are not allowed in a body');
+    if (/position\s*:\s*(absolute|fixed)/i.test(html)) errors.push(where + ': absolute or fixed positioning is not allowed');
+    if (/\son[a-z]+\s*=/i.test(html)) errors.push(where + ': event handler attributes are not allowed');
+    (html.match(/<img\b[^>]*>/gi) || []).forEach(function (img) {
+      var src = (img.match(/\ssrc\s*=\s*"([^"]*)"/i) || [])[1] || '';
+      if (!/^https:\/\//i.test(src)) errors.push(where + ': every image must load from an https:// URL (' + (src || 'no src') + ')');
+      if (!/\salt\s*=\s*"[^"]*"/i.test(img)) errors.push(where + ': every image needs alt text (' + src + ')');
+    });
+  }
+
+  function trackAnchors(html, ctx) {
+    var n = 0;
+    return html.replace(/(<a\b[^>]*\shref\s*=\s*")([^"]*)(")/gi, function (m, pre, href, post) {
+      if (/^(tel:|mailto:|#)/i.test(href)) return m;
+      n++;
+      return pre + esc(ctx.trackLink ? ctx.trackLink('a' + n, href.replace(/&amp;/g, '&')) : href) + post;
+    });
+  }
+
+  function toText(html) {
+    return html
+      .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, function (m, href, label) {
+        var t = label.replace(/<[^>]+>/g, '').trim(); return t + (/^(tel:|mailto:)/.test(href) ? '' : ' (' + href.replace(/&amp;/g, '&') + ')');
+      })
+      .replace(/<\/(p|h1|h2|div|tr|li)>/gi, '\n\n').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ').replace(/&mdash;/g, '—').replace(/&rsquo;/g, '’').replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function detailsBox(lines) {
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 18px;"><tr><td style="background-color:' + BRAND.panel + ';border-radius:6px;padding:14px 18px;font-family:' + FONT_BODY + ';font-size:15px;line-height:1.6;color:' + BRAND.teal + ';">' +
+      lines.join('<br />') + '</td></tr></table>';
+  }
+
+  // ── The shell, written once ──
+  function shell(parts, ctx) {
+    var b = ctx.business || {};
+    var banner = ctx.testBanner
+      ? '<tr><td style="background-color:#FFF4D6;padding:10px 24px;font-family:' + FONT_BODY + ';font-size:13px;color:#5B4A12;border-bottom:1px dashed #C8A84B;">' +
+        '<strong style="color:#5B4A12;">TEST EMAIL.</strong> In production this would go to ' + esc(ctx.testBanner) + '.</td></tr>' : '';
+    // Placed where the body says {{details}}; otherwise right after the body.
+    var details = parts.details.length && !parts.detailsPlaced
+      ? '<tr><td class="px" style="padding:4px 44px 6px;">' + detailsBox(parts.details) + '</td></tr>' : '';
+    return '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">' +
+      '<html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="x-apple-disable-message-reformatting" />' +
+      '<meta name="format-detection" content="telephone=no" /><title>' + esc(parts.subject) + '</title>' +
+      '<style type="text/css">body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;}table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;}' +
+      'img{-ms-interpolation-mode:bicubic;border:0;height:auto;line-height:100%;outline:none;text-decoration:none;}body{margin:0!important;padding:0!important;width:100%!important;}' +
+      '@media screen and (max-width:620px){.wrap{width:100%!important;max-width:100%!important;table-layout:fixed!important;}.px{padding-left:22px!important;padding-right:22px!important;}img.fluid{width:100%!important;height:auto!important;}}' +
+      '@media (prefers-color-scheme:dark){.card{background-color:#FFFFFF!important;}}</style></head>' +
+      '<body style="margin:0;padding:0;background-color:' + BRAND.page + ';">' +
+      (parts.preheader ? '<div style="display:none;font-size:1px;color:' + BRAND.page + ';line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">' + esc(parts.preheader) + '</div>' : '') +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:' + BRAND.page + ';"><tr><td align="center" style="padding:24px 12px;">' +
+      '<table role="presentation" class="wrap card" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#FFFFFF;border-radius:6px;overflow:hidden;">' +
+      banner +
+      '<tr><td align="center" style="padding:26px 24px 16px;"><img src="' + ASSET + 'mcps-lockup.png" width="186" height="43" alt="' + esc(b.name || 'Mission Custom Pool Solutions') + '" style="display:block;border:0;width:186px;height:43px;" /></td></tr>' +
+      '<tr><td style="padding:0 44px;font-size:0;line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td height="3" style="background-color:' + BRAND.aqua + ';font-size:0;line-height:0;">&nbsp;</td></tr></table></td></tr>' +
+      '<tr><td class="px" style="padding:26px 44px 8px;">' + parts.body + '</td></tr>' +
+      details +
+      '<tr><td class="px" style="padding:12px 44px 30px;font-family:' + FONT_BODY + ';font-size:15px;line-height:1.55;color:' + BRAND.ink + ';">' +
+      esc(parts.signature) + '<br /><span style="font-size:13.5px;color:' + BRAND.muted + ';">' + esc(b.name || 'Mission Custom Pool Solutions') + (b.phone ? ' &middot; ' + esc(b.phone) : '') + '</span></td></tr>' +
+      '<tr><td style="padding:0;font-size:0;line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td height="3" style="background-color:' + BRAND.teal + ';font-size:0;line-height:0;">&nbsp;</td></tr></table></td></tr>' +
+      '<tr><td class="px" align="center" style="background-color:' + BRAND.panel + ';padding:24px 44px 26px;font-family:' + FONT_BODY + ';font-size:13px;line-height:1.6;color:' + BRAND.muted + ';">' +
+      '<div style="font-family:' + FONT_LABEL + ';font-size:15px;font-weight:700;color:' + BRAND.aqua + ';margin:0 0 6px;">' + esc(b.name || 'Mission Custom Pool Solutions') + '</div>' +
+      '<div style="font-family:' + FONT_HEAD + ';font-style:italic;color:' + BRAND.teal + ';margin:0 0 6px;">Every pool matters.</div>' +
+      esc(b.address || '') + (b.website ? '<br /><a href="' + esc(parts.track('website', b.website)) + '" style="color:' + BRAND.muted + ';text-decoration:underline;">' + esc(b.website.replace(/^https?:\/\//, '')) + '</a>' : '') +
+      '<div style="margin:14px 0 0;"><a href="' + esc(ctx.unsubscribeUrl) + '" style="font-size:12px;color:' + BRAND.faint + ';text-decoration:underline;">Unsubscribe</a></div>' +
+      (ctx.deliveryToken ? '<div style="margin:10px 0 0;font-size:10px;color:#A7B2B2;">Ref ' + esc(ctx.deliveryToken) + '</div>' : '') +
+      '</td></tr></table>' +
+      (ctx.openPixelUrl ? '<img src="' + esc(ctx.openPixelUrl) + '" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px;" />' : '') +
+      '</td></tr></table></body></html>';
+  }
+
+  // input: { revision: {subject, body_html, details_box, preheader},
+  //          blocks: {Name: {flag, html}}, fields: [{field, source, key, fallback, required, format}],
+  //          contact: {...}, context: {sender_name, business: {name, address, phone, website},
+  //            unsubscribeUrl, openPixelUrl, deliveryToken, testBanner, links: {quote: url},
+  //            trackLink(linkId, url) -> url} }
+  // output: { ok, errors[], subject, html, text, used_fields[], used_blocks[] }
+  function render(input) {
+    var rev = input.revision || {}, contact = input.contact || {}, ctx = input.context || {};
+    var reg = {}; (input.fields || []).forEach(function (f) { reg[f.field] = f; });
+    var blocks = input.blocks || {}, errors = [], used = [], usedBlocks = [];
+    var track = function (id, url) { return ctx.trackLink ? ctx.trackLink(id, url) : url; };
+
+    if (!ctx.business || !String(ctx.business.address || '').trim()) errors.push('business address missing from the footer (required by CAN-SPAM)');
+    if (!ctx.unsubscribeUrl) errors.push('unsubscribe link missing');
+
+    checkSafety(String(rev.body_html || ''), 'body', errors);
+    // Blocks first: included ones are merged like the body; excluded ones vanish
+    // together with the blank line they sat on.
+    var body = String(rev.body_html || '').replace(/[ \t]*\{\{\s*block:([A-Za-z0-9_]+)\s*\}\}[ \t]*\r?\n?/g, function (m, name) {
+      var blk = blocks[name];
+      if (!blk) { errors.push('missing block {{block:' + name + '}}'); return ''; }
+      var flag = String(contact[blk.flag] || '').trim().toUpperCase();
+      if (flag !== 'Y' && flag !== 'YES' && flag !== 'TRUE') return '';
+      checkSafety(blk.html, 'block ' + name, errors);
+      usedBlocks.push(name);
+      return blk.html + '\n';
+    });
+    // Buttons become numbered placeholders so merging and link tracking leave them alone.
+    var buttons = [];
+    body = body.replace(/\{\{\s*button:([^|}]+)\|([A-Za-z0-9_]+)\s*\}\}/g, function (m, label, linkName) {
+      var url = (ctx.links || {})[linkName];
+      if (!url) { errors.push('button link "' + linkName + '" is not configured'); return ''; }
+      buttons.push({ label: label.trim(), url: url });
+      return '[[EE_BUTTON_' + (buttons.length - 1) + ']]';
+    });
+    body = body.replace(/\{\{\s*details\s*\}\}/g, '[[EE_DETAILS]]');
+    body = inlineStyles(trackAnchors(mergeText(body, reg, contact, ctx, errors, used), ctx)).replace(/\[\[EE_DETAILS\]\]/g, '{{details}}');
+    body = body.replace(/\[\[EE_BUTTON_(\d+)\]\]/g, function (m, i) {
+      var b = buttons[+i]; return button(b.label, esc(track('button' + (+i + 1), b.url)));
+    });
+
+    var subject = mergeText(rev.subject, reg, contact, ctx, errors, used).replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    if (!subject.trim()) errors.push('subject is empty');
+    var details = String(rev.details_box || '').split('|').map(function (l) { return l.trim(); }).filter(Boolean)
+      .map(function (l) { return mergeText(esc(l), reg, contact, ctx, errors, used); });
+    var signature = mergeText('{{SenderName}}', reg, contact, ctx, errors, used).replace(/&amp;/g, '&');
+    var preheader = mergeText(rev.preheader || '', reg, contact, ctx, errors, used);
+
+    var detailsPlaced = false;
+    body = body.replace(/[ \t]*\{\{\s*details\s*\}\}[ \t]*\r?\n?/g, function () {
+      detailsPlaced = true; return details.length ? detailsBox(details) + '\n' : '';
+    });
+    var html = shell({ subject: subject, body: body, details: details, detailsPlaced: detailsPlaced, signature: signature, preheader: preheader, track: track }, ctx);
+    // Only template-authored parts are checked; the shell's own CSS legitimately contains "}}".
+    if ([body, subject, preheader].concat(details).some(function (t) { return /\{\{|\}\}/.test(t); })) errors.push('unresolved {{ }} left in the email');
+    if (errors.length) return { ok: false, errors: errors, used_fields: used, used_blocks: usedBlocks };
+    return { ok: true, errors: [], subject: subject, html: html, text: toText(body + (details.length ? '<p>' + details.join('<br />') + '</p>' : '') +
+      '<p>' + esc(signature) + '<br />' + esc((ctx.business || {}).name || '') + '</p><p>' + esc((ctx.business || {}).address || '') + '</p><p>Unsubscribe: ' + esc(ctx.unsubscribeUrl) + '</p>'),
+      used_fields: used, used_blocks: usedBlocks };
+  }
+
+  return { render: render, longDate: longDate, escapeHtml: esc };
+});
