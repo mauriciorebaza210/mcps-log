@@ -11,11 +11,11 @@ Resume in any Claude Code session with `/email-engine`.
   2. ✅ **4b Apps Script adapter** (built 2026-11-02; runs for real in 4e): `Env.js` over Sheets / PropertiesService / LockService / GmailApp; `Setup.js` creates the engine tabs, the separate Journal spreadsheet and the Drive folders; `Planner.js` builds today's plan with `decide()`.
   3. ✅ **4c Revisions** (built 2026-11-02; `eeApprove` dry-renders, freezes and hashes; send re-checks the hash): approve → immutable copy + sha256; integrity check at send.
   4. **4d Guarded deploy:** `scripts/ee-deploy.mjs` + a one-time `clasp --user tony login` (Mau, in a terminal).
-  5. **4e Sandbox sends:** as Tony, run setup, approve both revisions, add test contacts (Mau's address), Run now.
+  5. ✅ **4e Sandbox sends** (2026-11-02: the B Intro and C Welcome were delivered from antonio@ to Mau; an Intro interrupted by a Gmail-permission error was recovered as attempt 2, one email; 3 real-world fixes deployed: quota reserve 200→20 (Tony's quota is 100/day), clean stop on Gmail errors, crashed runs logged): as Tony, run setup, approve both revisions, add test contacts (Mau's address), Run now.
   6. **4f Sandbox suite:** the SB rows with deterministic fault injection, in a separate sandbox spreadsheet so the engine's real sheets stay clean.
 - **Built:** 4d guarded deploy, `npm run ee:deploy "<what changed>"` (`scripts/ee-deploy.mjs`): it checks the project, the deployment and the Tony login, syncs, runs the tests, pushes, deploys as Tony, then checks the live engine runs as antonio@ on the new version, rolling back if not.
-- **Next action:** Mau: turn on the Apps Script API for Tony and run `clasp --user tony login` once. Then Claude runs the first deploy, and Mau runs the 4e steps as Tony.
-- **Blocked on / waiting for:** the one-time Tony login for clasp (Mau).
+- **Next action:** Mau runs `eeRunNow` once more (expect 0 sent, contact B1 → B2) and checks both emails on his phone; then 4f, the sandbox suite.
+- **Blocked on / waiting for:** nothing. Deploys run as Tony via `npm run ee:deploy` (live @6, cp4-3).
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library; test emails may go to Mau.
 
