@@ -10,7 +10,7 @@ Each spike records what was measured, how, and what it changes in PLAN.md. CP1 c
 | 2c | Interrupted sends and orphan drafts | **done, inconclusive** | no call was cut off mid-flight (0/8); see below |
 | 2d | Auto-reply and bounce headers | **partial** | auto-reply headers readable; bounce rows captured the wrong message (script bug) |
 | 3 | Unsubscribe ordering + lock-hold p50/p95 | **done 2026-11-02** | contract HELD 6/6; authorize hold p95 1.70 s (budget 2 s) |
-| 4 | Service-account read latency and bytes per op | not started (needs the read path, CP5 prep) | |
+| 4 | Service-account read latency and bytes per op | **done 2026-11-02** | launch size: every page read ≤ 360 KB and ≤ 0.41 s; budgets met |
 | 5 | `Comms_Optouts` and `Comms_Log` exist live | **done 2026-11-02** | both exist; Settings spreadsheet found |
 | 6 | Node test glob discovers the whole suite | **done 2026-11-02** | `node --test "<glob>"` correct; plain `node <glob>` skips files |
 
@@ -85,6 +85,41 @@ Inside *authorize*, p95 by step: Inbox lookup 590 ms, opt-out lookup (separate s
 - All three sections are inside the budget, but authorize p95 is at 85% of it with a 2,000-row opt-out file. **Plan note:** authorize is the section to watch. If production pushes p95 over 2 s, the first fix is a CacheService suppression flag checked before the TextFinder lookups (both are already in the plan's gate), then a per-run in-memory opt-out snapshot refreshed only when an ingest lands.
 - Script bug, corrected in this analysis: the logger wrote rows by position, so *bookkeeping* times landed in the `lock_wait_ms` column of `3_sections`. The figures above read the right column.
 
+## 4. Read speed and bytes per page (done 2026-11-02)
+`email-engine/spikes/phase0/spike4-read.mjs` filled a blank spreadsheet Mau shared with the portal's service account (the service account itself may not create files: 403), timed each read pattern 6 times with one `values:batchGet`, then removed its tabs. Bytes are the decoded JSON from the Sheets API with `prettyPrint=false`. Measured from Mau's Mac; Vercel will be re-measured at CP6.
+
+**Launch size (2x the initial workload: 300 contacts, 1,200 deliveries, 3,000 events), the size the mandatory budgets are judged at:**
+
+| Read | Bytes | Cold | Warm p50 | Warm max |
+|---|---|---|---|---|
+| Overview, all columns | 359 KB | 409 ms | 255 ms | 289 ms |
+| Overview, only the columns the page shows | 180 KB | 208 ms | 226 ms | 250 ms |
+| Contacts page | 80 KB | 232 ms | 209 ms | 291 ms |
+| Tracking detail for one email | 231 KB | 215 ms | 240 ms | 249 ms |
+| All deliveries, no archiving | 463 KB | 319 ms | 299 ms | 341 ms |
+| Raw events, one month | 621 KB | 518 ms | 285 ms | 341 ms |
+
+Mandatory budgets: overview read p95 < 1.5 s ✔ (≤ 0.41 s); overview payload < 1 MB ✔ (359 KB, 180 KB with narrow columns).
+
+**Benchmark size (5,000 contacts, 20,000 deliveries, 30,000 events), to find where it breaks:**
+
+| Read | Bytes | Cold | Warm p50 | Warm max |
+|---|---|---|---|---|
+| Overview, all columns | 3.2 MB | 925 ms | 1,407 ms | **2,801 ms** |
+| Overview, narrow columns | 1.6 MB | 613 ms | 616 ms | 645 ms |
+| Contacts page | 1.3 MB | 410 ms | 395 ms | 473 ms |
+| Tracking detail for one email | 1.2 MB | 393 ms | 400 ms | 447 ms |
+| All deliveries, no archiving | 7.8 MB | 1,827 ms | 1,506 ms | 1,639 ms |
+| Raw events, one month | 6.3 MB | 1,065 ms | 945 ms | 1,087 ms |
+
+`prettyPrint=false` alone halved every payload (the first benchmark run without it: overview 6.5 MB, deliveries 15.8 MB, events 11.8 MB).
+
+**Plan changes from this spike:**
+1. Reads use **only the columns each page shows** and `prettyPrint=false`. That halves bytes again and keeps the overview flat at ~0.6 s even at 5,000 contacts.
+2. **Pages never read the raw Events sheet.** A month of events is 6.3 MB at benchmark size. The engine keeps each delivery's recent event list (last 25) in its Engagement row (`events_json`), which the tracking drawer reads. Raw Events stay the record of truth, used for re-classification and CSV export only.
+3. **Archiving old Deliveries is required**, not optional: unarchived, the read grows to 7.8 MB / 1.5 s.
+4. **New measured migration trigger:** narrow overview payload > 1 MB, which is about 3,000 contacts at this shape. Then switch to the precomputed read-model sheet (Performance fallback 1).
+
 ## 5. Shared Comms tabs
 - The portal's Settings spreadsheet (the one its Apps Script is bound to) is **"Chem Log"**, ID `1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U`. It was the only match for the portal's own tabs. This becomes the engine's `settings_ss_id`.
 - `Comms_Optouts` **exists**, with 0 rows. Headers: `email, scope, opted_out_at, source, recipient_id, removed_at, removed_by`, which matches what the plan's append-only writes need.
@@ -103,5 +138,4 @@ Inside *authorize*, p95 by step: Inbox lookup 590 ms, opt-out lookup (separate s
 **Conclusion:** `npm run test:ee` = `node --test "tests/email-engine-*.test.js"` is correct. No plan change needed.
 
 ## Still open for CP1
-- **Spike 4**: read latency and bytes per op through the service account, on a synthetic engine spreadsheet.
 - Optional: re-run 2d with the bounce fix.

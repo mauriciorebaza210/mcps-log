@@ -129,6 +129,12 @@ The tag is the rollback point (`git checkout ee/cpN-…`). Nothing reaches `main
 - **No automatic duplicates (unconditional for this release).** Once a delivery enters `sending`, it **never automatically returns to send eligibility**, whatever any experiment shows.
 - **Interrupted execution resolves by evidence.** The delivery ends up `sent` (its token is found in Sent), `reconcile` (waiting for the grace period), or `unknown` (a human decides).
 - **Exactly-one delivery cannot be guaranteed.** If execution dies just before Gmail accepts the message, it stays unsent until a human resolves it. At this volume that tradeoff is accepted. Phase 0 results are operational guidance (grace periods, runbook), not proof.
+- **Phase 0 checked these guarantees against measurements (SPIKES.md, 2026-11-02) and none needed weakening:**
+  - Drafts disappear on send, and sent mail is searchable within seconds (G = 2 min, G2 = 15 min).
+  - Unsubscribe ordering held in 6 of 6 cases.
+  - Lock-hold p95 is inside the budget.
+  - The engine runs as Tony only when Tony deploys it (enforced by the deploy check and the owner guard).
+  - No timing-based kill could interrupt a call, so interrupted sends are tested by fault injection.
 - **Unsubscribe cutoff (precise).** A successfully recorded unsubscribe blocks every **send authorization** that comes after it. A delivery that was already authorized or in flight may complete. The authorization point and its ordering are defined under *Lock boundaries*.
 - **Stop signals:**
   - Durable: unsubscribe, form submit, replies and bounces (the mailbox can be re-scanned).
@@ -567,7 +573,10 @@ Any resend (automatic or human) first passes the full pre-send gate:
   - Write acknowledgement: p95 < 3 s, with an optimistic UI
 - **Bounded backend cost:**
   - Reads touch only Contacts, Steps, Enrollments (active), Deliveries (last 60 days), the Engagement summary and the current Runs, **never raw Events**.
-  - Events are monthly sheets; older Deliveries are archived to `Deliveries_YYYY`.
+  - Reads request **only the columns each page shows**, with `prettyPrint=false` (spike 4: each halves the payload).
+  - The tracking drawer's per-delivery event list comes from `Engagement.events_json` (the last 25 events, kept by the engine), not from raw Events (spike 4: one Events month is 6.3 MB at benchmark size). Raw Events are read only for re-classification and CSV export.
+  - Events are monthly sheets; older Deliveries are archived to `Deliveries_YYYY` (spike 4: without archiving, the read grows to 7.8 MB / 1.5 s).
+  - **Measured (spike 4, from a dev machine, at launch size):** overview 359 KB / ≤ 0.41 s; narrow columns 180 KB. Mandatory budgets met with wide margin; re-measured from Vercel at CP6.
   - **The benchmarks record bytes fetched and ranges scanned per op, as well as latency.**
 
 ## Operations
@@ -578,6 +587,7 @@ Any resend (automatic or human) first passes the full pre-send gate:
 - **Migration triggers:**
   - run > 150 s on 3 consecutive runs
   - an Events month > 100k rows
+  - narrow overview payload > 1 MB (spike 4: about 3,000 contacts at the current shape), which means switch to the precomputed read-model sheet
   - read p95 > 1.5 s for 7 days
   - > 500 sends/day
   - Sheets 429 errors on more than one day a week
@@ -795,3 +805,4 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
 - 2026-11-02: Answers from Mau: the "3-1 report" is the 3-day startup summary (portal-built from the three day logs); the Startup Summary email's other contents come from its assigned template; **every email sends from Tony's address**; PDFs live in an **Attachment Library** with their own versions and approvals, so they can be added after launch and revised without re-approving each email. Added failure rows 56–57; CP7 no longer requires the PDFs.
 - 2026-11-02: Phase 0 spike results (SPIKES.md). Grace periods set to G = 2 min, G2 = 15 min (spike 2b). Recovery must treat `getDraft(missing)` as throwing (spike 2a). Timing-based kills couldn't interrupt a call (spike 2c), so the sandbox rows for interrupted sends and orphan drafts (1, 3, 4) use deterministic fault injection. Unsubscribe ordering held 6/6 and lock-hold p95 is inside the 2 s budget (spike 3); authorize is the section to watch. Settings spreadsheet = "Chem Log", `1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U`, with both `Comms_Optouts` and `Comms_Log` present (spike 5). Guarantees unchanged.
 - 2026-11-02: Spike 1 result: the web app runs as whoever deployed it last. Every deploy is now done as Tony (clasp named login), and the deploy script asserts `effective_user = antonio@` after each deploy, rolling back if wrong. Engine spreadsheet, script and deployment created under antonio@; IDs recorded under Deployment.
+- 2026-11-02: Spike 4 results: at launch size every page read is ≤ 360 KB and ≤ 0.41 s, so the mandatory read budgets are met. Reads now request only the columns each page shows, with `prettyPrint=false`; the tracking drawer reads per-delivery events from `Engagement.events_json`, never raw Events; Deliveries archiving is required; new migration trigger: narrow overview > 1 MB (~3,000 contacts). Guarantees section notes that Phase 0 confirmed them.

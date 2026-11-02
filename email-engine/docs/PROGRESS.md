@@ -9,7 +9,8 @@ Resume in any Claude Code session with `/email-engine`.
 - **Done:** spike 6 (Node test glob). Result in SPIKES.md: the planned `node --test` command is correct, and the plain `node <glob>` form silently skips files.
 - **Done 2026-11-02:** spikes 2a, 2b, 2c (inconclusive by design limits), 3 and 5, plus 2d partially. Results and plan changes in SPIKES.md: grace periods G = 2 min / G2 = 15 min; unsubscribe ordering held 6/6; lock-hold p95 inside budget; Settings spreadsheet found ("Chem Log") with both Comms tabs.
 - **Done 2026-11-02:** spike 1. The web app runs as whoever deployed last, so every deploy is done as Tony (clasp named login + identity check). Engine spreadsheet, script and deployment exist under antonio@.
-- **Next action:** spike 4 (read speed and bytes per op on a synthetic engine spreadsheet). Then close CP1.
+- **Done 2026-11-02:** spike 4. At launch size every page read is ≤ 360 KB and ≤ 0.41 s (budgets met); the plan now reads only needed columns and never reads raw Events on page load.
+- **Next action:** close CP1 (all exit criteria met; 2d bounce rows are a known script bug, covered by the existing bounce parser). Then CP2: the rules engine (`decide()`) and its worked-example tests. That is pure code, with nothing needed from Mau or Tony.
 - **Blocked on / waiting for:** nothing.
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library.
