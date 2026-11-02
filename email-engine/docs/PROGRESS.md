@@ -7,9 +7,10 @@ Resume in any Claude Code session with `/email-engine`.
 - **Checkpoint in progress:** CP1 `spikes` (Phase 0 discovery)
 - **Goal:** measure the things the guarantees depend on before writing engine code. Results go in `email-engine/docs/SPIKES.md`, and the Guarantees section of PLAN.md is updated to match.
 - **Done:** spike 6 (Node test glob). Result in SPIKES.md: the planned `node --test` command is correct, and the plain `node <glob>` form silently skips files.
-- **Next action:** write the spike scripts for spikes 2–4, then run them in the chosen Google account.
+- **Spike scripts ready:** `email-engine/spikes/phase0/` (Code.gs + README.md) cover spikes 2, 3 and 5. Spike 4 (read speed) comes after, once the service-account read path is set up.
+- **Next action:** Mau runs the spike script in his account (README steps; ~10 min hands-on + ~80 min unattended) and shares the results spreadsheet.
 - **Blocked on / waiting for:**
-  - Which Google account runs the send-boundary spikes (2–3)? Mau's account is fine, sending only to himself.
+  - Mau running the spikes (account decided: mauricio@, a throwaway project).
   - Tony's time (~15 min) to create the engine spreadsheet + script under antonio@ and deploy the web app (spike 1).
   - A look at the live Settings spreadsheet for the `Comms_Optouts` and `Comms_Log` tabs (spike 5).
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
