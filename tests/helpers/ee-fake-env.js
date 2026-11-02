@@ -17,12 +17,12 @@ function loadCore() {
 const MIN = 60 * 1000;
 const T0 = Date.parse('2026-11-02T15:00:00Z');
 const OWNER = 'antonio@mcpoolsolutions.org';
-const ID = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Holds: 'key', Inbox: 'inbox_id', Secondaries: 'op_ref', Suppressions_Test: 'email_norm' };
+const ID = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Revisions: 'revision_id', Holds: 'key', Inbox: 'inbox_id', Secondaries: 'op_ref', Suppressions_Test: 'email_norm' };
 
 function fakeWorld() {
   const w = { now: T0, user: OWNER, owner: OWNER, enabled: true, paused: [], quota: 1500,
     props: {}, cache: {}, lockHeld: false, dead: false, n: 0,
-    journal: [], tables: { Deliveries: [], Enrollments: [], Contacts: [], Holds: [], Inbox: [], Secondaries: [], Suppressions_Test: [] }, meta: {},
+    journal: [], tables: { Deliveries: [], Enrollments: [], Contacts: [], Revisions: [], Holds: [], Inbox: [], Secondaries: [], Suppressions_Test: [] }, meta: {},
     optouts: [], drafts: {}, outbox: [], alerts: [], steps: {}, revisions: {}, faults: {}, hooks: {} };
   const fault = name => { const f = w.faults[name]; if (!f) return null; if (f.times !== undefined && f.times-- <= 0) return null; return f; };
   const alive = () => { if (w.dead) throw { killed: true, message: 'process is dead' }; };

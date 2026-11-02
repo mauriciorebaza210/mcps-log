@@ -8,12 +8,12 @@ Resume in any Claude Code session with `/email-engine`.
 - **Goal:** the engine runs in Tony's Apps Script project and sends branded test emails (B Intro, C Welcome) from antonio@ to Mau; the sandbox-mailbox failure rows (1–5, 9, 35a/b, 36–40) pass against real Gmail.
 - **Steps:**
   1. ✅ **4a Renderer** (done 2026-11-02; 13 tests; previews checked in Chrome at desktop width, phone check happens on the real test emails in 4e): `js/lib/email-render.js` (shell + merge fields + blocks + validation; pure, shared with the portal preview) and the B Intro and C Welcome bodies + PoolSchool block, with Node tests.
-  2. **4b Apps Script adapter:** `Env.js` over Sheets / PropertiesService / LockService / GmailApp; `Setup.js` creates the engine tabs, the separate Journal spreadsheet and the Drive folders; `Planner.js` builds today's plan with `decide()`.
-  3. **4c Revisions:** approve → immutable copy + sha256; integrity check at send.
+  2. ✅ **4b Apps Script adapter** (built 2026-11-02; runs for real in 4e): `Env.js` over Sheets / PropertiesService / LockService / GmailApp; `Setup.js` creates the engine tabs, the separate Journal spreadsheet and the Drive folders; `Planner.js` builds today's plan with `decide()`.
+  3. ✅ **4c Revisions** (built 2026-11-02; `eeApprove` dry-renders, freezes and hashes; send re-checks the hash): approve → immutable copy + sha256; integrity check at send.
   4. **4d Guarded deploy:** `scripts/ee-deploy.mjs` + a one-time `clasp --user tony login` (Mau, in a terminal).
   5. **4e Sandbox sends:** as Tony, run setup, approve both revisions, add test contacts (Mau's address), Run now.
   6. **4f Sandbox suite:** the SB rows with deterministic fault injection, in a separate sandbox spreadsheet so the engine's real sheets stay clean.
-- **Next action:** 4b, the Apps Script adapter, setup and planner.
+- **Next action:** 4d, the guarded deploy script; then Mau runs `clasp --user tony login` once.
 - **Blocked on / waiting for:** nothing until 4d (Mau's `clasp --user tony login`).
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library; test emails may go to Mau.

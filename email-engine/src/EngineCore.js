@@ -42,7 +42,9 @@ var EE_CONST = {
 function EE_createCore(env) {
   'use strict';
   var C = EE_CONST;
-  var ID_FIELD = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Inbox: 'inbox_id',
+  // Journaled entity types and the main-sheet table each one materializes into.
+  var TYPE_TABLE = { delivery: 'Deliveries', enrollment: 'Enrollments', contact: 'Contacts', revision: 'Revisions' };
+  var ID_FIELD = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Revisions: 'revision_id', Inbox: 'inbox_id',
     Secondaries: 'op_ref', Suppressions_Test: 'email_norm' };
   var REOPENABLE = { released: 1, cancelled: 1 };
   var AWAITING_OUTCOME = { sending: 1, reconcile: 1 };
@@ -111,9 +113,7 @@ function EE_createCore(env) {
   }
   function applyRecord(rec) {
     var d = rec.data || {};
-    if (rec.type === 'delivery') return upsertVersioned('Deliveries', d, rec.seq);
-    if (rec.type === 'enrollment') return upsertVersioned('Enrollments', d, rec.seq);
-    if (rec.type === 'contact') return upsertVersioned('Contacts', d, rec.seq);
+    if (TYPE_TABLE[rec.type]) return upsertVersioned(TYPE_TABLE[rec.type], d, rec.seq);
     if (rec.type === 'inbox') {
       if (env.store.get('Inbox', d.inbox_id)) return;
       env.store.upsert('Inbox', merge(d, { last_seq: rec.seq }));
@@ -499,12 +499,12 @@ function EE_createCore(env) {
     });
   }
 
-  // Contact and enrollment changes are journaled like deliveries, so a restore
+  // Contact, enrollment and revision changes are journaled like deliveries, so a restore
   // can rebuild them (PLAN.md → Journal coverage). During a run pass the lease;
   // admin edits outside a run take the plain lock.
   function commitEntity(type, data, opId, lease) {
-    var table = type === 'contact' ? 'Contacts' : type === 'enrollment' ? 'Enrollments' : null;
-    if (!table) throw new Error('commitEntity: unsupported type ' + type);
+    var table = TYPE_TABLE[type];
+    if (!table || type === 'delivery') throw new Error('commitEntity: unsupported type ' + type);
     var body = function () {
       var current = env.store.get(table, data[ID_FIELD[table]]);
       return commitLocked({ op_id: opId, type: type, entity_id: data[ID_FIELD[table]], data: merge(current, data) }).data;
