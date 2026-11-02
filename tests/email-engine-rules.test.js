@@ -298,3 +298,12 @@ test('Ended attempts: released/cancelled re-plan; abandoned and failed never do'
   w.deliveries = [{ key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', state: 'failed' }];
   assert.notEqual(L.decide(Object.assign({}, w, { today: '2026-11-20' })).enrollments[0].status, 'completed');
 });
+
+test('A 7 pm send counts as that local day, not the next UTC day', () => {
+  const w = world([contact('c1', 'B')], [enrollment('e1', 'c1', 'B', '2026-10-26')]);
+  // 7:30 pm CDT on Oct 26 = 00:30 UTC on Oct 27
+  w.deliveries = [{ key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', mode: 'production', state: 'sent', sent_at: '2026-10-27T00:30:00Z' }];
+  assert.equal(outcomeOn(w, '2026-10-26', 'e1:b_followup:1').due, '2026-10-30', 'Follow Up = local send day + 4');
+  assert.equal(L.localDay('2026-10-27T00:30:00Z', 'America/Chicago'), '2026-10-26');
+  assert.equal(L.localDay('2026-10-26', 'America/Chicago'), '2026-10-26');
+});

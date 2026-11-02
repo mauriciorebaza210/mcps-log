@@ -42,7 +42,7 @@ var EE_CONST = {
 function EE_createCore(env) {
   'use strict';
   var C = EE_CONST;
-  var ID_FIELD = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Inbox: 'inbox_id',
+  var ID_FIELD = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Inbox: 'inbox_id',
     Secondaries: 'op_ref', Suppressions_Test: 'email_norm' };
   var REOPENABLE = { released: 1, cancelled: 1 };
   var AWAITING_OUTCOME = { sending: 1, reconcile: 1 };
@@ -113,6 +113,7 @@ function EE_createCore(env) {
     var d = rec.data || {};
     if (rec.type === 'delivery') return upsertVersioned('Deliveries', d, rec.seq);
     if (rec.type === 'enrollment') return upsertVersioned('Enrollments', d, rec.seq);
+    if (rec.type === 'contact') return upsertVersioned('Contacts', d, rec.seq);
     if (rec.type === 'inbox') {
       if (env.store.get('Inbox', d.inbox_id)) return;
       env.store.upsert('Inbox', merge(d, { last_seq: rec.seq }));
@@ -239,7 +240,16 @@ function EE_createCore(env) {
   }
   // Stage A: render + draft (outside the lock), then record the draft id.
   function prepare(lease, row) {
-    var msg = env.render(row);
+    var msg;
+    try { msg = env.render(row); }
+    catch (e) {
+      // A template that fails its checks (missing value, integrity, unsafe HTML)
+      // fails this delivery for a person to fix; it is never retried daily.
+      var why = String(e && e.message || e).slice(0, 500);
+      fenced(lease, function () { commitDelivery(row, { state: 'failed', error: why }); });
+      try { env.alert('delivery_failed', row.delivery_id + ': ' + why); } catch (e2) { /* the state is recorded */ }
+      return null;
+    }
     var draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token });
     return fenced(lease, function () { return commitDelivery(row, { state: 'drafted', draft_id: draftId }); });
   }
@@ -353,6 +363,7 @@ function EE_createCore(env) {
       var c = claim(lease, item);
       if (!c.row) return { result: 'skipped', reason: c.skipped, fatal: c.fatal };
       row = prepare(lease, c.row);
+      if (!row) return { result: 'failed' };
     }
     var a = authorize(lease, row);
     if (!a.ok) return { result: 'cancelled', reason: a.reason, fatal: a.fatal };
@@ -361,7 +372,7 @@ function EE_createCore(env) {
   }
 
   // ── The run ──
-  // opts: { trigger, plan: function () -> [due items in send order], dailyCap, budgetMs, sentToday }
+  // opts: { trigger, plan: function (lease) -> [due items in send order], dailyCap, budgetMs, sentToday }
   function run(opts) {
     opts = opts || {};
     var started = env.now();
@@ -378,7 +389,7 @@ function EE_createCore(env) {
         env.withLock(function () { ensureCaughtUp(); processSecondariesLocked(); });
         var adopted = reconcileAll(lease);
         summary.adopted = adopted.length;
-        var queue = adopted.concat(opts.plan ? opts.plan() : []);
+        var queue = adopted.concat(opts.plan ? opts.plan(lease) : []);   // planned under this run's lease
         var sentToday = Number(opts.sentToday || 0);
         for (var i = 0; i < queue.length; i++) {
           if (opts.budgetMs && env.now() - started > opts.budgetMs) return stop('time_budget');
@@ -389,6 +400,7 @@ function EE_createCore(env) {
           if (r.result === 'sent') summary.sent++;
           else if (r.result === 'reconcile') summary.reconcile++;
           else if (r.result === 'cancelled') summary.cancelled++;
+          else if (r.result === 'failed') summary.failed = (summary.failed || 0) + 1;
           else summary.skipped++;
           if (r.fatal) { try { env.alert('run_stopped', r.reason); } catch (e) { /* the run still stops */ } return stop(r.reason); }
         }
@@ -487,8 +499,21 @@ function EE_createCore(env) {
     });
   }
 
+  // Contact and enrollment changes are journaled like deliveries, so a restore
+  // can rebuild them (PLAN.md → Journal coverage). During a run pass the lease;
+  // admin edits outside a run take the plain lock.
+  function commitEntity(type, data, opId, lease) {
+    var table = type === 'contact' ? 'Contacts' : type === 'enrollment' ? 'Enrollments' : null;
+    if (!table) throw new Error('commitEntity: unsupported type ' + type);
+    var body = function () {
+      var current = env.store.get(table, data[ID_FIELD[table]]);
+      return commitLocked({ op_id: opId, type: type, entity_id: data[ID_FIELD[table]], data: merge(current, data) }).data;
+    };
+    return lease ? fenced(lease, body) : env.withLock(function () { ensureCaughtUp(); return body(); });
+  }
+
   return {
-    run: run, ingest: ingest, resend: resend, markSent: markSent, abandon: abandon,
+    run: run, ingest: ingest, resend: resend, markSent: markSent, abandon: abandon, commitEntity: commitEntity,
     // Exposed for tests and for the stage-by-stage concurrency checks.
     acquireLease: acquireLease, renewLease: renewLease, releaseLease: releaseLease,
     claim: claim, prepare: prepare, authorize: authorize, sendAuthorized: sendAuthorized,

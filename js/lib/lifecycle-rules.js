@@ -53,6 +53,15 @@
       year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   }
 
+  // A sent_at timestamp is UTC; its calendar day is the local one. A plain
+  // YYYY-MM-DD value is already a local date.
+  function localDay(value, tz) {
+    var v = String(value || '');
+    if (!v) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    var ms = Date.parse(v);
+    return isNaN(ms) ? v.slice(0, 10) : localDate(new Date(ms), tz);
+  }
   function norm(email) { return String(email || '').trim().toLowerCase(); }
   function deliveryKey(enrollmentId, stepId, occurrence) { return enrollmentId + ':' + stepId + ':' + occurrence; }
   function indexBy(list, field) { var m = {}; (list || []).forEach(function (x) { m[x[field]] = x; }); return m; }
@@ -169,7 +178,7 @@
         }
 
         if (rec && rec.state === 'sent') {
-          d.outcome = 'sent'; d.sent_on = String(rec.sent_at || '').slice(0, 10);
+          d.outcome = 'sent'; d.sent_on = localDay(rec.sent_at, ctx.tz);
           if (step.anchor === 'startup') startupSent = true;
         } else if (rec && IN_FLIGHT[rec.state]) {
           d.outcome = 'in_flight'; d.reason = rec.state;
@@ -269,7 +278,8 @@
   //          commsSentToday: [email_norm], paused: {all, buckets} }
   // output: { today, deliveries: [...], enrollments: [...], due: [...in send order] }
   function decide(input) {
-    var today = input.today || localDate(input.now || new Date(), input.tz);
+    var tz = input.tz || 'America/Chicago';
+    var today = input.today || localDate(input.now || new Date(), tz);
     var supp = {};
     (input.suppressions || []).forEach(function (s) {
       var k = (s.mode || 'production') + '|' + norm(s.email_norm);
@@ -277,12 +287,12 @@
     });
     var sentToday = {};
     (input.deliveries || []).forEach(function (r) {
-      if (r.state === 'sent' && String(r.sent_at || '').slice(0, 10) === today) sentToday[(r.mode || 'production') + '|' + r.contact_id] = true;
+      if (r.state === 'sent' && localDay(r.sent_at, tz) === today) sentToday[(r.mode || 'production') + '|' + r.contact_id] = true;
     });
     var commsToday = {}; (input.commsSentToday || []).forEach(function (e) { commsToday[norm(e)] = true; });
     var signalsByEnrollment = {};
     (input.signals || []).forEach(function (s) { (signalsByEnrollment[s.enrollment_id] = signalsByEnrollment[s.enrollment_id] || []).push(s); });
-    var ctx = { today: today, rulesets: input.rulesets || {}, contacts: indexBy(input.contacts, 'contact_id'),
+    var ctx = { today: today, tz: tz, rulesets: input.rulesets || {}, contacts: indexBy(input.contacts, 'contact_id'),
       deliveries: indexBy(input.deliveries, 'key'), holds: input.holds || {}, signalsByEnrollment: signalsByEnrollment,
       paused: input.paused || {}, sentToday: sentToday, commsToday: commsToday,
       suppression: function (mode, email) { return supp[(mode || 'production') + '|' + norm(email)] || ''; } };
@@ -305,6 +315,7 @@
     decideEnrollment: decideEnrollment,
     deliveryKey: deliveryKey,
     localDate: localDate,
+    localDay: localDay,
     addDays: addDays,
     daysBetween: daysBetween
   };
