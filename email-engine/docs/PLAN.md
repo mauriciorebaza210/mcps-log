@@ -290,7 +290,7 @@ Stage B: send invoked (outcome may be ambiguous)
      │  draft.send()
      ├─ returns message → Stage C
      └─ exception / timeout / execution killed → reconcile   (NEVER back to eligible)
-  reconcile (Sent searched after grace G, again after G2; G and G2 measured in Phase 0):
+  reconcile (Sent searched after grace G = 2 min, again after G2 = 15 min; set from spike 2b, where every message was searchable within 8.5 s):
      token found in Sent → sent (capture message_id / thread_id)
      not found after G2 (draft present or not) → unknown (human: Mark sent / Resend / Cancel)
      A delivery that has been in `sending` NEVER returns to automatic eligibility.
@@ -788,3 +788,4 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
 - 2026-10-29: Plan approved (third review, 9.3/10: approved to build through the sandbox B/C slice). Priority set to MCP Legacy (B) + MCP Startup (C); resume protocol and checkpoints CP0–CP10 added.
 - 2026-10-29: **C startup visit emails added** (Mau): Welcome gets Safety Guidelines + Startup Guide attachments; each startup day sends On the Way + a customer Startup Day Log; the last startup day sends a Startup Summary (summary report + pool school scheduling). Added: *Event-triggered emails* and *Attachments* sections, 3 C event steps in the matrix, failure rows 47–55, and CP7 split into `bc-scheduled` → `startup-events` → `bc-live` (CP11+ for other buckets). Event-triggered sending pulled forward from Phase 4. Welcome's PoolSchool block no longer needs a date. Sandbox slice (CP4–CP6) unchanged. Open: what the "3-1 report" is and what else the summary contains; who the startup emails come from.
 - 2026-11-02: Answers from Mau: the "3-1 report" is the 3-day startup summary (portal-built from the three day logs); the Startup Summary email's other contents come from its assigned template; **every email sends from Tony's address**; PDFs live in an **Attachment Library** with their own versions and approvals, so they can be added after launch and revised without re-approving each email. Added failure rows 56–57; CP7 no longer requires the PDFs.
+- 2026-11-02: Phase 0 spike results (SPIKES.md). Grace periods set to G = 2 min, G2 = 15 min (spike 2b). Recovery must treat `getDraft(missing)` as throwing (spike 2a). Timing-based kills couldn't interrupt a call (spike 2c), so the sandbox rows for interrupted sends and orphan drafts (1, 3, 4) use deterministic fault injection. Unsubscribe ordering held 6/6 and lock-hold p95 is inside the 2 s budget (spike 3); authorize is the section to watch. Settings spreadsheet = "Chem Log", `1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U`, with both `Comms_Optouts` and `Comms_Log` present (spike 5). Guarantees unchanged.

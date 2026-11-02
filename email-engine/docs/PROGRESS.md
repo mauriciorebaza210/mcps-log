@@ -7,12 +7,10 @@ Resume in any Claude Code session with `/email-engine`.
 - **Checkpoint in progress:** CP1 `spikes` (Phase 0 discovery)
 - **Goal:** measure the things the guarantees depend on before writing engine code. Results go in `email-engine/docs/SPIKES.md`, and the Guarantees section of PLAN.md is updated to match.
 - **Done:** spike 6 (Node test glob). Result in SPIKES.md: the planned `node --test` command is correct, and the plain `node <glob>` form silently skips files.
-- **Spike scripts ready:** `email-engine/spikes/phase0/` (Code.gs + README.md) cover spikes 2, 3 and 5. Spike 4 (read speed) comes after, once the service-account read path is set up.
-- **Next action:** Mau runs the spike script in his account (README steps; ~10 min hands-on + ~80 min unattended) and shares the results spreadsheet.
+- **Done 2026-11-02:** spikes 2a, 2b, 2c (inconclusive by design limits), 3 and 5, plus 2d partially. Results and plan changes in SPIKES.md: grace periods G = 2 min / G2 = 15 min; unsubscribe ordering held 6/6; lock-hold p95 inside budget; Settings spreadsheet found ("Chem Log") with both Comms tabs.
+- **Next action:** spike 1 with Tony; spike 4 (read speed) setup.
 - **Blocked on / waiting for:**
-  - Mau running the spikes (account decided: mauricio@, a throwaway project).
   - Tony's time (~15 min) to create the engine spreadsheet + script under antonio@ and deploy the web app (spike 1).
-  - A look at the live Settings spreadsheet for the `Comms_Optouts` and `Comms_Log` tabs (spike 5).
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library.
 
