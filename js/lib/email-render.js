@@ -154,7 +154,9 @@
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:' + BRAND.page + ';"><tr><td align="center" style="padding:24px 12px;">' +
       '<table role="presentation" class="wrap card" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#FFFFFF;border-radius:6px;overflow:hidden;">' +
       banner +
-      '<tr><td align="center" style="padding:26px 24px 16px;"><img src="' + ASSET + 'mcps-lockup.png" width="186" height="43" alt="' + esc(b.name || 'Mission Custom Pool Solutions') + '" style="display:block;border:0;width:186px;height:43px;" /></td></tr>' +
+      // The logo carries its own white badge: Gmail's dark mode darkens the card
+      // but never the image, so the navy lettering stays readable.
+      '<tr><td align="center" style="padding:18px 24px 8px;"><img src="' + ASSET + 'mcps-lockup-badge.png" width="214" height="59" alt="' + esc(b.name || 'Mission Custom Pool Solutions') + '" style="display:block;border:0;width:214px;height:59px;" /></td></tr>' +
       '<tr><td style="padding:0 44px;font-size:0;line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td height="3" style="background-color:' + BRAND.aqua + ';font-size:0;line-height:0;">&nbsp;</td></tr></table></td></tr>' +
       '<tr><td class="px" style="padding:26px 44px 8px;">' + parts.body + '</td></tr>' +
       details +

@@ -39,7 +39,7 @@ test('B Intro renders for a real contact: branded shell, merge fields, tracked C
   assert.deepEqual(r.errors, []); assert.equal(r.ok, true);
   assert.equal(r.subject, 'An introduction from Mission Custom Pools');
   assert.match(r.html, /Hi Maria,/);
-  assert.match(r.html, /mcps-lockup\.png/);                                    // shell logo
+  assert.match(r.html, /mcps-lockup-badge\.png/);                                    // shell logo
   assert.match(r.html, /Every pool matters\./);
   assert.match(r.html, /4640 South Flores Road, Elmendorf, TX 78112/);       // footer address (Mau, 2026-11-02)
   assert.match(r.html, /href="https:\/\/mcps-log\.vercel\.app\/api\/t\/u\?d=TEST"/);
