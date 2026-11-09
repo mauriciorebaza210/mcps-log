@@ -121,6 +121,9 @@ const LC_ISSUE = { no_recent_run: 'No daily run in over a day', last_run_crashed
   unresolved_reconcile: 'A send is still confirming', delivery_failed: 'An email failed', engine_unreadable: 'The engine can’t be reached' };
 const LC_ALERT = { delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped', run_crashed: 'Run crashed',
   journal_integrity: 'Safety pause', reply_scan_failed: 'Reply scan failed' };
+const LC_STOP = { clicked: 'clicked', replied: 'replied', form_submitted: 'requested service', suppressed_all: 'unsubscribed',
+  prerequisite_expired: 'expired', bucket_changed: 'moved group', manual: 'stopped by hand' };
+const lcStopWord_ = r => LC_STOP[r] || String(r || 'manual').replace(/_/g, ' ');
 function lcTag_(text, kind) { return '<span class="lc-tag ' + (kind || '') + '"><i></i>' + lcEsc_(text) + '</span>'; }
 function lcStateTag_(state) { const s = LC_STATE[state] || [state, '']; return lcTag_(s[0], s[1]); }
 function lcEvidence_(g) {
@@ -337,7 +340,7 @@ function lcContacts_() {
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
       const status = !seq ? lcTag_('Not enrolled', '') : seq.status === 'active' ? lcTag_('Active', 'live') :
-        seq.status === 'stopped' ? lcTag_('Stopped · ' + (seq.stop_reason || 'manual'), 'warn') : lcTag_(seq.status, '');
+        seq.status === 'stopped' ? lcTag_('Stopped · ' + lcStopWord_(seq.stop_reason), 'warn') : lcTag_(seq.status, '');
       return '<tr class="click" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0"><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' +
         lcEsc_(lcInitials_(c.first_name, c.last_name)) + '</span><div><b>' + lcEsc_([c.first_name, c.last_name].filter(Boolean).join(' ')) +
         (c.is_test ? ' <span class="lc-tag" style="height:18px;font-size:10.5px">Test</span>' : '') + '</b><small>' + lcEsc_(c.email) + '</small></div></div></td>' +
@@ -433,7 +436,7 @@ function lcStepTab_(D) {
 function lcContactBody_(d) {
   const c = d.contact;
   const enr = d.enrollments.map(e => '<span class="lc-tag ' + (e.status === 'active' ? 'live' : e.status === 'stopped' ? 'warn' : '') + '"><i></i>' +
-    lcEsc_(LC_SEQ[e.sequence_id] || e.sequence_id) + ' · ' + lcEsc_(e.status === 'stopped' ? 'stopped, ' + (e.stop_reason || 'manual') : e.status) + '</span>').join(' ');
+    lcEsc_(LC_SEQ[e.sequence_id] || e.sequence_id) + ' · ' + lcEsc_(e.status === 'stopped' ? 'stopped, ' + lcStopWord_(e.stop_reason) : e.status) + '</span>').join(' ');
   const tl = d.deliveries.length ? '<ul class="lc-tl">' + d.deliveries.map(x => '<li class="' + (x.state === 'sent' ? '' : 'off') + '"><b>' + lcEsc_(lcStepName_(x.step_id)) +
     '</b><small>' + lcEsc_(x.sent_at ? lcDate_(x.sent_at) : (LC_STATE[x.state] || [x.state])[0]) + '</small>' +
     '<div class="lc-ev" style="justify-content:flex-start;margin-top:6px">' + (x.state === 'sent' ? lcEvidence_(x.engagement) : lcStateTag_(x.state)) + '</div>' +
