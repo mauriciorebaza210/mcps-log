@@ -124,14 +124,15 @@ export function health(tables, now) {
   const lastDaily = daily[0] ? ms(daily[0].started_at) : 0;
   const enabled = String(cfg.engine_enabled) !== 'false';
   // Before the daily trigger is installed there's nothing to miss.
-  if (enabled && lastDaily && now - lastDaily > 26 * H) issues.push({ kind: 'no_recent_run', detail: 'no daily run since ' + daily[0].started_at });
-  if (runs[0] && /^crashed/.test(String(runs[0].stopped_reason))) issues.push({ kind: 'last_run_crashed', detail: String(runs[0].stopped_reason).slice(0, 200) });
+  // `detail` is for the alert email; `at` / `step_id` let the page word it properly.
+  if (enabled && lastDaily && now - lastDaily > 26 * H) issues.push({ kind: 'no_recent_run', at: daily[0].started_at, detail: 'no daily run since ' + daily[0].started_at });
+  if (runs[0] && /^crashed/.test(String(runs[0].stopped_reason))) issues.push({ kind: 'last_run_crashed', at: runs[0].started_at, detail: String(runs[0].stopped_reason).slice(0, 200) });
   (tables.Deliveries || []).forEach(d => {
     const since = ms(d.send_invoked_at || d.claimed_at);
     if ((d.state === 'unknown' || d.state === 'reconcile') && since && now - since > 24 * H) {
-      issues.push({ kind: 'unresolved_' + d.state, detail: d.delivery_id + ' since ' + (d.send_invoked_at || d.claimed_at) });
+      issues.push({ kind: 'unresolved_' + d.state, at: d.send_invoked_at || d.claimed_at, step_id: d.step_id, detail: d.delivery_id + ' since ' + (d.send_invoked_at || d.claimed_at) });
     }
-    if (d.state === 'failed' && now - ms(d.claimed_at) < 24 * H) issues.push({ kind: 'delivery_failed', detail: d.delivery_id + ': ' + String(d.error || '').slice(0, 160) });
+    if (d.state === 'failed' && now - ms(d.claimed_at) < 24 * H) issues.push({ kind: 'delivery_failed', at: d.claimed_at, step_id: d.step_id, detail: d.delivery_id + ': ' + String(d.error || '').slice(0, 160) });
   });
   const recentAlerts = (tables.Alerts || []).filter(a => now - ms(String(a.at).split(' ')[0]) < 24 * H).length;
   return { ok: issues.length === 0, issues, enabled, last_run_at: runs[0] ? runs[0].started_at : '',
@@ -158,6 +159,10 @@ export function buildOverview(tables, caps, now, opts = {}) {
     const rev = published[s.step_id];
     return {
       step_id: s.step_id, name: s.name, bucket: s.sequence_id, order: s.order, category: s.category, status: s.status,
+      timing: { anchor: s.anchor, offset: s.offset, repeat_every: s.repeat_every || 0, repeat_count: s.repeat_count || 0,
+        requires: s.requires || '', window_days: s.window_days, max_hold_days: s.max_hold_days },
+      stop_rules: (s.stop_rules || []).map(r => ({ signal: r.signal, min_confidence: r.min_confidence || '', stops: r.stops })),
+      audience_filter: s.audience_filter || null,
       audience: enrollments.filter(e => e.sequence_id === s.sequence_id && e.status === 'active').length,
       published: rev ? { revision_id: rev.revision_id, rev_no: rev.rev_no, subject: rev.subject, approved_at: rev.approved_at, approver: rev.approver } : null,
       counts: {
@@ -182,7 +187,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
   const h = health(tables, now);
   return {
     mode,
-    health: { ...h, issues: h.issues.map(i => ({ kind: i.kind, detail: caps.has('view_pii') ? i.detail : '' })) },
+    health: { ...h, issues: h.issues.map(i => ({ kind: i.kind, at: i.at || '', step_id: i.step_id || '', detail: caps.has('view_pii') ? i.detail : '' })) },
     engine: {
       enabled: String(cfg.engine_enabled) !== 'false', mode: cfg.engine_mode || 'test',
       paused_buckets: String(cfg.paused_buckets || '').split(',').map(x => x.trim()).filter(Boolean),
@@ -202,6 +207,27 @@ export function buildOverview(tables, caps, now, opts = {}) {
   };
 }
 
+// One email: its rules, content and every recipient's evidence (the drawer).
+export function buildStep(tables, caps, stepId, now, opts = {}) {
+  const ov = buildOverview(tables, caps, now, opts);
+  const step = ov.steps.find(s => s.step_id === stepId);
+  if (!step) return null;
+  const eng = engagementIndex(tables);
+  const contacts = {};
+  (tables.Contacts || []).forEach(c => { contacts[c.contact_id] = c; });
+  const rows = (tables.Deliveries || []).filter(d => d.step_id === stepId && d.mode === ov.mode).sort(byDesc('claimed_at'));
+  const links = {};
+  rows.forEach(d => { const g = eng[d.delivery_id]; Object.entries((g && g.links_json) || {}).forEach(([k, v]) => { links[k] = (links[k] || 0) + Number(v || 0); }); });
+  const rev = (tables.Revisions || []).filter(r => r.step_id === stepId).sort((a, b) => b.rev_no - a.rev_no)
+    .map(r => ({ revision_id: r.revision_id, rev_no: r.rev_no, status: r.status, subject: r.subject, preheader: r.preheader || '',
+      approver: r.approver || '', approved_at: r.approved_at || '' }));
+  return { mode: ov.mode, step, revisions: rev, links,
+    recipients: rows.map(d => {
+      const c = contacts[d.contact_id] || {};
+      return { ...deliveryView(d, caps, eng[d.delivery_id]), name: [c.first_name, c.last_name].filter(Boolean).join(' ') || d.contact_id };
+    }) };
+}
+
 export function buildContacts(tables, caps, opts = {}) {
   const q = String(opts.q || '').trim().toLowerCase();
   const pii = caps.has('view_pii');
@@ -212,7 +238,16 @@ export function buildContacts(tables, caps, opts = {}) {
   if (q) rows = rows.filter(c => [c.first_name, c.last_name].concat(pii ? [c.email_norm, c.address] : [])
     .some(v => String(v || '').toLowerCase().includes(q)));
   const limit = Math.min(Number(opts.limit) || 200, 1000);
-  return { total: rows.length, contacts: rows.slice(0, limit).map(c => contactView(c, caps)) };
+  // Where each person stands, without opening them: their sequence and last email.
+  const enr = {}, last = {};
+  (tables.Enrollments || []).forEach(e => { (enr[e.contact_id] = enr[e.contact_id] || []).push(e); });
+  (tables.Deliveries || []).forEach(d => { if (d.state === 'sent' && ms(d.sent_at) > ms(last[d.contact_id] && last[d.contact_id].sent_at)) last[d.contact_id] = d; });
+  return { total: rows.length, contacts: rows.slice(0, limit).map(c => {
+    const e = (enr[c.contact_id] || []).sort(byDesc('enrolled_on'))[0];
+    const l = last[c.contact_id];
+    return { ...contactView(c, caps), sequence: e ? { status: e.status, stop_reason: e.stop_reason || '', mode: e.mode } : null,
+      last_email: l ? { step_id: l.step_id, sent_at: l.sent_at } : null };
+  }) };
 }
 
 export function buildContact(tables, caps, contactId) {

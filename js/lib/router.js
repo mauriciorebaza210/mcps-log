@@ -92,6 +92,7 @@ function navigateTo(pageWithSub){
   if(page==='service_requests') loadServiceRequests();
   if(page==='crm') loadCRM();
   if(page==='comms') loadCommsPage(sub);
+  if(page==='lifecycle') loadLifecycle(sub);
   if(page==='training') loadTraining();
   if(page==='onboarding') loadOnboarding();
   if(page==='admin') { loadUsers(); loadStartupRequests(); loadPendingHires(); loadInternalNotes(); if (typeof loadEmployeeInvites === 'function') loadEmployeeInvites(); if (typeof loadScopeLibrary === 'function') loadScopeLibrary(); if (typeof loadServiceAreas === 'function') loadServiceAreas(); }
@@ -125,7 +126,7 @@ function _setSidebarActive(page, hubTab) {
   if (target) target.classList.add('active');
   // Auto-expand parent accordion
   if (page === 'crm' || page === 'quotes' || page === 'comms' || page === 'contracts' ||
-      page === 'action_queue') _setAccordionOpen('sales', true);
+      page === 'action_queue' || page === 'lifecycle') _setAccordionOpen('sales', true);
   if (['jobs','live_map','route_planner','service_log','inventory'].includes(page) && hubTab !== 'profile') _setAccordionOpen('tech', true);
   if (page === 'financial_hub') _setAccordionOpen('finance', true);
   if (page === 'alerts') _setAccordionOpen('alerts', true);

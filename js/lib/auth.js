@@ -43,7 +43,10 @@ function doLogin() {
 
 function showLErr(m){const el=document.getElementById('lerr');el.textContent=m;el.style.display='block';}
 
-function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch(()=>{});_s=null;localStorage.removeItem('mcps_s');localStorage.removeItem('mcps_home_view_as');location.hash='';location.reload();}
+function doLogout(){if(_s)api({action:'logout',secret:SEC,token:_s.token}).catch(()=>{});_s=null;localStorage.removeItem('mcps_s');
+  // Lifecycle Email caches hold per-user (possibly PII) views: never leave them behind.
+  try{Object.keys(localStorage).filter(k=>k.indexOf('mcps_lc:')===0).forEach(k=>localStorage.removeItem(k));}catch(_){}
+  localStorage.removeItem('mcps_home_view_as');location.hash='';location.reload();}
 
 function unionPages_(roles) {
   const set = new Set();
@@ -51,7 +54,7 @@ function unionPages_(roles) {
   // ROLE_PAGES but missing here is silently dropped from the session, so the
   // sidebar never renders it and navigateTo() refuses it. Add every new page
   // here as well as in ROLE_PAGES.
-  const order = ['home','service_requests','action_queue','onboarding','jobs','live_map','route_planner','service_log','crm','comms','contracts','inventory','quotes','training','admin','financial_hub','alerts'];
+  const order = ['home','service_requests','action_queue','onboarding','jobs','live_map','route_planner','service_log','crm','comms','lifecycle','contracts','inventory','quotes','training','admin','financial_hub','alerts'];
   roles.forEach(r=>{(ROLE_PAGES[r]||[]).forEach(p=>set.add(p));});
   return order.filter(p=>set.has(p));
 }

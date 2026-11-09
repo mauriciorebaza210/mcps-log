@@ -20,7 +20,7 @@
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import * as sheets from './_sheets.js';
-import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, health } from './_lib/email-read.js';
+import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, health } from './_lib/email-read.js';
 import { relayEvents } from './_lib/email-relay.js';
 import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
@@ -109,6 +109,10 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     let data;
     if (view === 'overview') data = buildOverview(tables, caps, Date.now(), { mode: q.mode });
     else if (view === 'contacts') data = buildContacts(tables, caps, { q: q.q, bucket: q.bucket, review: q.review, limit: q.limit });
+    else if (view === 'step') {
+      data = buildStep(tables, caps, String(q.id || ''), Date.now(), { mode: q.mode });
+      if (!data) return reply(res, 404, { ok: false, error: 'Email not found' });
+    }
     else if (view === 'contact') {
       data = buildContact(tables, caps, String(q.id || ''));
       if (!data) return reply(res, 404, { ok: false, error: 'Contact not found' });

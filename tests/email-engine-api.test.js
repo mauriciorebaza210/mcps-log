@@ -200,5 +200,20 @@ test('Overview carries health for the portal banner; details hidden without view
   assert.equal(mau.ok, false);
   assert.deepEqual(mau.issues.map(i => i.kind), ['unresolved_unknown']);
   assert.match(mau.issues[0].detail, /x:1/);
-  assert.deepEqual(viewer.issues, [{ kind: 'unresolved_unknown', detail: '' }]);
+  assert.deepEqual(viewer.issues.map(i => [i.kind, i.detail]), [['unresolved_unknown', '']]);
+  assert.ok(viewer.issues[0].at, 'the time is not personal data');
+});
+
+test('Step view: rules, revisions, recipients with names and evidence, link totals; viewer sees masked emails', async () => {
+  const h = (await load())(world().deps);
+  const d = (await call(h, { token: 'tok-mau', query: { view: 'step', id: 'b_intro' } })).body.data;
+  assert.equal(d.step.name, 'MCP x MCPS Intro');
+  assert.equal(d.revisions[0].rev_no, 1);
+  assert.deepEqual(d.recipients.map(r => [r.delivery_id, r.name]), [['e1:b_intro:1', 'Maria Lopez'], ['old:b_intro:1', 'Maria Lopez']]);
+  assert.equal(d.links.button1, 2);
+  const v = (await call(h, { token: 'tok-viewer', query: { view: 'step', id: 'b_intro' } })).body.data;
+  assert.equal(v.recipients[0].email, 'm•••@example.com');
+  assert.equal((await call(h, { token: 'tok-mau', query: { view: 'step', id: 'nope' } })).statusCode, 404);
+  const c = (await call(h, { token: 'tok-mau', query: { view: 'contacts' } })).body.data.contacts.find(x => x.contact_id === 'c1');
+  assert.deepEqual([c.sequence.status, c.last_email.step_id], ['active', 'b_intro']);
 });
