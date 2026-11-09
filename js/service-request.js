@@ -34,6 +34,19 @@
   var LINK_TOKEN = params.get('k') || '';
   var CAMPAIGN = (params.get('c') || '').slice(0, 60);
   var REF_LOOKUP = params.get('r') || '';
+  // Lifecycle email click proof (api/email.js → op=beacon). The signed value is
+  // kept for the session, so the request can carry it too, and dropped from the
+  // address bar so a forwarded link doesn't count as someone else's click.
+  var EE_KEY = 'mcps_ee';
+  var EE = params.get('ee') || '';
+  try {
+    if (EE) sessionStorage.setItem(EE_KEY, EE); else EE = sessionStorage.getItem(EE_KEY) || '';
+  } catch (_) { /* private mode: the value in the URL still works for this page */ }
+  if (params.get('ee') && window.history && history.replaceState) {
+    params.delete('ee');
+    var qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  }
 
   // ── State ────────────────────────────────────────────────────────────────
   var S = {
@@ -591,7 +604,8 @@
       campaign_id: CAMPAIGN,
       draft_id: S.draft_id,
       photo_urls: S.photos.filter(function (p) { return p.state === 'done'; }).map(function (p) { return p.url; }),
-      k: LINK_TOKEN
+      k: LINK_TOKEN,
+      ee: EE
     }).then(function (res) {
       if (res && res.ok) { clearDraft(); return renderDone(res); }
       btn.disabled = false;
@@ -685,6 +699,8 @@
     // customer is still choosing a category — takes it off the critical path.
     fetch('/api/service-request?warm=1').catch(function () {});
 
+    sendBeacons();
+
     // Prefill resolves alongside first paint. The form is already usable, so a
     // slow or failed lookup costs nothing — and an invalid, expired or forwarded
     // link falls through to the address form rather than a dead end.
@@ -704,6 +720,34 @@
         })
         .catch(function () { /* silent: the form already works */ });
     }
+  }
+
+  // Proof that a real browser opened the email link: sent with retries, and if
+  // it still fails, kept and retried on the next visit. If it's lost anyway, the
+  // only effect is that the next email in that sequence still goes out.
+  function sendBeacons() {
+    var QUEUE = 'mcps_ee_queue', queue = [];
+    try { queue = JSON.parse(localStorage.getItem(QUEUE) || '[]'); } catch (_) { queue = []; }
+    var sent = false;
+    try { sent = sessionStorage.getItem(EE_KEY + '_sent') === EE; } catch (_) {}
+    if (EE && !sent && queue.indexOf(EE) === -1) queue.push(EE);
+    var save = function () { try { localStorage.setItem(QUEUE, JSON.stringify(queue.slice(-10))); } catch (_) {} };
+    save();
+    queue.slice().forEach(function (value) {
+      var attempt = 0;
+      (function tryOnce() {
+        fetch('/api/email?op=beacon', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ee: value }), keepalive: true })
+          .then(function (r) {
+            if (r.ok || r.status === 400) {             // 400: invalid, never worth retrying
+              queue = queue.filter(function (v) { return v !== value; }); save();
+              try { if (value === EE) sessionStorage.setItem(EE_KEY + '_sent', EE); } catch (_) {}
+              return;
+            }
+            throw new Error('retry');
+          })
+          .catch(function () { if (++attempt < 3) setTimeout(tryOnce, 1000 * attempt); });
+      })();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

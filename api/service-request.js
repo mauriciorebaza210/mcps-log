@@ -49,6 +49,7 @@ import {
   sanitizeSubmission, idempotencyKey, newRequestId, rowFromObject, appendAction, clean
 } from './_lib/service-requests.js';
 import { notifyCustomer, notifyOffice } from './_lib/notify.js';
+import { relayFormSignal } from './_lib/email-relay.js';
 
 const NORM = { normEmail, normPhone, normAddress };
 
@@ -381,7 +382,9 @@ async function handleSubmit(req, res) {
   // send the whole thing again.
   const notes = await Promise.allSettled([
     notifyCustomer(record, CATEGORIES[fields.category].label),
-    notifyOffice(record, CATEGORIES[fields.category].label, matchSummary(match, matched))
+    notifyOffice(record, CATEGORIES[fields.category].label, matchSummary(match, matched)),
+    // Came from a lifecycle email: stop that sequence (email-engine, best effort).
+    relayFormSignal(body.ee, req)
   ]);
   notes.forEach(n => {
     const v = n.status === 'fulfilled' ? n.value : { error: String(n.reason) };

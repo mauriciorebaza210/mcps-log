@@ -261,3 +261,26 @@ test('The real B Intro, rendered with signed links: every link, the pixel and th
   const cta = urls.map(u => Object.fromEntries(new URL(u).searchParams)).find(p => p.l === 'button1');
   assert.equal(cta.u, cfg.links.quote);
 });
+
+test('Form submit from a lifecycle landing page becomes a form stop signal; a missing, forged or unconfigured beacon relays nothing', async () => {
+  const w = trackerWorld();
+  const { relayFormSignal } = await import(path.join(ROOT, 'api', '_lib', 'email-relay.js'));
+  const relayEvents = async events => ({ ok: true, results: w.tracker.ingest(events) });
+  const req = { headers: { 'user-agent': BROWSER } };
+  const prev = process.env.EE_LINK_SECRET;
+  try {
+    delete process.env.EE_LINK_SECRET;
+    assert.ok((await relayFormSignal(T.beaconParam(hmac, TOKEN, 'button1', 'production'), req, { relayEvents })).skipped);
+    process.env.EE_LINK_SECRET = SECRET;
+    assert.ok((await relayFormSignal('', req, { relayEvents })).skipped);
+    const forged = T.beaconParam(hmac, TOKEN, 'button1', 'production').replace(/.$/, '0');
+    assert.equal((await relayFormSignal(forged, req, { relayEvents })).skipped, 'bad_signature');
+    assert.equal(w.signals().length, 0);
+    const r = await relayFormSignal(T.beaconParam(hmac, TOKEN, 'button1', 'production'), req, { relayEvents });
+    assert.equal(r.results[0].status, 'recorded');
+    const s = w.signals();
+    assert.equal(s.length, 1);
+    assert.deepEqual([s[0].signal, s[0].confidence, s[0].enrollment_id], ['form', 'high', 'e1']);
+    assert.ok(w.eng().form_submitted_at);
+  } finally { if (prev === undefined) delete process.env.EE_LINK_SECRET; else process.env.EE_LINK_SECRET = prev; }
+});
