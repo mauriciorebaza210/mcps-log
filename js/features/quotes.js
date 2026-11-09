@@ -1205,7 +1205,9 @@ async function qLoadQuote(quoteId) {
   const msg = document.getElementById('q-save-msg');
   if (msg) { msg.className = 'q-msg'; msg.textContent = 'Loading ' + id + '…'; }
   try {
-    const res = await apiLocalGet('/api/quotes/get', { quote_id: id });
+    // apiLocalGet doesn't add the session token (apiLocalPost does), and
+    // /api/quotes/get requires it: without this every reopen was a 401.
+    const res = await apiLocalGet('/api/quotes/get', { quote_id: id, token: currentSessionToken_() });
     if (!res.ok) {
       if (msg) { msg.className = 'q-msg err'; msg.textContent = res.error || 'Could not load that quote.'; }
       return;
