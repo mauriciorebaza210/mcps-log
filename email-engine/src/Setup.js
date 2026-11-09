@@ -113,3 +113,19 @@ function eeAddTestContacts() {
   });
   Logger.log('Test contacts ready (both at mauricio@). The C contact starts up on ' + contacts[1].startup_date + '.');
 }
+
+// CP5 live tracking test: a fresh B contact at a new plus-address of Mau's, so
+// clicking, unsubscribing or replying on it never blocks the other test contacts.
+// Adds the address to the test allowlist (test mode only sends to listed addresses).
+function eeAddTrackingTestContact() {
+  var x = EE_core_(), store = x.env.store;
+  var n = store.rows('Contacts').filter(function (c) { return /^test_trk_/.test(c.contact_id); }).length + 1;
+  var email = 'mauricio+trk' + n + '@mcpoolsolutions.org', id = 'test_trk_' + n;
+  var cfg = EE_config_(store);
+  var allow = String(cfg.test_recipients || '').split(',').map(function (s) { return s.trim(); }).filter(String);
+  if (allow.indexOf(email) === -1) { allow.push(email); store.upsert('Config', { key: 'test_recipients', value: allow.join(',') }); }
+  x.core.commitEntity('contact', { contact_id: id, email_norm: email, first_name: 'Mau', last_name: 'Tracking ' + n,
+    bucket: 'B', sub_bucket: 'B1', review_status: 'confirmed', is_test: 'Y', source: 'tracking_test', created_at: new Date().toISOString() },
+    'contact:' + id + ':create');
+  Logger.log('Added ' + id + ' at ' + email + '. Run eeRunNow to send its B Intro with tracked links (track_base: ' + (cfg.track_base || 'NOT SET') + ').');
+}
