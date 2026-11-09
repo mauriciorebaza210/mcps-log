@@ -7,11 +7,12 @@ Resume in any Claude Code session with `/email-engine`.
 - **Checkpoint in progress:** CP5 `tracking-api`
 - **Goal (PLAN.md → Checkpoints):** `api/email.js` (authenticated reads, c/o/beacon/u, heartbeat) + the quotes merge; `vercel build` + import checks; API rows pass; quote flows OK on preview.
 - **Steps (proposed):**
-  1. **5a Quotes merge:** fold `api/quotes/*` into one function to free a slot under the 12-function Hobby cap (PLAN.md → Decisions → Functions). Check every caller; `vercel build` + import check (memory: Vercel createRequire trap).
-  2. **5b `api/email.js` read path:** Bearer auth + Permissions + redaction after cache, `private, no-store` (row 31).
+  1. ✅ **5a Quotes merge** (2026-11-09, cda1c5c): `api/quotes/index.js` + rewrite `/api/quotes/:op` → `/api/quotes?op=:op`; no caller changed. `vercel build` lists 10 functions; the built bundle imports and routes all three ops (`tests/quotes-dispatch.test.js`). Still to do: a quote get/save on the preview deploy (batched with the CP5 preview check).
+  2. ✅ **5b `api/email.js` read path** (2026-11-09, 8d78760): `op=read` views overview / contacts / contact; Bearer-only token; engine Permissions tab (seeded mau + tony: editor, approver, operator); raw cache 15 s, redaction per request; row 31 tests (`tests/email-engine-api.test.js`). Read-only check on the real engine sheet: 1.45 s cold, 10 KB. Note: the raw cache is a 15 s TTL, not the plan's `data_version` key (a version check would itself cost the read it saves); writes from the portal will bust it.
   3. **5c Tracking ingest:** c (click redirect), o (open pixel), beacon, u (signed unsubscribe moves off the interim GAS page) → signed relay → engine `ee_track` / `ee_unsubscribe`; raw Events + evidence-graded classifier (rows 20–23, 40 bounce/click/reply part).
   4. **5d Heartbeat:** Vercel Cron reads the engine sheet, alerts through portal GAS `ee_alert`.
-- **Next action:** start 5a (quotes merge): map `api/quotes/*` and its callers.
+- **Next action:** 5c tracking ingest (signed links in the renderer, c/o/beacon/u in `api/email.js`, signed relay to a new engine `ee_track`, Events + classifier).
+- **Needed from Mau at the CP5 deploy (batched):** Vercel env `EE_ENGINE_SS_ID` (+ the link and relay secrets from 5c, also set as Script Properties); Tony reruns `eeSetup` once (adds the Permissions tab); a quote open/save on the preview URL.
 - **Blocked on / waiting for:** nothing. Deploys run as Tony via `npm run ee:deploy` (live @8, cp4-5). Tony's clasp login expires now and then: `clasp --user tony login`.
 - **Open decisions (not blocking yet):** (1) the 3-1 report layout (CP8 portal work); (2) final Safety Guidelines + Startup Guide PDFs (can be added after launch through the Attachment Library); (3) A "positive service milestone"; (4) Referral Campaign timing.
 - **Settled 2026-11-02:** 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library; test emails may go to Mau.
