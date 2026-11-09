@@ -21,7 +21,7 @@ export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Con
 
 const NUMERIC = new Set(['occurrence', 'attempt', 'gen', 'last_seq', 'held_days', 'rev_no', 'adopted_from_gen',
   'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed', 'opens_total', 'opens_low', 'opens_medium',
-  'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high']);
+  'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'auto_replies', 'soft_bounces']);
 const DAY = 24 * 60 * 60 * 1000;
 const IN_FLIGHT = new Set(['claimed', 'drafted', 'sending', 'reconcile']);
 const NEEDS_ATTENTION = new Set(['reconcile', 'unknown', 'failed']);
@@ -87,12 +87,15 @@ function contactView(c, caps) {
 }
 // Per-delivery tracking, by evidence level (PLAN.md → Tracking). Opens are
 // estimates; "verified" is a browser-verified click, the only kind that stops.
-function engagementView(g) {
+function engagementView(g, caps) {
   if (!g) return null;
   return { opened: g.opens_medium > 0, opens: g.opens_total, opens_low: g.opens_low,
     clicks: g.clicks_medium, clicks_low: g.clicks_low, verified_clicks: g.clicks_high,
     first_open_at: g.first_open_at || '', first_click_at: g.first_click_at || '', first_verified_click_at: g.first_verified_click_at || '',
     unsubscribed_at: g.unsubscribed_at || '', form_submitted_at: g.form_submitted_at || '', links: g.links_json || {},
+    replied_at: g.replied_at || '', other_replied_at: g.other_replied_at || '', auto_replies: g.auto_replies,
+    reply_snippet: caps && caps.has('view_pii') ? (g.last_reply_snippet || '') : '',
+    bounced_at: g.bounced_at || '', soft_bounces: g.soft_bounces,
     classifier_version: g.classifier_version || '' };
 }
 function deliveryView(d, caps, g) {
@@ -101,7 +104,7 @@ function deliveryView(d, caps, g) {
     occurrence: d.occurrence, mode: d.mode, state: d.state, attempt: d.attempt, revision_id: d.revision_id,
     email: caps.has('view_pii') ? d.email_norm : maskEmail(d.email_norm),
     claimed_at: d.claimed_at || '', send_invoked_at: d.send_invoked_at || '', sent_at: d.sent_at || '',
-    error: d.error || '', resolved_by: d.resolved_by || '', engagement: engagementView(g)
+    error: d.error || '', resolved_by: d.resolved_by || '', engagement: engagementView(g, caps)
   };
 }
 function engagementIndex(tables) {
@@ -166,7 +169,9 @@ export function buildOverview(tables, caps, now, opts = {}) {
       tracking: {
         opened_est: tracked(g => g.opens_medium > 0), clicked: tracked(g => g.clicks_medium > 0),
         verified_clicks: tracked(g => g.clicks_high > 0), unsubscribed: tracked(g => !!g.unsubscribed_at),
-        forms: tracked(g => !!g.form_submitted_at), scanner_like: tracked(g => g.clicks_low > 0 || g.opens_low > 0)
+        forms: tracked(g => !!g.form_submitted_at), scanner_like: tracked(g => g.clicks_low > 0 || g.opens_low > 0),
+        replied: tracked(g => !!g.replied_at || !!g.other_replied_at), auto_replies: tracked(g => g.auto_replies > 0),
+        bounced: tracked(g => !!g.bounced_at)
       }
     };
   });

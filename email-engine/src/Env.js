@@ -31,7 +31,7 @@ var EE_TABLES = {
   Config: ['key', 'value'],
   Meta: ['key', 'value'],
   Runs: ['run_id', 'trigger', 'owner', 'started_at', 'finished_at', 'sent', 'skipped', 'cancelled', 'reconcile', 'adopted',
-    'failed', 'stopped_reason', 'plan_json'],
+    'failed', 'stopped_reason', 'plan_json', 'scan_json'],
   Alerts: ['at', 'kind', 'detail'],
   // Who can do what in the portal's Lifecycle Email page (read by api/email.js).
   // Roles: viewer, editor, approver, operator (PLAN.md → Configuration & authorization).
@@ -39,17 +39,21 @@ var EE_TABLES = {
   // Per-delivery tracking summary, derived from the raw Events (Tracking.js).
   Engagement: ['delivery_id', 'contact_id', 'enrollment_id', 'step_id', 'mode', 'classifier_version', 'opens_total', 'opens_low',
     'opens_medium', 'first_open_at', 'last_open_at', 'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'first_click_at',
-    'last_click_at', 'first_verified_click_at', 'links_json', 'recent_clicks', 'unsubscribed_at', 'form_submitted_at', 'updated_at']
+    'last_click_at', 'first_verified_click_at', 'links_json', 'recent_clicks', 'unsubscribed_at', 'form_submitted_at',
+    'replied_at', 'other_replied_at', 'last_reply_snippet', 'auto_replies', 'soft_bounces', 'bounced_at', 'bounce_kind', 'updated_at'],
+  // Per-thread cursor for the reply scan (Replies.js): messages already handled.
+  Threads: ['thread_id', 'message_count', 'seen_json', 'last_scanned_at']
 };
 // Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
 var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',
   'seconds_since_send', 'method', 'ua_raw', 'ua_family', 'ip_prefix_hash', 'beacon_present', 'burst_count', 'confidence',
-  'reasons', 'classifier_version', 'source'];
+  'reasons', 'classifier_version', 'source', 'gmail_message_id', 'snippet'];
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id' };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
-  opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1 };
+  opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1,
+  auto_replies: 1, soft_bounces: 1, message_count: 1 };
 var EE_JOURNAL_HEADERS = ['seq', 'op_id', 'type', 'entity_id', 'data', 'prev_hash', 'hash', 'at'];
 var EE_TZ = 'America/Chicago';
 
@@ -184,7 +188,11 @@ function EE_events_(ss) {
   var tabs = {};
   function tab(ms) {
     var name = 'Events_' + Utilities.formatDate(new Date(ms), EE_TZ, 'yyyy_MM');
-    return tabs[name] || (tabs[name] = EE_ensureTab_(ss, name, EE_EVENT_HEADERS));
+    if (tabs[name]) return tabs[name];
+    var sh = EE_ensureTab_(ss, name, EE_EVENT_HEADERS);
+    // A tab made before a column was added: complete its header row in place.
+    if (sh.getLastColumn() < EE_EVENT_HEADERS.length) sh.getRange(1, 1, 1, EE_EVENT_HEADERS.length).setValues([EE_EVENT_HEADERS]).setFontWeight('bold');
+    return (tabs[name] = sh);
   }
   return {
     has: function (id, ms) {
@@ -288,6 +296,18 @@ function EE_env(opts) {
         }
         return null;
       },
+      // Inbound mail for Replies.js.
+      threadMessages: function (threadId) {
+        var t; try { t = GmailApp.getThreadById(threadId); } catch (e) { return []; }
+        return t ? t.getMessages().map(EE_msgInfo_) : [];
+      },
+      bounceMessages: function (days) {
+        var out = [];
+        GmailApp.search('from:(mailer-daemon OR postmaster) newer_than:' + Number(days || 7) + 'd', 0, 50)
+          .forEach(function (t) { t.getMessages().forEach(function (m) { out.push(EE_msgInfo_(m)); }); });
+        return out;
+      },
+      aliases: function () { return GmailApp.getAliases(); },
       findDraftsByToken: function (token) {
         return GmailApp.getDrafts().filter(function (d) { return d.getMessage().getPlainBody().indexOf(token) !== -1; })
           .map(function (d) { return d.getId(); });
@@ -296,6 +316,14 @@ function EE_env(opts) {
     render: function (row) { return EE_renderDelivery_(store, row); }
   };
   return env;
+}
+
+function EE_msgInfo_(m) {
+  var h = function (name) { try { return String(m.getHeader(name) || ''); } catch (e) { return ''; } };
+  return { id: m.getId(), from: m.getFrom(), date: m.getDate().getTime(), subject: m.getSubject(),
+    body: String(m.getPlainBody() || '').slice(0, 8000),
+    headers: { auto_submitted: h('Auto-Submitted'), x_autoreply: h('X-Autoreply'), x_autorespond: h('X-Autorespond'),
+      precedence: h('Precedence'), content_type: h('Content-Type') } };
 }
 
 // Revision + contact + settings → the email. Throws (failing the delivery) on

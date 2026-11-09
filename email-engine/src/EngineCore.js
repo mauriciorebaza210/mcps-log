@@ -49,6 +49,8 @@ function EE_createCore(env) {
     Secondaries: 'op_ref', Suppressions_Test: 'email_norm' };
   var REOPENABLE = { released: 1, cancelled: 1 };
   var AWAITING_OUTCOME = { sending: 1, reconcile: 1 };
+  // Inbox types that suppress the person: an unsubscribe, or a hard bounce (scope all).
+  var SUPPRESSING = { unsubscribe: 1, bounce: 1 };
 
   function StaleLease() { this.name = 'StaleLease'; this.message = 'lease superseded'; }
   function IntegrityError(reason) { this.name = 'IntegrityError'; this.reason = reason; this.message = 'journal integrity: ' + reason; }
@@ -194,7 +196,7 @@ function EE_createCore(env) {
     var cached = env.cache.get('sup:' + mode + ':' + e);
     if (cached) scope = cached;
     env.store.rows('Inbox').forEach(function (r) {
-      if (r.type === 'unsubscribe' && r.mode === mode && r.email_norm === e) scope = scope === 'all' ? 'all' : (r.scope || 'all');
+      if (SUPPRESSING[r.type] && r.mode === mode && r.email_norm === e) scope = scope === 'all' ? 'all' : (r.scope || 'all');
     });
     if (mode === 'production') {
       var shared = env.optouts.scope(e);                // throws if the shared tab is unreadable
@@ -439,11 +441,11 @@ function EE_createCore(env) {
     var data = { inbox_id: evt.event_id, type: evt.type, mode: mode, email_norm: email, scope: evt.scope || '',
       contact_id: evt.contact_id || '', enrollment_id: evt.enrollment_id || '', step_id: evt.step_id || '',
       signal: evt.signal || '', confidence: evt.confidence || '', received_at: iso(env.now()),
-      secondary: evt.type === 'unsubscribe' && mode === 'production' ? 'comms_optouts' : '' };
+      secondary: SUPPRESSING[evt.type] && mode === 'production' ? 'comms_optouts' : '' };
     try {
       env.withLock(function () {
         commitLocked({ op_id: 'inbox:' + evt.event_id, type: 'inbox', entity_id: evt.event_id, data: data });
-        if (evt.type === 'unsubscribe') {
+        if (SUPPRESSING[evt.type]) {
           env.cache.put('sup:' + mode + ':' + email, data.scope || 'all', C.SUPPRESSION_CACHE_S);
           if (mode === 'test') env.store.upsert('Suppressions_Test', { email_norm: email, scope: data.scope || 'all' });
         }
@@ -451,7 +453,7 @@ function EE_createCore(env) {
       try { env.withLock(processSecondariesLocked); } catch (e) { /* retried by the next run's catch-up */ }
       return { ok: true, journaled: true };
     } catch (e) {
-      if (evt.type !== 'unsubscribe') throw e;
+      if (!SUPPRESSING[evt.type]) throw e;
       // Journal down: the opt-out must still never be lost. Sending stays closed
       // (EE_SAFETY_PAUSE) until the Journal is healthy and this is journaled.
       var stored = false;

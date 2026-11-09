@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp5-1';
+var EE_VERSION = 'cp6-1';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -67,7 +67,10 @@ function EE_sentToday_(env) {
 function EE_run_(trigger) {
   var x = EE_core_();
   var cfg = EE_config_(x.env.store);
-  var started = new Date().toISOString(), summary;
+  var started = new Date().toISOString(), summary, scan = null;
+  // Replies and bounces first, so today's plan already sees their stops (Replies.js).
+  try { scan = EE_createReplyScanner(x.env, x.core).scan(); }
+  catch (e) { scan = { error: String(e && e.message || e).slice(0, 200) }; try { x.env.alert('reply_scan_failed', scan.error); } catch (e2) { /* the run goes on */ } }
   try {
     summary = EE_runDay(x.core, x.env, function () { return EE_readSnapshot_(x.env); }, {
       trigger: trigger, dailyCap: Number(cfg.daily_cap || 50), budgetMs: 270000, sentToday: EE_sentToday_(x.env) });
@@ -83,8 +86,9 @@ function EE_run_(trigger) {
     x.env.store.upsert('Runs', { run_id: summary.run_id, trigger: trigger, owner: x.env.user(), started_at: summary.started_at,
       finished_at: summary.finished_at, sent: summary.sent, skipped: summary.skipped, cancelled: summary.cancelled,
       reconcile: summary.reconcile, adopted: summary.adopted, failed: summary.failed || 0,
-      stopped_reason: summary.stopped_reason, plan_json: summary.plan || {} });
+      stopped_reason: summary.stopped_reason, plan_json: summary.plan || {}, scan_json: scan || {} });
   } catch (e) { /* the run itself is already recorded in the Journal */ }
+  summary.scan = scan;
   Logger.log(JSON.stringify(summary));
   return summary;
 }
