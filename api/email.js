@@ -5,6 +5,7 @@
 //   GET  /api/email?op=o&…   open pixel      → GIF now; relayed after
 //   POST /api/email?op=beacon {ee}           landing-page proof of a real browser; relayed before answering
 //   GET  /api/email?op=u&…   unsubscribe confirmation page; POST records it (relayed before answering)
+//   GET  /api/email/heartbeat  Vercel Cron, daily (vercel.json); emails Mau if the engine looks unhealthy
 //
 // Links are built and signed by the engine with js/lib/email-tracking.js; a link
 // that fails its signature is refused and records nothing (matrix row 22).
@@ -19,8 +20,9 @@
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import * as sheets from './_sheets.js';
-import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact } from './_lib/email-read.js';
+import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, health } from './_lib/email-read.js';
 import { relayEvents } from './_lib/email-relay.js';
+import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
 
@@ -42,7 +44,9 @@ function reply(res, status, body) {
 }
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-const DEFAULT_DEPS = { ...sheets, relayEvents, waitUntil, linkSecret: () => String(process.env.EE_LINK_SECRET || '').trim(),
+const DEFAULT_DEPS = { ...sheets, relayEvents, waitUntil, sendEngineAlert, now: () => Date.now(),
+  cronSecret: () => String(process.env.CRON_SECRET || '').trim(),
+  linkSecret: () => String(process.env.EE_LINK_SECRET || '').trim(),
   firstPartyHosts: () => ['mcps-log.vercel.app'].concat(String(process.env.EE_FIRST_PARTY_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean)) };
 
 const escHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -178,7 +182,32 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return page(res, 503, 'We couldn’t finish that', fallback);
   }
 
-  const OPS = { read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe };
+  // Vercel Cron sends Authorization: Bearer $CRON_SECRET. Without the secret
+  // configured, nobody can trigger it.
+  async function opHeartbeat(req, res) {
+    const secret = deps.cronSecret();
+    if (!secret || bearer(req) !== secret) return reply(res, 401, { ok: false, error: 'Unauthorized' });
+    if (!engineSpreadsheetId()) return reply(res, 503, { ok: false, error: 'EE_ENGINE_SS_ID not set' });
+    let tables, h;
+    try {
+      tables = await loadTables(true);
+      h = health(tables, deps.now());
+    } catch (e) {
+      // Can't even read the engine: that is the alert.
+      h = { ok: false, issues: [{ kind: 'engine_unreadable', detail: String(e && e.message || e).slice(0, 200) }] };
+    }
+    let alerted = null;
+    if (!h.ok) {
+      const cfg = {}; ((tables && tables.Config) || []).forEach(r => { cfg[r.key] = r.value; });
+      const to = cfg.alert_email || 'mauricio@mcpoolsolutions.org';
+      const text = 'The lifecycle email engine needs a look:\n\n' + h.issues.map(i => '• ' + i.kind + ': ' + i.detail).join('\n') +
+        '\n\nLast run: ' + (h.last_run_at || 'none') + '\nPortal: https://mcps-log.vercel.app (Lifecycle Email)';
+      alerted = await deps.sendEngineAlert(to, '[Email engine] heartbeat: ' + h.issues.length + ' issue(s)', text).catch(e => ({ ok: false, error: String(e) }));
+    }
+    return reply(res, 200, { ok: true, healthy: h.ok, issues: h.issues, alerted });
+  }
+
+  const OPS = { read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat };
 
   return async function handler(req, res) {
     const op = String((req.query && req.query.op) || '').trim();

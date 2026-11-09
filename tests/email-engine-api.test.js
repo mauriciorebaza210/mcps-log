@@ -145,3 +145,57 @@ test('Missing engine tabs → 503 with a clear message; wrong method → 405; un
   await h2({ method: 'GET', query: { op: 'nope' }, headers: {} }, res);
   assert.equal(res.statusCode, 404);
 });
+
+// ── Heartbeat (PLAN.md → Operations → Independent heartbeat) ─────────────────
+
+async function heartbeat(tablesOver = {}, { auth = 'Bearer cron-s3cret', readFails = false } = {}) {
+  const sent = [];
+  const values = { ...SHEET, ...tablesOver };
+  const h = (await load())({
+    ...world({ readSheetRanges: async tabs => { if (readFails) throw new Error('quota exceeded'); const o = {}; tabs.forEach(t => { if (values[t]) o[t] = values[t]; }); return o; } }).deps,
+    cronSecret: () => 'cron-s3cret', now: () => NOW,
+    sendEngineAlert: async (to, subject, text) => { sent.push({ to, subject, text }); return { ok: true }; }
+  });
+  const res = { headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, status(c) { this.statusCode = c; return this; }, send(b) { this.body = JSON.parse(b); return this; } };
+  await h({ method: 'GET', query: { op: 'heartbeat' }, headers: auth ? { authorization: auth } : {} }, res);
+  return { res, sent };
+}
+
+test('Heartbeat: only Vercel Cron (CRON_SECRET) can run it', async () => {
+  assert.equal((await heartbeat({}, { auth: '' })).res.statusCode, 401);
+  assert.equal((await heartbeat({}, { auth: 'Bearer wrong' })).res.statusCode, 401);
+});
+
+test('Heartbeat: a stale daily run, an old unknown delivery and a crashed run → one alert email listing them', async () => {
+  const { res, sent } = await heartbeat({
+    Runs: [['run_id', 'trigger', 'started_at', 'stopped_reason'], ['r1', 'daily', iso(2), 'done'], ['r2', 'manual', iso(0.1), 'crashed: boom']],
+    Deliveries: [['delivery_id', 'state', 'claimed_at', 'send_invoked_at', 'mode'], ['x:1', 'unknown', iso(2), iso(2), 'test']]
+  });
+  assert.equal(res.body.healthy, false);
+  assert.deepEqual(res.body.issues.map(i => i.kind).sort(), ['last_run_crashed', 'no_recent_run', 'unresolved_unknown']);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'mauricio@mcpoolsolutions.org');
+  assert.match(sent[0].text, /unresolved_unknown: x:1/);
+});
+
+test('Heartbeat: healthy (or the daily trigger not installed yet) sends nothing; an unreadable engine is itself an alert', async () => {
+  const ok = await heartbeat({ Runs: [['run_id', 'trigger', 'started_at', 'stopped_reason'], ['r1', 'daily', iso(0.5), 'done']],
+    Deliveries: [['delivery_id', 'state', 'claimed_at', 'mode'], ['a', 'sent', iso(1), 'test']] });
+  assert.equal(ok.res.body.healthy, true); assert.equal(ok.sent.length, 0);
+  const manualOnly = await heartbeat({ Deliveries: [['delivery_id', 'state', 'claimed_at', 'mode'], ['a', 'sent', iso(1), 'test']] });
+  assert.equal(manualOnly.res.body.healthy, true, 'only manual runs so far: nothing to miss yet');
+  const down = await heartbeat({}, { readFails: true });
+  assert.deepEqual(down.res.body.issues.map(i => i.kind), ['engine_unreadable']);
+  assert.equal(down.sent.length, 1);
+});
+
+test('Overview carries health for the portal banner; details hidden without view_pii', async () => {
+  const stale = { ...SHEET, Deliveries: [['delivery_id', 'state', 'claimed_at', 'send_invoked_at', 'mode'], ['x:1', 'unknown', iso(3), iso(3), 'test']] };
+  const h = (await load())(world({ readSheetRanges: async tabs => { const o = {}; tabs.forEach(t => { if (stale[t]) o[t] = stale[t]; }); return o; } }).deps);
+  const mau = (await call(h, { token: 'tok-mau' })).body.data.health;
+  const viewer = (await call(h, { token: 'tok-viewer' })).body.data.health;
+  assert.equal(mau.ok, false);
+  assert.deepEqual(mau.issues.map(i => i.kind), ['unresolved_unknown']);
+  assert.match(mau.issues[0].detail, /x:1/);
+  assert.deepEqual(viewer.issues, [{ kind: 'unresolved_unknown', detail: '' }]);
+});

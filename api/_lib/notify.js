@@ -322,3 +322,13 @@ export async function notifyOffice(request, categoryLabel, matchSummary) {
     return { ok: false, error: String(error && error.message || error) };
   }
 }
+
+// Lifecycle Email Engine heartbeat alerts (api/email.js → op=heartbeat) use the
+// same signed relay. It runs in the portal's project and account, not the
+// engine's, so an alert still arrives when the engine itself is what broke
+// (email-engine/docs/PLAN.md → Operations → Independent heartbeat). The dedupe
+// key allows one alert per subject per day.
+export async function sendEngineAlert(to, subject, text) {
+  const html = '<pre style="font-family:Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap;">' + esc(text) + '</pre>';
+  return send({ to, subject, html, text, idempotencyKey: 'ee-heartbeat:' + new Date().toISOString().slice(0, 10) + ':' + subject });
+}

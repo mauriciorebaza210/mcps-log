@@ -110,6 +110,31 @@ function engagementIndex(tables) {
   return by;
 }
 
+// Engine health, for the portal banner and the daily heartbeat (PLAN.md →
+// Operations → SLOs). Only what the sheet can show: the engine's own safety
+// pause lives in its Script Properties and it alerts on that itself.
+export function health(tables, now) {
+  const H = 60 * 60 * 1000, issues = [];
+  const cfg = config(tables);
+  const runs = (tables.Runs || []).slice().sort(byDesc('started_at'));
+  const daily = runs.filter(r => r.trigger === 'daily');
+  const lastDaily = daily[0] ? ms(daily[0].started_at) : 0;
+  const enabled = String(cfg.engine_enabled) !== 'false';
+  // Before the daily trigger is installed there's nothing to miss.
+  if (enabled && lastDaily && now - lastDaily > 26 * H) issues.push({ kind: 'no_recent_run', detail: 'no daily run since ' + daily[0].started_at });
+  if (runs[0] && /^crashed/.test(String(runs[0].stopped_reason))) issues.push({ kind: 'last_run_crashed', detail: String(runs[0].stopped_reason).slice(0, 200) });
+  (tables.Deliveries || []).forEach(d => {
+    const since = ms(d.send_invoked_at || d.claimed_at);
+    if ((d.state === 'unknown' || d.state === 'reconcile') && since && now - since > 24 * H) {
+      issues.push({ kind: 'unresolved_' + d.state, detail: d.delivery_id + ' since ' + (d.send_invoked_at || d.claimed_at) });
+    }
+    if (d.state === 'failed' && now - ms(d.claimed_at) < 24 * H) issues.push({ kind: 'delivery_failed', detail: d.delivery_id + ': ' + String(d.error || '').slice(0, 160) });
+  });
+  const recentAlerts = (tables.Alerts || []).filter(a => now - ms(String(a.at).split(' ')[0]) < 24 * H).length;
+  return { ok: issues.length === 0, issues, enabled, last_run_at: runs[0] ? runs[0].started_at : '',
+    last_daily_run_at: daily[0] ? daily[0].started_at : '', daily_trigger_seen: !!lastDaily, alerts_24h: recentAlerts };
+}
+
 // mode: 'test' | 'production' (default: the engine's current mode).
 export function buildOverview(tables, caps, now, opts = {}) {
   const cfg = config(tables);
@@ -149,8 +174,10 @@ export function buildOverview(tables, caps, now, opts = {}) {
     run_id: r.run_id, trigger: r.trigger, started_at: r.started_at, finished_at: r.finished_at,
     sent: r.sent, skipped: r.skipped, cancelled: r.cancelled, failed: r.failed, stopped_reason: r.stopped_reason
   }));
+  const h = health(tables, now);
   return {
     mode,
+    health: { ...h, issues: h.issues.map(i => ({ kind: i.kind, detail: caps.has('view_pii') ? i.detail : '' })) },
     engine: {
       enabled: String(cfg.engine_enabled) !== 'false', mode: cfg.engine_mode || 'test',
       paused_buckets: String(cfg.paused_buckets || '').split(',').map(x => x.trim()).filter(Boolean),

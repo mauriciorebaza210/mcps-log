@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/api/qbo/:op", "destination": "/api/qbo?op=:op" },
     { "source": "/api/quotes/:op", "destination": "/api/quotes?op=:op" },
+    { "source": "/api/email/heartbeat", "destination": "/api/email?op=heartbeat" },
     { "source": "/api/:path*", "destination": "/api/:path*" },
     { "source": "/proposal-approval.html", "destination": "/agreement.html" },
     { "source": "/margins", "destination": "/margins.html" },
@@ -10,5 +11,8 @@
     { "source": "/startup-request", "destination": "/startup-request.html" },
     { "source": "/builder-portal", "destination": "/builder-portal.html" },
     { "source": "/service", "destination": "/service-request.html" }
+  ],
+  "crons": [
+    { "path": "/api/email/heartbeat", "schedule": "0 15 * * *" }
   ]
 }
