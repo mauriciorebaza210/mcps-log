@@ -245,7 +245,19 @@ var EE_SEED = {
     ],
     "links": {
       "quote": "https://mcps-log.vercel.app/service"
-    }
+    },
+    "permissions": [
+      {
+        "username": "mau",
+        "roles": "editor,approver,operator",
+        "note": "Mau (portal username)"
+      },
+      {
+        "username": "tony",
+        "roles": "editor,approver,operator",
+        "note": "Tony (portal username)"
+      }
+    ]
   },
   "content": {
     "steps": {

@@ -55,6 +55,12 @@ function eeSetup() {
     log.push('ruleset ' + EE_SEED.ruleset.rule_rev + ' seeded');
   }
   EE_SEED.fields.forEach(function (f) { if (!env.store.get('Fields', f.field)) env.store.upsert('Fields', f); });
+  (cfg.permissions || []).forEach(function (p) {
+    if (env.store.get('Permissions', p.username)) return;      // never overwrite an edited row
+    env.store.upsert('Permissions', { username: p.username, roles: p.roles, active: 'Y', note: p.note || '',
+      updated_at: new Date().toISOString(), updated_by: me });
+    log.push('permission ' + p.username + ' = ' + p.roles);
+  });
 
   // Drive: drafts (editable), revisions (immutable approved copies), attachments.
   var root = EE_folder_(props, 'EE_FOLDER_ROOT', 'MCPS Email Engine', null);

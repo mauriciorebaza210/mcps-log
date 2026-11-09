@@ -32,11 +32,14 @@ var EE_TABLES = {
   Meta: ['key', 'value'],
   Runs: ['run_id', 'trigger', 'owner', 'started_at', 'finished_at', 'sent', 'skipped', 'cancelled', 'reconcile', 'adopted',
     'failed', 'stopped_reason', 'plan_json'],
-  Alerts: ['at', 'kind', 'detail']
+  Alerts: ['at', 'kind', 'detail'],
+  // Who can do what in the portal's Lifecycle Email page (read by api/email.js).
+  // Roles: viewer, editor, approver, operator (PLAN.md → Configuration & authorization).
+  Permissions: ['username', 'roles', 'active', 'note', 'updated_at', 'updated_by']
 };
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id' };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1 };
 var EE_JOURNAL_HEADERS = ['seq', 'op_id', 'type', 'entity_id', 'data', 'prev_hash', 'hash', 'at'];
 var EE_TZ = 'America/Chicago';

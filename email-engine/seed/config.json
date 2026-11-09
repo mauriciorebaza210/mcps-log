@@ -12,5 +12,9 @@
   "daily_cap": 50,
   "test_mode": true,
   "test_recipients": ["mauricio@mcpoolsolutions.org"],
-  "links": { "quote": "https://mcps-log.vercel.app/service" }
+  "links": { "quote": "https://mcps-log.vercel.app/service" },
+  "permissions": [
+    { "username": "mau", "roles": "editor,approver,operator", "note": "Mau (portal username)" },
+    { "username": "tony", "roles": "editor,approver,operator", "note": "Tony (portal username)" }
+  ]
 }

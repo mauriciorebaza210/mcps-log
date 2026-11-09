@@ -1,0 +1,170 @@
+// Lifecycle Email Engine: the portal's read model (pure; no network).
+//
+// api/email.js reads the engine spreadsheet in one batchGet and hands the raw
+// values here. Everything below is a function of (values, capabilities, now),
+// so tests/email-read.test.js covers it without Sheets.
+//
+// Contract: email-engine/docs/PLAN.md → Read-path security and Configuration &
+// authorization. Capabilities are explicit, never inherited: a user's set is
+// the union of their roles' sets. Redaction runs on every request, after the
+// (shared, raw) cache, so no filtered view is ever cached or shared.
+
+export const ROLE_CAPS = {
+  viewer: ['view_aggregates'],
+  editor: ['view_aggregates', 'view_pii', 'edit_drafts', 'edit_contacts'],
+  approver: ['view_aggregates', 'view_pii', 'approve_publish', 'activate_steps'],
+  operator: ['view_aggregates', 'view_pii', 'export', 'run_now', 'pause', 'resolve_unknown', 'edit_config']
+};
+
+// The engine tabs the portal reads. Never raw Events (PLAN.md → Performance).
+export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts'];
+
+const NUMERIC = new Set(['occurrence', 'attempt', 'gen', 'last_seq', 'held_days', 'rev_no', 'adopted_from_gen',
+  'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed']);
+const DAY = 24 * 60 * 60 * 1000;
+const IN_FLIGHT = new Set(['claimed', 'drafted', 'sending', 'reconcile']);
+const NEEDS_ATTENTION = new Set(['reconcile', 'unknown', 'failed']);
+
+// Same decoding as the engine (email-engine/src/Env.js → EE_decode_): every
+// column is plain text; JSON columns and counters are converted back.
+function decode(key, v) {
+  if (v === undefined || v === null || v === '') return NUMERIC.has(key) ? 0 : '';
+  if (NUMERIC.has(key)) return Number(v);
+  const s = String(v);
+  if (s[0] === '{' || s[0] === '[') { try { return JSON.parse(s); } catch (_) { /* plain text */ } }
+  return s;
+}
+export function toTables(values) {
+  const out = {};
+  for (const tab of READ_TABS) {
+    const rows = values[tab];
+    if (!Array.isArray(rows) || !rows.length) { out[tab] = rows ? [] : null; continue; }
+    const h = rows[0].map(x => String(x || '').trim());
+    out[tab] = rows.slice(1).filter(r => r.some(c => c !== '' && c !== undefined))
+      .map(r => { const o = {}; h.forEach((k, i) => { if (k) o[k] = decode(k, r[i]); }); return o; });
+  }
+  return out;
+}
+
+export function capabilitiesFor(username, permissionRows) {
+  const u = String(username || '').trim().toLowerCase();
+  const caps = new Set();
+  const row = (permissionRows || []).find(r => String(r.username || '').trim().toLowerCase() === u);
+  if (!row || String(row.active || 'Y').toUpperCase().startsWith('N')) return caps;
+  String(row.roles || '').split(',').map(r => r.trim().toLowerCase()).forEach(role => (ROLE_CAPS[role] || []).forEach(c => caps.add(c)));
+  return caps;
+}
+
+function config(tables) {
+  const c = {};
+  (tables.Config || []).forEach(r => { c[r.key] = r.value; });
+  return c;
+}
+function activeSteps(tables, cfg) {
+  const rs = (tables.Rulesets || []).find(r => r.rule_rev === cfg.rule_rev);
+  return (rs && rs.json && rs.json.steps) || [];
+}
+const ms = iso => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? t : 0; };
+const byDesc = key => (a, b) => ms(b[key]) - ms(a[key]);
+
+// PII is the contact's email address, street address and phone (and, from
+// CP5c, reply snippets). Names stay visible: they're how anyone tells rows apart.
+function maskEmail(e) {
+  const s = String(e || ''), at = s.indexOf('@');
+  return at > 0 ? s[0] + '•••' + s.slice(at) : (s ? '•••' : '');
+}
+function contactView(c, caps) {
+  const pii = caps.has('view_pii');
+  return {
+    contact_id: c.contact_id, first_name: c.first_name, last_name: c.last_name,
+    bucket: c.bucket, sub_bucket: c.sub_bucket, review_status: c.review_status, is_test: c.is_test === 'Y',
+    email: pii ? c.email_norm : maskEmail(c.email_norm),
+    address: pii ? (c.address || '') : (c.address ? 'hidden' : ''),
+    phone: pii ? (c.phone || '') : (c.phone ? 'hidden' : ''),
+    startup_date: c.startup_date || '', source: c.source || '', created_at: c.created_at || ''
+  };
+}
+function deliveryView(d, caps) {
+  return {
+    delivery_id: d.delivery_id, contact_id: d.contact_id, enrollment_id: d.enrollment_id, step_id: d.step_id,
+    occurrence: d.occurrence, mode: d.mode, state: d.state, attempt: d.attempt, revision_id: d.revision_id,
+    email: caps.has('view_pii') ? d.email_norm : maskEmail(d.email_norm),
+    claimed_at: d.claimed_at || '', send_invoked_at: d.send_invoked_at || '', sent_at: d.sent_at || '',
+    error: d.error || '', resolved_by: d.resolved_by || ''
+  };
+}
+
+// mode: 'test' | 'production' (default: the engine's current mode).
+export function buildOverview(tables, caps, now, opts = {}) {
+  const cfg = config(tables);
+  const mode = opts.mode === 'test' || opts.mode === 'production' ? opts.mode : (cfg.engine_mode === 'production' ? 'production' : 'test');
+  const since = now - 60 * DAY, week = now - 7 * DAY;
+  const deliveries = (tables.Deliveries || []).filter(d => d.mode === mode && (ms(d.sent_at || d.claimed_at) >= since || NEEDS_ATTENTION.has(d.state) || IN_FLIGHT.has(d.state)));
+  const enrollments = (tables.Enrollments || []).filter(e => e.mode === mode);
+  const published = {};
+  (tables.Revisions || []).filter(r => r.status === 'published').forEach(r => {
+    if (!published[r.step_id] || published[r.step_id].rev_no < r.rev_no) published[r.step_id] = r;
+  });
+  const steps = activeSteps(tables, cfg).map(s => {
+    const mine = deliveries.filter(d => d.step_id === s.step_id);
+    const count = pred => mine.filter(pred).length;
+    const rev = published[s.step_id];
+    return {
+      step_id: s.step_id, name: s.name, bucket: s.sequence_id, order: s.order, category: s.category, status: s.status,
+      audience: enrollments.filter(e => e.sequence_id === s.sequence_id && e.status === 'active').length,
+      published: rev ? { revision_id: rev.revision_id, rev_no: rev.rev_no, subject: rev.subject, approved_at: rev.approved_at, approver: rev.approver } : null,
+      counts: {
+        sent: count(d => d.state === 'sent'), sent_7d: count(d => d.state === 'sent' && ms(d.sent_at) >= week),
+        in_flight: count(d => IN_FLIGHT.has(d.state)), unknown: count(d => d.state === 'unknown'),
+        failed: count(d => d.state === 'failed'), cancelled: count(d => d.state === 'cancelled')
+      }
+    };
+  });
+  const runs = (tables.Runs || []).slice().sort(byDesc('started_at')).slice(0, 10).map(r => ({
+    run_id: r.run_id, trigger: r.trigger, started_at: r.started_at, finished_at: r.finished_at,
+    sent: r.sent, skipped: r.skipped, cancelled: r.cancelled, failed: r.failed, stopped_reason: r.stopped_reason
+  }));
+  return {
+    mode,
+    engine: {
+      enabled: String(cfg.engine_enabled) !== 'false', mode: cfg.engine_mode || 'test',
+      paused_buckets: String(cfg.paused_buckets || '').split(',').map(x => x.trim()).filter(Boolean),
+      daily_cap: Number(cfg.daily_cap || 0), run_hour: Number(cfg.run_hour || 0), sender_name: cfg.sender_name || '',
+      rule_rev: cfg.rule_rev || '', last_run: runs[0] || null
+    },
+    steps,
+    attention: deliveries.filter(d => NEEDS_ATTENTION.has(d.state)).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps)),
+    runs,
+    alerts: (tables.Alerts || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20)
+      .map(a => ({ at: String(a.at).split(' ')[0], kind: a.kind, detail: caps.has('view_pii') ? a.detail : '' })),
+    totals: {
+      contacts: (tables.Contacts || []).length,
+      active_enrollments: enrollments.filter(e => e.status === 'active').length,
+      sent_7d: deliveries.filter(d => d.state === 'sent' && ms(d.sent_at) >= week).length
+    }
+  };
+}
+
+export function buildContacts(tables, caps, opts = {}) {
+  const q = String(opts.q || '').trim().toLowerCase();
+  const pii = caps.has('view_pii');
+  let rows = (tables.Contacts || []).filter(c => !opts.bucket || c.bucket === opts.bucket);
+  if (opts.review) rows = rows.filter(c => c.review_status === opts.review);
+  // Search matches names always, and email/address only for viewers allowed to see them,
+  // so a search can't be used to probe hidden fields.
+  if (q) rows = rows.filter(c => [c.first_name, c.last_name].concat(pii ? [c.email_norm, c.address] : [])
+    .some(v => String(v || '').toLowerCase().includes(q)));
+  const limit = Math.min(Number(opts.limit) || 200, 1000);
+  return { total: rows.length, contacts: rows.slice(0, limit).map(c => contactView(c, caps)) };
+}
+
+export function buildContact(tables, caps, contactId) {
+  const c = (tables.Contacts || []).find(x => x.contact_id === contactId);
+  if (!c) return null;
+  const enrollments = (tables.Enrollments || []).filter(e => e.contact_id === contactId).map(e => ({
+    enrollment_id: e.enrollment_id, sequence_id: e.sequence_id, mode: e.mode, status: e.status, enrolled_on: e.enrolled_on,
+    stop_reason: e.stop_reason || '', stopped_on: e.stopped_on || '', stopped_branches: e.stopped_branches || []
+  }));
+  const deliveries = (tables.Deliveries || []).filter(d => d.contact_id === contactId).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps));
+  return { contact: contactView(c, caps), enrollments, deliveries };
+}
