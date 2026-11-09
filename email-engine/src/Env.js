@@ -174,16 +174,21 @@ function EE_config_(store) {
   return c;
 }
 
-function EE_env() {
+// opts (sandbox suite only): { mainId, journalId, settingsId, prefix }. The
+// prefix namespaces the run lease, safety pause and cache keys, so a sandbox run
+// can never pause, block or suppress the real engine.
+function EE_env(opts) {
+  opts = opts || {};
   var props = EE_props_();
-  var main = EE_mainSs_();
-  var journalSs = SpreadsheetApp.openById(props.getProperty('EE_JOURNAL_SS_ID'));
+  var main = opts.mainId ? SpreadsheetApp.openById(opts.mainId) : EE_mainSs_();
+  var journalSs = SpreadsheetApp.openById(opts.journalId || props.getProperty('EE_JOURNAL_SS_ID'));
+  var pre = opts.prefix || '';
   var tables = {};
   var table = function (name) { return tables[name] || (tables[name] = EE_table_(main, name, EE_ID_FIELD[name])); };
   var store = { rows: function (n) { return table(n).rows(); }, get: function (n, id) { return table(n).get(id); },
     upsert: function (n, row) { table(n).upsert(row); } };
   var optoutsApi = null;
-  var optouts = function () { return optoutsApi || (optoutsApi = EE_optouts_(SpreadsheetApp.openById(props.getProperty('EE_SETTINGS_SS_ID')))); };
+  var optouts = function () { return optoutsApi || (optoutsApi = EE_optouts_(SpreadsheetApp.openById(opts.settingsId || props.getProperty('EE_SETTINGS_SS_ID')))); };
   var cache = CacheService.getScriptCache();
 
   var env = {
@@ -197,9 +202,9 @@ function EE_env() {
       lock.waitLock(30000);
       try { return fn(); } finally { lock.releaseLock(); }
     },
-    props: { get: function (k) { return props.getProperty(k); }, set: function (k, v) { props.setProperty(k, v); },
-      del: function (k) { props.deleteProperty(k); } },
-    cache: { get: function (k) { return cache.get(k); }, put: function (k, v, s) { cache.put(k, v, s || 21600); } },
+    props: { get: function (k) { return props.getProperty(pre + k); }, set: function (k, v) { props.setProperty(pre + k, v); },
+      del: function (k) { props.deleteProperty(pre + k); } },
+    cache: { get: function (k) { return cache.get(pre + k); }, put: function (k, v, s) { cache.put(pre + k, v, s || 21600); } },
     journal: EE_journal_(journalSs),
     store: store,
     meta: { get: function (k) { var r = store.get('Meta', k); return r ? r.value : null; },
