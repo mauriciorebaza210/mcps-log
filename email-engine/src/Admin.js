@@ -13,12 +13,14 @@
 //                       including the quiescence lock on Resend)
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_ADMIN_ACTIONS = { run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued' }  (Apps Script: a trigger; tests: a fake)
 function EE_adminRun_(env, core, req, deps) {
   var action = String(req.action || ''), p = req.params || {}, actor = String(req.actor || '').slice(0, 60);
   var out;
+  // The full write path (auth, permissions, relay, engine) with no effect: the speed check (CP6c).
+  if (action === 'ping') return { ok: true, at: new Date(env.now()).toISOString() };
   if (!EE_ADMIN_ACTIONS[action]) out = { ok: false, error: 'unknown action' };
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };

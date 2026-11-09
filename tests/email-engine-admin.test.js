@@ -81,3 +81,10 @@ test('Resend is refused until quiescence (with the unlock time), then releases t
   assert.equal(w.outbox.length, 0, 'the page never sends directly; the next run does, through the full gate');
   assert.deepEqual(w.log().map(r => r[2]), ['quiescence', 'ok']);
 });
+
+test('Ping answers without changing anything or writing the change log (speed check)', () => {
+  const w = world();
+  assert.equal(w.admin('ping', {}).ok, true);
+  assert.equal(w.tables.ChangeLog.length, 0);
+  assert.equal(w.tables.Config.length, 0);
+});

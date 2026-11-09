@@ -138,6 +138,7 @@ function lcEvidence_(g) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 function loadLifecycle(sub) {
+  LC.t0 = performance.now(); LC.perf = null;
   LC.root = document.getElementById('lc-root');
   if (!LC.root) return;
   if (sub && ['emails', 'activity', 'contacts'].includes(sub)) LC.tab = sub;
@@ -154,7 +155,10 @@ function loadLifecycle(sub) {
 function lcRefresh_(fresh) {
   LC.loading = true; LC.error = null; lcRenderHead_();
   const params = { mode: LC.mode || '', fresh: fresh ? '1' : '' };
-  lcLoad_('overview', params, (data) => { LC.ov = data; if (!LC.mode) LC.mode = data.mode; lcRender_(); }, LC.mode || 'default')
+  lcLoad_('overview', params, (data, cached) => {
+    LC.ov = data; if (!LC.mode) LC.mode = data.mode; lcRender_();
+    if (!LC.perf && LC.t0) LC.perf = { paint_ms: Math.round(performance.now() - LC.t0), paint_from: cached ? 'cache' : 'network' };
+  }, LC.mode || 'default')
     .catch(e => { LC.error = e; })
     .finally(() => {
       LC.loading = false;
@@ -496,6 +500,32 @@ async function lcWrite_(busyKey, action, params, okText) {
   else if (r.reason === 'quiescence') lcToast_('Not yet: available at ' + new Date(r.unlock_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), true);
   else lcToast_(r.error || r.reason || 'That didn’t work', true);
   lcRefresh_(true);
+}
+
+// ── Speed check (CP6c) ────────────────────────────────────────────────────────
+// Run from the browser console on the Lifecycle page: lcBench(). Measures with
+// the signed-in user's real session; only timings are printed.
+async function lcBench(n = 20) {
+  const pct = (a, p) => { const s = a.slice().sort((x, y) => x - y); return Math.round(s[Math.min(s.length - 1, Math.ceil(p / 100 * s.length) - 1)]); };
+  const time = async fn => { const t = performance.now(); await fn(); return performance.now() - t; };
+  const fresh = [], cached = [], write = [];
+  let bytes = 0;
+  for (let i = 0; i < n; i++) {
+    fresh.push(await time(async () => {
+      const r = await fetch('/api/email?op=read&view=overview&fresh=1', { headers: { Authorization: 'Bearer ' + currentSessionToken_() } });
+      bytes = Math.max(bytes, (await r.text()).length);
+    }));
+    cached.push(await time(() => fetch('/api/email?op=read&view=overview', { headers: { Authorization: 'Bearer ' + currentSessionToken_() } }).then(r => r.text())));
+  }
+  for (let i = 0; i < Math.min(n, 8); i++) write.push(await time(() => lcAdmin_('ping')));
+  const out = {
+    'Page from cache (ms)': LC.perf ? LC.perf.paint_ms + ' (' + LC.perf.paint_from + ')' : 'reload the page first',
+    'Fresh read p50 / p95 (ms)': pct(fresh, 50) + ' / ' + pct(fresh, 95), 'Cached read p50 / p95 (ms)': pct(cached, 50) + ' / ' + pct(cached, 95),
+    'Action p50 / p95 (ms)': pct(write, 50) + ' / ' + pct(write, 95), 'Overview size (KB)': Math.round(bytes / 1024),
+    'Budgets met': (pct(fresh, 95) < 1500 && pct(write, 95) < 5000 && bytes < 1048576 && LC.perf && LC.perf.paint_ms < 500) ? 'yes' : 'NO'
+  };
+  console.table(out);
+  return out;
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
