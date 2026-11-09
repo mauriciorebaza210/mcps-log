@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp4-5';
+var EE_VERSION = 'cp5-1';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -131,7 +131,28 @@ function doGet(e) {
 function doPost(e) {
   var p = (e && e.parameter) || {};
   if (p.action === 'unsubscribe') return EE_unsubscribePage_(p.t, true);
+  if (p.sig && e.postData && e.postData.contents) return EE_json_(EE_relay_(e));
   return EE_json_({ ok: false, error: 'unsupported' });
+}
+// Signed relay from api/email.js (api/_lib/email-relay.js): HMAC-SHA256 over the
+// exact body (sig in the query string, since doPost can't read headers), a
+// 5-minute timestamp window and a nonce, like ServiceRequestNotify.js.
+function EE_relay_(e) {
+  var secret = EE_props_().getProperty('EE_RELAY_SECRET');
+  if (!secret) return { ok: false, error: 'relay not configured' };
+  var raw = e.postData.contents;
+  var want = EE_hmacHex_(secret, raw), got = String(e.parameter.sig || '');
+  var diff = want.length === got.length ? 0 : 1;
+  for (var i = 0; i < want.length && i < got.length; i++) diff |= want.charCodeAt(i) ^ got.charCodeAt(i);
+  if (diff) return { ok: false, error: 'bad signature' };
+  var msg; try { msg = JSON.parse(raw); } catch (err) { return { ok: false, error: 'bad body' }; }
+  if (Math.abs(Date.now() - Number(msg.ts || 0)) > 5 * 60 * 1000) return { ok: false, error: 'stale' };
+  var cache = CacheService.getScriptCache();
+  if (!msg.nonce || cache.get('ee_nonce:' + msg.nonce)) return { ok: false, error: 'replayed' };
+  cache.put('ee_nonce:' + msg.nonce, '1', 21600);
+  if (msg.action !== 'ee_track') return { ok: false, error: 'unknown action' };
+  var x = EE_core_();
+  return { ok: true, results: EE_createTracker(x.env, x.core).ingest(msg.events) };
 }
 // Interim unsubscribe (CP4 sandbox). GET shows a confirmation; only the POST
 // records it, so link scanners can't unsubscribe anyone. CP5 moves this to the

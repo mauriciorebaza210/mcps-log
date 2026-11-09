@@ -35,12 +35,21 @@ var EE_TABLES = {
   Alerts: ['at', 'kind', 'detail'],
   // Who can do what in the portal's Lifecycle Email page (read by api/email.js).
   // Roles: viewer, editor, approver, operator (PLAN.md → Configuration & authorization).
-  Permissions: ['username', 'roles', 'active', 'note', 'updated_at', 'updated_by']
+  Permissions: ['username', 'roles', 'active', 'note', 'updated_at', 'updated_by'],
+  // Per-delivery tracking summary, derived from the raw Events (Tracking.js).
+  Engagement: ['delivery_id', 'contact_id', 'enrollment_id', 'step_id', 'mode', 'classifier_version', 'opens_total', 'opens_low',
+    'opens_medium', 'first_open_at', 'last_open_at', 'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'first_click_at',
+    'last_click_at', 'first_verified_click_at', 'links_json', 'recent_clicks', 'unsubscribed_at', 'form_submitted_at', 'updated_at']
 };
+// Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
+var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',
+  'seconds_since_send', 'method', 'ua_raw', 'ua_family', 'ip_prefix_hash', 'beacon_present', 'burst_count', 'confidence',
+  'reasons', 'classifier_version', 'source'];
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username' };
-var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1 };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id' };
+var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
+  opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1 };
 var EE_JOURNAL_HEADERS = ['seq', 'op_id', 'type', 'entity_id', 'data', 'prev_hash', 'hash', 'at'];
 var EE_TZ = 'America/Chicago';
 
@@ -166,6 +175,29 @@ function EE_sha256Hex_(text) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8)
     .map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
 }
+// Hex HMAC-SHA256, matching Node's crypto for ASCII input (see api/_lib/notify.js).
+function EE_hmacHex_(secret, message) {
+  return Utilities.computeHmacSha256Signature(String(message), String(secret))
+    .map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+function EE_events_(ss) {
+  var tabs = {};
+  function tab(ms) {
+    var name = 'Events_' + Utilities.formatDate(new Date(ms), EE_TZ, 'yyyy_MM');
+    return tabs[name] || (tabs[name] = EE_ensureTab_(ss, name, EE_EVENT_HEADERS));
+  }
+  return {
+    has: function (id, ms) {
+      var sh = tab(ms), last = sh.getLastRow();
+      return last > 1 && !!sh.getRange(2, 1, last - 1, 1).createTextFinder(String(id)).matchEntireCell(true).findNext();
+    },
+    append: function (row) {
+      var sh = tab(Date.parse(row.received_at));
+      sh.getRange(sh.getLastRow() + 1, 1, 1, EE_EVENT_HEADERS.length)
+        .setValues([EE_EVENT_HEADERS.map(function (k) { return EE_encode_(row[k]); })]);
+    }
+  };
+}
 function EE_readVerified_(fileId, sha) {
   var text = DriveApp.getFileById(fileId).getBlob().getDataAsString('UTF-8');
   if (EE_sha256Hex_(text) !== sha) throw new Error('integrity: file ' + fileId + ' changed after approval');
@@ -209,6 +241,7 @@ function EE_env(opts) {
       del: function (k) { props.deleteProperty(pre + k); } },
     cache: { get: function (k) { return cache.get(pre + k); }, put: function (k, v, s) { cache.put(pre + k, v, s || 21600); } },
     journal: EE_journal_(journalSs),
+    events: EE_events_(main),
     store: store,
     meta: { get: function (k) { var r = store.get('Meta', k); return r ? r.value : null; },
       set: function (k, v) { store.upsert('Meta', { key: k, value: String(v) }); } },
@@ -282,13 +315,19 @@ function EE_renderDelivery_(store, row) {
   var blocks = {};
   (rev.blocks_json || []).forEach(function (b) { blocks[b.name] = { flag: b.flag, html: EE_readVerified_(b.file_id, b.sha256) }; });
   var webapp = EE_props_().getProperty('EE_WEBAPP_URL');
+  // Tracked links (api/email.js) once the link secret is set; until then plain
+  // links and the interim Apps Script unsubscribe page.
+  var linkSecret = EE_props_().getProperty('EE_LINK_SECRET');
+  var L = linkSecret && c.track_base ? MCPS_EMAIL_TRACKING.links({ base: c.track_base, token: row.token, mode: row.mode,
+    hmacHex: function (m) { return EE_hmacHex_(linkSecret, m); } }) : null;
   var out = MCPS_EMAIL_RENDER.render({
     revision: { subject: rev.subject, preheader: rev.preheader, details_box: rev.details_box,
       body_html: EE_readVerified_(rev.body_file_id, rev.body_sha256) },
     blocks: blocks, fields: rev.fields_json || [], contact: contact,
     context: { sender_name: c.sender_name, deliveryToken: row.token,
       business: { name: c.business_name, address: c.business_address, phone: c.business_phone, website: c.business_website },
-      unsubscribeUrl: webapp ? webapp + '?action=unsubscribe&t=' + encodeURIComponent(row.token) : '',
+      unsubscribeUrl: L ? L.unsubscribe() : (webapp ? webapp + '?action=unsubscribe&t=' + encodeURIComponent(row.token) : ''),
+      openPixelUrl: L ? L.open() : '', trackLink: L ? L.click : null,
       // Test contacts use allowlisted addresses (Mau's), so no "meant for" banner is needed.
       links: { quote: c.link_quote }, testBanner: null }
   });
