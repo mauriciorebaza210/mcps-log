@@ -6,6 +6,7 @@
 //   POST /api/email?op=beacon {ee}           landing-page proof of a real browser; relayed before answering
 //   GET  /api/email?op=u&…   unsubscribe confirmation page; POST records it (relayed before answering)
 //   GET  /api/email/heartbeat  Vercel Cron, daily (vercel.json); emails Mau if the engine looks unhealthy
+//   POST /api/email?op=admin  {action, params}  (Bearer) page actions, each gated by a capability
 //
 // Links are built and signed by the engine with js/lib/email-tracking.js; a link
 // that fails its signature is refused and records nothing (matrix row 22).
@@ -21,12 +22,16 @@ import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import * as sheets from './_sheets.js';
 import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, health } from './_lib/email-read.js';
-import { relayEvents } from './_lib/email-relay.js';
+import { relayEvents, relayAdmin } from './_lib/email-relay.js';
 import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
 
 const RAW_TTL_MS = 15 * 1000;
+// The capability each page action needs (PLAN.md → Configuration & authorization).
+const ADMIN_CAP = { run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
+  abandon: 'resolve_unknown', resend: 'resolve_unknown' };
+let rawVersion = 0;          // bumped after a write, so this instance never serves the pre-write cache
 
 function engineSpreadsheetId() {
   return String(process.env.EE_ENGINE_SS_ID || '').trim();
@@ -44,7 +49,7 @@ function reply(res, status, body) {
 }
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-const DEFAULT_DEPS = { ...sheets, relayEvents, waitUntil, sendEngineAlert, now: () => Date.now(),
+const DEFAULT_DEPS = { ...sheets, relayEvents, relayAdmin, waitUntil, sendEngineAlert, now: () => Date.now(),
   cronSecret: () => String(process.env.CRON_SECRET || '').trim(),
   linkSecret: () => String(process.env.EE_LINK_SECRET || '').trim(),
   firstPartyHosts: () => ['mcps-log.vercel.app'].concat(String(process.env.EE_FIRST_PARTY_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean)) };
@@ -87,7 +92,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
         throw e;
       }
     };
-    return fresh ? load() : deps.getCached('ee:raw:' + id, RAW_TTL_MS, load);
+    return fresh ? load() : deps.getCached('ee:raw:' + id + ':' + rawVersion, RAW_TTL_MS, load);
   }
 
   async function opRead(req, res) {
@@ -211,7 +216,28 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return reply(res, 200, { ok: true, healthy: h.ok, issues: h.issues, alerted });
   }
 
-  const OPS = { read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat };
+  async function opAdmin(req, res) {
+    if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await deps.validatePortalSession(bearer(req));
+    if (!session) return reply(res, 401, { ok: false, error: 'Unauthorized' });
+    if (!engineSpreadsheetId()) return reply(res, 503, { ok: false, error: 'The email engine is not connected yet (EE_ENGINE_SS_ID).' });
+    const body = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch (_) { return {}; } })() : (req.body || {});
+    const action = String(body.action || '');
+    if (!ADMIN_CAP[action]) return reply(res, 400, { ok: false, error: 'Unknown action' });
+    // Permissions are read fresh: a just-removed user must not keep acting on a cached grant.
+    let tables;
+    try { tables = await loadTables(true); }
+    catch (e) { if (e.status === 503) return reply(res, 503, { ok: false, error: 'The engine sheet is missing tabs; run eeSetup.' }); throw e; }
+    const caps = capabilitiesFor(session.username, tables.Permissions);
+    if (!caps.has(ADMIN_CAP[action])) return reply(res, 403, { ok: false, error: 'You don’t have permission to do that.' });
+    const params = body.params && typeof body.params === 'object' ? body.params : {};
+    const r = await deps.relayAdmin({ action, params, actor: String(session.username || '') });
+    rawVersion++;
+    if (!r || r.error === 'relay not configured') return reply(res, 503, { ok: false, error: 'The engine can’t be reached right now.' });
+    return reply(res, 200, { ...r, ok: !!r.ok });
+  }
+
+  const OPS = { read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
 
   return async function handler(req, res) {
     const op = String((req.query && req.query.op) || '').trim();

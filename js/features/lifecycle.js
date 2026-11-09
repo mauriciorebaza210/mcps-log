@@ -9,7 +9,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 const LC = { tab: 'emails', mode: null, ov: null, contacts: null, q: '', bucket: '', loading: false, error: null,
-  drawer: null, root: null, bound: false };
+  drawer: null, root: null, bound: false, runPending: 0, busy: {} };
+const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
 const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup' };
 const LC_ICON = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>',
@@ -19,6 +20,7 @@ const LC_ICON = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
   stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
 };
 
@@ -41,6 +43,39 @@ function lcLoad_(view, params, onData, extraKey) {
   const hit = lcCacheGet_(key);
   if (hit) onData(hit.data, true);
   return lcFetch_(view, params).then(data => { lcCacheSet_(key, data); onData(data, false); return data; });
+}
+
+async function lcAdmin_(action, params) {
+  const res = await fetch('/api/email?op=admin', { method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + currentSessionToken_() },
+    body: JSON.stringify({ action, params: params || {} }) });
+  const body = await res.json().catch(() => ({}));
+  if (res.status >= 400 && !body.error) body.error = 'HTTP ' + res.status;
+  return body;
+}
+function lcCan_(cap) { return !!(LC.ov && (LC.ov.capabilities || []).includes(cap)); }
+function lcToast_(text, bad) {
+  let el = document.getElementById('lc-toast');
+  if (!el) { const wrap = document.createElement('div'); wrap.className = 'lc-layer'; wrap.innerHTML = '<div class="lc-toast" id="lc-toast" role="status" aria-live="polite"></div>'; document.body.appendChild(wrap); el = document.getElementById('lc-toast'); }
+  el.textContent = text; el.classList.toggle('bad', !!bad);
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(lcToast_.t); lcToast_.t = setTimeout(() => el.classList.remove('show'), 3200);
+}
+// A small confirm sheet in the page's own style. Resolves true / false.
+function lcConfirm_(o) {
+  return new Promise(resolve => {
+    const layer = document.createElement('div');
+    layer.className = 'lc-layer';
+    layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet" role="alertdialog" aria-modal="true">' +
+      '<h3>' + lcEsc_(o.title) + '</h3><p>' + lcEsc_(o.body || '') + '</p><div class="row"><button class="lc-btn" data-x="0">Cancel</button>' +
+      '<button class="lc-btn ' + (o.danger ? 'danger solid' : 'primary') + '" data-x="1">' + lcEsc_(o.ok || 'Confirm') + '</button></div></div>';
+    const done = v => { layer.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
+    layer.addEventListener('click', e => { const t = e.target.closest('[data-x]'); if (t) done(t.dataset.x === '1'); });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(layer);
+    layer.querySelector('.lc-btn.' + (o.danger ? 'danger' : 'primary')).focus();
+  });
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
@@ -155,9 +190,12 @@ function lcRenderHead_() {
   const mode = ov ? '<div class="lc-seg" role="group" aria-label="Data shown">' +
     ['test', 'production'].map(m => '<button data-act="mode" data-mode="' + m + '" class="' + (LC.mode === m ? 'on' : '') + '">' + (m === 'test' ? 'Test' : 'Live') + '</button>').join('') + '</div>' : '';
   const test = ov && ov.engine.mode !== 'production' ? '<span class="lc-pill test"><i></i>Test mode</span>' : '';
+  const off = ov && !ov.engine.enabled ? '<button class="lc-pill bad" data-act="tab" data-tab="activity"><i></i>Sending off</button>' : '';
+  const run = lcCan_('run_now') ? '<button class="lc-btn primary' + (LC.runPending ? ' busy' : '') + '" data-act="run"' + (LC.runPending ? ' disabled' : '') + '>' +
+    (LC.runPending ? LC_ICON.refresh + 'Running…' : LC_ICON.play + 'Run now') + '</button>' : '';
   el.innerHTML = '<header class="lc-head"><div class="lc-title"><h1>Lifecycle Email</h1>' + mode + '</div>' +
-    '<div class="lc-status">' + test + health +
-    '<button class="lc-icon-btn' + (LC.loading ? ' spin' : '') + '" data-act="refresh" aria-label="Refresh" title="Refresh">' + LC_ICON.refresh + '</button></div></header>';
+    '<div class="lc-status">' + test + off + health +
+    '<button class="lc-icon-btn' + (LC.loading ? ' spin' : '') + '" data-act="refresh" aria-label="Refresh" title="Refresh">' + LC_ICON.refresh + '</button>' + run + '</div></header>';
 }
 
 function lcRenderKpis_() {
@@ -231,9 +269,17 @@ function lcActivity_() {
     : '<ul class="lc-list">' + sys.map(i => '<li><span class="lc-li-ic bad">' + LC_ICON.alert + '</span><div class="main"><b>' + lcEsc_(LC_ISSUE[i.kind] || i.kind) +
       '</b><small>' + lcEsc_(i.kind === 'no_recent_run' ? 'Last one ' + lcDate_(i.at) : i.at ? lcDate_(i.at) : '') + '</small></div></li>').join('') + '</ul>';
   const att = ov.attention.length ? '<ul class="lc-list">' + ov.attention.map(d => '<li>' + lcStateTag_(d.state) + '<div class="main"><b>' +
-      lcEsc_(lcStepName_(d.step_id)) + '</b><small>' + lcEsc_(d.email) + (d.error ? ' · ' + lcEsc_(d.error) : '') + '</small></div><time>' +
+      lcEsc_(lcStepName_(d.step_id)) + '</b><small>' + lcEsc_(d.email) + (d.error ? ' · ' + lcEsc_(d.error) : '') + '</small>' + lcResolveActs_(d) + '</div><time>' +
       lcEsc_(lcAgo_(d.send_invoked_at || d.claimed_at)) + '</time></li>').join('') + '</ul>'
     : '<div class="lc-empty">Nothing needs a decision.</div>';
+  const canPause = lcCan_('pause'), e = ov.engine;
+  const sw = (on, act, extra, label, key) => '<button class="lc-switch' + (on ? ' on' : '') + '" role="switch" aria-checked="' + on + '" aria-label="' + lcEsc_(label) + '" data-act="' + act + '"' +
+    (extra || '') + (canPause && !LC.busy[key] ? '' : ' disabled') + '></button>';
+  const ctrls = '<ul class="lc-ctrls"><li><div><b>Sending</b><small>' + (e.enabled ? 'On' : 'Off · nothing sends') + '</small></div>' + sw(e.enabled, 'enabled', '', 'Sending', 'enabled') + '</li>' +
+    ['B', 'C'].map(b => { const on = !e.paused_buckets.includes(b); return '<li><div><b>' + LC_SEQ[b] + '</b><small>' + (on ? 'Running' : 'Paused') + '</small></div>' +
+      sw(on, 'pause', ' data-bucket="' + b + '"', LC_SEQ[b], 'pause' + b) + '</li>'; }).join('') + '</ul>';
+  const changes = (ov.changes || []).length ? '<ul class="lc-list">' + ov.changes.slice(0, 8).map(c => '<li><div class="main"><b>' + lcEsc_(lcChangeText_(c)) +
+      '</b>' + (c.result !== 'ok' ? '<small>Refused: ' + lcEsc_(c.result) + '</small>' : '') + '</div><time>' + lcEsc_(lcAgo_(c.at)) + '</time></li>').join('') + '</ul>' : '';
   const runs = ov.runs.length ? '<table class="lc-table"><thead><tr><th>Run</th><th class="hide-sm">Trigger</th><th class="r">Sent</th><th class="r hide-sm">Skipped</th><th>Result</th></tr></thead><tbody>' +
       ov.runs.map(r => '<tr><td>' + lcEsc_(lcDate_(r.started_at)) + '</td><td class="hide-sm">' + (r.trigger === 'daily' ? 'Scheduled' : 'Manual') +
         '</td><td class="r num">' + r.sent + '</td><td class="r num hide-sm">' + r.skipped + '</td><td>' +
@@ -242,8 +288,9 @@ function lcActivity_() {
   const alerts = ov.alerts.length ? '<ul class="lc-list">' + ov.alerts.slice(0, 8).map(a => '<li><div class="main"><b>' + lcEsc_(LC_ALERT[a.kind] || a.kind) +
       '</b>' + (a.detail ? '<small>' + lcEsc_(lcHumanize_(a.detail)) + '</small>' : '') + '</div><time>' + lcEsc_(lcAgo_(a.at)) + '</time></li>').join('') + '</ul>'
     : '<div class="lc-empty">No alerts.</div>';
-  return '<div class="lc-grid"><div><div class="lc-card"><div class="lc-card-h"><h3>Health</h3></div>' + issues + '</div>' +
-    '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div></div>' +
+  return '<div class="lc-grid"><div><div class="lc-card"><div class="lc-card-h"><h3>Health</h3></div>' + issues + ctrls + '</div>' +
+    '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
+    (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +
     '<div><div class="lc-card"><div class="lc-card-h"><h3>Runs</h3><small>Daily at ' + lcHour_(ov.engine.run_hour) + '</small></div>' + runs + '</div>' +
     '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div></div></div>';
 }
@@ -255,6 +302,20 @@ function lcHumanize_(text) {
     .replace(/\b[\w]+:([a-z]+_[a-z]+):\d+\b/g, (m, step) => lcStepName_(step))
     .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, m => lcDate_(m));
 }
+// The decisions an unconfirmed send allows. "Confirming" resolves itself; failed needs the email fixed.
+function lcResolveActs_(d) {
+  if (d.state !== 'unknown' || !lcCan_('resolve_unknown')) return '';
+  const unlock = Date.parse(d.send_invoked_at || d.claimed_at) + LC_QUIESCENCE_MS, ready = Date.now() >= unlock, busy = LC.busy['r:' + d.delivery_id];
+  const b = (act, label, cls, dis, title) => '<button class="lc-btn sm ' + (cls || '') + '" data-act="resolve" data-do="' + act + '" data-id="' + lcEsc_(d.delivery_id) + '"' +
+    (dis || busy ? ' disabled' : '') + (title ? ' title="' + lcEsc_(title) + '"' : '') + '>' + label + '</button>';
+  return '<div class="lc-acts">' + b('mark_sent', 'Mark sent') +
+    b('resend', ready ? 'Resend' : 'Resend at ' + new Date(unlock).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), '', !ready,
+      ready ? '' : 'An earlier attempt could still finish until then') + b('abandon', 'Abandon', 'danger') + '</div>';
+}
+const LC_CHANGE = { run_now: () => 'started a run', set_enabled: p => (p.enabled ? 'turned sending on' : 'turned sending off'),
+  set_bucket_paused: p => (p.paused ? 'paused ' : 'resumed ') + (LC_SEQ[p.bucket] || p.bucket), mark_sent: () => 'marked a send as sent',
+  abandon: () => 'abandoned an unconfirmed send', resend: () => 'asked to resend an email' };
+const lcChangeText_ = c => (c.actor || 'Someone') + ' ' + (LC_CHANGE[c.action] ? LC_CHANGE[c.action](c.params || {}) : c.action);
 const lcHour_ = h => { h = Number(h) || 9; return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM'); };
 const lcStepName_ = id => { const s = LC.ov && LC.ov.steps.find(x => x.step_id === id); return s ? s.name : id; };
 
@@ -381,6 +442,62 @@ function lcContactBody_(d) {
     '<div class="lc-sec"><h4>Emails</h4>' + tl + '</div>';
 }
 
+// ── Actions ───────────────────────────────────────────────────────────────────
+// Each one: confirm if it matters, call the engine, say what happened, then refresh.
+async function lcRunNow_() {
+  const live = LC.ov && LC.ov.engine.mode === 'production';
+  if (!await lcConfirm_({ title: 'Run now?', ok: 'Run now',
+    body: live ? 'Emails that are due go out to customers right away.' : 'Emails that are due go out now, to test contacts only.' })) return;
+  LC.runPending = Date.now(); lcRenderHead_();
+  const r = await lcAdmin_('run_now');
+  if (!r.ok) { LC.runPending = 0; lcRenderHead_(); return lcToast_(r.error || 'Couldn’t start the run', true); }
+  lcToast_(r.status === 'already_queued' ? 'A run is already starting' : 'Run starts within a minute');
+  lcWatchRun_();
+}
+// Polls until a run newer than the click shows up, then reports it.
+function lcWatchRun_() {
+  const since = LC.runPending - 5000;
+  const tick = () => {
+    if (!LC.runPending) return;
+    if (Date.now() - LC.runPending > 7 * 60 * 1000) { LC.runPending = 0; lcRenderHead_(); return lcToast_('The run hasn’t reported yet. Check Activity later.', true); }
+    lcFetch_('overview', { mode: LC.mode || '', fresh: '1' }).then(data => {
+      const r = (data.runs || []).find(x => Date.parse(x.started_at) >= since && x.finished_at);
+      LC.ov = data; lcCacheSet_(lcKey_('overview', LC.mode || 'default'), data);
+      if (r) { LC.runPending = 0; lcToast_('Run finished · ' + r.sent + ' sent'); }
+      lcRender_();
+      if (LC.runPending) setTimeout(tick, 15000);
+    }).catch(() => setTimeout(tick, 15000));
+  };
+  setTimeout(tick, 20000);
+}
+async function lcSetEnabled_(on) {
+  if (!on && !await lcConfirm_({ title: 'Turn sending off?', ok: 'Turn off', danger: true,
+    body: 'No lifecycle email goes out until it’s back on. Nothing is lost; due emails wait.' })) return;
+  await lcWrite_('enabled', 'set_enabled', { enabled: on }, on ? 'Sending is on' : 'Sending is off');
+}
+async function lcSetPaused_(bucket, paused) {
+  await lcWrite_('pause' + bucket, 'set_bucket_paused', { bucket, paused }, (paused ? 'Paused ' : 'Resumed ') + LC_SEQ[bucket]);
+}
+async function lcResolve_(what, id) {
+  const copy = {
+    mark_sent: { title: 'Mark as sent?', ok: 'Mark sent', body: 'Only if you found this email in Tony’s Sent folder.' },
+    resend: { title: 'Resend this email?', ok: 'Resend', body: 'Check Tony’s Sent folder first. If it isn’t there, the next run sends it again.' },
+    abandon: { title: 'Abandon this email?', ok: 'Abandon', danger: true, body: 'It won’t be sent, and its draft is deleted.' }
+  }[what];
+  if (!copy || !await lcConfirm_(copy)) return;
+  const done = { mark_sent: 'Marked as sent', resend: 'It sends on the next run', abandon: 'Abandoned' }[what];
+  await lcWrite_('r:' + id, what, { delivery_id: id }, done);
+}
+async function lcWrite_(busyKey, action, params, okText) {
+  LC.busy[busyKey] = true; lcRenderBody_();
+  const r = await lcAdmin_(action, params).catch(() => ({ ok: false, error: 'Network error' }));
+  delete LC.busy[busyKey];
+  if (r.ok) lcToast_(okText);
+  else if (r.reason === 'quiescence') lcToast_('Not yet: available at ' + new Date(r.unlock_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), true);
+  else lcToast_(r.error || r.reason || 'That didn’t work', true);
+  lcRefresh_(true);
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 function lcOnClick_(e) {
   const t = e.target.closest('[data-act]'); if (!t) return;
@@ -393,6 +510,10 @@ function lcOnClick_(e) {
   else if (act === 'close') lcCloseDrawer_();
   else if (act === 'dtab' && LC.drawer) { LC.drawer.tab = t.dataset.tab; lcRenderDrawer_(); }
   else if (act === 'bucket') { LC.bucket = t.dataset.bucket; lcRenderBody_(); }
+  else if (act === 'run') lcRunNow_();
+  else if (act === 'enabled') lcSetEnabled_(!LC.ov.engine.enabled);
+  else if (act === 'pause') lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));
+  else if (act === 'resolve') lcResolve_(t.dataset.do, t.dataset.id);
 }
 function lcOnInput_(e) {
   if (e.target.dataset.lcInput !== 'q') return;

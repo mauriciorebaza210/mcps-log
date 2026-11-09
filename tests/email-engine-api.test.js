@@ -26,6 +26,7 @@ const SHEET = {
     ['old:b_intro:1', 'c1', 'e1', 'b_intro', '2', 'test', 'maria@example.com', 'sent', '1', iso(90), iso(90)]],
   Runs: [['run_id', 'trigger', 'started_at', 'sent', 'stopped_reason'], ['r1', 'daily', iso(1), '1', 'done'], ['r2', 'manual', iso(0.5), '0', 'done']],
   Alerts: [['at', 'kind', 'detail'], [iso(1) + ' ab12', 'delivery_unknown', 'e2:c_welcome:1 to james@example.com']],
+  ChangeLog: [['id', 'at', 'actor', 'action', 'detail', 'result'], ['chg_1', iso(0.2), 'mau', 'set_bucket_paused', '{"bucket":"B","paused":true}', 'ok']],
   Engagement: [['delivery_id', 'opens_total', 'opens_low', 'opens_medium', 'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'first_open_at', 'links_json', 'replied_at', 'last_reply_snippet'],
     ['e1:b_intro:1', '3', '1', '2', '2', '1', '1', '1', iso(1), '{"button1":2}', iso(0.5), 'Call me Tuesday']]
 };
@@ -216,4 +217,45 @@ test('Step view: rules, revisions, recipients with names and evidence, link tota
   assert.equal((await call(h, { token: 'tok-mau', query: { view: 'step', id: 'nope' } })).statusCode, 404);
   const c = (await call(h, { token: 'tok-mau', query: { view: 'contacts' } })).body.data.contacts.find(x => x.contact_id === 'c1');
   assert.deepEqual([c.sequence.status, c.last_email.step_id], ['active', 'b_intro']);
+});
+
+// ── Page actions (op=admin) ──────────────────────────────────────────────────
+
+async function admin(body, { token = 'tok-mau', method = 'POST', relay } = {}) {
+  const sent = [];
+  const h = (await load())({ ...world().deps, relayAdmin: async a => { sent.push(a); return relay ? relay(a) : { ok: true }; } });
+  const res = { headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, status(c) { this.statusCode = c; return this; }, send(b) { this.body = JSON.parse(b); return this; } };
+  await h({ method, query: { op: 'admin' }, body, headers: token ? { authorization: 'Bearer ' + token } : {} }, res);
+  return { res, sent };
+}
+
+test('Admin: POST with a session only; each action needs its own capability; unknown actions refused', async () => {
+  assert.equal((await admin({ action: 'run_now' }, { method: 'GET' })).res.statusCode, 405);
+  assert.equal((await admin({ action: 'run_now' }, { token: '' })).res.statusCode, 401);
+  assert.equal((await admin({ action: 'drop_tables' })).res.statusCode, 400);
+  const v = await admin({ action: 'run_now' }, { token: 'tok-viewer' });
+  assert.equal(v.res.statusCode, 403);
+  assert.equal(v.sent.length, 0, 'a refused action never reaches the engine');
+  assert.equal((await admin({ action: 'abandon', params: { delivery_id: 'x' } }, { token: 'tok-viewer' })).res.statusCode, 403);
+});
+
+test('Admin: the actor is the validated portal user, never a name sent by the browser', async () => {
+  const { res, sent } = await admin({ action: 'set_bucket_paused', params: { bucket: 'B', paused: true }, actor: 'someone-else' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(sent, [{ action: 'set_bucket_paused', params: { bucket: 'B', paused: true }, actor: 'mau' }]);
+});
+
+test('Admin: engine refusals pass through (e.g. Resend before quiescence); an unreachable engine is a 503', async () => {
+  const r = await admin({ action: 'resend', params: { delivery_id: 'e2:c_welcome:1' } }, { relay: () => ({ ok: false, reason: 'quiescence', unlock_at: '2026-11-09T22:00:00Z' }) });
+  assert.deepEqual([r.res.statusCode, r.res.body.ok, r.res.body.reason], [200, false, 'quiescence']);
+  const down = await admin({ action: 'run_now' }, { relay: () => ({ ok: false, error: 'relay not configured' }) });
+  assert.equal(down.res.statusCode, 503);
+});
+
+test('Overview carries the viewer’s capabilities and the recent change log', async () => {
+  const h = (await load())(world().deps);
+  const o = (await call(h, { token: 'tok-mau' })).body.data;
+  assert.ok(o.capabilities.includes('run_now'));
+  assert.deepEqual(o.changes.map(c => [c.actor, c.action, c.params.bucket]), [['mau', 'set_bucket_paused', 'B']]);
+  assert.deepEqual((await call(h, { token: 'tok-viewer' })).body.data.capabilities, ['view_aggregates']);
 });

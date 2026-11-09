@@ -23,9 +23,16 @@ function asciiJson(value) {
 
 // events: [{event_id, type, token, link_id, mode, method, ua, ip_hash, received_at}]
 // → {ok, results} from the engine, or {ok:false, error}. Never throws.
-export async function relayEvents(events, cfg = relayConfig(), fetchImpl = fetch) {
+export function relayEvents(events, cfg = relayConfig(), fetchImpl = fetch) {
+  return relayCall({ action: 'ee_track', events }, cfg, fetchImpl);
+}
+// admin: {action, params, actor}: actor is the validated portal username (Admin.js).
+export function relayAdmin(admin, cfg = relayConfig(), fetchImpl = fetch) {
+  return relayCall({ action: 'ee_admin', admin }, cfg, fetchImpl);
+}
+async function relayCall(payload, cfg, fetchImpl) {
   if (!cfg.url || !cfg.secret) return { ok: false, error: 'relay not configured' };
-  const body = asciiJson({ action: 'ee_track', events, ts: Date.now(), nonce: crypto.randomUUID() });
+  const body = asciiJson({ ...payload, ts: Date.now(), nonce: crypto.randomUUID() });
   const sig = crypto.createHmac('sha256', cfg.secret).update(body).digest('hex');
   try {
     const res = await fetchImpl(cfg.url + (cfg.url.includes('?') ? '&' : '?') + 'sig=' + sig, {

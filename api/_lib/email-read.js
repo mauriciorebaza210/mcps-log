@@ -17,7 +17,7 @@ export const ROLE_CAPS = {
 };
 
 // The engine tabs the portal reads. Never raw Events (PLAN.md → Performance).
-export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement'];
+export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement', 'ChangeLog'];
 
 const NUMERIC = new Set(['occurrence', 'attempt', 'gen', 'last_seq', 'held_days', 'rev_no', 'adopted_from_gen',
   'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed', 'opens_total', 'opens_low', 'opens_medium',
@@ -199,6 +199,10 @@ export function buildOverview(tables, caps, now, opts = {}) {
     runs,
     alerts: (tables.Alerts || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20)
       .map(a => ({ at: String(a.at).split(' ')[0], kind: a.kind, detail: caps.has('view_pii') ? a.detail : '' })),
+    // Who did what from the portal (Admin.js), newest first.
+    changes: (tables.ChangeLog || []).slice().sort(byDesc('at')).slice(0, 15).map(c => ({ at: c.at, actor: c.actor, action: c.action,
+      params: typeof c.detail === 'object' && c.detail ? c.detail : {}, result: c.result })),
+    capabilities: [...caps].sort(),
     totals: {
       contacts: (tables.Contacts || []).length,
       active_enrollments: enrollments.filter(e => e.status === 'active').length,

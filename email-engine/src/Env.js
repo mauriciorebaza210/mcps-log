@@ -42,7 +42,9 @@ var EE_TABLES = {
     'last_click_at', 'first_verified_click_at', 'links_json', 'recent_clicks', 'unsubscribed_at', 'form_submitted_at',
     'replied_at', 'other_replied_at', 'last_reply_snippet', 'auto_replies', 'soft_bounces', 'bounced_at', 'bounce_kind', 'updated_at'],
   // Per-thread cursor for the reply scan (Replies.js): messages already handled.
-  Threads: ['thread_id', 'message_count', 'seen_json', 'last_scanned_at']
+  Threads: ['thread_id', 'message_count', 'seen_json', 'last_scanned_at'],
+  // Every action taken from the portal (Admin.js), with the portal user who took it.
+  ChangeLog: ['id', 'at', 'actor', 'action', 'detail', 'result']
 };
 // Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
 var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',
@@ -50,7 +52,7 @@ var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id'
   'reasons', 'classifier_version', 'source', 'gmail_message_id', 'snippet'];
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id' };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
   opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1,
   auto_replies: 1, soft_bounces: 1, message_count: 1 };

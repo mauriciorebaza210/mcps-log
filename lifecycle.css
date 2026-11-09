@@ -217,4 +217,36 @@
   .lc-dr-tabs{padding:0 18px}
   .lc-kv{grid-template-columns:110px 1fr}
 }
-@media (prefers-reduced-motion:reduce){.lc *,.lc-layer *,.lc-drawer,.lc-scrim{animation:none!important;transition:none!important;opacity:1!important;transform:none!important}}
+@media (prefers-reduced-motion:reduce){.lc *,.lc-layer,.lc-layer *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* Actions (6b-2): buttons, switches, confirm sheet, toast */
+.lc-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:600;font-size:13px;color:var(--ink);white-space:nowrap}
+.lc-btn:hover:not(:disabled){border-color:var(--aqua);color:var(--teal)}
+.lc-btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+.lc-btn.primary:hover:not(:disabled){background:var(--teal-2);color:#fff}
+.lc-btn.danger{color:var(--red)}
+.lc-btn.danger.solid{background:var(--red);border-color:var(--red);color:#fff}
+.lc-btn.sm{height:28px;padding:0 11px;font-size:12.5px}
+.lc-btn:disabled{opacity:.5;cursor:not-allowed}
+.lc-btn svg{width:14px;height:14px}
+.lc-btn.busy svg{animation:lc-spin .9s linear infinite}
+.lc-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.lc-ctrls{list-style:none;margin:0;padding:4px 18px 10px;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.lc-ctrls li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px}
+.lc-ctrls li:first-child{border-top:0}
+.lc-ctrls b{font-weight:600}
+.lc-ctrls small{display:block;color:var(--muted);font-size:12px}
+.lc-switch{position:relative;width:40px;height:23px;border-radius:999px;border:0;background:#CFD7D8;padding:0;flex:none;transition:background .15s}
+.lc-switch::after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.lc-switch.on{background:var(--aqua)}
+.lc-switch.on::after{left:20px}
+.lc-switch:disabled{opacity:.55;cursor:not-allowed}
+.lc-sheet{position:fixed;z-index:951;left:50%;top:50%;transform:translate(-50%,-48%);width:min(420px,calc(100% - 32px));background:var(--card);border-radius:16px;box-shadow:var(--shadow-lg);padding:22px 22px 18px;opacity:0;animation:lc-pop .18s ease forwards}
+@keyframes lc-pop{to{opacity:1;transform:translate(-50%,-50%)}}
+.lc-sheet h3{font-family:var(--f-head);font-weight:700;font-size:17px;color:var(--teal);margin:0 0 6px}
+.lc-sheet p{margin:0;color:var(--ink-2);font-size:13.5px}
+.lc-sheet .row{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.lc-sheet-scrim{z-index:950}
+.lc-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,8px);z-index:960;background:var(--teal);color:#fff;font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:999px;box-shadow:var(--shadow-lg);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:calc(100% - 32px)}
+.lc-toast.show{opacity:1;transform:translate(-50%,0)}
+.lc-toast.bad{background:var(--red)}

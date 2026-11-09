@@ -18,7 +18,7 @@ test('All engine files load together like Apps Script, and expose the entry poin
   const all = files.map(f => fs.readFileSync(path.join(SRC, f), 'utf8') + '\n').join('');
   vm.runInContext(all, ctx, { filename: 'email-engine/src (all files)' });
   for (const fn of ['eeSetup', 'eeAddTestContacts', 'eeApprove', 'eeApproveBIntro', 'eeApproveCWelcome', 'eeRunNow', 'eeDiagnostics', 'eeInstall', 'EE_dailyTrigger', 'doGet', 'doPost',
-    'EE_createCore', 'EE_planDay', 'EE_runDay', 'EE_env', 'eeSandboxSuite', 'eeSandboxStatus', 'EE_sbContinue', 'EE_createTracker', 'EE_relay_', 'eeAddTrackingTestContact', 'EE_createReplyScanner']) {
+    'EE_createCore', 'EE_planDay', 'EE_runDay', 'EE_env', 'eeSandboxSuite', 'eeSandboxStatus', 'EE_sbContinue', 'EE_createTracker', 'EE_relay_', 'eeAddTrackingTestContact', 'EE_createReplyScanner', 'EE_admin_', 'EE_adminRun_', 'EE_runNowTrigger']) {
     assert.equal(typeof ctx[fn], 'function', fn);
   }
   assert.equal(typeof ctx.MCPS_LIFECYCLE.decide, 'function');

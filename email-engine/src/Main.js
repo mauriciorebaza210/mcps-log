@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp6-1';
+var EE_VERSION = 'cp6-2';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -154,6 +154,7 @@ function EE_relay_(e) {
   var cache = CacheService.getScriptCache();
   if (!msg.nonce || cache.get('ee_nonce:' + msg.nonce)) return { ok: false, error: 'replayed' };
   cache.put('ee_nonce:' + msg.nonce, '1', 21600);
+  if (msg.action === 'ee_admin') return EE_admin_(msg.admin || {});
   if (msg.action !== 'ee_track') return { ok: false, error: 'unknown action' };
   var x = EE_core_();
   return { ok: true, results: EE_createTracker(x.env, x.core).ingest(msg.events) };
