@@ -17,10 +17,11 @@ export const ROLE_CAPS = {
 };
 
 // The engine tabs the portal reads. Never raw Events (PLAN.md → Performance).
-export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts'];
+export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement'];
 
 const NUMERIC = new Set(['occurrence', 'attempt', 'gen', 'last_seq', 'held_days', 'rev_no', 'adopted_from_gen',
-  'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed']);
+  'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed', 'opens_total', 'opens_low', 'opens_medium',
+  'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high']);
 const DAY = 24 * 60 * 60 * 1000;
 const IN_FLIGHT = new Set(['claimed', 'drafted', 'sending', 'reconcile']);
 const NEEDS_ATTENTION = new Set(['reconcile', 'unknown', 'failed']);
@@ -84,14 +85,29 @@ function contactView(c, caps) {
     startup_date: c.startup_date || '', source: c.source || '', created_at: c.created_at || ''
   };
 }
-function deliveryView(d, caps) {
+// Per-delivery tracking, by evidence level (PLAN.md → Tracking). Opens are
+// estimates; "verified" is a browser-verified click, the only kind that stops.
+function engagementView(g) {
+  if (!g) return null;
+  return { opened: g.opens_medium > 0, opens: g.opens_total, opens_low: g.opens_low,
+    clicks: g.clicks_medium, clicks_low: g.clicks_low, verified_clicks: g.clicks_high,
+    first_open_at: g.first_open_at || '', first_click_at: g.first_click_at || '', first_verified_click_at: g.first_verified_click_at || '',
+    unsubscribed_at: g.unsubscribed_at || '', form_submitted_at: g.form_submitted_at || '', links: g.links_json || {},
+    classifier_version: g.classifier_version || '' };
+}
+function deliveryView(d, caps, g) {
   return {
     delivery_id: d.delivery_id, contact_id: d.contact_id, enrollment_id: d.enrollment_id, step_id: d.step_id,
     occurrence: d.occurrence, mode: d.mode, state: d.state, attempt: d.attempt, revision_id: d.revision_id,
     email: caps.has('view_pii') ? d.email_norm : maskEmail(d.email_norm),
     claimed_at: d.claimed_at || '', send_invoked_at: d.send_invoked_at || '', sent_at: d.sent_at || '',
-    error: d.error || '', resolved_by: d.resolved_by || ''
+    error: d.error || '', resolved_by: d.resolved_by || '', engagement: engagementView(g)
   };
+}
+function engagementIndex(tables) {
+  const by = {};
+  (tables.Engagement || []).forEach(g => { by[g.delivery_id] = g; });
+  return by;
 }
 
 // mode: 'test' | 'production' (default: the engine's current mode).
@@ -105,9 +121,12 @@ export function buildOverview(tables, caps, now, opts = {}) {
   (tables.Revisions || []).filter(r => r.status === 'published').forEach(r => {
     if (!published[r.step_id] || published[r.step_id].rev_no < r.rev_no) published[r.step_id] = r;
   });
+  const eng = engagementIndex(tables);
   const steps = activeSteps(tables, cfg).map(s => {
     const mine = deliveries.filter(d => d.step_id === s.step_id);
     const count = pred => mine.filter(pred).length;
+    const sentRows = mine.filter(d => d.state === 'sent');
+    const tracked = pred => sentRows.filter(d => eng[d.delivery_id] && pred(eng[d.delivery_id])).length;
     const rev = published[s.step_id];
     return {
       step_id: s.step_id, name: s.name, bucket: s.sequence_id, order: s.order, category: s.category, status: s.status,
@@ -117,6 +136,12 @@ export function buildOverview(tables, caps, now, opts = {}) {
         sent: count(d => d.state === 'sent'), sent_7d: count(d => d.state === 'sent' && ms(d.sent_at) >= week),
         in_flight: count(d => IN_FLIGHT.has(d.state)), unknown: count(d => d.state === 'unknown'),
         failed: count(d => d.state === 'failed'), cancelled: count(d => d.state === 'cancelled')
+      },
+      // Unique deliveries, among those sent in the window.
+      tracking: {
+        opened_est: tracked(g => g.opens_medium > 0), clicked: tracked(g => g.clicks_medium > 0),
+        verified_clicks: tracked(g => g.clicks_high > 0), unsubscribed: tracked(g => !!g.unsubscribed_at),
+        forms: tracked(g => !!g.form_submitted_at), scanner_like: tracked(g => g.clicks_low > 0 || g.opens_low > 0)
       }
     };
   });
@@ -133,7 +158,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
       rule_rev: cfg.rule_rev || '', last_run: runs[0] || null
     },
     steps,
-    attention: deliveries.filter(d => NEEDS_ATTENTION.has(d.state)).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps)),
+    attention: deliveries.filter(d => NEEDS_ATTENTION.has(d.state)).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps, eng[d.delivery_id])),
     runs,
     alerts: (tables.Alerts || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20)
       .map(a => ({ at: String(a.at).split(' ')[0], kind: a.kind, detail: caps.has('view_pii') ? a.detail : '' })),
@@ -165,6 +190,7 @@ export function buildContact(tables, caps, contactId) {
     enrollment_id: e.enrollment_id, sequence_id: e.sequence_id, mode: e.mode, status: e.status, enrolled_on: e.enrolled_on,
     stop_reason: e.stop_reason || '', stopped_on: e.stopped_on || '', stopped_branches: e.stopped_branches || []
   }));
-  const deliveries = (tables.Deliveries || []).filter(d => d.contact_id === contactId).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps));
+  const eng = engagementIndex(tables);
+  const deliveries = (tables.Deliveries || []).filter(d => d.contact_id === contactId).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps, eng[d.delivery_id]));
   return { contact: contactView(c, caps), enrollments, deliveries };
 }

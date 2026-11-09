@@ -25,7 +25,9 @@ const SHEET = {
     ['e2:c_welcome:1', 'c2', 'e2', 'c_welcome', '1', 'test', 'james@example.com', 'unknown', '1', iso(1), ''],
     ['old:b_intro:1', 'c1', 'e1', 'b_intro', '2', 'test', 'maria@example.com', 'sent', '1', iso(90), iso(90)]],
   Runs: [['run_id', 'trigger', 'started_at', 'sent', 'stopped_reason'], ['r1', 'daily', iso(1), '1', 'done'], ['r2', 'manual', iso(0.5), '0', 'done']],
-  Alerts: [['at', 'kind', 'detail'], [iso(1) + ' ab12', 'delivery_unknown', 'e2:c_welcome:1 to james@example.com']]
+  Alerts: [['at', 'kind', 'detail'], [iso(1) + ' ab12', 'delivery_unknown', 'e2:c_welcome:1 to james@example.com']],
+  Engagement: [['delivery_id', 'opens_total', 'opens_low', 'opens_medium', 'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'first_open_at', 'links_json'],
+    ['e1:b_intro:1', '3', '1', '2', '2', '1', '1', '1', iso(1), '{"button1":2}']]
 };
 
 async function load() {
@@ -106,6 +108,9 @@ test('Overview: per-step counts, audience, attention list, latest runs first, 60
   assert.deepEqual(o.attention.map(d => d.delivery_id), ['e2:c_welcome:1']);
   assert.equal(o.runs[0].run_id, 'r2');
   assert.equal(o.engine.last_run.run_id, 'r2');
+  assert.deepEqual({ ...b.tracking }, { opened_est: 1, clicked: 1, verified_clicks: 1, unsubscribed: 0, forms: 0, scanner_like: 1 });
+  const r = (await call(h, { token: 'tok-mau', query: { view: 'contact', id: 'c1' } })).body.data.deliveries[0].engagement;
+  assert.deepEqual([r.opened, r.opens, r.verified_clicks, r.links.button1], [true, 3, 1, 2]);
   assert.equal((await call(h, { token: 'tok-mau', query: { mode: 'production' } })).body.data.steps[0].counts.sent, 0, 'test data never shows in production');
 });
 
