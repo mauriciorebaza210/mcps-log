@@ -101,3 +101,29 @@ test('Maintenance runs only allow-listed setup tasks, and logs them', () => {
   assert.deepEqual(ran, ['eeSetupMarketingKit']);
   assert.deepEqual(w.log().map(r => [r[0], r[1], r[2]]), [['claude', 'maintenance', 'ok'], ['claude', 'maintenance', 'unknown task'], ['claude', 'maintenance', 'unknown task']]);
 });
+
+test('Import saves new contacts into Needs review, never twice; do-not-contact goes to the real opt-out list', () => {
+  const w = world();
+  w.env.sha256 = s => require('crypto').createHash('sha256').update(s).digest('hex');
+  const imp = (contacts, extra) => w.ctx_.EE_adminRun_(w.env, w.core, { action: 'import_contacts', actor: 'mau',
+    params: Object.assign({ group: 'B', source: 'MCP 2019-2024', contacts }, extra || {}) }, { scheduleRun: () => 'queued' });
+  const r = imp([{ email_norm: 'Maria@Example.com', first_name: 'Maria', last_name: 'Lopez', city: 'Boerne', tags: 'vip,spa' },
+    { email_norm: 'james@example.com', first_name: 'James' }, { email_norm: 'not-an-email' }], { do_not_contact: ['dnc@example.com'] });
+  assert.equal(JSON.stringify([r.ok, r.added, r.skipped.map(s => s.reason), r.do_not_contact_recorded]), JSON.stringify([true, 2, ['bad_email'], 1]));
+  const maria = w.tables.Contacts.find(c => c.email_norm === 'maria@example.com');
+  assert.deepEqual([maria.bucket, maria.sub_bucket, maria.review_status, maria.is_test, maria.source, maria.tags, maria.imported_by],
+    ['B', 'B1', 'needs_review', 'N', 'MCP 2019-2024', 'vip,spa', 'mau']);
+  assert.match(maria.contact_id, /^ct_[0-9a-f]{16}$/);
+  assert.equal(w.optouts.length, 1, 'do-not-contact reaches the shared Comms_Optouts');
+  const again = imp([{ email_norm: 'maria@example.com', first_name: 'Maria' }]);
+  assert.deepEqual([again.added, again.skipped[0].reason], [0, 'existing'], 'a retried chunk adds nobody twice');
+  assert.equal(w.tables.Contacts.length, 2);
+  assert.equal(imp([], { group: 'Z' }).ok, false);
+});
+
+test('Saving an import mapping stores it in Config under its key', () => {
+  const w = world();
+  w.ctx_.EE_adminRun_(w.env, w.core, { action: 'save_import_mapping', actor: 'mau', params: { key: 'email|name', mapping: { 0: 'full_name', 1: 'email' }, source: 'MCP' } }, {});
+  const row = w.tables.Config.find(c => c.key === 'import_mapping:email|name');
+  assert.deepEqual(JSON.parse(row.value).mapping, { 0: 'full_name', 1: 'email' });
+});

@@ -11,9 +11,10 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 var EE_TABLES = {
-  Contacts: ['contact_id', 'email_norm', 'first_name', 'last_name', 'phone', 'address', 'language', 'bucket', 'sub_bucket',
-    'tags', 'review_status', 'review_reason', 'is_test', 'pool_school', 'pool_school_date', 'source', 'quote_id', 'pool_id',
-    'startup_date', 'startup_source', 'notes', 'created_at', 'updated_at', 'last_seq'],
+  Contacts: ['contact_id', 'email_norm', 'alt_emails', 'first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area',
+    'pool_build_year', 'language', 'bucket', 'sub_bucket', 'tags', 'review_status', 'review_reason', 'is_test', 'pool_school',
+    'pool_school_date', 'source', 'quote_id', 'pool_id', 'startup_date', 'startup_source', 'notes', 'imported_by', 'created_at',
+    'updated_at', 'last_seq'],
   Enrollments: ['enrollment_id', 'contact_id', 'sequence_id', 'rule_rev', 'mode', 'status', 'enrolled_on', 'anchor_snapshot',
     'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq'],
   Deliveries: ['delivery_id', 'key', 'enrollment_id', 'contact_id', 'step_id', 'occurrence', 'mode', 'email_norm', 'bucket',

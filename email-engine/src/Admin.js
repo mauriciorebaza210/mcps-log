@@ -11,13 +11,16 @@
 //   set_bucket_paused  pause / resume one sequence (Config paused_buckets)
 //   mark_sent | abandon | resend   resolve an unconfirmed send (EngineCore's own rules,
 //                       including the quiescence lock on Resend)
+//   import_contacts    save imported contacts into Needs review (api/email.js → op=import checks them first;
+//                       the engine re-checks emails). Do-not-contact rows go to the opt-out list.
+//   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
 //   maintenance        run one allow-listed setup task as Tony (eeSetup, eeSetupMarketingKit,
 //                       eeDiagnostics), so nobody has to click Run in the Apps Script editor.
 //                       Only works for tasks whose Google permissions Tony has already granted.
 // ══════════════════════════════════════════════════════════════════════════════
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
-var EE_ADMIN_ACTIONS = { maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued' }  (Apps Script: a trigger; tests: a fake)
 function EE_adminRun_(env, core, req, deps) {
@@ -28,6 +31,16 @@ function EE_adminRun_(env, core, req, deps) {
   if (!EE_ADMIN_ACTIONS[action]) out = { ok: false, error: 'unknown action' };
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };
+  else if (action === 'import_contacts') out = EE_importContacts_(env, core, p, actor);
+  else if (action === 'save_import_mapping') {
+    var key = String(p.key || '').slice(0, 300);
+    if (!key || typeof p.mapping !== 'object') out = { ok: false, error: 'key and mapping required' };
+    else {
+      env.store.upsert('Config', { key: 'import_mapping:' + key, value: JSON.stringify({ mapping: p.mapping, source: String(p.source || '').slice(0, 80),
+        saved_by: actor, at: new Date(env.now()).toISOString() }) });
+      out = { ok: true };
+    }
+  }
   else if (action === 'maintenance') {
     var fn = EE_MAINTENANCE_TASKS[String(p.task || '')];
     if (!fn || !deps.runTask) out = { ok: false, error: 'unknown task' };
@@ -63,6 +76,39 @@ function EE_adminRun_(env, core, req, deps) {
     });
   } catch (e) { /* the action itself is already done or refused; the log is best effort */ }
   return out;
+}
+
+// Imported contacts land in Needs review: nobody is emailed by an import, and in
+// test mode the planner ignores real contacts anyway. Ids come from the email,
+// so a retried chunk never creates a second contact.
+var EE_IMPORT_MAX = 100;
+function EE_importContacts_(env, core, p, actor) {
+  var group = String(p.group || ''), list = p.contacts || [];
+  if (!/^[A-F]$/.test(group)) return { ok: false, error: 'group A-F required' };
+  if (!Array.isArray(list) || list.length > EE_IMPORT_MAX) return { ok: false, error: 'send at most ' + EE_IMPORT_MAX + ' contacts per call' };
+  var existing = {};
+  env.store.rows('Contacts').forEach(function (c) {
+    [c.email_norm].concat(String(c.alt_emails || '').split(',')).forEach(function (e) { e = String(e || '').trim().toLowerCase(); if (e) existing[e] = c.contact_id; });
+  });
+  var added = [], skipped = [], now = new Date(env.now()).toISOString();
+  list.forEach(function (c) {
+    var email = String(c.email_norm || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { skipped.push({ email_norm: email, reason: 'bad_email' }); return; }
+    if (existing[email]) { skipped.push({ email_norm: email, reason: 'existing', contact_id: existing[email] }); return; }
+    var id = 'ct_' + env.sha256(email).slice(0, 16), rec = {};
+    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source']
+      .forEach(function (k) { rec[k] = String(c[k] == null ? '' : c[k]); });
+    if (!rec.source) rec.source = String(p.source || '').slice(0, 80);       // the import's source, when rows don't carry one
+    rec.contact_id = id; rec.email_norm = email; rec.bucket = group; rec.sub_bucket = group === 'B' ? 'B1' : '';
+    rec.review_status = 'needs_review'; rec.review_reason = 'imported'; rec.is_test = 'N';
+    rec.created_at = now; rec.imported_by = actor;
+    core.commitEntity('contact', rec, 'contact:' + id + ':import');
+    existing[email] = id; added.push(id);
+  });
+  // "Do not contact" in the file is a real person's wish: it goes to the real opt-out list.
+  var dnc = (p.do_not_contact || []).map(function (e) { return String(e || '').trim().toLowerCase(); }).filter(Boolean);
+  dnc.forEach(function (e) { core.ingest({ event_id: 'dnc_' + env.sha256(e).slice(0, 16), type: 'unsubscribe', mode: 'production', email_norm: e, scope: 'all' }); });
+  return { ok: true, added: added.length, skipped: skipped, do_not_contact_recorded: dnc.length };
 }
 
 // Apps Script entry for the relay.

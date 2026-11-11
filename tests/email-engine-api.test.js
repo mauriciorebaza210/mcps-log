@@ -259,3 +259,63 @@ test('Overview carries the viewer’s capabilities and the recent change log', a
   assert.deepEqual(o.changes.map(c => [c.actor, c.action, c.params.bucket]), [['mau', 'set_bucket_paused', 'B']]);
   assert.deepEqual((await call(h, { token: 'tok-viewer' })).body.data.capabilities, ['view_aggregates']);
 });
+
+// ── Import (op=import) ──────────────────────────────────────────────────────
+
+async function importCall(body, { token = 'tok-mau', relay, optouts, clients } = {}) {
+  const sent = [];
+  const engine = { ...SHEET, Contacts: [['contact_id', 'email_norm', 'first_name', 'last_name', 'address'], ['c1', 'maria@example.com', 'Maria', 'Lopez', '1 Elm St, Boerne']] };
+  const h = (await load())({
+    ...world().deps,
+    crmSpreadsheetId: () => 'crm',
+    readSheetRanges: async (tabs, id) => {
+      if (id === 'crm') return { Clients: clients || [['email', 'status'], ['active@example.com', 'active'], ['lead@example.com', 'prospect']] };
+      if (id !== 'sheet-under-test') return { Comms_Optouts: optouts || [['email', 'scope', 'removed_at'], ['gone@example.com', 'all', ''], ['back@example.com', 'all', '2026-01-01']] };
+      const o = {}; tabs.forEach(t => { if (engine[t]) o[t] = engine[t]; }); return o;
+    },
+    relayAdmin: async a => { sent.push(a); return relay ? relay(a) : { ok: true, added: (a.params.contacts || []).length, skipped: [] }; }
+  });
+  const res = { headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, status(c) { this.statusCode = c; return this; }, send(b) { this.body = JSON.parse(b); return this; } };
+  await h({ method: 'POST', query: { op: 'import' }, body, headers: token ? { authorization: 'Bearer ' + token } : {} }, res);
+  return { res, sent };
+}
+const IMPORT_ROWS = [
+  { row: 2, email_norm: 'new@example.com', first_name: 'Nora', last_name: 'New', address: '5 Oak' },
+  { row: 3, email_norm: 'maria@example.com', first_name: 'Maria', last_name: 'Lopez' },
+  { row: 4, email_norm: 'maria.l@work.example', first_name: 'Maria', last_name: 'Lopez', address: '1 Elm St' },
+  { row: 5, email_norm: 'active@example.com', first_name: 'Al', last_name: 'Active' },
+  { row: 6, email_norm: 'gone@example.com', first_name: 'Gus', last_name: 'Gone' },
+  { row: 7, email_norm: 'dnc@example.com', first_name: 'Dee', do_not_contact: true },
+  { row: 8, email_norm: 'lead@example.com', first_name: 'Lee', last_name: 'Lead' },
+  { row: 9, email_norm: 'back@example.com', first_name: 'Bea', last_name: 'Back' }
+];
+
+test('Import check: each row gets one verdict (new, existing, same person, customer, opted out, do not contact)', async () => {
+  const { res, sent } = await importCall({ stage: 'check', group: 'B', contacts: IMPORT_ROWS });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body.rows.map(r => [r.row, r.status]), [[2, 'new'], [3, 'existing'], [4, 'same_person'], [5, 'customer'], [6, 'opted_out'], [7, 'do_not_contact'], [8, 'new'], [9, 'new']]);
+  assert.equal(res.body.rows.find(r => r.row === 8).note, 'Sales Hub lead');
+  assert.equal(res.body.rows.find(r => r.row === 9).status, 'new', 'a removed opt-out no longer blocks');
+  assert.equal(sent.length, 0, 'a check writes nothing');
+});
+
+test('Import save: the server re-checks; only new rows (and chosen same-person rows) reach the engine, with clean fields', async () => {
+  const tampered = IMPORT_ROWS.map(r => ({ ...r, status: 'new', evil: '<script>' }));
+  const { res, sent } = await importCall({ stage: 'save', group: 'B', source: 'MCP list', contacts: tampered, include_rows: [4] });
+  assert.equal(res.statusCode, 200);
+  const p = sent[0].params;
+  assert.deepEqual(p.contacts.map(c => c.email_norm), ['new@example.com', 'maria.l@work.example', 'lead@example.com', 'back@example.com']);
+  assert.deepEqual(p.do_not_contact, ['dnc@example.com']);
+  assert.equal(p.contacts[0].source, 'MCP list');
+  assert.equal(p.contacts[0].evil, undefined, 'unknown fields are dropped');
+  assert.equal(sent[0].actor, 'mau');
+});
+
+test('Import: needs edit_contacts; save takes at most 100 rows; mappings are listed and saved', async () => {
+  assert.equal((await importCall({ stage: 'check', contacts: IMPORT_ROWS }, { token: 'tok-viewer' })).res.statusCode, 403);
+  const many = Array.from({ length: 101 }, (_, i) => ({ row: i + 2, email_norm: 'p' + i + '@example.com' }));
+  assert.equal((await importCall({ stage: 'save', contacts: many })).res.statusCode, 400);
+  const m = await importCall({ stage: 'save_mapping', key: 'email|name', mapping: { 0: 'email' } });
+  assert.deepEqual([m.res.statusCode, m.sent[0].action], [200, 'save_import_mapping']);
+  assert.equal((await importCall({ stage: 'mappings' })).res.body.ok, true);
+});

@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp7-0';
+var EE_VERSION = 'cp7-1';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 

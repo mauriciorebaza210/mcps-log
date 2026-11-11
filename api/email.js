@@ -7,6 +7,7 @@
 //   GET  /api/email?op=u&…   unsubscribe confirmation page; POST records it (relayed before answering)
 //   GET  /api/email/heartbeat  Vercel Cron, daily (vercel.json); emails Mau if the engine looks unhealthy
 //   POST /api/email?op=admin  {action, params}  (Bearer) page actions, each gated by a capability
+//   POST /api/email?op=import {stage: mappings|check|save|save_mapping, …}  (Bearer, edit_contacts)
 //
 // Links are built and signed by the engine with js/lib/email-tracking.js; a link
 // that fails its signature is refused and records nothing (matrix row 22).
@@ -23,11 +24,14 @@ import { waitUntil } from '@vercel/functions';
 import * as sheets from './_sheets.js';
 import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, health } from './_lib/email-read.js';
 import { relayEvents, relayAdmin } from './_lib/email-relay.js';
+import { checkImport, importRecord } from './_lib/email-import.js';
 import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
 
 const RAW_TTL_MS = 15 * 1000;
+const SETTINGS_SS_ID = () => String(process.env.EE_SETTINGS_SS_ID || '1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U').trim();   // "Chem Log": Comms_Optouts
+const IMPORT_CHECK_MAX = 5000, IMPORT_SAVE_MAX = 100;
 // The capability each page action needs (PLAN.md → Configuration & authorization).
 const ADMIN_CAP = { maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
   abandon: 'resolve_unknown', resend: 'resolve_unknown' };
@@ -237,7 +241,63 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return reply(res, 200, { ...r, ok: !!r.ok });
   }
 
-  const OPS = { read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
+  // Import (PLAN.md → Plan changes 2026-11-10). The page parses the file
+  // (js/lib/contact-import.js); here every row is checked against the engine's
+  // contacts, the shared opt-out list and the portal's clients, and the save
+  // step checks again before relaying a chunk to the engine.
+  async function opImport(req, res) {
+    if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });
+    const session = await deps.validatePortalSession(bearer(req));
+    if (!session) return reply(res, 401, { ok: false, error: 'Unauthorized' });
+    if (!engineSpreadsheetId()) return reply(res, 503, { ok: false, error: 'The email engine is not connected yet (EE_ENGINE_SS_ID).' });
+    const body = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch (_) { return {}; } })() : (req.body || {});
+    let tables;
+    try { tables = await loadTables(true); }
+    catch (e) { if (e.status === 503) return reply(res, 503, { ok: false, error: 'The engine sheet is missing tabs; run eeSetup.' }); throw e; }
+    const caps = capabilitiesFor(session.username, tables.Permissions);
+    if (!caps.has('edit_contacts')) return reply(res, 403, { ok: false, error: 'You don’t have permission to import contacts.' });
+    const stage = String(body.stage || '');
+
+    if (stage === 'mappings') {
+      const out = {};
+      (tables.Config || []).filter(r => String(r.key).startsWith('import_mapping:'))
+        .forEach(r => { out[String(r.key).slice('import_mapping:'.length)] = typeof r.value === 'object' ? r.value : {}; });
+      return reply(res, 200, { ok: true, mappings: out });
+    }
+    if (stage === 'save_mapping') {
+      const r = await deps.relayAdmin({ action: 'save_import_mapping', params: { key: body.key, mapping: body.mapping, source: body.source }, actor: session.username });
+      rawVersion++;
+      return reply(res, r && r.ok ? 200 : 502, { ok: !!(r && r.ok), error: r && r.error });
+    }
+    if (stage !== 'check' && stage !== 'save') return reply(res, 400, { ok: false, error: 'Unknown stage' });
+
+    const contacts = Array.isArray(body.contacts) ? body.contacts : [];
+    const limit = stage === 'check' ? IMPORT_CHECK_MAX : IMPORT_SAVE_MAX;
+    if (!contacts.length || contacts.length > limit) return reply(res, 400, { ok: false, error: 'Send 1 to ' + limit + ' contacts.' });
+    const group = /^[A-F]$/.test(String(body.group || '')) ? String(body.group) : 'B';
+    const [settings, crm] = await Promise.all([
+      deps.readSheetRanges(['Comms_Optouts'], SETTINGS_SS_ID()),
+      deps.readSheetRanges(['Clients'], deps.crmSpreadsheetId())
+    ]);
+    const sources = { engineContacts: tables.Contacts || [], optouts: sheets.rowsToObjects(settings.Comms_Optouts || []),
+      clients: sheets.rowsToObjects(crm.Clients || []) };
+    const verdict = checkImport(contacts, sources, { group });
+    if (stage === 'check') return reply(res, 200, { ok: true, ...verdict });
+
+    // Save: only rows the server itself calls new (or same_person rows the person chose to include).
+    const include = new Set((body.include_rows || []).map(Number));
+    const byRow = new Map(contacts.map(c => [Number(c.row), c]));
+    const toSave = verdict.rows.filter(r => r.status === 'new' || (r.status === 'same_person' && include.has(Number(r.row))))
+      .map(r => importRecord(byRow.get(Number(r.row)), { source: body.source }));
+    const dnc = verdict.rows.filter(r => r.status === 'do_not_contact').map(r => r.email_norm);
+    if (!toSave.length && !dnc.length) return reply(res, 200, { ok: true, added: 0, skipped: [], rows: verdict.rows });
+    const r = await deps.relayAdmin({ action: 'import_contacts', params: { group, source: String(body.source || ''), contacts: toSave, do_not_contact: dnc }, actor: session.username });
+    rawVersion++;
+    if (!r || r.error === 'relay not configured') return reply(res, 503, { ok: false, error: 'The engine can’t be reached right now.' });
+    return reply(res, r.ok ? 200 : 502, { ...r, rows: verdict.rows });
+  }
+
+  const OPS = { import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
 
   return async function handler(req, res) {
     const op = String((req.query && req.query.op) || '').trim();
