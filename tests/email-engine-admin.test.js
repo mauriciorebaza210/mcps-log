@@ -173,3 +173,11 @@ test('A batch skips people who are no longer waiting; bad input is refused', () 
   assert.equal(batch(w, { group: 'B', pick: 'at_start', count: 2, start_on: '2020-01-01' }).ok, false, 'no start dates in the past');
   assert.equal(w.ctx_.EE_adminRun_(w.env, w.core, { action: 'cancel_batch', params: { batch_id: w.tables.Batches[0].batch_id }, actor: 'mau' }, {}).ok, false, 'a started batch can’t be cancelled');
 });
+
+test('Starting a batch skips someone who already had a sequence (a returning contact back in Needs review)', () => {
+  const w = world(); waiting(w, 2);
+  w.tables.Enrollments.push({ enrollment_id: 'e2', contact_id: 'p2', status: 'stopped' });
+  const r = batch(w, { group: 'B', pick: 'now', contact_ids: ['p1', 'p2'] });
+  assert.equal(JSON.stringify(r.started), JSON.stringify({ started: 1, skipped: 1 }));
+  assert.equal(status(w, 'p2'), 'needs_review');
+});

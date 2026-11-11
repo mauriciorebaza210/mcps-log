@@ -152,7 +152,9 @@ function EE_createBatch_(env, core, p, actor) {
 // Confirms the batch's people, so the next run starts their sequence. Someone who
 // is no longer waiting in Needs review (enrolled, edited, removed) is skipped.
 function EE_startBatch_(env, core, b, actor) {
-  var contacts = env.store.rows('Contacts'), byId = {};
+  var enrolled = {};
+  env.store.rows('Enrollments').forEach(function (e) { enrolled[e.contact_id] = true; });
+  var contacts = env.store.rows('Contacts').map(function (c) { if (enrolled[c.contact_id]) c.enrolled = true; return c; }), byId = {};
   contacts.forEach(function (c) { byId[c.contact_id] = c; });
   var filters = typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {};
   var ids = b.pick === 'now' ? (b.contact_ids || [])
@@ -161,6 +163,7 @@ function EE_startBatch_(env, core, b, actor) {
   ids.forEach(function (cid) {
     var c = byId[cid];
     if (!c || c.review_status !== 'needs_review' || c.bucket !== b.group) { skipped.push({ contact_id: cid, reason: c ? 'no longer waiting' : 'not found' }); return; }
+    if (c.enrolled) { skipped.push({ contact_id: cid, reason: 'already had a sequence' }); return; }
     core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id },
       'contact:' + cid + ':batch:' + b.batch_id);
     started++;

@@ -27,7 +27,10 @@
     var any = function (list, value) { return !list || !list.length || list.map(low).indexOf(low(value)) !== -1; };
     return (contacts || []).filter(function (c) {
       if (c.review_status !== 'needs_review' || c.bucket !== batch.group || skip[c.contact_id]) return false;
-      if (String(c.is_test || '').toUpperCase() === 'Y' && !batch.include_test) return false;
+      // Test contacts (the engine stores 'Y', the page sends true) are never batched.
+      if ((c.is_test === true || String(c.is_test || '').toUpperCase() === 'Y') && !batch.include_test) return false;
+      // Someone who has already been in a sequence (now stopped or done) never starts again.
+      if (c.sequence || c.enrolled) return false;
       if (!any(f.area, c.area || c.city)) return false;
       if (!any(f.source, c.source)) return false;
       if (f.tags && f.tags.length) { var t = tagsOf(c); if (!f.tags.map(low).some(function (x) { return t.indexOf(x) !== -1; })) return false; }

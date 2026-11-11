@@ -27,3 +27,11 @@ test('Filter options list what is actually waiting, with counts', () => {
   assert.deepEqual(o.area, [{ value: 'Boerne', count: 3 }, { value: 'Helotes', count: 6 }]);
   assert.deepEqual(o.tags.map(t => t.value), ['spa', 'vip']);
 });
+
+test('Never batched: test contacts in either form (engine "Y", page true), and anyone who already had a sequence', () => {
+  const base = { bucket: 'B', review_status: 'needs_review' };
+  const list = [{ ...base, contact_id: 'a', is_test: 'Y' }, { ...base, contact_id: 'b', is_test: true },
+    { ...base, contact_id: 'c', sequence: { status: 'stopped', stop_reason: 'clicked' } }, { ...base, contact_id: 'd', enrolled: true },
+    { ...base, contact_id: 'e', is_test: false }];
+  assert.deepEqual(B.eligible(list, { group: 'B' }).map(c => c.contact_id), ['e']);
+});
