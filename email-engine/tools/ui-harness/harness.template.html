@@ -8,6 +8,7 @@
 <script>
 var _s={username:'mau',token:'t'}; function currentSessionToken_(){return 't';}
 function escHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+var LC_RESTART_READY=true; // mockup: show the restart option
 var FX=__FIXTURE__;
 FX.contacts.contacts.forEach(function(c,i){if(i%2===0){c.review_status='needs_review';c.tags=i%4===0?['vip']:['spa'];}c.area=['Boerne','Helotes','Castroville'][i%3];});(function(){var F=['Hannah','Luis','Grace','Oscar','Megan','Victor','Chloe','Ramon','Emily','Hector','Olivia','Pedro','Ava','Mateo','Zoe','Diego','Lily','Andres','Nora','Felipe'],L=['Perez','Cruz','Diaz','Long','Kim','Soto','Hall','Ruiz','Young','Lara','King','Rios','Scott','Nunez','Green','Vargas','Adams','Leon','Baker','Mora'];
 for(var i=0;i<52;i++){var f=F[i%20],l=L[(i*7)%20];FX.contacts.contacts.push({contact_id:'w'+i,first_name:f,last_name:l,email:(f+'.'+l+i).toLowerCase()+'@example.com',bucket:i<46?'B':'C',review_status:'needs_review',is_test:false,area:['Boerne','Helotes','Castroville','Bulverde'][i%4],tags:i%5===0?['vip']:i%3===0?['spa']:[],source:i%2?'MCP 2019':'MCP 2022',created_at:'2026-10-'+String(1+i%28).padStart(2,'0'),sequence:null,last_email:null});}

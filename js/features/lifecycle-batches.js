@@ -12,6 +12,9 @@
 const BAT = { layer: null, step: 'who', group: 'B', filters: { area: [], tags: [], source: [] }, count: 20, order: 'random', pick: 'now',
   start_on: '', batches: 1, every: 7, restart: false, removed: new Set(), seed: 1, busy: false };
 const BAT_STEPS = [['who', 'Who'], ['when', 'When'], ['people', 'People'], ['review', 'Review']];
+// Restarts need the engine's create_batch to end the old enrollment (not built yet; today it
+// skips anyone who had a sequence). Until then the option stays hidden; the harness turns it on.
+var LC_RESTART_READY = typeof LC_RESTART_READY !== 'undefined' && LC_RESTART_READY;
 
 const batToday_ = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 const batAddDays_ = (d, n) => { const t = new Date(d + 'T12:00:00'); t.setDate(t.getDate() + n); return t.toLocaleDateString('en-CA'); };
@@ -52,25 +55,24 @@ function batExcluded_() {
 const batAll_ = () => (LC.contacts && LC.contacts.contacts) || [];
 const batIsTest_ = c => c.is_test === true || String(c.is_test || '').toUpperCase() === 'Y';
 // Already had this campaign and it ended (stopped or finished): only a person can restart them.
+// Restart candidates are shown to MCPS_BATCHES as if waiting, so the shared filters and
+// ordering apply to them too; _orig maps them back.
+const batAsWaiting_ = c => ({ ...c, review_status: 'needs_review', sequence: null, _orig: c });
+const batCanRestart_ = c => c.bucket === BAT.group && !batIsTest_(c) && c.sequence && /^(stopped|completed)$/.test(c.sequence.status);
+function batCandidates_() {
+  return batAll_().concat(BAT.restart && LC_RESTART_READY ? batAll_().filter(batCanRestart_).map(batAsWaiting_) : []);
+}
+const batSpecOf_ = count => ({ group: BAT.group, filters: BAT.filters, exclude: [...batExcluded_()], count, order: BAT.order });
 function batRestartPool_() {
-  const skip = batExcluded_(), f = BAT.filters;
-  return MCPS_BATCHES.eligible(batAll_().filter(c => c.bucket === BAT.group && !batIsTest_(c) && !skip.has(c.contact_id) && c.sequence && /^(stopped|completed)$/.test(c.sequence.status))
-    .map(c => ({ ...c, review_status: 'needs_review', sequence: null, _orig: c })), { group: BAT.group, filters: f }).map(c => c._orig);
+  return MCPS_BATCHES.eligible(batAll_().filter(batCanRestart_).map(batAsWaiting_), batSpecOf_(0)).map(c => c._orig);
 }
-function batPool_() {
-  const pool = MCPS_BATCHES.eligible(batAll_(), { group: BAT.group, filters: BAT.filters, exclude: [...batExcluded_()] });
-  return BAT.restart ? pool.concat(batRestartPool_()) : pool;
-}
+function batPool_() { return MCPS_BATCHES.eligible(batCandidates_(), batSpecOf_(0)).map(c => c._orig || c); }
 const batTotal_ = () => BAT.count * BAT.batches;
 // The people, batch by batch (pick now), in the same order the engine would take them.
 function batPlan_() {
   const pool = batPool_(), dates = Array.from({ length: BAT.batches }, (_, i) => batAddDays_(BAT.start_on, i * BAT.every));
   let picked = [];
-  if (BAT.pick === 'now') {
-    if (BAT.order === 'oldest') picked = pool.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.contact_id).localeCompare(String(b.contact_id)));
-    else { const r = batRandom_(BAT.seed); picked = pool.slice(); for (let i = picked.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [picked[i], picked[j]] = [picked[j], picked[i]]; } }
-    picked = picked.slice(0, batTotal_());
-  }
+  if (BAT.pick === 'now') picked = MCPS_BATCHES.pick(batCandidates_(), batSpecOf_(batTotal_()), batRandom_(BAT.seed)).map(c => c._orig || c);
   let left = BAT.pick === 'now' ? picked.length : pool.length;
   return dates.map((d, i) => {
     const people = BAT.pick === 'now' ? picked.slice(i * BAT.count, (i + 1) * BAT.count) : [];
@@ -111,7 +113,7 @@ function batWho_() {
     opts[key].map(o => '<button class="lc-chip' + (BAT.filters[key].includes(o.value) ? ' on' : '') + '" data-bat="chip" data-key="' + key + '" data-val="' + lcEsc_(o.value) + '">' +
       lcEsc_(o.value) + ' <small>' + o.count + '</small></button>').join('') + '</div></div>' : '';
   const waiting = MCPS_BATCHES.eligible(batAll_(), { group: BAT.group, filters: BAT.filters, exclude: [...batExcluded_()] }).length;
-  const re = batRestartPool_().length;
+  const re = LC_RESTART_READY ? batRestartPool_().length : 0;
   return '<div class="lc-wiz-stat"><b>' + waiting + '</b><span>waiting in Needs review' + (Object.values(BAT.filters).some(l => l.length) ? ' match these filters' : '') + '</span>' +
     '<button class="lc-link" data-bat="import">Import more</button></div>' +
     '<div class="lc-imp-row"><div class="lc-fld"><span>Campaign</span>' + batSeg_('group', BAT.group, [['B', 'MCP Legacy'], ['C', 'MCP Startup']]) + '</div>' +
