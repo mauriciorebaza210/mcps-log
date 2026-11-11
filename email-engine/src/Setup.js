@@ -202,7 +202,14 @@ function eeSetupMarketingKit() {
 
   try { root.addEditor('mauricio@mcpoolsolutions.org'); log.push('shared with Mau'); } catch (e) { log.push('share with Mau failed: ' + e.message); }
   Logger.log(log.join('\n') + '\nFolder: ' + root.getUrl());
-  return root.getUrl();
+  // The structure as it now stands, so a remote run (maintenance action) can be checked.
+  var tree = [];
+  [['MCP Legacy', 'B'], ['MCP Startup', 'C']].forEach(function (q) {
+    var it = DriveApp.getFolderById(props.getProperty('EE_FOLDER_SEQ_' + q[1])).getFolders(), names = [];
+    while (it.hasNext()) { var f = it.next(), files = f.getFiles(), n = 0; while (files.hasNext()) { files.next(); n++; } names.push(f.getName() + (n ? ' (' + n + ' file' + (n > 1 ? 's' : '') + ')' : '')); }
+    tree.push(q[0] + ': ' + names.sort().join(' | '));
+  });
+  return { url: root.getUrl(), changes: log, tree: tree };
 }
 
 // The current Intro, rendered through the MCPS frame into one complete file,
