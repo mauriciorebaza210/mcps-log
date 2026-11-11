@@ -22,6 +22,7 @@ Resume in any Claude Code session with `/email-engine`.
 - **Plan change 2026-11-09:** contact import (CSV / Excel / pasted rows, column mapping, pre-write check, all into Needs review) and **Start a batch** (N contacts by filter, random or oldest first) added to CP10.
 - **Plan change 2026-11-10:** Schedule tab (calendar of programmed emails, per-send Skip / Move / Send next run) in CP7; contact tags editing (drawer, bulk, filter, import, batch filter) in CP7/CP10; demo is Mau-only (85e56c1, **not yet deployed: Tony's clasp login expired**).
 - **Plan change 2026-11-10:** single email sequence type moved up to CP7 (Mau).
+- **Plan change 2026-11-10:** batches get a "Start on" date (line up several at once); **import + batches are the first thing built in CP7** (Mau's priority).
 - **Next action:** Mau rehearses (DEMO.md → "10 minutes before"), then runs the demo with Tony. After it: close CP6 (tag `ee/cp6-slice-demo`), then CP7.
 - **Blocked on / waiting for:** nothing. Deploys run as Tony via `npm run ee:deploy` (live @9, cp5-1). Preview: https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO).
 - **⚠️ Before go-live:** engine Config `track_base` and `link_quote` point at the preview; set back to https://mcps-log.vercel.app and https://mcps-log.vercel.app/service. Production env needs EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, **fresh** EE_LINK_SECRET + EE_RELAY_SECRET (the preview ones were shown in a screenshot in the chat on 2026-11-09; also update the engine's Script Properties to match), and CRON_SECRET.
