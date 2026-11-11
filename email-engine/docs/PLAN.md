@@ -845,4 +845,9 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
   - **Engine:** a Batches table (batch_id, filters, count, order random/oldest, start_on, picked contact ids, status planned/started/cancelled, created_by). On its start date the daily run confirms the batch's contacts, so their sequence starts that morning; a contact that unsubscribed, bounced or was enrolled meanwhile is skipped and reported. Journaled, ChangeLog'd, needs `edit_contacts`.
   - **Page:** batches appear on the Schedule calendar on their start day, and in Contacts → Batches with their status.
   - Import and batches are built first in CP7, before the editor and wizard, so the MCP Legacy list can be loaded and batches lined up as soon as the list exists. CP10 becomes loading the real list and the C sync.
+- 2026-11-10: **Template layout: MCPS frame or Full template** (Mau: Drive templates will carry their own header and signature).
+  - Each email revision records its layout. **MCPS frame** (today's behaviour): the shell adds header, signature and footer. **Full template:** the HTML is the entire email; the shell adds nothing visible.
+  - Full templates must contain `{{UnsubscribeLink}}` (an `<a href="{{UnsubscribeLink}}">`) and `{{BusinessAddress}}` (or the address text); the renderer refuses approval without them (same checks as today, applied to the template instead of the shell). Merge fields and `{{button:…}}` work the same.
+  - In both layouts the engine still rewrites links for click tracking, adds the open pixel, and appends the small `Ref dlv_…` line at the very bottom (needed for Sent-folder reconcile and orphan-draft recovery: never removable). Images need alt text; `http:` images and scripts are refused.
+  - Template guidance for whoever builds them: 600 px wide, table layout with inline CSS (email clients ignore most `<style>`), web-safe font fallbacks, images hosted on the email asset host, no important text inside images.
 
