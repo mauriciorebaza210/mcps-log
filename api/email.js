@@ -29,7 +29,7 @@ import TRACKING from '../js/lib/email-tracking.js';
 
 const RAW_TTL_MS = 15 * 1000;
 // The capability each page action needs (PLAN.md → Configuration & authorization).
-const ADMIN_CAP = { ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
+const ADMIN_CAP = { maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
   abandon: 'resolve_unknown', resend: 'resolve_unknown' };
 let rawVersion = 0;          // bumped after a write, so this instance never serves the pre-write cache
 

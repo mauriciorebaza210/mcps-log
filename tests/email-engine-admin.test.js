@@ -16,6 +16,7 @@ function world() {
   // Config lives in the store here, like the real env.
   w.env.config.pausedBuckets = () => { const r = w.tables.Config.find(c => c.key === 'paused_buckets'); return r && r.value ? r.value.split(',') : []; };
   w.runs = 0;
+  w.ctx_ = ctx;
   w.admin = (action, params) => ctx.EE_adminRun_(w.env, w.core, { action, params, actor: 'mau' }, { scheduleRun: () => (w.runs++ ? 'already_queued' : 'queued') });
   w.cfg = k => (w.tables.Config.find(c => c.key === k) || {}).value;
   w.log = () => w.tables.ChangeLog.map(c => [c.actor, c.action, c.result]);
@@ -87,4 +88,16 @@ test('Ping answers without changing anything or writing the change log (speed ch
   assert.equal(w.admin('ping', {}).ok, true);
   assert.equal(w.tables.ChangeLog.length, 0);
   assert.equal(w.tables.Config.length, 0);
+});
+
+test('Maintenance runs only allow-listed setup tasks, and logs them', () => {
+  const w = world();
+  const ran = [];
+  const run = (task) => w.ctx_.EE_adminRun_(w.env, w.core, { action: 'maintenance', params: { task }, actor: 'claude' },
+    { scheduleRun: () => 'queued', runTask: fn => { ran.push(fn); return 'done'; } });
+  assert.equal(run('setup_marketing_kit').ok, true);
+  assert.equal(run('eeDemoSetup').ok, false, 'not on the allow-list');
+  assert.equal(run('deleteEverything').ok, false);
+  assert.deepEqual(ran, ['eeSetupMarketingKit']);
+  assert.deepEqual(w.log().map(r => [r[0], r[1], r[2]]), [['claude', 'maintenance', 'ok'], ['claude', 'maintenance', 'unknown task'], ['claude', 'maintenance', 'unknown task']]);
 });

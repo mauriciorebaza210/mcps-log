@@ -11,9 +11,13 @@
 //   set_bucket_paused  pause / resume one sequence (Config paused_buckets)
 //   mark_sent | abandon | resend   resolve an unconfirmed send (EngineCore's own rules,
 //                       including the quiescence lock on Resend)
+//   maintenance        run one allow-listed setup task as Tony (eeSetup, eeSetupMarketingKit,
+//                       eeDiagnostics), so nobody has to click Run in the Apps Script editor.
+//                       Only works for tasks whose Google permissions Tony has already granted.
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_ADMIN_ACTIONS = { ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
+var EE_ADMIN_ACTIONS = { maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued' }  (Apps Script: a trigger; tests: a fake)
 function EE_adminRun_(env, core, req, deps) {
@@ -24,6 +28,11 @@ function EE_adminRun_(env, core, req, deps) {
   if (!EE_ADMIN_ACTIONS[action]) out = { ok: false, error: 'unknown action' };
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };
+  else if (action === 'maintenance') {
+    var fn = EE_MAINTENANCE_TASKS[String(p.task || '')];
+    if (!fn || !deps.runTask) out = { ok: false, error: 'unknown task' };
+    else { try { out = { ok: true, task: p.task, result: deps.runTask(fn) }; } catch (e) { out = { ok: false, error: String(e && e.message || e).slice(0, 300) }; } }
+  }
   else if (action === 'set_enabled') {
     if (typeof p.enabled !== 'boolean') out = { ok: false, error: 'enabled must be true or false' };
     else { env.store.upsert('Config', { key: 'engine_enabled', value: p.enabled ? 'true' : 'false' }); out = { ok: true, enabled: p.enabled }; }
@@ -59,7 +68,8 @@ function EE_adminRun_(env, core, req, deps) {
 // Apps Script entry for the relay.
 function EE_admin_(req) {
   var x = EE_core_();
-  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_ });
+  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_,
+    runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; } });
 }
 // One pending run at a time; the trigger removes itself when it fires.
 function EE_scheduleRunNow_() {
