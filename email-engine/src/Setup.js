@@ -187,11 +187,18 @@ function eeSetupMarketingKit() {
   EE_folder_(props, 'EE_FOLDER_BLOCKS', 'Shared blocks', tpl);
 
   // Instructions for ChatGPT, and an example full template it can start from.
-  var guideName = 'START HERE - ChatGPT instructions.txt';
-  if (!root.getFilesByName(guideName).hasNext()) { root.createFile(guideName, EE_CHATGPT_GUIDE, MimeType.PLAIN_TEXT); log.push('file ' + guideName); }
+  // The instructions are the kit's own file: always refreshed to the current version.
+  var guideName = 'START HERE - ChatGPT instructions.txt', guides = root.getFilesByName(guideName);
+  if (guides.hasNext()) { guides.next().setContent(EE_CHATGPT_GUIDE); log.push('updated ' + guideName); }
+  else { root.createFile(guideName, EE_CHATGPT_GUIDE, MimeType.PLAIN_TEXT); log.push('file ' + guideName); }
+  // The example lives in its email's folder; an earlier run left it loose in Email Templates: move it there.
   var exName = 'Example - MCP x MCPS Intro (full template).html';
   var introFolder = DriveApp.getFolderById(props.getProperty('EE_FOLDER_STEP_b_intro'));
-  if (!introFolder.getFilesByName(exName).hasNext()) { introFolder.createFile(exName, EE_exampleFullTemplate_(), MimeType.HTML); log.push('file MCP Legacy/1 - MCP x MCPS Intro/' + exName); }
+  if (!introFolder.getFilesByName(exName).hasNext()) {
+    var loose = tpl.getFilesByName(exName);
+    if (loose.hasNext()) { loose.next().moveTo(introFolder); log.push('moved the example into MCP Legacy/1 - MCP x MCPS Intro'); }
+    else { introFolder.createFile(exName, EE_exampleFullTemplate_(), MimeType.HTML); log.push('file MCP Legacy/1 - MCP x MCPS Intro/' + exName); }
+  }
 
   try { root.addEditor('mauricio@mcpoolsolutions.org'); log.push('shared with Mau'); } catch (e) { log.push('share with Mau failed: ' + e.message); }
   Logger.log(log.join('\n') + '\nFolder: ' + root.getUrl());
