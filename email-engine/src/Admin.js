@@ -30,7 +30,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -63,6 +63,17 @@ function EE_adminRun_(env, core, req, deps) {
     }
   }
   else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
+  else if (action === 'sync_startups') out = EE_syncStartups_(env, core, p, actor);
+  else if (action === 'set_crm_rule') {
+    var rule = p.rule && typeof p.rule === 'object' ? p.rule : null;
+    if (!rule) out = { ok: false, error: 'rule required' };
+    else {
+      env.store.upsert('Config', { key: 'crm_lead_rule', value: JSON.stringify({ statuses: rule.statuses || ['LEAD'], lead_sources: rule.lead_sources || [],
+        year_built: rule.year_built || 'any', areas: rule.areas || [], group: rule.group || 'B' }) });
+      env.store.upsert('Config', { key: 'crm_lead_auto', value: p.auto ? 'true' : 'false' });
+      out = { ok: true, auto: !!p.auto };
+    }
+  }
   else if (EE_TEMPLATE_ACTIONS[action]) out = EE_templateAction_(env, core, action, p, actor, deps);
   else if (action === 'set_send_time') {
     var sb = String(p.bucket || ''), st = EE_validSendTime_(p.time);
@@ -143,7 +154,7 @@ function EE_importContacts_(env, core, p, actor) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { skipped.push({ email_norm: email, reason: 'bad_email' }); return; }
     if (existing[email]) { skipped.push({ email_norm: email, reason: 'existing', contact_id: existing[email] }); return; }
     var id = 'ct_' + env.sha256(email).slice(0, 16), rec = {};
-    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source']
+    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id']
       .forEach(function (k) { rec[k] = String(c[k] == null ? '' : c[k]); });
     if (!rec.source) rec.source = String(p.source || '').slice(0, 80);       // the import's source, when rows don't carry one
     rec.contact_id = id; rec.email_norm = email; rec.bucket = group; rec.sub_bucket = group === 'B' ? 'B1' : '';
@@ -297,4 +308,59 @@ function EE_sendOverride_(env, p, actor) {
     env.store.upsert('Overrides', { key: key, kind: kind, date: date, enrollment_id: en.enrollment_id, step_id: d.step_id, by: actor, at: new Date(env.now()).toISOString() });
   });
   return { ok: true, key: key, kind: kind, date: date };
+}
+
+// ── Startups from the portal (PLAN.md → "Connected to the portal's own data") ───
+// api/email.js reads Quotes + the schedule and sends the startups it found; here
+// they become confirmed MCP Startup contacts (only changed fields are written),
+// and cancelled ones are removed with their sequence stopped.
+var EE_STARTUP_FIELDS = ['quote_id', 'pool_id', 'first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'startup_date', 'startup_source', 'pool_school'];
+function EE_syncStartups_(env, core, p, actor) {
+  var list = Array.isArray(p.contacts) ? p.contacts : [], removed = Array.isArray(p.removed) ? p.removed : [];
+  if (list.length > 400) return { ok: false, error: 'send at most 400 startups per call' };
+  var byQuote = {}, byEmail = {}, today = EE_today_(env), now = new Date(env.now()).toISOString();
+  env.store.rows('Contacts').forEach(function (c) {
+    if (c.quote_id) byQuote[c.quote_id] = c;
+    byEmail[String(c.email_norm || '').toLowerCase()] = c;
+  });
+  var added = 0, updated = 0, skipped = [], gone = 0;
+  list.forEach(function (s) {
+    var email = String(s.email_norm || '').trim().toLowerCase(), qid = String(s.quote_id || '');
+    if (!qid || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || !/^\d{4}-\d{2}-\d{2}$/.test(String(s.startup_date || ''))) { skipped.push({ quote_id: qid, reason: 'incomplete' }); return; }
+    var cur = byQuote[qid] || byEmail[email];
+    if (cur && cur.bucket !== 'C') { skipped.push({ quote_id: qid, reason: 'in_' + cur.bucket + '_campaign', contact_id: cur.contact_id }); return; }
+    var data = {};
+    EE_STARTUP_FIELDS.forEach(function (k) { var v = String(s[k] == null ? '' : s[k]).slice(0, 200); if (!cur || String(cur[k] || '') !== v) data[k] = v; });
+    if (cur && cur.review_status === 'removed') { data.review_status = 'confirmed'; data.review_reason = 'startup back on the schedule'; }
+    if (cur && !Object.keys(data).length) return;
+    if (!cur) {
+      var id = 'ct_' + env.sha256(email).slice(0, 16);
+      data.contact_id = id; data.email_norm = email; data.bucket = 'C'; data.sub_bucket = ''; data.is_test = 'N';
+      data.review_status = 'confirmed'; data.review_reason = 'startup from the portal'; data.source = 'portal_startup';
+      data.created_at = now; data.imported_by = actor;
+      core.commitEntity('contact', data, 'contact:' + id + ':startup:' + qid);
+      byQuote[qid] = data; byEmail[email] = data; added++;
+    } else {
+      data.contact_id = cur.contact_id; data.updated_at = now;
+      core.commitEntity('contact', data, 'contact:' + cur.contact_id + ':sync:' + env.sha256(JSON.stringify(data)).slice(0, 12));
+      updated++;
+    }
+  });
+  var running = {};
+  env.store.rows('Enrollments').forEach(function (e) { if (/^(active|waiting_anchor|paused)$/.test(e.status)) (running[e.contact_id] = running[e.contact_id] || []).push(e); });
+  removed.forEach(function (r) {
+    var c = byQuote[String(r.quote_id || '')];
+    if (!c || c.review_status === 'removed') return;
+    core.commitEntity('contact', { contact_id: c.contact_id, review_status: 'removed', review_reason: String(r.reason || 'startup_cancelled').slice(0, 60) },
+      'contact:' + c.contact_id + ':removed:' + today);
+    (running[c.contact_id] || []).forEach(function (e) {
+      core.commitEntity('enrollment', { enrollment_id: e.enrollment_id, status: 'stopped', stop_reason: 'startup_cancelled', stopped_on: today },
+        'enrollment:' + e.enrollment_id + ':startup_cancelled');
+    });
+    gone++;
+  });
+  var result = { added: added, updated: updated, removed: gone, skipped: skipped.length };
+  env.store.upsert('Config', { key: 'crm_sync_at', value: now });
+  env.store.upsert('Config', { key: 'crm_sync_result', value: JSON.stringify(result) });
+  return { ok: true, added: added, updated: updated, removed: gone, skipped: skipped };
 }

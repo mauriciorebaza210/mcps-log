@@ -25,6 +25,7 @@ import * as sheets from './_sheets.js';
 import { READ_TABS, OPTIONAL_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, buildPlan, health } from './_lib/email-read.js';
 import { relayEvents, relayAdmin } from './_lib/email-relay.js';
 import { checkImport, importRecord } from './_lib/email-import.js';
+import { leadBreakdown, leadCandidates, customerEmails, startupContacts } from './_lib/email-crm.js';
 import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
@@ -214,6 +215,8 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
       // Can't even read the engine: that is the alert.
       h = { ok: false, issues: [{ kind: 'engine_unreadable', detail: String(e && e.message || e).slice(0, 200) }] };
     }
+    // The portal's startups (and Sales Hub leads, when Keep in sync is on) every morning.
+    const synced = tables ? await crmSync(tables, 'heartbeat').catch(e => ({ ok: false, error: String(e && e.message || e).slice(0, 200) })) : null;
     let alerted = null;
     if (!h.ok) {
       const cfg = {}; ((tables && tables.Config) || []).forEach(r => { cfg[r.key] = r.value; });
@@ -222,7 +225,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
         '\n\nLast run: ' + (h.last_run_at || 'none') + '\nPortal: https://mcps-log.vercel.app (Lifecycle Email)';
       alerted = await deps.sendEngineAlert(to, '[Email engine] heartbeat: ' + h.issues.length + ' issue(s)', text).catch(e => ({ ok: false, error: String(e) }));
     }
-    return reply(res, 200, { ok: true, healthy: h.ok, issues: h.issues, alerted });
+    return reply(res, 200, { ok: true, healthy: h.ok, issues: h.issues, alerted, synced });
   }
 
   async function opAdmin(req, res) {
@@ -302,7 +305,82 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return reply(res, r.ok ? 200 : 502, { ...r, rows: verdict.rows });
   }
 
-  const OPS = { import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
+  // ── The portal's own data (PLAN.md → "Connected to the portal's own data") ──
+  const todayCT = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(deps.now()));
+  const cfgOf = tables => { const c = {}; (tables.Config || []).forEach(r => { c[r.key] = r.value; }); return c; };
+  const ruleOf = cfg => { try { const r = typeof cfg.crm_lead_rule === 'object' ? cfg.crm_lead_rule : JSON.parse(cfg.crm_lead_rule || 'null'); return r && typeof r === 'object' ? r : null; } catch (_) { return null; } };
+  async function crmSources() {
+    const [crm, routes, settings] = await Promise.all([
+      deps.readSheetRanges(['Quotes', 'Clients'], deps.crmSpreadsheetId()),
+      deps.readSheetRanges(['Scheduled_Visits'], deps.routesSpreadsheetId()),
+      deps.readSheetRanges(['Comms_Optouts'], SETTINGS_SS_ID())
+    ]);
+    return { quotes: sheets.rowsToObjects(crm.Quotes || []), clients: sheets.rowsToObjects(crm.Clients || []),
+      visits: sheets.rowsToObjects(routes.Scheduled_Visits || []), optouts: sheets.rowsToObjects(settings.Comms_Optouts || []) };
+  }
+  // Sales Hub leads matching a rule, through the same check as a file import.
+  function checkLeads(src, tables, rule) {
+    const cands = leadCandidates(src.quotes, rule);
+    const verdict = checkImport(cands, { engineContacts: tables.Contacts || [], optouts: src.optouts, clients: customerEmails(src.quotes, src.clients) }, { group: rule.group || 'B' });
+    return { cands, verdict };
+  }
+  async function addLeads(cands, verdict, rule, actor, include) {
+    const byRow = new Map(cands.map(c => [Number(c.row), c]));
+    const save = verdict.rows.filter(r => r.status === 'new' || (r.status === 'same_person' && include.has(Number(r.row)))).map(r => importRecord(byRow.get(Number(r.row))));
+    let added = 0, failed = '';
+    for (let i = 0; i < save.length; i += 100) {
+      const r = await deps.relayAdmin({ action: 'import_contacts', params: { group: rule.group || 'B', source: 'sales_hub', contacts: save.slice(i, i + 100) }, actor });
+      if (!r || !r.ok) { failed = (r && r.error) || 'engine unreachable'; break; }
+      added += r.added || 0;
+    }
+    rawVersion++;
+    return { added, failed };
+  }
+  async function syncStartups(src, actor) {
+    const s = startupContacts(src.quotes, src.visits, todayCT());
+    const r = await deps.relayAdmin({ action: 'sync_startups', params: { contacts: s.contacts, removed: s.removed }, actor });
+    rawVersion++;
+    return { ...(r || { ok: false, error: 'engine unreachable' }), found: s.contacts.length, not_synced: s.skipped };
+  }
+  async function crmSync(tables, actor) {
+    const src = await crmSources(), cfg = cfgOf(tables), rule = ruleOf(cfg);
+    const out = { startups: await syncStartups(src, actor) };
+    if (rule && String(cfg.crm_lead_auto) === 'true') { const { cands, verdict } = checkLeads(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
+    return out;
+  }
+
+  async function opCrm(req, res) {
+    const session = await deps.validatePortalSession(bearer(req));
+    if (!session) return reply(res, 401, { ok: false, error: 'Unauthorized' });
+    if (!engineSpreadsheetId()) return reply(res, 503, { ok: false, error: 'The email engine is not connected yet (EE_ENGINE_SS_ID).' });
+    const tables = await loadTables(true);
+    const caps = capabilitiesFor(session.username, tables.Permissions);
+    if (!caps.has('view_aggregates')) return reply(res, 403, { ok: false, error: 'You don’t have access to Lifecycle Email.' });
+    const cfg = cfgOf(tables), src = await crmSources();
+    if (req.method === 'GET') {
+      const st = startupContacts(src.quotes, src.visits, todayCT());
+      let result = null; try { result = JSON.parse(cfg.crm_sync_result || 'null'); } catch (_) { /* none yet */ }
+      return reply(res, 200, { ok: true, breakdown: leadBreakdown(src.quotes, tables.Contacts || []), rule: ruleOf(cfg), auto: String(cfg.crm_lead_auto) === 'true',
+        startups: { found: st.contacts.length, cancelled: st.removed.length, not_synced: st.skipped.length, last_sync: cfg.crm_sync_at || '', result } });
+    }
+    if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });
+    if (!caps.has('edit_contacts')) return reply(res, 403, { ok: false, error: 'You don’t have permission to do that.' });
+    const body = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch (_) { return {}; } })() : (req.body || {});
+    const stage = String(body.stage || '');
+    if (stage === 'sync_startups') return reply(res, 200, { ok: true, startups: await syncStartups(src, session.username) });
+    const rule = body.rule && typeof body.rule === 'object' ? body.rule : null;
+    if (!rule) return reply(res, 400, { ok: false, error: 'Pick which leads first.' });
+    const { cands, verdict } = checkLeads(src, tables, rule);
+    if (stage === 'check') return reply(res, 200, { ok: true, total: cands.length, summary: verdict.summary, rows: verdict.rows.slice(0, 400) });
+    if (stage !== 'add') return reply(res, 400, { ok: false, error: 'Unknown stage' });
+    const done = await addLeads(cands, verdict, rule, session.username, new Set((body.include_rows || []).map(Number)));
+    const saved = await deps.relayAdmin({ action: 'set_crm_rule', params: { rule, auto: !!body.keep_in_sync }, actor: session.username });
+    rawVersion++;
+    if (done.failed) return reply(res, 502, { ok: false, error: done.failed, added: done.added });
+    return reply(res, 200, { ok: true, added: done.added, summary: verdict.summary, rule_saved: !!(saved && saved.ok) });
+  }
+
+  const OPS = { crm: opCrm, import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
 
   return async function handler(req, res) {
     const op = String((req.query && req.query.op) || '').trim();

@@ -101,6 +101,7 @@ function cmpTimePill_(b) {
 // ── Rendering ─────────────────────────────────────────────────────────────────
 function lcCampaigns_() {
   if (!LC.contacts) return '<div class="lc-sk" style="height:220px;margin-bottom:16px"></div><div class="lc-sk" style="height:320px"></div>';
+  if (typeof crmLoad_ === 'function' && !CRM.data && !CRM.loading) crmLoad_();
   if (CMP.id && cmpSteps_(CMP.id).length) return cmpPage_(CMP.id);
   return '<div class="lc-cmp-grid">' + ['B', 'C'].filter(b => cmpSteps_(b).length).map(cmpCard_).join('') + '</div>';
 }
@@ -123,9 +124,9 @@ function cmpCard_(b) {
   return '<article class="lc-cmp-card"><button class="lc-cmp-open" data-act="cmp-open" data-id="' + b + '" aria-label="Open ' + LC_SEQ[b] + '"></button>' +
     '<header><span class="lc-bkt">' + b + '</span><div class="grow"><h2>' + LC_SEQ[b] + '</h2><small>' + steps.length + ' emails · ' + live + ' approved</small></div>' + cmpStatus_(b) + '</header>' +
     '<div class="lc-cmp-mini">' + stages + '</div>' +
-    '<footer><span class="lc-cmp-next">' + CMP_ICON.cal + (nb ? lcEsc_(nb.count + ' start ' + batDayLabel_(nb.start_on) + ', ' + lcClock_(nb.send_time || lcSendTime_(b))) : 'No batches lined up') +
-      '<span class="lc-dim">· sends ' + lcEsc_(lcClock_(lcSendTime_(b))) + '</span></span>' +
-    (lcCan_('edit_contacts') ? '<button class="lc-btn sm primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</footer></article>';
+    '<footer><span class="lc-cmp-next">' + CMP_ICON.cal + (b === 'C' && typeof crmStartupLine_ === 'function' ? crmStartupLine_(true) : nb ? lcEsc_(nb.count + ' start ' + batDayLabel_(nb.start_on) + ', ' + lcClock_(nb.send_time || lcSendTime_(b))) : 'No batches lined up') +
+      (b === 'C' ? '' : '<span class="lc-dim">· sends ' + lcEsc_(lcClock_(lcSendTime_(b))) + '</span>') + '</span>' +
+    (lcCan_('edit_contacts') && cmpBatchable_(b) ? '<button class="lc-btn sm primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</footer></article>';
 }
 
 function cmpPage_(b) {
@@ -134,11 +135,11 @@ function cmpPage_(b) {
     '<div class="lc-cmp-title"><span class="lc-bkt">' + b + '</span><h2>' + LC_SEQ[b] + '</h2>' + cmpStatus_(b) + cmpTimePill_(b) + '</div>' +
     '<div class="lc-cmp-acts"><div class="lc-seg" role="group" aria-label="View">' + [['list', 'List'], ['calendar', 'Calendar']].map(([k, l]) =>
       '<button data-act="cmp-view" data-view="' + k + '" class="' + (CMP.view === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div>' +
-    (lcCan_('edit_contacts') ? '<button class="lc-btn primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</div></div>';
+    (lcCan_('edit_contacts') && cmpBatchable_(b) ? '<button class="lc-btn primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</div></div>';
   const pipe = '<div class="lc-pipe" role="tablist" aria-label="Where people are">' + CMP_STAGES.map(([k, l, hint], i) =>
     '<button role="tab" aria-selected="' + (CMP.stage === k) + '" data-act="cmp-stage" data-stage="' + k + '" class="' + (CMP.stage === k ? 'on' : '') + (i > 2 ? ' end' : '') + '">' +
     '<b>' + cmpCount_(p, k) + '</b><span>' + l + '</span><small>' + hint + '</small></button>').join('') + '</div>';
-  return head + pipe + (CMP.view === 'calendar' ? cmpCalendar_(b) : cmpList_(b, p));
+  return head + pipe + (b === 'C' && typeof crmStartupStrip_ === 'function' ? crmStartupStrip_() : '') + (CMP.view === 'calendar' ? cmpCalendar_(b) : cmpList_(b, p));
 }
 
 function cmpList_(b, p) {
@@ -153,11 +154,14 @@ function cmpList_(b, p) {
       lcEsc_(cmpWhen_(s)) + '</small></div><div class="nums">' + (s.published ? '<span><b>' + s.counts.sent + '</b> sent</span><span><b>' + (t.clicked || 0) + '</b> clicked</span><span><b>' + (t.replied || 0) + '</b> replied</span>'
       : lcTag_('Not approved', '')) + '</div><div class="next">' + (loading ? '<span class="lc-sk" style="display:block;height:30px;width:80px;margin-left:auto"></span>' : n ? '<b>' + lcEsc_(batDayLabel_(n.d)) + '</b><small>' + lcEsc_(lcClock_(n.time)) + ' · ' + n.n + (n.n === 1 ? ' person' : ' people') + '</small>' : '<small>Nothing planned</small>') + '</div></button>';
   }).join('');
-  return '<div class="lc-cmp-cols"><section class="lc-card"><div class="lc-card-h"><h3>Batches</h3><small>' + cmpCount_(p, 'lined') + ' lined up</small></div>' + cmpBatches_(b) + '</section>' +
+  return '<div class="lc-cmp-cols"><section class="lc-card"><div class="lc-card-h"><h3>' + (cmpBatchable_(b) ? 'Batches' : 'How people join') + '</h3><small>' + (cmpBatchable_(b) ? cmpCount_(p, 'lined') + ' lined up' : 'From the portal') + '</small></div>' + cmpBatches_(b) + '</section>' +
     '<section class="lc-card"><div class="lc-card-h"><h3>Emails</h3><small>Next send</small></div><div class="lc-cmp-ems">' + emails + '</div></section></div>' + cmpStageTable_(b, p);
 }
 
+// MCP Startup's people join on their own from the portal's startups; batches are for lists (MCP Legacy).
+const cmpBatchable_ = b => b !== 'C';
 function cmpBatches_(b) {
+  if (!cmpBatchable_(b)) return '<div class="lc-empty">Startups join automatically from the portal, about 3 days before their startup.</div>';
   const list = ((LC.contacts && LC.contacts.batches) || []).filter(x => x.group === b && x.status !== 'cancelled')
     .sort((x, y) => (x.status === 'planned') === (y.status === 'planned') ? String(x.status === 'planned' ? x.start_on : y.start_on).localeCompare(x.status === 'planned' ? y.start_on : x.start_on) : x.status === 'planned' ? -1 : 1);
   if (!list.length) return '<div class="lc-empty">No batches yet.' + (lcCan_('edit_contacts') ? ' <button class="lc-link" data-act="cmp-batch" data-id="' + b + '">Start one</button>' : '') + '</div>';
@@ -244,7 +248,7 @@ function cmpDayPanel_(b, day, d) {
   return '<aside class="lc-card lc-day"><div class="lc-card-h"><h3>' + lcEsc_(cmpLong_(d)) + '</h3><button class="lc-icon-btn" data-act="cmp-day-close" aria-label="Close">' + LC_ICON.x + '</button></div>' +
     '<div class="lc-day-b">' + groups +
     (!groups ? '<div class="lc-empty">Nothing planned on this day.</div>' : '') +
-    (can ? '<button class="lc-btn primary lc-day-new" data-act="cmp-batch" data-id="' + b + '" data-day="' + d + '">' + CMP_ICON.plus + 'Start a batch on ' + lcEsc_(batDayLabel_(d)) + '</button>' : '') + '</div></aside>';
+    (can && cmpBatchable_(b) ? '<button class="lc-btn primary lc-day-new" data-act="cmp-batch" data-id="' + b + '" data-day="' + d + '">' + CMP_ICON.plus + 'Start a batch on ' + lcEsc_(batDayLabel_(d)) + '</button>' : '') + '</div></aside>';
 }
 
 // One person's planned send in the day panel, with what can still be changed.
@@ -274,7 +278,7 @@ function cmpOnClick_(t) {
   else if (a === 'cmp-day') {
     const d = t.dataset.day, fc = cmpForecast_(CMP.id) || {};
     // An empty day goes straight to setup; a day with plans shows them first.
-    if (!fc[d] && lcCan_('edit_contacts')) lcOpenBatch_({ group: CMP.id, start_on: d });
+    if (!fc[d] && lcCan_('edit_contacts') && cmpBatchable_(CMP.id)) lcOpenBatch_({ group: CMP.id, start_on: d });
     else { CMP.day = CMP.day === d ? '' : d; lcRenderBody_(); }
   }
   else if (a === 'cmp-day-close') { CMP.day = ''; lcRenderBody_(); }

@@ -58,6 +58,8 @@ export function importRecord(c, opts = {}) {
     state: String(c.state || '').slice(0, 20), zip: String(c.zip || '').slice(0, 12), area: String(c.area || '').slice(0, 60),
     pool_build_year: String(c.pool_build_year || '').slice(0, 4), notes: String(c.notes || '').slice(0, 500),
     tags: (Array.isArray(c.tags) ? c.tags : []).map(t => String(t).slice(0, 40)).slice(0, 20).join(','),
-    source: String(opts.source || c.source || '').slice(0, 80)
+    source: String(opts.source || c.source || '').slice(0, 80),
+    // The Sales Hub row it came from (api/_lib/email-crm.js), so the contact links back.
+    quote_id: String(c.quote_id || '').slice(0, 20)
   };
 }
