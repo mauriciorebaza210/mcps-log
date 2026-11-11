@@ -82,6 +82,16 @@ function EE_ensureTab_(ss, name, headers, log) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
     sh.setFrozenRows(1);
     if (log) log.push('created tab ' + name);
+  } else {
+    // Columns added in later versions go on the end; existing ones never move.
+    var have = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+    var missing = headers.filter(function (h) { return have.indexOf(h) === -1; });
+    if (missing.length) {
+      var at = have.filter(String).length + 1;
+      if (sh.getMaxColumns() < at + missing.length - 1) sh.insertColumnsAfter(sh.getMaxColumns(), at + missing.length - 1 - sh.getMaxColumns());
+      sh.getRange(1, at, 1, missing.length).setValues([missing]).setFontWeight('bold');
+      if (log) log.push(name + ': added ' + missing.join(', '));
+    }
   }
   // Plain text everywhere, so Sheets never converts our values (see Env.js).
   sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getMaxColumns(), headers.length)).setNumberFormat('@');

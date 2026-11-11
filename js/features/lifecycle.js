@@ -89,11 +89,42 @@ function lcAgo_(iso) {
   if (s < 7 * 86400) return Math.floor(s / 86400) + ' d ago';
   return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
-function lcDate_(iso) {
-  const t = Date.parse(iso || ''); if (!t) return '';
-  return new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+// ── Time on screen: always the engine's local time (Central) with its zone ──
+// (PLAN.md → Execution modes → Time on screen), whatever the viewer's computer says.
+const LC_TZ = 'America/Chicago';
+const lcLocalDay_ = ms => new Date(ms).toLocaleDateString('en-CA', { timeZone: LC_TZ });
+const lcTodayCT_ = () => lcLocalDay_(Date.now());
+const lcZone_ = ms => ((new Intl.DateTimeFormat('en-US', { timeZone: LC_TZ, timeZoneName: 'short' }).formatToParts(new Date(ms)).find(p => p.type === 'timeZoneName') || {}).value || 'CT');
+// The zone in force on a local date (CST or CDT), for planned times.
+const lcZoneOn_ = d => lcZone_(Date.parse((d || lcTodayCT_()) + 'T18:00:00Z'));
+// 'HH:MM' → '10:30 AM'
+function lcClock_(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/); if (!m) return '';
+  const h = +m[1]; return (h % 12 || 12) + ':' + m[2] + ' ' + (h < 12 ? 'AM' : 'PM');
 }
-const lcDay_ = iso => { const t = Date.parse(iso || ''); return t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''; };
+// Compact for tight spaces (calendar cells): '9am', '2:15pm'
+const lcClockShort_ = hhmm => { const c = lcClock_(hhmm); return c ? c.replace(':00 ', ' ').replace(' AM', 'am').replace(' PM', 'pm') : ''; };
+const lcClockAt_ = ms => new Date(ms).toLocaleTimeString('en-US', { timeZone: LC_TZ, hour: 'numeric', minute: '2-digit' });
+// 'Today · 10:31 AM CST', 'Yesterday · …', 'Mon, Nov 23 · 10:31 AM CST'
+function lcStamp_(iso, noZone) {
+  const t = Date.parse(iso || ''); if (!t) return '';
+  const d = lcLocalDay_(t), today = lcTodayCT_(), y = lcLocalDay_(Date.parse(today + 'T18:00:00Z') - 86400000);
+  const day = d === today ? 'Today' : d === y ? 'Yesterday'
+    : new Date(t).toLocaleDateString('en-US', { timeZone: LC_TZ, weekday: 'short', month: 'short', day: 'numeric' });
+  return day + ' · ' + lcClockAt_(t) + (noZone ? '' : ' ' + lcZone_(t));
+}
+const lcDate_ = iso => lcStamp_(iso);
+const lcDay_ = iso => { const t = Date.parse(iso || ''); return t ? new Date(t).toLocaleDateString('en-US', { timeZone: LC_TZ, month: 'short', day: 'numeric' }) : ''; };
+// A relative time with the exact local time on hover.
+const lcAgoT_ = iso => '<time title="' + lcEsc_(lcStamp_(iso)) + '">' + lcEsc_(lcAgo_(iso)) + '</time>';
+// Today's runs still ahead, from the engine's plan ('' when none is planned for today).
+function lcNextRun_() {
+  const p = LC.ov && LC.ov.engine.run_plan, now = lcClockAt_(Date.now());
+  if (!p || p.date !== lcTodayCT_()) return '';
+  const cur = new Date().toLocaleTimeString('en-GB', { timeZone: LC_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return (p.times || []).find(t => t > cur) || '';
+}
+const lcSendTime_ = b => (LC.ov && LC.ov.engine.send_times && LC.ov.engine.send_times[b]) || '09:00';
 const lcPct_ = (n, d) => d ? Math.round(100 * n / d) + '%' : '';
 const lcInitials_ = (a, b) => ((String(a || '')[0] || '') + (String(b || '')[0] || '')).toUpperCase() || '·';
 function lcTiming_(t, steps) {
@@ -117,7 +148,7 @@ const LC_RESULT = { done: 'Completed', quota_reserve: 'Paused for quota', daily_
 const LC_STATE = { sent: ['Sent', 'live'], unknown: ['Unconfirmed', 'bad'], reconcile: ['Confirming', 'warn'], failed: ['Failed', 'bad'],
   cancelled: ['Cancelled', ''], claimed: ['Preparing', ''], drafted: ['Preparing', ''], sending: ['Sending', 'warn'],
   released: ['Retrying', ''], abandoned: ['Abandoned', ''] };
-const LC_ISSUE = { no_recent_run: 'No daily run in over a day', last_run_crashed: 'The last run crashed', unresolved_unknown: 'A send is unconfirmed',
+const LC_ISSUE = { no_recent_run: 'No scheduled run in over a day', last_run_crashed: 'The last run crashed', unresolved_unknown: 'A send is unconfirmed',
   unresolved_reconcile: 'A send is still confirming', delivery_failed: 'An email failed', engine_unreadable: 'The engine can’t be reached' };
 const LC_ALERT = { delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped', run_crashed: 'Run crashed',
   journal_integrity: 'Safety pause', reply_scan_failed: 'Reply scan failed' };
@@ -192,8 +223,10 @@ function lcRenderHead_() {
   if (h) {
     const sys = lcSystemIssues_(h);
     const cls = !sys.length ? '' : (sys.some(i => /crash|unreadable/.test(i.kind)) ? 'bad' : 'warn');
-    const label = !sys.length ? (h.last_run_at ? 'Healthy · ran ' + lcAgo_(h.last_run_at) : 'Healthy') : (LC_ISSUE[sys[0].kind] || sys[0].kind);
-    health = '<button class="lc-pill ' + cls + '" data-act="tab" data-tab="activity"><i></i>' + lcEsc_(label) + '</button>';
+    const label = !sys.length ? (h.last_run_at ? 'Healthy · ran ' + lcStamp_(h.last_run_at, true) : 'Healthy') : (LC_ISSUE[sys[0].kind] || sys[0].kind);
+    health = '<button class="lc-pill ' + cls + '" data-act="tab" data-tab="activity" title="' + lcEsc_(h.last_run_at ? 'Last run ' + lcStamp_(h.last_run_at) : '') + '"><i></i>' + lcEsc_(label) + '</button>';
+    const next = lcNextRun_();
+    if (next) health += '<button class="lc-pill" data-act="tab" data-tab="activity"><i class="next"></i>Next run ' + lcEsc_(lcClock_(next) + ' ' + lcZoneOn_()) + '</button>';
   }
   const mode = ov ? '<div class="lc-seg" role="group" aria-label="Data shown">' +
     ['test', 'production'].map(m => '<button data-act="mode" data-mode="' + m + '" class="' + (LC.mode === m ? 'on' : '') + '">' + (m === 'test' ? 'Test' : 'Live') + '</button>').join('') + '</div>' : '';
@@ -274,12 +307,11 @@ function lcActivity_() {
   const ov = LC.ov, h = ov.health;
   const sys = lcSystemIssues_(h);
   const issues = !sys.length ? '<div class="lc-ok"><span class="dot">' + LC_ICON.check + '</span><div><b>All clear</b><small>' +
-      lcEsc_(h.daily_trigger_seen ? 'Last run ' + lcAgo_(h.last_run_at) : 'Daily schedule not switched on yet') + '</small></div></div>'
+      lcEsc_(h.daily_trigger_seen ? 'Last run ' + lcStamp_(h.last_run_at) : 'Schedule not switched on yet') + '</small></div></div>'
     : '<ul class="lc-list">' + sys.map(i => '<li><span class="lc-li-ic bad">' + LC_ICON.alert + '</span><div class="main"><b>' + lcEsc_(LC_ISSUE[i.kind] || i.kind) +
       '</b><small>' + lcEsc_(i.kind === 'no_recent_run' ? 'Last one ' + lcDate_(i.at) : i.at ? lcDate_(i.at) : '') + '</small></div></li>').join('') + '</ul>';
   const att = ov.attention.length ? '<ul class="lc-list">' + ov.attention.map(d => '<li>' + lcStateTag_(d.state) + '<div class="main"><b>' +
-      lcEsc_(lcStepName_(d.step_id)) + '</b><small>' + lcEsc_(d.email) + (d.error ? ' · ' + lcEsc_(d.error) : '') + '</small>' + lcResolveActs_(d) + '</div><time>' +
-      lcEsc_(lcAgo_(d.send_invoked_at || d.claimed_at)) + '</time></li>').join('') + '</ul>'
+      lcEsc_(lcStepName_(d.step_id)) + '</b><small>' + lcEsc_(d.email) + (d.error ? ' · ' + lcEsc_(d.error) : '') + '</small>' + lcResolveActs_(d) + '</div>' + lcAgoT_(d.send_invoked_at || d.claimed_at) + '</li>').join('') + '</ul>'
     : '<div class="lc-empty">Nothing needs a decision.</div>';
   const canPause = lcCan_('pause'), e = ov.engine;
   const sw = (on, act, extra, label, key) => '<button class="lc-switch' + (on ? ' on' : '') + '" role="switch" aria-checked="' + on + '" aria-label="' + lcEsc_(label) + '" data-act="' + act + '"' +
@@ -288,19 +320,19 @@ function lcActivity_() {
     ['B', 'C'].map(b => { const on = !e.paused_buckets.includes(b); return '<li><div><b>' + LC_SEQ[b] + '</b><small>' + (on ? 'Running' : 'Paused') + '</small></div>' +
       sw(on, 'pause', ' data-bucket="' + b + '"', LC_SEQ[b], 'pause' + b) + '</li>'; }).join('') + '</ul>';
   const changes = (ov.changes || []).length ? '<ul class="lc-list">' + ov.changes.slice(0, 8).map(c => '<li><div class="main"><b>' + lcEsc_(lcChangeText_(c)) +
-      '</b>' + (c.result !== 'ok' ? '<small>Refused: ' + lcEsc_(c.result) + '</small>' : '') + '</div><time>' + lcEsc_(lcAgo_(c.at)) + '</time></li>').join('') + '</ul>' : '';
+      '</b>' + (c.result !== 'ok' ? '<small>Refused: ' + lcEsc_(c.result) + '</small>' : '') + '</div>' + lcAgoT_(c.at) + '</li>').join('') + '</ul>' : '';
   const runs = ov.runs.length ? '<table class="lc-table"><thead><tr><th>Run</th><th class="hide-sm">Trigger</th><th class="r">Sent</th><th class="r hide-sm">Skipped</th><th>Result</th></tr></thead><tbody>' +
-      ov.runs.map(r => '<tr><td>' + lcEsc_(lcDate_(r.started_at)) + '</td><td class="hide-sm">' + (r.trigger === 'daily' ? 'Scheduled' : 'Manual') +
+      ov.runs.map(r => '<tr><td>' + lcEsc_(lcStamp_(r.started_at, true)) + '</td><td class="hide-sm">' + lcEsc_(lcTrigger_(r)) +
         '</td><td class="r num">' + r.sent + '</td><td class="r num hide-sm">' + r.skipped + '</td><td>' +
         (r.stopped_reason === 'done' ? lcTag_('Completed', 'live') : /^crashed/.test(r.stopped_reason) ? lcTag_('Crashed', 'bad') : lcTag_(LC_RESULT[r.stopped_reason] || r.stopped_reason, 'warn')) +
         '</td></tr>').join('') + '</tbody></table>' : '<div class="lc-empty">No runs yet.</div>';
   const alerts = ov.alerts.length ? '<ul class="lc-list">' + ov.alerts.slice(0, 8).map(a => '<li><div class="main"><b>' + lcEsc_(LC_ALERT[a.kind] || a.kind) +
-      '</b>' + (a.detail ? '<small>' + lcEsc_(lcHumanize_(a.detail)) + '</small>' : '') + '</div><time>' + lcEsc_(lcAgo_(a.at)) + '</time></li>').join('') + '</ul>'
+      '</b>' + (a.detail ? '<small>' + lcEsc_(lcHumanize_(a.detail)) + '</small>' : '') + '</div>' + lcAgoT_(a.at) + '</li>').join('') + '</ul>'
     : '<div class="lc-empty">No alerts.</div>';
   return '<div class="lc-grid"><div><div class="lc-card"><div class="lc-card-h"><h3>Health</h3></div>' + issues + ctrls + '</div>' +
     '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
     (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +
-    '<div><div class="lc-card"><div class="lc-card-h"><h3>Runs</h3><small>Daily at ' + lcHour_(ov.engine.run_hour) + '</small></div>' + runs + '</div>' +
+    '<div>' + lcTodayRuns_() + '<div class="lc-card"><div class="lc-card-h"><h3>Recent runs</h3><small>Times in ' + lcEsc_(lcZoneOn_()) + '</small></div>' + runs + '</div>' +
     '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div></div></div>';
 }
 // Engine-level problems only; per-email ones live in "Needs a decision".
@@ -318,13 +350,42 @@ function lcResolveActs_(d) {
   const b = (act, label, cls, dis, title) => '<button class="lc-btn sm ' + (cls || '') + '" data-act="resolve" data-do="' + act + '" data-id="' + lcEsc_(d.delivery_id) + '"' +
     (dis || busy ? ' disabled' : '') + (title ? ' title="' + lcEsc_(title) + '"' : '') + '>' + label + '</button>';
   return '<div class="lc-acts">' + b('mark_sent', 'Mark sent') +
-    b('resend', ready ? 'Resend' : 'Resend at ' + new Date(unlock).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), '', !ready,
+    b('resend', ready ? 'Resend' : 'Resend at ' + lcClockAt_(unlock), '', !ready,
       ready ? '' : 'An earlier attempt could still finish until then') + b('abandon', 'Abandon', 'danger') + '</div>';
 }
 const LC_CHANGE = { run_now: () => 'started a run', set_enabled: p => (p.enabled ? 'turned sending on' : 'turned sending off'),
   set_bucket_paused: p => (p.paused ? 'paused ' : 'resumed ') + (LC_SEQ[p.bucket] || p.bucket), mark_sent: () => 'marked a send as sent',
   abandon: () => 'abandoned an unconfirmed send', resend: () => 'asked to resend an email' };
 const lcChangeText_ = c => (c.actor || 'Someone') + ' ' + (LC_CHANGE[c.action] ? LC_CHANGE[c.action](c.params || {}) : c.action);
+// How a run was started, with its planned time when the schedule started it.
+const lcTrigger_ = r => r.trigger === 'scheduled' ? 'Scheduled' + (r.planned_for ? ' · ' + lcClock_(r.planned_for) : '')
+  : r.trigger === 'daily' ? 'Daily' : 'Run now';
+// Today's runs: the engine's plan for today, each marked done (with what it sent) or still ahead.
+function lcTodayRuns_() {
+  const ov = LC.ov, p = ov.engine.run_plan, today = lcTodayCT_(), zone = lcZoneOn_(today);
+  const ran = ov.runs.filter(r => r.started_at && lcLocalDay_(Date.parse(r.started_at)) === today);
+  const st = ov.engine.send_times || {};
+  const defaults = Object.keys(st).map(b => LC_SEQ[b] + ' ' + lcClock_(st[b])).join(' · ');
+  if (!p || p.date !== today) {
+    return '<div class="lc-card"><div class="lc-card-h"><h3>Today’s runs</h3><small>' + lcEsc_(zone) + '</small></div><div class="lc-ok"><span class="dot">' + CMP_ICON_CLOCK + '</span><div><b>' +
+      (ran.length ? ran.length + (ran.length === 1 ? ' run' : ' runs') + ' so far' : 'No runs planned today') + '</b><small>' +
+      lcEsc_('The schedule isn’t switched on yet. Send times: ' + defaults + '.') + '</small></div></div></div>';
+  }
+  const cur = new Date().toLocaleTimeString('en-GB', { timeZone: LC_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const done = new Set(ran.map(r => r.planned_for).filter(Boolean));
+  const times = [...new Set([...(p.times || []), ...done])].sort();
+  const rows = times.map(t => {
+    const r = ran.find(x => x.planned_for === t), next = !r && t > cur && t === (p.times || []).find(x => x > cur);
+    const state = r ? lcTag_('Ran ' + lcClockAt_(Date.parse(r.started_at)) + ' · ' + r.sent + ' sent', 'live') : t > cur ? lcTag_(next ? 'Next' : 'Planned', next ? 'teal' : '') : lcTag_('Missed', 'warn');
+    const why = Object.keys(st).filter(b => st[b] === t).map(b => LC_SEQ[b]).join(' · ') || 'Batch send time';
+    return '<li class="' + (r ? 'done' : next ? 'next' : '') + '"><time>' + lcEsc_(lcClock_(t)) + '</time><div class="main"><small>' + lcEsc_(why) + '</small></div>' + state + '</li>';
+  }).join('');
+  const extra = ran.filter(r => !r.planned_for).length;
+  return '<div class="lc-card"><div class="lc-card-h"><h3>Today’s runs</h3><small>Times in ' + lcEsc_(zone) + '</small></div><ol class="lc-runs">' + rows + '</ol>' +
+    (extra ? '<p class="lc-note" style="padding:0 18px 12px;margin:0">Plus ' + extra + ' started by hand.</p>' : '') +
+    ((p.dropped || []).length ? '<p class="lc-note" style="padding:0 18px 12px;margin:0">More than 12 send times today: ' + lcEsc_(p.dropped.map(lcClock_).join(', ')) + ' wait for the next run.</p>' : '') + '</div>';
+}
+const CMP_ICON_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>';
 const lcHour_ = h => { h = Number(h) || 9; return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM'); };
 const lcStepName_ = id => { const s = LC.ov && LC.ov.steps.find(x => x.step_id === id); return s ? s.name : id; };
 
@@ -348,7 +409,7 @@ function lcContacts_() {
         lcEsc_(lcInitials_(c.first_name, c.last_name)) + '</span><div><b>' + lcEsc_([c.first_name, c.last_name].filter(Boolean).join(' ')) +
         (c.is_test ? ' <span class="lc-tag" style="height:18px;font-size:10.5px">Test</span>' : '') + '</b><small>' + lcEsc_(c.email) + '</small></div></div></td>' +
         '<td class="hide-xs"><span class="lc-seqname"><span class="lc-bkt sm">' + lcEsc_(c.bucket) + '</span>' + lcEsc_(LC_SEQ[c.bucket] || '') + '</span></td>' +
-        '<td>' + status + '</td><td class="hide-sm">' + (last ? lcEsc_(lcStepName_(last.step_id)) + ' <span style="color:var(--muted)">· ' + lcEsc_(lcAgo_(last.sent_at)) + '</span>' : '<span style="color:var(--muted)">–</span>') + '</td></tr>';
+        '<td>' + status + '</td><td class="hide-sm">' + (last ? lcEsc_(lcStepName_(last.step_id)) + ' <span style="color:var(--muted)">· ' + lcAgoT_(last.sent_at) + '</span>' : '<span style="color:var(--muted)">–</span>') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
 }
 
@@ -409,7 +470,7 @@ function lcStepTab_(D) {
     return '<div>' + d.recipients.map(r => {
       const g = r.engagement || {};
       return '<div class="lc-rcp"><span class="lc-avatar">' + lcEsc_(lcInitials_(...String(r.name).split(' '))) + '</span><div class="who"><b>' + lcEsc_(r.name) +
-        '</b><small>' + lcEsc_(r.email) + ' · ' + lcEsc_(r.sent_at ? lcDay_(r.sent_at) : (LC_STATE[r.state] || [r.state])[0]) + '</small>' +
+        '</b><small>' + lcEsc_(r.email) + ' · ' + lcEsc_(r.sent_at ? lcStamp_(r.sent_at) : (LC_STATE[r.state] || [r.state])[0]) + '</small>' +
         (g.reply_snippet ? '<div class="lc-quote">' + lcEsc_(g.reply_snippet) + '</div>' : '') + '</div>' +
         '<div class="lc-ev">' + (r.state === 'sent' ? lcEvidence_(g) : lcStateTag_(r.state)) + '</div></div>';
     }).join('') + '</div>';
@@ -515,7 +576,7 @@ async function lcWrite_(busyKey, action, params, okText) {
   const r = await lcAdmin_(action, params).catch(() => ({ ok: false, error: 'Network error' }));
   delete LC.busy[busyKey];
   if (r.ok) lcToast_(okText);
-  else if (r.reason === 'quiescence') lcToast_('Not yet: available at ' + new Date(r.unlock_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), true);
+  else if (r.reason === 'quiescence') lcToast_('Not yet: available at ' + lcClockAt_(Date.parse(r.unlock_at)) + ' ' + lcZone_(Date.parse(r.unlock_at)), true);
   else lcToast_(r.error || r.reason || 'That didn’t work', true);
   lcRefresh_(true);
 }

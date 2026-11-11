@@ -10,7 +10,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 const BAT = { layer: null, step: 'who', group: 'B', filters: { area: [], tags: [], source: [] }, count: 20, order: 'random', pick: 'now',
-  start_on: '', batches: 1, every: 7, restart: false, removed: new Set(), seed: 1, busy: false };
+  start_on: '', send_time: '', batches: 1, every: 7, restart: false, removed: new Set(), seed: 1, busy: false };
 const BAT_STEPS = [['who', 'Who'], ['when', 'When'], ['people', 'People'], ['review', 'Review']];
 // Restarts need the engine's create_batch to end the old enrollment (not built yet; today it
 // skips anyone who had a sequence). Until then the option stays hidden; the harness turns it on.
@@ -24,7 +24,7 @@ function batRandom_(seed) { let s = seed; return () => (s = (s * 16807) % 214748
 function lcOpenBatch_(opts) {
   opts = opts || {};
   Object.assign(BAT, { step: 'who', group: opts.group || (typeof CMP !== 'undefined' && CMP.id) || LC.bucket || 'B', filters: { area: [], tags: [], source: [] },
-    count: 20, order: 'random', pick: 'now', start_on: opts.start_on && opts.start_on > batToday_() ? opts.start_on : batToday_(), batches: 1, every: 7,
+    count: 20, order: 'random', pick: 'now', start_on: opts.start_on && opts.start_on > batToday_() ? opts.start_on : batToday_(), send_time: '', batches: 1, every: 7,
     restart: false, removed: new Set(), seed: Date.now() % 2147483646 + 1, busy: false });
   const layer = document.createElement('div');
   layer.className = 'lc-layer';
@@ -68,6 +68,11 @@ function batRestartPool_() {
 }
 function batPool_() { return MCPS_BATCHES.eligible(batCandidates_(), batSpecOf_(0)).map(c => c._orig || c); }
 const batTotal_ = () => BAT.count * BAT.batches;
+// The batch's send time: its own, else the campaign default.
+const batTime_ = () => BAT.send_time || lcSendTime_(BAT.group);
+const batNowCT_ = () => new Date().toLocaleTimeString('en-GB', { timeZone: LC_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const batWhenLabel_ = d => (d <= batToday_() ? 'Today' : new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })) +
+  ' · ' + lcClock_(batTime_()) + ' ' + lcZoneOn_(d);
 // The people, batch by batch (pick now), in the same order the engine would take them.
 function batPlan_() {
   const pool = batPool_(), dates = Array.from({ length: BAT.batches }, (_, i) => batAddDays_(BAT.start_on, i * BAT.every));
@@ -127,11 +132,13 @@ function batWho_() {
 function batWhen_(plan) {
   const pool = batPool_().length, short = BAT.pick === 'now' && pool < batTotal_();
   return '<div class="lc-imp-row"><label class="lc-fld"><span>First batch starts</span><input class="lc-input" type="date" min="' + batToday_() + '" value="' + BAT.start_on + '" data-bat-date></label>' +
+    '<label class="lc-fld"><span>Send time</span><select class="lc-input" data-bat-time style="width:250px">' +
+      cmpTimeOptions_(BAT.send_time, '<option value=""' + (BAT.send_time ? '' : ' selected') + '>Campaign default (' + lcEsc_(lcClock_(lcSendTime_(BAT.group))) + ')</option>') + '</select></label>' +
     '<label class="lc-fld"><span>Batches</span><input class="lc-input" type="number" min="1" max="12" value="' + BAT.batches + '" data-bat-num="batches" style="width:90px"></label>' +
     (BAT.batches > 1 ? '<div class="lc-fld"><span>Every</span>' + batSeg_('every', BAT.every, [[7, 'Week'], [14, '2 weeks'], [30, '30 days']]) + '</div>' : '') +
     '<div class="lc-fld"><span>Choose people</span>' + batSeg_('pick', BAT.pick, [['now', 'Now'], ['at_start', 'On each start day']]) + '</div></div>' +
-    '<ol class="lc-wiz-dates">' + plan.map((b, i) => '<li><span class="lc-step">' + (i + 1) + '</span><b>' + lcEsc_(new Date(b.start_on + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })) +
-      '</b><span>' + b.count + (b.count === 1 ? ' person' : ' people') + '</span>' + (b.start_on <= batToday_() ? lcTag_('Starts today', 'live') : '') + '</li>').join('') + '</ol>' +
+    '<ol class="lc-wiz-dates">' + plan.map((b, i) => '<li><span class="lc-step">' + (i + 1) + '</span><b>' + lcEsc_(batWhenLabel_(b.start_on)) +
+      '</b><span>' + b.count + (b.count === 1 ? ' person' : ' people') + '</span>' + (b.start_on <= batToday_() ? lcTag_(batTime_() <= batNowCT_() ? 'Sends right away' : 'Starts today', 'live') : '') + '</li>').join('') + '</ol>' +
     (short ? '<p class="lc-note">Only ' + pool + ' match, so the last batch is smaller' + (plan.length < BAT.batches ? ' and ' + (BAT.batches - plan.length) + ' would be empty' : '') + '.</p>' : '') +
     (BAT.pick === 'at_start' ? '<p class="lc-note">Each morning a batch starts, the engine picks from whoever is still waiting then, with these filters.</p>' : '');
 }
@@ -144,7 +151,7 @@ function batPeople_(plan) {
     (c.sequence ? ' <span class="lc-tag warn sm">Restart</span>' : '') + '</b><small>' + lcEsc_(c.email || '') + (c.area ? ' · ' + lcEsc_(c.area) : '') + (c.sequence ? ' · ' + lcEsc_(batHistory_(c)) : '') + '</small></div></div></td>' +
     '<td class="r"><button class="lc-icon-btn" data-bat="remove" data-id="' + lcEsc_(c.contact_id) + '" aria-label="Leave out" title="Leave out">' + LC_ICON.x + '</button></td></tr>';
   return warn + (BAT.order === 'random' && batPool_().length > batTotal_() ? '<div><button class="lc-btn sm" data-bat="shuffle">' + LC_ICON.refresh + 'Pick others</button></div>' : '') +
-    plan.map(b => '<div class="lc-imp-sub">' + lcEsc_(b.start_on <= batToday_() ? 'Today' : new Date(b.start_on + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })) +
+    plan.map(b => '<div class="lc-imp-sub">' + lcEsc_(batWhenLabel_(b.start_on)) +
       '<small>' + b.count + (b.count === 1 ? ' person' : ' people') + '</small></div><div class="lc-card"><table class="lc-table"><tbody>' + b.people.map(row).join('') + '</tbody></table></div>').join('');
 }
 function batHistory_(c) {
@@ -160,17 +167,18 @@ function batReview_(plan) {
   const emails = b => {
     if (!chained) return 'Emails follow each person’s startup date';
     let d = b.start_on;
-    return steps.map((s, i) => { if (i) d = batAddDays_(d, Number((s.timing || {}).offset) || 0); return lcEsc_(s.name) + ' ' + lcEsc_(batDayLabel_(d)); }).join(' → ');
+    return steps.map((s, i) => { if (i) d = batAddDays_(d, Number((s.timing || {}).offset) || 0); return lcEsc_(s.name) + ' ' + lcEsc_(batDayLabel_(d)); }).join(' → ') + ' · ' + lcEsc_(lcClock_(batTime_()));
   };
   return '<dl class="lc-kv lc-wiz-kv"><dt>Campaign</dt><dd>' + lcEsc_(LC_SEQ[BAT.group]) + '</dd><dt>Who</dt><dd>' + (what ? lcEsc_(what) : 'Everyone waiting') +
     (BAT.restart ? ', plus people who had it before' : '') + ' · ' + (BAT.order === 'oldest' ? 'oldest first' : 'random') + '</dd>' +
-    '<dt>People</dt><dd>' + (BAT.pick === 'now' ? 'Chosen now (you saw the list)' : 'Chosen on each start day') + '</dd></dl>' +
+    '<dt>People</dt><dd>' + (BAT.pick === 'now' ? 'Chosen now (you saw the list)' : 'Chosen on each start day') + '</dd>' +
+    '<dt>Send time</dt><dd>' + lcEsc_(lcClock_(batTime_()) + ' ' + lcZoneOn_(BAT.start_on)) + (BAT.send_time ? '' : ' (campaign default)') + ', for every email in the campaign</dd></dl>' +
     '<div class="lc-card"><table class="lc-table"><thead><tr><th>Starts</th><th class="r">People</th><th class="hide-sm">Emails (planned)</th></tr></thead><tbody>' +
-    plan.map(b => '<tr><td>' + lcEsc_(b.start_on <= batToday_() ? 'Today' : new Date(b.start_on + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })) + '</td><td class="r">' + b.count +
+    plan.map(b => '<tr><td>' + lcEsc_(batWhenLabel_(b.start_on)) + '</td><td class="r">' + b.count +
       '</td><td class="hide-sm lc-dim">' + emails(b) + '</td></tr>').join('') + '</tbody></table></div>' +
     (restarting.length ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>' + restarting.length + (restarting.length === 1 ? ' person restarts' : ' people restart') + ' ' + lcEsc_(LC_SEQ[BAT.group]) + '</b>' +
       '<small>Their earlier sequence is closed and they get every email again from the first one: ' + restarting.map(c => lcEsc_(cmpName_(c))).join(', ') + '.</small></div></div>' : '') +
-    '<p class="lc-note">' + (plan[0] && plan[0].start_on <= batToday_() ? 'Today’s batch gets its first email on the next run. ' : '') + 'Planned batches can be cancelled or moved until their start day.</p>';
+    '<p class="lc-note">' + (plan[0] && plan[0].start_on <= batToday_() ? (batTime_() <= batNowCT_() ? 'Today’s send time has passed, so today’s batch goes out right away. ' : 'Today’s batch gets its first email at ' + lcClock_(batTime_()) + '. ') : '') + 'Planned batches can be cancelled or moved until their start day.</p>';
 }
 
 // ── Saving: one create_batch per batch ────────────────────────────────────────
@@ -179,14 +187,14 @@ async function batCreate_() {
   if (!plan.length) return;
   const n = plan.reduce((a, b) => a + b.count, 0), restarting = batRestarting_(plan);
   if (plan[0].start_on <= batToday_() && !await lcConfirm_({ title: 'Start ' + plan[0].count + ' today?', ok: 'Start',
-    body: 'They leave Needs review and their first email goes out on the next run.' + (plan.length > 1 ? ' The other ' + (n - plan[0].count) + ' are lined up.' : '') })) return;
+    body: 'They leave Needs review and their first email goes out ' + (batTime_() <= batNowCT_() ? 'right away.' : 'at ' + lcClock_(batTime_()) + ' ' + lcZoneOn_() + '.') + (plan.length > 1 ? ' The other ' + (n - plan[0].count) + ' are lined up.' : '') })) return;
   if (restarting.length && !await lcConfirm_({ title: 'Restart ' + restarting.length + (restarting.length === 1 ? ' person?' : ' people?'), ok: 'Restart them',
     body: restarting.map(cmpName_).join(', ') + ' had ' + LC_SEQ[BAT.group] + ' before. They get every email again.' })) return;
   BAT.busy = true; batRender_();
   let made = 0, err = '';
   for (const b of plan) {
     const ids = b.people.map(c => c.contact_id), re = b.people.filter(c => c.sequence).map(c => c.contact_id);
-    const r = await lcAdmin_('create_batch', { group: BAT.group, filters: BAT.filters, order: BAT.order, pick: BAT.pick, start_on: b.start_on,
+    const r = await lcAdmin_('create_batch', { group: BAT.group, filters: BAT.filters, order: BAT.order, pick: BAT.pick, start_on: b.start_on, send_time: BAT.send_time,
       count: b.count, contact_ids: ids, restart_ids: re, include_restart: BAT.restart && BAT.pick !== 'now' }).catch(() => ({ ok: false, error: 'Network error' }));
     if (!r.ok) { err = r.error || 'That didn’t work'; break; }
     made++;
@@ -219,5 +227,6 @@ function batOnChange_(e) {
   const el = e.target;
   if (el.matches('[data-bat-num]')) { const k = el.dataset.batNum, max = k === 'batches' ? 12 : 500; BAT[k] = Math.max(1, Math.min(max, Number(el.value) || 1)); batRender_(); }
   else if (el.matches('[data-bat-date]')) { BAT.start_on = el.value < batToday_() ? batToday_() : el.value; batRender_(); }
+  else if (el.matches('[data-bat-time]')) { BAT.send_time = el.value; batRender_(); }
   else if (el.matches('[data-bat-check="restart"]')) { BAT.restart = el.checked; batRender_(); }
 }

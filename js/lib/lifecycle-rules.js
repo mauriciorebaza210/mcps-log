@@ -62,6 +62,18 @@
     var ms = Date.parse(v);
     return isNaN(ms) ? v.slice(0, 10) : localDate(new Date(ms), tz);
   }
+  // A local clock time as 'HH:MM' (24 h), or '' when it isn't one.
+  function normTime(v) {
+    var m = String(v == null ? '' : v).trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m || +m[1] > 23 || +m[2] > 59) return '';
+    return (m[1].length === 1 ? '0' : '') + m[1] + ':' + m[2];
+  }
+  // The local clock time ('HH:MM') of an instant in the business timezone.
+  function localTime(now, tz) {
+    var t = new Intl.DateTimeFormat('en-GB', { timeZone: tz || 'America/Chicago', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+    return normTime(t);
+  }
+  var DEFAULT_SEND_TIME = '09:00';
   function norm(email) { return String(email || '').trim().toLowerCase(); }
   function deliveryKey(enrollmentId, stepId, occurrence) { return enrollmentId + ':' + stepId + ':' + occurrence; }
   function indexBy(list, field) { var m = {}; (list || []).forEach(function (x) { m[x[field]] = x; }); return m; }
@@ -144,6 +156,8 @@
     else if (state.status === 'waiting_anchor') state.status = 'active';
 
     var sub = contact.sub_bucket || '';
+    // Send time: the enrollment's own (from its batch), else the campaign default.
+    var sendTime = normTime(en.send_time) || normTime((ctx.sendTimes || {})[en.sequence_id]) || DEFAULT_SEND_TIME;
     var stepResult = {};        // step_id -> { sent, due, outcome } for occurrence 1
     var startupSent = false;
 
@@ -167,7 +181,7 @@
         if (rec && REOPENED[rec.state]) rec = null;
         var d = { key: key, enrollment_id: en.enrollment_id, contact_id: en.contact_id, mode: state.mode,
           step_id: step.step_id, occurrence: occ, order: step.order, category: step.category,
-          due: null, last_send_day: null, outcome: '', reason: '', held_days: ctx.holds[key] || 0 };
+          due: null, send_time: sendTime, last_send_day: null, outcome: '', reason: '', held_days: ctx.holds[key] || 0 };
         if (base && !unsupported) {
           d.due = addDays(base, step.offset + k * (step.repeat_every || 0));
           var nextDue = k + 1 < count ? addDays(base, step.offset + (k + 1) * (step.repeat_every || 0)) : null;
@@ -215,6 +229,9 @@
             : (d.held_days > 0 && d.held_days >= (step.max_hold_days || 0) ? 'hold_cap_reached' : 'window_passed');
         } else if (projected || ctx.today < d.due) {
           d.outcome = 'upcoming'; if (projected) d.reason = 'projected_from_prerequisite';
+        } else if (ctx.time && sendTime > ctx.time) {
+          // Its day has come but not its time: a later run today sends it.
+          d.outcome = 'upcoming'; d.reason = 'later_today';
         } else if (ctx.paused.all || (ctx.paused.buckets || []).indexOf(contact.bucket) !== -1) {
           d.outcome = 'paused';
         } else if (contact.review_status !== 'confirmed') {
@@ -275,7 +292,9 @@
   // input: { today | now+tz, rulesets: {rev: {steps: [...]}}, contacts, enrollments,
   //          deliveries (claimed onward), holds: {key: days}, signals,
   //          suppressions: [{email_norm, scope: 'all'|'marketing', mode}],
-  //          commsSentToday: [email_norm], paused: {all, buckets} }
+  //          commsSentToday: [email_norm], paused: {all, buckets},
+  //          time: 'HH:MM' local (optional; gates today's sends by send time),
+  //          sendTimes: {sequence_id: 'HH:MM'} campaign defaults }
   // output: { today, deliveries: [...], enrollments: [...], due: [...in send order] }
   function decide(input) {
     var tz = input.tz || 'America/Chicago';
@@ -295,6 +314,7 @@
     var ctx = { today: today, tz: tz, rulesets: input.rulesets || {}, contacts: indexBy(input.contacts, 'contact_id'),
       deliveries: indexBy(input.deliveries, 'key'), holds: input.holds || {}, signalsByEnrollment: signalsByEnrollment,
       paused: input.paused || {}, sentToday: sentToday, commsToday: commsToday,
+      time: normTime(input.time), sendTimes: input.sendTimes || {},
       suppression: function (mode, email) { return supp[(mode || 'production') + '|' + norm(email)] || ''; } };
 
     var deliveries = [], enrollments = [];
@@ -315,6 +335,9 @@
     decideEnrollment: decideEnrollment,
     deliveryKey: deliveryKey,
     localDate: localDate,
+    localTime: localTime,
+    normTime: normTime,
+    DEFAULT_SEND_TIME: DEFAULT_SEND_TIME,
     localDay: localDay,
     addDays: addDays,
     daysBetween: daysBetween

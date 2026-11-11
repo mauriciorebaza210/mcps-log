@@ -5,16 +5,17 @@
 //   eeAddTestContacts()  two test contacts at Mau's address (B and C)                   (Setup.js)
 //   eeApprove(stepId)    publish an immutable revision of a step's draft                 (Revisions.js)
 //   eeRunNow()           run the engine once, now
-//   eeInstall()          install the daily trigger (run as Tony)
+//   eeInstall()          install the scheduler trigger and plan today's runs (run as Tony; Schedule.js)
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp7-3';
+var EE_VERSION = 'cp7-4';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
 // Today's snapshot for the planner (Planner.js → EE_planDay).
-function EE_readSnapshot_(env) {
+// time: the run's gate time ('HH:MM' local; see Schedule.js → EE_slotFor_).
+function EE_readSnapshot_(env, time) {
   var cfg = EE_config_(env.store);
   var rulesets = {};
   env.store.rows('Rulesets').forEach(function (r) { rulesets[r.rule_rev] = r.json; });
@@ -54,7 +55,12 @@ function EE_readSnapshot_(env) {
     deliveries: env.store.rows('Deliveries'), holds: env.store.rows('Holds'), inbox: env.store.rows('Inbox'),
     suppressions: suppressions, commsSentToday: commsSentToday,
     paused: { all: String(cfg.engine_enabled) === 'false', buckets: env.config.pausedBuckets() },
-    publishedRevision: publishedRevision };
+    publishedRevision: publishedRevision, time: time || '', sendTimes: EE_sendTimesBySequence_(cfg, rulesets[cfg.rule_rev]) };
+}
+function EE_sendTimesBySequence_(cfg, ruleset) {
+  var byBucket = EE_sendTimes_(cfg), out = {};
+  ((ruleset && ruleset.sequences) || []).forEach(function (s) { if (byBucket[s.bucket]) out[s.sequence_id] = byBucket[s.bucket]; });
+  return out;
 }
 
 function EE_sentToday_(env) {
@@ -68,6 +74,9 @@ function EE_run_(trigger) {
   var x = EE_core_();
   var cfg = EE_config_(x.env.store);
   var started = new Date().toISOString(), summary, scan = null;
+  // The gate time: a scheduled run that fired a little early uses its slot (Schedule.js).
+  var nowTime = MCPS_LIFECYCLE.localTime(new Date(), EE_TZ), plan = EE_runPlan_(cfg);
+  var slot = trigger === 'scheduled' && plan && plan.date === EE_today_(x.env) ? EE_slotFor_(plan, nowTime) : { gate: nowTime, planned_for: '' };
   // Batches whose start date has come confirm their people, so this plan starts them (Admin.js).
   var batches = null;
   try { batches = EE_startDueBatches_(x.env, x.core); }
@@ -76,7 +85,7 @@ function EE_run_(trigger) {
   try { scan = EE_createReplyScanner(x.env, x.core).scan(); }
   catch (e) { scan = { error: String(e && e.message || e).slice(0, 200) }; try { x.env.alert('reply_scan_failed', scan.error); } catch (e2) { /* the run goes on */ } }
   try {
-    summary = EE_runDay(x.core, x.env, function () { return EE_readSnapshot_(x.env); }, {
+    summary = EE_runDay(x.core, x.env, function () { return EE_readSnapshot_(x.env, slot.gate); }, {
       trigger: trigger, dailyCap: Number(cfg.daily_cap || 50), budgetMs: 270000, sentToday: EE_sentToday_(x.env) });
   } catch (e) {
     // Unexpected failure: still log the run and alert, then surface the error.
@@ -87,12 +96,14 @@ function EE_run_(trigger) {
     throw e;
   }
   try {
-    x.env.store.upsert('Runs', { run_id: summary.run_id, trigger: trigger, owner: x.env.user(), started_at: summary.started_at,
+    x.env.store.upsert('Runs', { run_id: summary.run_id, trigger: trigger, planned_for: slot.planned_for, owner: x.env.user(), started_at: summary.started_at,
       finished_at: summary.finished_at, sent: summary.sent, skipped: summary.skipped, cancelled: summary.cancelled,
       reconcile: summary.reconcile, adopted: summary.adopted, failed: summary.failed || 0,
       stopped_reason: summary.stopped_reason, plan_json: summary.plan || {}, scan_json: scan || {} });
   } catch (e) { /* the run itself is already recorded in the Journal */ }
-  summary.scan = scan; summary.batches = batches;
+  // The scheduler missed today (or isn't installed but a plan exists): plan now.
+  try { if (plan && plan.date !== EE_today_(x.env) && EE_hasScheduler_()) EE_planRuns_(x.env, EE_triggerDeps_()); } catch (e) { /* the next scheduler run retries */ }
+  summary.scan = scan; summary.batches = batches; summary.planned_for = slot.planned_for;
   Logger.log(JSON.stringify(summary));
   return summary;
 }
@@ -110,18 +121,21 @@ function eeDiagnostics() {
   Logger.log(JSON.stringify(d, null, 2));
   return d;
 }
+// Kept so a trigger installed before send times (CP7) still runs.
 function EE_dailyTrigger() { return EE_run_('daily'); }
+function EE_hasScheduler_() { return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'EE_scheduleTrigger'; }); }
 
 function eeInstall() {
   var me = Session.getEffectiveUser().getEmail();
   var owner = EE_props_().getProperty('EE_OWNER_EMAIL');
   if (owner && owner.toLowerCase() !== me.toLowerCase()) throw new Error('Install as the engine owner (' + owner + '), not ' + me + '.');
-  ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'EE_dailyTrigger'; })
+  ScriptApp.getProjectTriggers().filter(function (t) { return /^(EE_dailyTrigger|EE_scheduleTrigger)$/.test(t.getHandlerFunction()); })
     .forEach(function (t) { ScriptApp.deleteTrigger(t); });
-  var hour = Number(EE_config_(EE_env().store).run_hour || 9);
-  ScriptApp.newTrigger('EE_dailyTrigger').timeBased().everyDays(1).atHour(hour).inTimezone(EE_TZ).create();
+  // Just after midnight: plan the day's runs at their send times (Schedule.js).
+  ScriptApp.newTrigger('EE_scheduleTrigger').timeBased().everyDays(1).atHour(0).nearMinute(5).inTimezone(EE_TZ).create();
   EE_props_().setProperty('EE_TRIGGER_OWNER', me);
-  Logger.log('Daily run installed at ' + hour + ':00 ' + EE_TZ + ' as ' + me + '.');
+  var today = EE_planRuns_(EE_env(), EE_triggerDeps_());
+  Logger.log('Scheduler installed as ' + me + '. Runs today: ' + (today.times.join(', ') || 'none left') + ' ' + EE_TZ + '.');
 }
 
 // ── Web app ──

@@ -17,6 +17,8 @@
 //                       chosen on the date). A batch dated today starts immediately; later ones start in that
 //                       morning's run (EE_startDueBatches_, called from Main.js).
 //   cancel_batch       before it starts
+//   set_send_time      a campaign's default send time (Config send_time_<bucket>), then re-plan today's runs
+//                       (create_batch also takes send_time: the batch's people keep it; Schedule.js)
 //   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
 //   maintenance        run one allow-listed setup task as Tony (eeSetup, eeSetupMarketingKit,
 //                       eeDiagnostics), so nobody has to click Run in the Apps Script editor.
@@ -24,9 +26,9 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
-var EE_ADMIN_ACTIONS = { create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
-// deps: { scheduleRun() -> 'queued' | 'already_queued' }  (Apps Script: a trigger; tests: a fake)
+// deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
   var action = String(req.action || ''), p = req.params || {}, actor = String(req.actor || '').slice(0, 60);
   var out;
@@ -36,7 +38,21 @@ function EE_adminRun_(env, core, req, deps) {
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };
   else if (action === 'import_contacts') out = EE_importContacts_(env, core, p, actor);
-  else if (action === 'create_batch') out = EE_createBatch_(env, core, p, actor);
+  else if (action === 'create_batch') {
+    out = EE_createBatch_(env, core, p, actor);
+    // Today's runs may need this batch's time; one already past runs right away (row 61).
+    if (out.ok && out.started && deps.scheduleRun && (!out.send_time || out.send_time <= MCPS_LIFECYCLE.localTime(new Date(env.now()), EE_TZ))) deps.scheduleRun();
+    if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
+  }
+  else if (action === 'set_send_time') {
+    var sb = String(p.bucket || ''), st = EE_validSendTime_(p.time);
+    if (!/^[A-F]$/.test(sb) || !st) out = { ok: false, error: 'bucket A–F and a time between 6:00 AM and 8:00 PM on a quarter hour required' };
+    else {
+      env.store.upsert('Config', { key: 'send_time_' + sb, value: st });
+      out = { ok: true, bucket: sb, time: st };
+      if (deps.planRuns) { try { out.runs = deps.planRuns().times; } catch (e) { /* the scheduler retries tonight */ } }
+    }
+  }
   else if (action === 'cancel_batch') {
     var bt = env.store.get('Batches', String(p.batch_id || ''));
     if (!bt) out = { ok: false, error: 'batch not found' };
@@ -140,14 +156,16 @@ function EE_createBatch_(env, core, p, actor) {
     count = ids.length;
   } else if (count < 1 || count > EE_BATCH_MAX) return { ok: false, error: 'count 1 to ' + EE_BATCH_MAX };
   var filters = p.filters && typeof p.filters === 'object' ? p.filters : {};
+  var sendTime = '';
+  if (p.send_time) { sendTime = EE_validSendTime_(p.send_time); if (!sendTime) return { ok: false, error: 'send time must be 6:00 AM–8:00 PM on a quarter hour' }; }
   var id = 'bat_' + env.uuid().replace(/-/g, '').slice(-12);
   if (env.store.get('Batches', id)) return { ok: false, error: 'id collision, try again' };
   var batch = { batch_id: id, name: String(p.name || '').slice(0, 80), group: group, filters_json: filters, count: count,
     order: p.order === 'oldest' ? 'oldest' : 'random', pick: pickNow ? 'now' : 'at_start', start_on: startOn,
-    contact_ids: ids, status: 'planned', created_by: actor, created_at: new Date(env.now()).toISOString() };
+    contact_ids: ids, send_time: sendTime, status: 'planned', created_by: actor, created_at: new Date(env.now()).toISOString() };
   env.store.upsert('Batches', batch);
-  if (startOn <= today) return { ok: true, batch_id: id, started: EE_startBatch_(env, core, batch, actor) };
-  return { ok: true, batch_id: id, start_on: startOn };
+  if (startOn <= today) return { ok: true, batch_id: id, send_time: sendTime, started: EE_startBatch_(env, core, batch, actor) };
+  return { ok: true, batch_id: id, start_on: startOn, send_time: sendTime };
 }
 // Confirms the batch's people, so the next run starts their sequence. Someone who
 // is no longer waiting in Needs review (enrolled, edited, removed) is skipped.
@@ -164,7 +182,7 @@ function EE_startBatch_(env, core, b, actor) {
     var c = byId[cid];
     if (!c || c.review_status !== 'needs_review' || c.bucket !== b.group) { skipped.push({ contact_id: cid, reason: c ? 'no longer waiting' : 'not found' }); return; }
     if (c.enrolled) { skipped.push({ contact_id: cid, reason: 'already had a sequence' }); return; }
-    core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id },
+    core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id, send_time: MCPS_LIFECYCLE.normTime(b.send_time) },
       'contact:' + cid + ':batch:' + b.batch_id);
     started++;
   });
@@ -184,7 +202,7 @@ function EE_startDueBatches_(env, core) {
 // Apps Script entry for the relay.
 function EE_admin_(req) {
   var x = EE_core_();
-  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_,
+  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
     runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; } });
 }
 // One pending run at a time; the trigger removes itself when it fires.

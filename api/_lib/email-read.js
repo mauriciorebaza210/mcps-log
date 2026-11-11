@@ -82,7 +82,7 @@ function contactView(c, caps) {
     email: pii ? c.email_norm : maskEmail(c.email_norm),
     address: pii ? (c.address || '') : (c.address ? 'hidden' : ''),
     phone: pii ? (c.phone || '') : (c.phone ? 'hidden' : ''),
-    startup_date: c.startup_date || '', source: c.source || '', created_at: c.created_at || '',
+    startup_date: c.startup_date || '', send_time: c.send_time || '', source: c.source || '', created_at: c.created_at || '',
     area: c.area || c.city || '', city: c.city || '', tags: String(c.tags || '').split(',').map(t => t.trim()).filter(Boolean)
   };
 }
@@ -121,7 +121,8 @@ export function health(tables, now) {
   const H = 60 * 60 * 1000, issues = [];
   const cfg = config(tables);
   const runs = (tables.Runs || []).slice().sort(byDesc('started_at'));
-  const daily = runs.filter(r => r.trigger === 'daily');
+  // Runs the schedule made (the old daily trigger, or a send-time run); Run now doesn't count.
+  const daily = runs.filter(r => r.trigger === 'daily' || r.trigger === 'scheduled');
   const lastDaily = daily[0] ? ms(daily[0].started_at) : 0;
   const enabled = String(cfg.engine_enabled) !== 'false';
   // Before the daily trigger is installed there's nothing to miss.
@@ -138,6 +139,12 @@ export function health(tables, now) {
   const recentAlerts = (tables.Alerts || []).filter(a => now - ms(String(a.at).split(' ')[0]) < 24 * H).length;
   return { ok: issues.length === 0, issues, enabled, last_run_at: runs[0] ? runs[0].started_at : '',
     last_daily_run_at: daily[0] ? daily[0].started_at : '', daily_trigger_seen: !!lastDaily, alerts_24h: recentAlerts };
+}
+
+const sendTime = v => (/^\d{1,2}:\d{2}$/.test(String(v || '').trim()) ? String(v).trim().padStart(5, '0') : '09:00');
+function runPlan(cfg) {
+  try { const p = typeof cfg.run_plan === 'object' && cfg.run_plan ? cfg.run_plan : JSON.parse(cfg.run_plan || 'null'); return p && p.date ? { date: p.date, times: p.times || [], dropped: p.dropped || [] } : null; }
+  catch (_) { return null; }
 }
 
 // mode: 'test' | 'production' (default: the engine's current mode).
@@ -182,7 +189,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
     };
   });
   const runs = (tables.Runs || []).slice().sort(byDesc('started_at')).slice(0, 10).map(r => ({
-    run_id: r.run_id, trigger: r.trigger, started_at: r.started_at, finished_at: r.finished_at,
+    run_id: r.run_id, trigger: r.trigger, planned_for: r.planned_for || '', started_at: r.started_at, finished_at: r.finished_at,
     sent: r.sent, skipped: r.skipped, cancelled: r.cancelled, failed: r.failed, stopped_reason: r.stopped_reason
   }));
   const h = health(tables, now);
@@ -193,7 +200,9 @@ export function buildOverview(tables, caps, now, opts = {}) {
       enabled: String(cfg.engine_enabled) !== 'false', mode: cfg.engine_mode || 'test',
       paused_buckets: String(cfg.paused_buckets || '').split(',').map(x => x.trim()).filter(Boolean),
       daily_cap: Number(cfg.daily_cap || 0), run_hour: Number(cfg.run_hour || 0), sender_name: cfg.sender_name || '',
-      rule_rev: cfg.rule_rev || '', last_run: runs[0] || null
+      rule_rev: cfg.rule_rev || '', last_run: runs[0] || null, tz: 'America/Chicago',
+      // Send times (PLAN.md → Scheduling semantics): campaign defaults and today's planned runs.
+      send_times: { B: sendTime(cfg.send_time_B), C: sendTime(cfg.send_time_C) }, run_plan: runPlan(cfg)
     },
     steps,
     attention: deliveries.filter(d => NEEDS_ATTENTION.has(d.state)).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps, eng[d.delivery_id])),
@@ -248,7 +257,7 @@ export function buildContacts(tables, caps, opts = {}) {
   (tables.Enrollments || []).forEach(e => { (enr[e.contact_id] = enr[e.contact_id] || []).push(e); });
   (tables.Deliveries || []).forEach(d => { if (d.state === 'sent' && ms(d.sent_at) > ms(last[d.contact_id] && last[d.contact_id].sent_at)) last[d.contact_id] = d; });
   const batches = (tables.Batches || []).slice().sort(byDesc('created_at')).slice(0, 30).map(b => ({
-    batch_id: b.batch_id, name: b.name || '', group: b.group, count: b.count, order: b.order, pick: b.pick, start_on: b.start_on,
+    batch_id: b.batch_id, name: b.name || '', group: b.group, count: b.count, order: b.order, pick: b.pick, start_on: b.start_on, send_time: b.send_time || '',
     status: b.status, started_count: b.started_count, filters: typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {},
     created_by: b.created_by, created_at: b.created_at, started_at: b.started_at || '',
     // Who a planned batch already holds, so a new batch doesn't pick them again.

@@ -42,6 +42,8 @@ function EE_planDay(snap) {
     var n = enrollments.filter(function (e) { return e.contact_id === c.contact_id && e.sequence_id === seq.sequence_id; }).length + 1;
     var en = { enrollment_id: 'en_' + c.contact_id + '_' + seq.sequence_id + '_' + n, contact_id: c.contact_id,
       sequence_id: seq.sequence_id, rule_rev: snap.ruleRev, mode: mode, status: 'active', enrolled_on: snap.today,
+      // The batch that started them may have set a send time (Schedule.js); '' = campaign default.
+      send_time: L.normTime(c.send_time),
       anchor_snapshot: { startup_date: c.startup_date || '' }, stopped_branches: [], stopped_steps: [], flags: [] };
     enrollments.push(en);
     enrollmentWrites.push({ op_id: 'enrollment:' + en.enrollment_id + ':create', data: en });
@@ -55,7 +57,7 @@ function EE_planDay(snap) {
   var r = L.decide({ today: snap.today, rulesets: snap.rulesets, contacts: snap.contacts,
     enrollments: enrollments.filter(function (e) { return e.mode === mode; }),
     deliveries: snap.deliveries, holds: holds, signals: signals, suppressions: snap.suppressions,
-    commsSentToday: snap.commsSentToday, paused: snap.paused });
+    commsSentToday: snap.commsSentToday, paused: snap.paused, time: snap.time, sendTimes: snap.sendTimes });
 
   // 3a. Enrollment changes (status, stops, branches, flags), journaled by the caller.
   var before = {};

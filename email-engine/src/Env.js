@@ -14,9 +14,9 @@ var EE_TABLES = {
   Contacts: ['contact_id', 'email_norm', 'alt_emails', 'first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area',
     'pool_build_year', 'language', 'bucket', 'sub_bucket', 'tags', 'review_status', 'review_reason', 'is_test', 'pool_school',
     'pool_school_date', 'source', 'quote_id', 'pool_id', 'startup_date', 'startup_source', 'notes', 'imported_by', 'created_at',
-    'updated_at', 'last_seq'],
+    'updated_at', 'last_seq', 'send_time'],
   Enrollments: ['enrollment_id', 'contact_id', 'sequence_id', 'rule_rev', 'mode', 'status', 'enrolled_on', 'anchor_snapshot',
-    'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq'],
+    'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq', 'send_time'],
   Deliveries: ['delivery_id', 'key', 'enrollment_id', 'contact_id', 'step_id', 'occurrence', 'mode', 'email_norm', 'bucket',
     'category', 'revision_id', 'state', 'attempt', 'token', 'run_id', 'gen', 'claimed_at', 'draft_id', 'send_invoked_at',
     'message_id', 'thread_id', 'sent_at', 'error', 'resolved_by', 'adopted_from_gen', 'resend_requested_by', 'last_seq'],
@@ -32,7 +32,7 @@ var EE_TABLES = {
   Config: ['key', 'value'],
   Meta: ['key', 'value'],
   Runs: ['run_id', 'trigger', 'owner', 'started_at', 'finished_at', 'sent', 'skipped', 'cancelled', 'reconcile', 'adopted',
-    'failed', 'stopped_reason', 'plan_json', 'scan_json'],
+    'failed', 'stopped_reason', 'plan_json', 'scan_json', 'planned_for'],
   Alerts: ['at', 'kind', 'detail'],
   // Who can do what in the portal's Lifecycle Email page (read by api/email.js).
   // Roles: viewer, editor, approver, operator (PLAN.md → Configuration & authorization).
@@ -48,7 +48,7 @@ var EE_TABLES = {
   ChangeLog: ['id', 'at', 'actor', 'action', 'detail', 'result'],
   // Batches that start contacts from Needs review on a date (Admin.js → create_batch).
   Batches: ['batch_id', 'name', 'group', 'filters_json', 'count', 'order', 'pick', 'start_on', 'contact_ids', 'status',
-    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at']
+    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at', 'send_time']
 };
 // Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
 var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',

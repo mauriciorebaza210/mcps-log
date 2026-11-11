@@ -119,7 +119,7 @@ The tag is the rollback point (`git checkout ee/cpN-…`). Nothing reaches `main
 | 4 | `sandbox-send` | Engine project deployed in the sandbox; B Intro + C Welcome revisions approved; the test-delivery sends arrive branded; SB rows pass (1–5, 9, 35a/b, 36–40) |
 | 5 | `tracking-api` | `api/email.js` (authenticated reads, c/o/beacon/u, heartbeat) + quotes merge; `vercel build` + import checks; API rows pass; quote flows OK on preview |
 | 6 | `slice-demo` | Minimal Lifecycle page; **mandatory performance budgets pass**; demo script run for Tony. *Reviewer approval boundary* |
-| 7 | `bc-scheduled` | **First: contact import (any spreadsheet format) and Start a batch with "Start on" dates** (moved up from CP10, Mau 2026-11-10). Then: all 7 scheduled B/C emails approved; Attachment Library working (the Welcome PDFs can be added now or later); wizard for B/C (enrollment/startup/previous anchors); **single email sequence type (`date` anchor) with the Template Library**; minimum runbook done; matrix green. *B may go live from here if Mau and Tony choose; it doesn't depend on the startup events* |
+| 7 | `bc-scheduled` | **First: contact import (any spreadsheet format) and Start a batch with "Start on" dates** (moved up from CP10, Mau 2026-11-10). Then: all 7 scheduled B/C emails approved; Attachment Library working (the Welcome PDFs can be added now or later); wizard for B/C (enrollment/startup/previous anchors); **single email sequence type (`date` anchor) with the Template Library**; **send times** (campaign default + per batch, runs at those times, shown in Central time everywhere; failure rows 58–61; one-off trigger precision measured); minimum runbook done; matrix green. *B may go live from here if Mau and Tony choose; it doesn't depend on the startup events* |
 | 8 | `startup-events` | Event pipeline (signed `ee_event`, immediate delivery, visit-keyed occurrences, hard deadlines, dynamic attachments); portal: startup OTW routed to the engine, customer Startup Log, Startup Summary report, pool school booking page; event matrix rows 47–55 green; OTW latency budget met |
 | 9 | `bc-live` | **Go-live decision with Mau and Tony.** Portal GAS changes deployed; production enabled for B/C with test mode off; first week monitored, with no `unknown` deliveries left unresolved |
 | 10 | `bc-contacts` | Legacy list loaded through the import (built in CP7) and the first batches lined up; C sync from startup requests with live dates |
@@ -322,6 +322,8 @@ Any resend (automatic or human) first passes the full pre-send gate:
 
 ## Scheduling semantics (correction 8)
 - **Clock.** `decide({now, tz:'America/Chicago', rulesets, contentMap, snapshot})` is pure. Dates are local calendar dates, so DST never moves a date. A business day is Mon–Fri minus the Config `holidays`.
+- **Send times (Mau, 2026-11-11).** Every delivery has a local send time (`HH:MM`, America/Chicago, 15-minute steps): the enrollment's `send_time` (copied from the batch that started it) or else the campaign default (Config `send_time_<bucket>`, default 09:00). Dates are unchanged: `decide()` still plans calendar days, and its optional `time` input gates the day: a delivery whose day has come is `due` only once `time ≥ send_time`, otherwise `upcoming: later_today`. A delivery from an earlier day (held, missed) waits for its time on the current day. Without `time` (simulation, old callers) there is no gate. The one-per-day limit, windows and deadlines are unchanged.
+- **Runs at send times.** A scheduler trigger just after midnight works out the day's run times (each campaign's default, the send times of active enrollments, and batches starting that day; only times still ahead) and installs one one-off trigger per time, at most 12 a day (Apps Script allows 20 triggers per user per project; the rest are kept for the scheduler, Run now and resumes). It writes the day's plan to Config `run_plan` so the page shows it. Changing a default or saving a batch re-runs the scheduler. A scheduled run uses its planned slot as the gate time when its trigger fires early (up to 20 min), so early firing never skips a send; a missed run is caught by the next one that day. Run now gates by the real time. Precision of one-off triggers is measured before go-live (CP7 spike).
 - **Rule versions.**
   - Each enrollment follows its own `rule_rev`.
   - Publishing a change creates a new ruleset revision and asks for its scope: **"apply to active enrollments"**, which migrates their `rule_rev` (unsent steps re-plan), or **"new enrollments only"**, which leaves existing ones on their old `rule_rev`.
@@ -536,6 +538,8 @@ Any resend (automatic or human) first passes the full pre-send gate:
     - **Production gates** read only production suppression sources.
   - The demo uses this mode.
 - **Production:** requires `engine_enabled`, the owner guard, and the `operator` permission for Run now.
+- **Triggers:** `EE_scheduleTrigger` (daily, just after midnight Central) → today's one-off `EE_timedRun` triggers at the send times (see *Scheduling semantics → Runs at send times*). Each run is recorded with `trigger: scheduled` and its `planned_for` slot. Nothing is installed until go-live (`eeInstall`, as Tony).
+- **Time on screen:** every time the page shows is Central time with its zone ("Mon, Nov 23 · 10:31 AM CST"), the engine's local time, whatever the viewer's computer is set to.
 
 ## Configuration & authorization
 - **Operational edits** (`ee_update_config`, step changes, activation) are:
@@ -783,6 +787,10 @@ Any resend (automatic or human) first passes the full pre-send gate:
 | 55 | Event steps on a day a scheduled C email is due | The event email doesn't consume the 1-per-day limit; the scheduled one still sends | FG |
 | 56 | A new Safety Guidelines version is approved mid-run | This run's deliveries carry the snapshot version; the next run carries the new one; each delivery records which | FG |
 | 57 | Welcome is approved and live with no attachment items | Sends normally; adding the items later requires the email's re-approval; revising an attached PDF needs only the PDF's approval | FG |
+| 58 | A scheduled run's trigger fires early (within 20 min of its slot) | Gates at the slot time; the slot's sends go out; recorded with `planned_for` | FG |
+| 59 | A scheduled run never fires | The next run that day sends what was due (time already passed); if none, tomorrow's run at that email's time; windows still apply | FG |
+| 60 | More than 12 distinct send times in a day | The scheduler installs the 12 earliest still ahead, alerts `too_many_send_times`; later sends wait for the next run | FG |
+| 61 | A batch saved for today with a time already past | It starts and sends on a run scheduled right away (now + 1 min) | FG |
 
 ## How changes work later
 | Change | Where | Code? |
@@ -799,7 +807,7 @@ Any resend (automatic or human) first passes the full pre-send gate:
 
 ## Verification
 1. **Phase 0:** a written spike report with measured G/G2, the interrupted-send results, lock-wait timings, and bytes per read. The guarantees section is updated to match the findings.
-2. `npm run test:ee` (discovery proven) and the sandbox suite pass. All matrix rows (1–46, including 35a/35b; plus 47–55 by CP8, 56–57 by CP7) pass, and the existing `tests/` still pass.
+2. `npm run test:ee` (discovery proven) and the sandbox suite pass. All matrix rows (1–46, including 35a/35b; plus 47–55 by CP8, 56–61 by CP7) pass, and the existing `tests/` still pass.
 3. `vercel build` + node import of `api/email.js` and `api/quotes/index.js`. Quote flows work on preview. The performance targets are measured (latency, bytes, ranges) and either met or reported with their gap.
 4. **Demo (test-delivery mode):**
    - 3 test contacts; approve the B Intro and C Welcome (with revision history).
@@ -867,4 +875,4 @@ Every change to this plan gets a dated line here (use `/email-engine tweak "<cha
   - **The wizard is Campaigns' setup flow**, not a separate place: audience (group, filters, tags, import link), how many, random/oldest, start date(s), the picked people (with the restart warning for anyone who already had a sequence), review, launch.
   - **Calendar view inside Campaigns** (List / Calendar switch; this is the planned Schedule view): planned sends and lined-up batches on their days; clicking a day opens the wizard with that date filled in; dragging a planned batch moves its start date; per-send Skip / Move / Send next run from the day's list. Same batch objects and engine checks in every entry point.
   - **Emails** stays (what: every email with results and drawer; CP7 templates, approvals, versions, splits). **Contacts** = directory + Import. **Activity** unchanged.
-
+- 2026-11-11: **Send times** (Mau): each campaign has a default send time and each batch can set its own; its emails keep that time. The engine runs at each needed time (scheduler + one-off triggers, max 12 a day) instead of once around 9 AM. Times show in Central time with the zone everywhere runs are monitored (calendar, batches, Activity runs, drawers, header). Changed together: *Scheduling semantics* (send times, runs at send times), *Execution modes* (triggers, time on screen), failure rows 58–61, CP7 exit criteria, *Verification* row range.
