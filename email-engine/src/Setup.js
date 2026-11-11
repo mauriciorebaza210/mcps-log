@@ -160,7 +160,7 @@ function eeDemoSetup() {
 // Marketing kit for Tony (run once as Tony; safe to re-run). Creates, in his Drive:
 //   MCPS Marketing/
 //     Email Templates/ (MCP Legacy, MCP Startup, Shared blocks)   ← the Template Library (CP7) reads here
-//     START HERE - ChatGPT instructions.txt                         ← paste into a ChatGPT Project
+//     START HERE - ChatGPT instructions.txt                         ← ChatGPT reads it through its Drive connector
 //     Example - MCP x MCPS Intro (full template).html               ← a compliant starting point
 // and shares the folder with Mau. Nothing is emailed except Drive's own "shared with you" note to Mau.
 
