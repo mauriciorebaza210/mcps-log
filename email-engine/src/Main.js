@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp7-4';
+var EE_VERSION = 'cp7-5';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -55,7 +55,8 @@ function EE_readSnapshot_(env, time) {
     deliveries: env.store.rows('Deliveries'), holds: env.store.rows('Holds'), inbox: env.store.rows('Inbox'),
     suppressions: suppressions, commsSentToday: commsSentToday,
     paused: { all: String(cfg.engine_enabled) === 'false', buckets: env.config.pausedBuckets() },
-    publishedRevision: publishedRevision, time: time || '', sendTimes: EE_sendTimesBySequence_(cfg, rulesets[cfg.rule_rev]) };
+    publishedRevision: publishedRevision, time: time || '', sendTimes: EE_sendTimesBySequence_(cfg, rulesets[cfg.rule_rev]),
+    overrides: EE_overrideMap_(env.store.rows('Overrides')) };
 }
 function EE_sendTimesBySequence_(cfg, ruleset) {
   var byBucket = EE_sendTimes_(cfg), out = {};

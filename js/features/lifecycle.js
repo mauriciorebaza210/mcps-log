@@ -198,6 +198,7 @@ function lcRefresh_(fresh) {
     .finally(() => {
       LC.loading = false;
       if (LC.tab === 'contacts' || LC.tab === 'campaigns' || LC.contacts) lcLoadContacts_(fresh);
+      if (LC.tab === 'campaigns' && typeof CMP !== 'undefined' && CMP.id) cmpLoadPlan_(CMP.id, fresh);
       lcRender_();
     });
 }
@@ -570,6 +571,7 @@ async function lcCancelBatch_(id) {
   if (!await lcConfirm_({ title: 'Cancel this batch?', ok: 'Cancel batch', danger: true, body: 'Its people stay in Needs review.' })) return;
   await lcWrite_('b:' + id, 'cancel_batch', { batch_id: id }, 'Batch cancelled');
   LC.contacts = null; lcLoadContacts_(true);
+  if (typeof CMP !== 'undefined' && CMP.id) cmpLoadPlan_(CMP.id, true);
 }
 async function lcWrite_(busyKey, action, params, okText) {
   LC.busy[busyKey] = true; lcRenderBody_();

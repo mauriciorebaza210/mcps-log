@@ -12,9 +12,8 @@
 const BAT = { layer: null, step: 'who', group: 'B', filters: { area: [], tags: [], source: [] }, count: 20, order: 'random', pick: 'now',
   start_on: '', send_time: '', batches: 1, every: 7, restart: false, removed: new Set(), seed: 1, busy: false };
 const BAT_STEPS = [['who', 'Who'], ['when', 'When'], ['people', 'People'], ['review', 'Review']];
-// Restarts need the engine's create_batch to end the old enrollment (not built yet; today it
-// skips anyone who had a sequence). Until then the option stays hidden; the harness turns it on.
-var LC_RESTART_READY = typeof LC_RESTART_READY !== 'undefined' && LC_RESTART_READY;
+// Restarts: people who finished or stopped the campaign, started again on purpose (people chosen now only).
+var LC_RESTART_READY = true;   // engine support: Admin.js restart_ids (cp7-5)
 
 const batToday_ = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 const batAddDays_ = (d, n) => { const t = new Date(d + 'T12:00:00'); t.setDate(t.getDate() + n); return t.toLocaleDateString('en-CA'); };
@@ -136,7 +135,7 @@ function batWhen_(plan) {
       cmpTimeOptions_(BAT.send_time, '<option value=""' + (BAT.send_time ? '' : ' selected') + '>Campaign default (' + lcEsc_(lcClock_(lcSendTime_(BAT.group))) + ')</option>') + '</select></label>' +
     '<label class="lc-fld"><span>Batches</span><input class="lc-input" type="number" min="1" max="12" value="' + BAT.batches + '" data-bat-num="batches" style="width:90px"></label>' +
     (BAT.batches > 1 ? '<div class="lc-fld"><span>Every</span>' + batSeg_('every', BAT.every, [[7, 'Week'], [14, '2 weeks'], [30, '30 days']]) + '</div>' : '') +
-    '<div class="lc-fld"><span>Choose people</span>' + batSeg_('pick', BAT.pick, [['now', 'Now'], ['at_start', 'On each start day']]) + '</div></div>' +
+    '<div class="lc-fld"><span>Choose people</span>' + (BAT.restart ? batSeg_('pick', 'now', [['now', 'Now']]) + '<small class="lc-dim">Restarts need people chosen now</small>' : batSeg_('pick', BAT.pick, [['now', 'Now'], ['at_start', 'On each start day']])) + '</div></div>' +
     '<ol class="lc-wiz-dates">' + plan.map((b, i) => '<li><span class="lc-step">' + (i + 1) + '</span><b>' + lcEsc_(batWhenLabel_(b.start_on)) +
       '</b><span>' + b.count + (b.count === 1 ? ' person' : ' people') + '</span>' + (b.start_on <= batToday_() ? lcTag_(batTime_() <= batNowCT_() ? 'Sends right away' : 'Starts today', 'live') : '') + '</li>').join('') + '</ol>' +
     (short ? '<p class="lc-note">Only ' + pool + ' match, so the last batch is smaller' + (plan.length < BAT.batches ? ' and ' + (BAT.batches - plan.length) + ' would be empty' : '') + '.</p>' : '') +
@@ -195,7 +194,7 @@ async function batCreate_() {
   for (const b of plan) {
     const ids = b.people.map(c => c.contact_id), re = b.people.filter(c => c.sequence).map(c => c.contact_id);
     const r = await lcAdmin_('create_batch', { group: BAT.group, filters: BAT.filters, order: BAT.order, pick: BAT.pick, start_on: b.start_on, send_time: BAT.send_time,
-      count: b.count, contact_ids: ids, restart_ids: re, include_restart: BAT.restart && BAT.pick !== 'now' }).catch(() => ({ ok: false, error: 'Network error' }));
+      count: b.count, contact_ids: ids, restart_ids: re }).catch(() => ({ ok: false, error: 'Network error' }));
     if (!r.ok) { err = r.error || 'That didn’t work'; break; }
     made++;
   }
@@ -228,5 +227,5 @@ function batOnChange_(e) {
   if (el.matches('[data-bat-num]')) { const k = el.dataset.batNum, max = k === 'batches' ? 12 : 500; BAT[k] = Math.max(1, Math.min(max, Number(el.value) || 1)); batRender_(); }
   else if (el.matches('[data-bat-date]')) { BAT.start_on = el.value < batToday_() ? batToday_() : el.value; batRender_(); }
   else if (el.matches('[data-bat-time]')) { BAT.send_time = el.value; batRender_(); }
-  else if (el.matches('[data-bat-check="restart"]')) { BAT.restart = el.checked; batRender_(); }
+  else if (el.matches('[data-bat-check="restart"]')) { BAT.restart = el.checked; if (el.checked) BAT.pick = 'now'; batRender_(); }
 }

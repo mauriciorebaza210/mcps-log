@@ -60,3 +60,48 @@ test('Gating never changes later steps\' dates (Follow Up still +4 from the actu
   assert.equal(f.outcome, 'due');
   assert.equal(f.send_time, '10:30');
 });
+
+// ── Per-send overrides and restarts (PLAN.md → Per-send overrides, Restarts; rows 62–64) ──
+const ov = (key, kind, date) => ({ ['e1:' + key + ':1']: { kind, date } });
+const step = (r, id) => r.deliveries.find(d => d.step_id === id);
+
+test('Skip: never sent; the next step chains from the date it was due', () => {
+  const r = L.decide(world(null, { overrides: ov('b_intro', 'skip') }));
+  assert.equal(step(r, 'b_intro').outcome, 'excluded');
+  assert.equal(step(r, 'b_intro').reason, 'skipped_by_operator');
+  assert.equal(step(r, 'b_followup').due, '2026-11-27', 'Follow Up still +4 from Nov 23');
+});
+
+test('Move: inside the window it changes the day; outside it is ignored', () => {
+  const moved = step(L.decide(world(null, { overrides: ov('b_intro', 'move', '2026-11-25') })), 'b_intro');
+  assert.equal(moved.due, '2026-11-25');
+  assert.equal(moved.original_due, '2026-11-23');
+  assert.equal(moved.outcome, 'upcoming');
+  const tooLate = step(L.decide(world(null, { overrides: ov('b_intro', 'move', '2026-12-31') })), 'b_intro');
+  assert.equal(tooLate.due, '2026-11-23', 'row 63: past the last send day is refused');
+});
+
+test('Send next run: due now regardless of date and time, but never before its prerequisite', () => {
+  const w = world(null, { today: '2026-11-23', time: '08:00', sendTimes: { B: '09:00' } });
+  w.deliveries = [{ key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', mode: 'production', step_id: 'b_intro', occurrence: 1, state: 'sent', sent_at: '2026-11-23T14:00:00Z' }];
+  w.overrides = ov('b_followup', 'next_run');
+  w.today = '2026-11-24';
+  assert.equal(step(L.decide(w), 'b_followup').outcome, 'due', 'Follow Up (due Nov 27) goes on the next run');
+  const early = world(null, { today: '2026-11-23', overrides: ov('b_followup', 'next_run') });
+  assert.equal(step(L.decide(early), 'b_followup').outcome, 'upcoming', 'row 63: Intro not sent yet');
+});
+
+test('Row 62: an override on a sent delivery has no effect', () => {
+  const w = world(null, { overrides: ov('b_intro', 'skip') });
+  w.deliveries = [{ key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', mode: 'production', step_id: 'b_intro', occurrence: 1, state: 'sent', sent_at: '2026-11-23T15:00:00Z' }];
+  assert.equal(step(L.decide(w), 'b_intro').outcome, 'sent');
+});
+
+test('Restart: only with restart_ok, never while a sequence is still going', () => {
+  const seq = { sequence_id: 'B', reentry: 'never' };
+  const c = { contact_id: 'c1', review_status: 'confirmed' };
+  const done = [{ contact_id: 'c1', sequence_id: 'B', status: 'stopped' }];
+  assert.equal(L.decideEnrollment(c, seq, done, '2026-11-23').action, 'needs_review');
+  assert.equal(L.decideEnrollment({ ...c, restart_ok: 'bat_1' }, seq, done, '2026-11-23').reason, 'restart_by_operator');
+  assert.equal(L.decideEnrollment({ ...c, restart_ok: 'bat_1' }, seq, [{ ...done[0], status: 'active' }], '2026-11-23').reason, 'already_enrolled');
+});

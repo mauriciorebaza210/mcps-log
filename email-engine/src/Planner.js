@@ -26,7 +26,7 @@ function EE_planDay(snap) {
   var inMode = function (c) { return mode === 'test' ? isTest(c) : !isTest(c); };
 
   var enrollments = (snap.enrollments || []).slice();
-  var enrollmentWrites = [], contactFlags = [];
+  var enrollmentWrites = [], contactFlags = [], restartClears = [];
 
   // 1. New enrollments
   (snap.contacts || []).forEach(function (c) {
@@ -47,6 +47,8 @@ function EE_planDay(snap) {
       anchor_snapshot: { startup_date: c.startup_date || '' }, stopped_branches: [], stopped_steps: [], flags: [] };
     enrollments.push(en);
     enrollmentWrites.push({ op_id: 'enrollment:' + en.enrollment_id + ':create', data: en });
+    // A restart is used up once they're enrolled again.
+    if (verdict.reason === 'restart_by_operator') restartClears.push({ op_id: 'contact:' + c.contact_id + ':restarted:' + en.enrollment_id, data: { contact_id: c.contact_id, restart_ok: '' } });
   });
 
   // 2. Decide
@@ -57,7 +59,7 @@ function EE_planDay(snap) {
   var r = L.decide({ today: snap.today, rulesets: snap.rulesets, contacts: snap.contacts,
     enrollments: enrollments.filter(function (e) { return e.mode === mode; }),
     deliveries: snap.deliveries, holds: holds, signals: signals, suppressions: snap.suppressions,
-    commsSentToday: snap.commsSentToday, paused: snap.paused, time: snap.time, sendTimes: snap.sendTimes });
+    commsSentToday: snap.commsSentToday, paused: snap.paused, time: snap.time, sendTimes: snap.sendTimes, overrides: snap.overrides || {} });
 
   // 3a. Enrollment changes (status, stops, branches, flags), journaled by the caller.
   var before = {};
@@ -82,7 +84,7 @@ function EE_planDay(snap) {
   (ruleset.steps || []).forEach(function (s) { stepsById[s.step_id] = s; });
   var contactsById0 = {};
   (snap.contacts || []).forEach(function (c) { contactsById0[c.contact_id] = c; });
-  var contactWrites = [];
+  var contactWrites = restartClears.slice();
   r.deliveries.forEach(function (d) {
     var st = stepsById[d.step_id], c = contactsById0[d.contact_id];
     if (d.outcome !== 'sent' || !st || !st.on_send_sub_bucket || !c || c.sub_bucket === st.on_send_sub_bucket) return;

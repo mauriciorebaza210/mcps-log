@@ -22,7 +22,7 @@
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import * as sheets from './_sheets.js';
-import { READ_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, health } from './_lib/email-read.js';
+import { READ_TABS, OPTIONAL_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, buildPlan, health } from './_lib/email-read.js';
 import { relayEvents, relayAdmin } from './_lib/email-relay.js';
 import { checkImport, importRecord } from './_lib/email-import.js';
 import { sendEngineAlert } from './_lib/notify.js';
@@ -33,7 +33,7 @@ const RAW_TTL_MS = 15 * 1000;
 const SETTINGS_SS_ID = () => String(process.env.EE_SETTINGS_SS_ID || '1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U').trim();   // "Chem Log": Comms_Optouts
 const IMPORT_CHECK_MAX = 5000, IMPORT_SAVE_MAX = 100;
 // The capability each page action needs (PLAN.md → Configuration & authorization).
-const ADMIN_CAP = { set_send_time: 'edit_config', create_batch: 'edit_contacts', cancel_batch: 'edit_contacts', maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
+const ADMIN_CAP = { set_send_time: 'edit_config', move_batch: 'edit_contacts', send_override: 'edit_contacts', create_batch: 'edit_contacts', cancel_batch: 'edit_contacts', maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
   abandon: 'resolve_unknown', resend: 'resolve_unknown' };
 let rawVersion = 0;          // bumped after a write, so this instance never serves the pre-write cache
 
@@ -89,6 +89,9 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   async function loadTables(fresh) {
     const id = engineSpreadsheetId();
     const load = async () => {
+      // Optional tabs first; if one doesn't exist yet, read the required ones alone.
+      try { return toTables(await deps.readSheetRanges(READ_TABS.concat(OPTIONAL_TABS), id)); }
+      catch (e) { if (!/unable to parse range/i.test(String(e && e.message))) throw e; }
       try { return toTables(await deps.readSheetRanges(READ_TABS, id)); }
       catch (e) {
         // One batchGet for all tabs: a tab that doesn't exist fails the whole read.
@@ -117,6 +120,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     const view = String(q.view || 'overview');
     let data;
     if (view === 'overview') data = buildOverview(tables, caps, Date.now(), { mode: q.mode });
+    else if (view === 'plan') data = buildPlan(tables, caps, Date.now(), { mode: q.mode, bucket: q.bucket, days: q.days });
     else if (view === 'contacts') data = buildContacts(tables, caps, { q: q.q, bucket: q.bucket, review: q.review, limit: q.limit });
     else if (view === 'step') {
       data = buildStep(tables, caps, String(q.id || ''), Date.now(), { mode: q.mode });

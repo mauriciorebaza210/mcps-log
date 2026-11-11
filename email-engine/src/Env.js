@@ -14,7 +14,7 @@ var EE_TABLES = {
   Contacts: ['contact_id', 'email_norm', 'alt_emails', 'first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area',
     'pool_build_year', 'language', 'bucket', 'sub_bucket', 'tags', 'review_status', 'review_reason', 'is_test', 'pool_school',
     'pool_school_date', 'source', 'quote_id', 'pool_id', 'startup_date', 'startup_source', 'notes', 'imported_by', 'created_at',
-    'updated_at', 'last_seq', 'send_time'],
+    'updated_at', 'last_seq', 'send_time', 'restart_ok'],
   Enrollments: ['enrollment_id', 'contact_id', 'sequence_id', 'rule_rev', 'mode', 'status', 'enrolled_on', 'anchor_snapshot',
     'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq', 'send_time'],
   Deliveries: ['delivery_id', 'key', 'enrollment_id', 'contact_id', 'step_id', 'occurrence', 'mode', 'email_norm', 'bucket',
@@ -48,7 +48,9 @@ var EE_TABLES = {
   ChangeLog: ['id', 'at', 'actor', 'action', 'detail', 'result'],
   // Batches that start contacts from Needs review on a date (Admin.js → create_batch).
   Batches: ['batch_id', 'name', 'group', 'filters_json', 'count', 'order', 'pick', 'start_on', 'contact_ids', 'status',
-    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at', 'send_time']
+    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at', 'send_time', 'restart_ids'],
+  // A person's change to one planned send (Admin.js → send_override; PLAN.md → Per-send overrides).
+  Overrides: ['key', 'kind', 'date', 'enrollment_id', 'step_id', 'by', 'at']
 };
 // Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
 var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',
@@ -56,7 +58,7 @@ var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id'
   'reasons', 'classifier_version', 'source', 'gmail_message_id', 'snippet'];
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Batches: 'batch_id' };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Batches: 'batch_id', Overrides: 'key' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
   opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1,
   auto_replies: 1, soft_bounces: 1, message_count: 1, count: 1, started_count: 1 };
@@ -83,6 +85,13 @@ function EE_encode_(v) {
 // match), so reads stay fast without loading the whole sheet.
 function EE_table_(ss, name, idField) {
   var sh = ss.getSheetByName(name);
+  // A tab added in a later version is created on first use (plain text, like eeSetup does).
+  if (!sh && EE_TABLES[name]) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, EE_TABLES[name].length).setValues([EE_TABLES[name]]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getMaxColumns(), EE_TABLES[name].length)).setNumberFormat('@');
+  }
   if (!sh) throw new Error('engine tab "' + name + '" is missing; run eeSetup()');
   function headers() { return sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String); }
   function toObj(h, vals) { var o = {}; h.forEach(function (k, i) { if (k) o[k] = EE_decode_(k, vals[i]); }); return o; }

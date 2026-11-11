@@ -17,6 +17,8 @@
 //                       chosen on the date). A batch dated today starts immediately; later ones start in that
 //                       morning's run (EE_startDueBatches_, called from Main.js).
 //   cancel_batch       before it starts
+//   move_batch         a planned batch to another start date (today or later)
+//   send_override      one planned send: skip | move (inside its window) | next_run | clear (Overrides tab)
 //   set_send_time      a campaign's default send time (Config send_time_<bucket>), then re-plan today's runs
 //                       (create_batch also takes send_time: the batch's people keep it; Schedule.js)
 //   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
@@ -26,7 +28,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
-var EE_ADMIN_ACTIONS = { set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -44,6 +46,19 @@ function EE_adminRun_(env, core, req, deps) {
     if (out.ok && out.started && deps.scheduleRun && (!out.send_time || out.send_time <= MCPS_LIFECYCLE.localTime(new Date(env.now()), EE_TZ))) deps.scheduleRun();
     if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
   }
+  else if (action === 'move_batch') {
+    var mb = env.store.get('Batches', String(p.batch_id || '')), to = String(p.start_on || '');
+    if (!mb) out = { ok: false, error: 'batch not found' };
+    else if (mb.status !== 'planned') out = { ok: false, error: 'already ' + mb.status };
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(to) || to < EE_today_(env)) out = { ok: false, error: 'pick today or a later day' };
+    else {
+      env.store.upsert('Batches', EE_merge_(mb, { start_on: to }));
+      out = { ok: true, start_on: to };
+      if (to <= EE_today_(env)) out.started = EE_startBatch_(env, core, EE_merge_(mb, { start_on: to }), actor);
+      if (deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
+    }
+  }
+  else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
   else if (action === 'set_send_time') {
     var sb = String(p.bucket || ''), st = EE_validSendTime_(p.time);
     if (!/^[A-F]$/.test(sb) || !st) out = { ok: false, error: 'bucket A–F and a time between 6:00 AM and 8:00 PM on a quarter hour required' };
@@ -157,12 +172,14 @@ function EE_createBatch_(env, core, p, actor) {
   } else if (count < 1 || count > EE_BATCH_MAX) return { ok: false, error: 'count 1 to ' + EE_BATCH_MAX };
   var filters = p.filters && typeof p.filters === 'object' ? p.filters : {};
   var sendTime = '';
+  // People who already had the campaign, restarted on purpose (people chosen now only).
+  var restartIds = pickNow ? (p.restart_ids || []).map(String).filter(function (x) { return ids.indexOf(x) !== -1; }) : [];
   if (p.send_time) { sendTime = EE_validSendTime_(p.send_time); if (!sendTime) return { ok: false, error: 'send time must be 6:00 AM–8:00 PM on a quarter hour' }; }
   var id = 'bat_' + env.uuid().replace(/-/g, '').slice(-12);
   if (env.store.get('Batches', id)) return { ok: false, error: 'id collision, try again' };
   var batch = { batch_id: id, name: String(p.name || '').slice(0, 80), group: group, filters_json: filters, count: count,
     order: p.order === 'oldest' ? 'oldest' : 'random', pick: pickNow ? 'now' : 'at_start', start_on: startOn,
-    contact_ids: ids, send_time: sendTime, status: 'planned', created_by: actor, created_at: new Date(env.now()).toISOString() };
+    contact_ids: ids, send_time: sendTime, restart_ids: restartIds, status: 'planned', created_by: actor, created_at: new Date(env.now()).toISOString() };
   env.store.upsert('Batches', batch);
   if (startOn <= today) return { ok: true, batch_id: id, send_time: sendTime, started: EE_startBatch_(env, core, batch, actor) };
   return { ok: true, batch_id: id, start_on: startOn, send_time: sendTime };
@@ -170,8 +187,13 @@ function EE_createBatch_(env, core, p, actor) {
 // Confirms the batch's people, so the next run starts their sequence. Someone who
 // is no longer waiting in Needs review (enrolled, edited, removed) is skipped.
 function EE_startBatch_(env, core, b, actor) {
-  var enrolled = {};
-  env.store.rows('Enrollments').forEach(function (e) { enrolled[e.contact_id] = true; });
+  var enrolled = {}, going = {};
+  env.store.rows('Enrollments').forEach(function (e) {
+    enrolled[e.contact_id] = true;
+    if (/^(active|waiting_anchor|paused)$/.test(e.status)) going[e.contact_id] = true;
+  });
+  var restart = {};
+  (b.restart_ids || []).forEach(function (id) { restart[id] = true; });
   var contacts = env.store.rows('Contacts').map(function (c) { if (enrolled[c.contact_id]) c.enrolled = true; return c; }), byId = {};
   contacts.forEach(function (c) { byId[c.contact_id] = c; });
   var filters = typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {};
@@ -180,6 +202,16 @@ function EE_startBatch_(env, core, b, actor) {
   var started = 0, skipped = [];
   ids.forEach(function (cid) {
     var c = byId[cid];
+    // Restarts (row 64): only someone whose earlier sequence has ended.
+    if (restart[cid] && c && c.bucket === b.group) {
+      if (going[cid]) { skipped.push({ contact_id: cid, reason: 'still_in_sequence' }); return; }
+      core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'restart: batch ' + b.batch_id,
+        restart_ok: b.batch_id, send_time: MCPS_LIFECYCLE.normTime(b.send_time),
+        // From the first email again: MCP Legacy's Intro is for B1 (it moves them to B2).
+        sub_bucket: b.group === 'B' ? 'B1' : (c.sub_bucket || '') }, 'contact:' + cid + ':restart:' + b.batch_id);
+      started++;
+      return;
+    }
     if (!c || c.review_status !== 'needs_review' || c.bucket !== b.group) { skipped.push({ contact_id: cid, reason: c ? 'no longer waiting' : 'not found' }); return; }
     if (c.enrolled) { skipped.push({ contact_id: cid, reason: 'already had a sequence' }); return; }
     core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id, send_time: MCPS_LIFECYCLE.normTime(b.send_time) },
@@ -216,4 +248,48 @@ function EE_runNowTrigger() {
   ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'EE_runNowTrigger'; })
     .forEach(function (t) { ScriptApp.deleteTrigger(t); });
   return EE_run_('portal');
+}
+
+// ── Per-send overrides (PLAN.md → Per-send overrides; rows 62–63) ─────────────
+// Checked against the email's own plan (decide() without overrides), so a move
+// stays inside its window and "next run" waits for its prerequisite.
+var EE_OPEN_OUTCOMES = { due: 1, upcoming: 1, held: 1, paused: 1 };
+function EE_overrideMap_(rows) {
+  var m = {};
+  (rows || []).forEach(function (r) { if (r.kind && r.kind !== 'clear') m[r.key] = { kind: r.kind, date: r.date || '' }; });
+  return m;
+}
+function EE_planOne_(env, en) {
+  var rulesets = {};
+  env.store.rows('Rulesets').forEach(function (r) { rulesets[r.rule_rev] = r.json; });
+  var holds = {};
+  env.store.rows('Holds').forEach(function (h) { holds[h.key] = Number(h.held_days || 0); });
+  var cfg = EE_config_(env.store), byBucket = EE_sendTimes_(cfg), sendTimes = {};
+  ((rulesets[en.rule_rev] || {}).sequences || []).forEach(function (s) { sendTimes[s.sequence_id] = byBucket[s.bucket]; });
+  return MCPS_LIFECYCLE.decide({ today: EE_today_(env), rulesets: rulesets, contacts: [env.store.get('Contacts', en.contact_id) || {}],
+    enrollments: [en], deliveries: env.store.rows('Deliveries').filter(function (d) { return d.enrollment_id === en.enrollment_id; }),
+    holds: holds, signals: [], suppressions: [], paused: {}, sendTimes: sendTimes });
+}
+function EE_sendOverride_(env, p, actor) {
+  var key = String(p.key || ''), kind = String(p.kind || ''), parts = key.split(':');
+  if (parts.length !== 3) return { ok: false, error: 'key required' };
+  if (!/^(skip|move|next_run|clear)$/.test(kind)) return { ok: false, error: 'kind must be skip, move, next_run or clear' };
+  var en = env.store.get('Enrollments', parts[0]);
+  if (!en || !/^(active|waiting_anchor|paused)$/.test(en.status)) return { ok: false, error: 'this person is no longer in the sequence' };
+  var d = EE_planOne_(env, en).deliveries.filter(function (x) { return x.key === key; })[0];
+  if (!d) return { ok: false, error: 'not a planned email' };
+  if (kind !== 'clear' && !EE_OPEN_OUTCOMES[d.outcome]) return { ok: false, error: d.outcome === 'sent' ? 'already sent' : 'not planned (' + d.outcome + ')' };
+  var date = '';
+  if (kind === 'move') {
+    date = String(p.date || '');
+    var today = EE_today_(env);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < today || !d.due || date < d.due || date > d.last_send_day) {
+      return { ok: false, error: 'pick a day from ' + (d.due < today ? today : d.due) + ' to ' + d.last_send_day };
+    }
+  }
+  if (kind === 'next_run' && /prerequisite/.test(d.reason || '')) return { ok: false, error: 'the email before it hasn’t gone out yet' };
+  env.withLock(function () {
+    env.store.upsert('Overrides', { key: key, kind: kind, date: date, enrollment_id: en.enrollment_id, step_id: d.step_id, by: actor, at: new Date(env.now()).toISOString() });
+  });
+  return { ok: true, key: key, kind: kind, date: date };
 }

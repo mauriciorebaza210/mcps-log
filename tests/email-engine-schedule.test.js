@@ -131,3 +131,99 @@ test('Read model: campaign send times, today\'s run plan, each run\'s planned sl
   assert.equal(ov.health.daily_trigger_seen, true);
   assert.equal(R.buildContacts(tables, caps, {}).batches[0].send_time, '14:15');
 });
+
+// ── Wiring the Campaigns tab: move_batch, send_override, restarts (rows 62–64) ──
+function wired(localNow) {
+  const w = world(localNow);
+  const BC = JSON.parse(read('email-engine/seed/ruleset-bc.json'));
+  w.tables.Rulesets.push({ rule_rev: BC.rule_rev, json: BC });
+  w.tables.Contacts.push({ contact_id: 'c1', email_norm: 'c1@x.com', bucket: 'B', sub_bucket: 'B1', review_status: 'confirmed', is_test: 'N' });
+  w.tables.Enrollments.push({ enrollment_id: 'e1', contact_id: 'c1', sequence_id: 'B', rule_rev: BC.rule_rev, mode: 'production', status: 'active', enrolled_on: '2026-11-23', stopped_branches: [] });
+  return w;
+}
+const sentIntro = w => w.tables.Deliveries.push({ delivery_id: 'e1:b_intro:1', key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', step_id: 'b_intro', occurrence: 1, mode: 'production', state: 'sent', sent_at: '2026-11-23T15:00:00Z' });
+
+test('move_batch: planned batches move to today or later; started ones can\'t', () => {
+  const w = wired('08:00');
+  w.tables.Batches.push({ batch_id: 'b1', group: 'B', pick: 'at_start', count: 2, start_on: '2026-11-30', status: 'planned' }, { batch_id: 'b2', status: 'started' });
+  assert.equal(w.admin('move_batch', { batch_id: 'b1', start_on: '2026-12-07' }).ok, true);
+  assert.equal(w.tables.Batches[0].start_on, '2026-12-07');
+  assert.equal(w.admin('move_batch', { batch_id: 'b1', start_on: '2026-11-01' }).ok, false);
+  assert.equal(w.admin('move_batch', { batch_id: 'b2', start_on: '2026-12-07' }).ok, false);
+});
+
+test('send_override: skip and clear are saved with who did it; sent emails refuse (row 62)', () => {
+  const w = wired('08:00');
+  const r = w.admin('send_override', { key: 'e1:b_intro:1', kind: 'skip' });
+  assert.equal(r.ok, true);
+  assert.equal(w.tables.Overrides[0].by, 'mau');
+  assert.equal(w.ctx_.EE_overrideMap_(w.tables.Overrides)['e1:b_intro:1'].kind, 'skip');
+  w.admin('send_override', { key: 'e1:b_intro:1', kind: 'clear' });
+  assert.equal(w.ctx_.EE_overrideMap_(w.tables.Overrides)['e1:b_intro:1'], undefined);
+  sentIntro(w);
+  assert.equal(w.admin('send_override', { key: 'e1:b_intro:1', kind: 'skip' }).error, 'already sent');
+});
+
+test('send_override: move only inside the window; next run only after the prerequisite (row 63)', () => {
+  const w = wired('08:00');
+  assert.equal(w.admin('send_override', { key: 'e1:b_followup:1', kind: 'next_run' }).ok, false, 'Intro not sent yet');
+  sentIntro(w);
+  assert.equal(w.admin('send_override', { key: 'e1:b_followup:1', kind: 'next_run' }).ok, true);
+  assert.equal(w.admin('send_override', { key: 'e1:b_followup:1', kind: 'move', date: '2026-11-29' }).ok, true, 'Follow Up due Nov 27, window 7 days');
+  assert.match(w.admin('send_override', { key: 'e1:b_followup:1', kind: 'move', date: '2026-12-20' }).error, /pick a day from 2026-11-27 to 2026-12-04/);
+  assert.equal(w.admin('send_override', { key: 'nope', kind: 'skip' }).ok, false);
+});
+
+test('Restart from a batch: an ended sequence gets restart_ok; an active one is skipped (row 64)', () => {
+  const w = wired('08:00');
+  w.tables.Contacts.push({ contact_id: 'c2', email_norm: 'c2@x.com', bucket: 'B', review_status: 'confirmed', is_test: 'N' });
+  w.tables.Enrollments.push({ enrollment_id: 'e2', contact_id: 'c2', sequence_id: 'B', status: 'stopped' });
+  const r = w.admin('create_batch', { group: 'B', pick: 'now', contact_ids: ['c1', 'c2'], restart_ids: ['c1', 'c2'], start_on: '2026-11-23' });
+  assert.equal(JSON.stringify(r.started), JSON.stringify({ started: 1, skipped: 1 }));
+  assert.equal(w.tables.Contacts.find(c => c.contact_id === 'c2').restart_ok, w.tables.Batches[0].batch_id);
+  assert.equal(w.tables.Contacts.find(c => c.contact_id === 'c2').sub_bucket, 'B1', 'back to the start of MCP Legacy');
+  assert.equal(w.tables.Contacts.find(c => c.contact_id === 'c1').restart_ok, undefined, 'c1 is still in its sequence');
+  assert.equal(w.tables.Batches[0].skipped_json[0].reason, 'still_in_sequence');
+});
+
+test('Planner: a restarted person is enrolled again (new id) and the mark is cleared', () => {
+  const ctx = { JSON, Math, Date, Object, Array, String, Number, Error, RegExp, Intl, isFinite };
+  vm.createContext(ctx);
+  vm.runInContext(read('js/lib/lifecycle-rules.js') + '\n' + read('email-engine/src/Planner.js'), ctx);
+  const BC = JSON.parse(read('email-engine/seed/ruleset-bc.json'));
+  const p = ctx.EE_planDay({ today: '2026-11-23', engineMode: 'production', ruleRev: BC.rule_rev, rulesets: { [BC.rule_rev]: BC },
+    contacts: [{ contact_id: 'c2', email_norm: 'c2@x.com', bucket: 'B', sub_bucket: 'B1', review_status: 'confirmed', is_test: 'N', restart_ok: 'bat_1' }],
+    enrollments: [{ enrollment_id: 'en_c2_B_1', contact_id: 'c2', sequence_id: 'B', rule_rev: BC.rule_rev, mode: 'production', status: 'stopped', enrolled_on: '2026-10-01', stopped_branches: [] }],
+    deliveries: [], holds: [], inbox: [], suppressions: [], commsSentToday: [], paused: {}, publishedRevision: { b_intro: 'r1' } });
+  assert.equal(p.enrollmentWrites[0].data.enrollment_id, 'en_c2_B_2');
+  assert.deepEqual({ ...p.contactWrites[0].data }, { contact_id: 'c2', restart_ok: '' });
+  assert.equal(p.due.length, 1);
+});
+
+test('Planned sends (view=plan): the engine\'s own decide() over enrollments, planned batches and overrides', async () => {
+  const R = await import(path.join(__dirname, '..', 'api', '_lib', 'email-read.js'));
+  const BC = JSON.parse(read('email-engine/seed/ruleset-bc.json'));
+  const t = rows => [[...new Set(rows.flatMap(Object.keys))], ...rows.map(r => [...new Set(rows.flatMap(Object.keys))].map(k => r[k] === undefined ? '' : typeof r[k] === 'object' ? JSON.stringify(r[k]) : String(r[k])))];
+  const tables = R.toTables({
+    Config: t([{ key: 'rule_rev', value: BC.rule_rev }, { key: 'engine_mode', value: 'production' }, { key: 'send_time_B', value: '10:30' }]),
+    Rulesets: t([{ rule_rev: BC.rule_rev, json: BC }]),
+    Permissions: t([{ username: 'mau', roles: 'operator', active: 'Y' }]),
+    Contacts: t([{ contact_id: 'c1', bucket: 'B', sub_bucket: 'B2', review_status: 'confirmed' }, { contact_id: 'p1', bucket: 'B', sub_bucket: 'B1', review_status: 'needs_review' }]),
+    Enrollments: t([{ enrollment_id: 'e1', contact_id: 'c1', sequence_id: 'B', rule_rev: BC.rule_rev, mode: 'production', status: 'active', enrolled_on: '2026-11-20' }]),
+    Deliveries: t([{ delivery_id: 'e1:b_intro:1', key: 'e1:b_intro:1', enrollment_id: 'e1', contact_id: 'c1', step_id: 'b_intro', occurrence: '1', mode: 'production', state: 'sent', sent_at: '2026-11-20T16:30:00Z' }]),
+    Batches: t([{ batch_id: 'b1', group: 'B', pick: 'now', count: '1', start_on: '2026-11-30', send_time: '14:15', status: 'planned', contact_ids: ['p1'] },
+      { batch_id: 'b2', group: 'B', pick: 'at_start', count: '20', start_on: '2026-12-07', status: 'planned', contact_ids: [] }]),
+    Overrides: t([{ key: 'e1:b_followup:1', kind: 'move', date: '2026-11-26' }])
+  });
+  const caps = R.capabilitiesFor('mau', tables.Permissions);
+  const plan = R.buildPlan(tables, caps, Date.parse('2026-11-23T15:00:00Z'), { bucket: 'B' });
+  const row = (step, who) => plan.rows.find(r => r[2] === step && (r[3] === who || r[6] === who));
+  assert.deepEqual(row('b_followup', 'c1').slice(0, 5), ['2026-11-26', '10:30', 'b_followup', 'c1', 'e1:b_followup:1'], 'moved from Nov 24, campaign time');
+  assert.equal(row('b_followup', 'c1')[7], 'moved');
+  assert.equal(row('b_followup', 'c1')[9], '2026-11-24');
+  assert.deepEqual(row('b_intro', 'p1').slice(0, 4), ['2026-11-30', '14:15', 'b_intro', 'p1'], 'picked batch at its own time');
+  assert.equal(row('b_intro', 'p1')[4], '', 'simulated: no key, nothing to override yet');
+  assert.equal(row('b_followup', 'p1')[0], '2026-12-04', 'chained +4 from the batch start');
+  const pick = row('b_intro', 'b2');
+  assert.deepEqual([pick[0], pick[3], pick[5]], ['2026-12-07', '', 20], 'pick-on-the-day: one row weighted by the batch size');
+});

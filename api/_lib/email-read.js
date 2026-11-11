@@ -9,6 +9,11 @@
 // the union of their roles' sets. Redaction runs on every request, after the
 // (shared, raw) cache, so no filtered view is ever cached or shared.
 
+// The same rules the engine runs (PLAN.md → Planned sends on the page). A plain static
+// import: createRequire breaks on Vercel (see the quote-write.js note).
+import RULES from '../../js/lib/lifecycle-rules.js';
+const TZ = 'America/Chicago';
+
 export const ROLE_CAPS = {
   viewer: ['view_aggregates'],
   editor: ['view_aggregates', 'view_pii', 'edit_drafts', 'edit_contacts'],
@@ -18,6 +23,8 @@ export const ROLE_CAPS = {
 
 // The engine tabs the portal reads. Never raw Events (PLAN.md → Performance).
 export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement', 'ChangeLog', 'Batches'];
+// Read when they exist: the engine creates Overrides on first use (a missing tab fails a batchGet).
+export const OPTIONAL_TABS = ['Holds', 'Overrides'];
 
 const NUMERIC = new Set(['occurrence', 'attempt', 'gen', 'last_seq', 'held_days', 'rev_no', 'adopted_from_gen',
   'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed', 'opens_total', 'opens_low', 'opens_medium',
@@ -37,7 +44,7 @@ function decode(key, v) {
 }
 export function toTables(values) {
   const out = {};
-  for (const tab of READ_TABS) {
+  for (const tab of READ_TABS.concat(OPTIONAL_TABS)) {
     const rows = values[tab];
     if (!Array.isArray(rows) || !rows.length) { out[tab] = rows ? [] : null; continue; }
     const h = rows[0].map(x => String(x || '').trim());
@@ -280,4 +287,57 @@ export function buildContact(tables, caps, contactId) {
   const eng = engagementIndex(tables);
   const deliveries = (tables.Deliveries || []).filter(d => d.contact_id === contactId).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps, eng[d.delivery_id]));
   return { contact: contactView(c, caps), enrollments, deliveries };
+}
+
+// ── Planned sends (Campaigns: list and calendar) ──────────────────────────────
+// decide() over the campaign's enrollments plus simulated ones for planned batches,
+// with the engine's holds and per-send overrides. Rows are tuples to keep it small:
+//   [date, time, step_id, contact_id, key, weight, batch_id, flag, last_send_day, original_due]
+// flag: '' | 'projected' (after an email not sent yet) | 'moved' | 'next_run' | 'held' | 'paused'
+export function buildPlan(tables, caps, now, opts = {}) {
+  const cfg = config(tables);
+  const mode = opts.mode === 'test' || opts.mode === 'production' ? opts.mode : (cfg.engine_mode === 'production' ? 'production' : 'test');
+  const bucket = String(opts.bucket || 'B');
+  const today = RULES.localDate(new Date(now), TZ);
+  const until = RULES.addDays(today, Math.min(Number(opts.days) || 60, 120));
+  const rulesets = {};
+  (tables.Rulesets || []).forEach(r => { rulesets[r.rule_rev] = typeof r.json === 'object' ? r.json : JSON.parse(r.json || '{}'); });
+  const rs = rulesets[cfg.rule_rev] || {};
+  const seq = (rs.sequences || []).find(s => s.bucket === bucket);
+  if (!seq) return { today, tz: TZ, mode, bucket, rows: [] };
+  const sendTimes = { [seq.sequence_id]: sendTime(cfg['send_time_' + bucket]) };
+  const firstSub = bucket === 'B' ? 'B1' : '';
+  const contacts = new Map((tables.Contacts || []).map(c => [c.contact_id, c]));
+  const enrollments = (tables.Enrollments || []).filter(e => e.mode === mode && e.sequence_id === seq.sequence_id && e.status !== 'completed');
+  // Planned batches, as if started on their day: picked people, or one weighted placeholder.
+  const weight = {}, batchOf = {};
+  (tables.Batches || []).filter(b => b.group === bucket && b.status === 'planned').forEach(b => {
+    const on = String(b.start_on) < today ? today : String(b.start_on);
+    const ids = Array.isArray(b.contact_ids) && b.contact_ids.length ? b.contact_ids : null;
+    const add = (cid, base) => {
+      const id = 'sim:' + b.batch_id + ':' + cid;
+      contacts.set(id, { ...(base || {}), contact_id: id, bucket, sub_bucket: firstSub, review_status: 'confirmed' });
+      enrollments.push({ enrollment_id: id, contact_id: id, sequence_id: seq.sequence_id, rule_rev: cfg.rule_rev, mode, status: 'active',
+        enrolled_on: on, send_time: b.send_time || '', stopped_branches: [] });
+      batchOf[id] = b.batch_id;
+      return id;
+    };
+    if (ids) ids.forEach(cid => add(cid, contacts.get(cid)));
+    else weight[add('pick', null)] = Number(b.count) || 0;
+  });
+  const holds = {};
+  (tables.Holds || []).forEach(h => { holds[h.key] = Number(h.held_days || 0); });
+  const overrides = {};
+  (tables.Overrides || []).forEach(o => { if (o.kind && o.kind !== 'clear') overrides[o.key] = { kind: o.kind, date: o.date || '' }; });
+  const r = RULES.decide({ today, rulesets, contacts: [...contacts.values()], enrollments,
+    deliveries: (tables.Deliveries || []).filter(d => d.mode === mode).map(d => (d.key ? d : { ...d, key: d.delivery_id })), holds, overrides, sendTimes, paused: {}, signals: [], suppressions: [] });
+  const OPEN = { due: 1, upcoming: 1, held: 1, paused: 1 };
+  const rows = r.deliveries.filter(d => OPEN[d.outcome] && d.due && d.due <= until).map(d => {
+    const sim = d.contact_id.startsWith('sim:'), real = sim ? d.contact_id.split(':')[2] : d.contact_id;
+    const flag = d.override === 'move' ? 'moved' : d.override === 'next_run' ? 'next_run' : d.outcome === 'held' ? 'held'
+      : /prerequisite/.test(d.reason || '') ? 'projected' : '';
+    return [d.due < today ? today : d.due, d.send_time, d.step_id, real === 'pick' ? '' : real, sim ? '' : d.key,
+      weight[d.contact_id] || 1, batchOf[d.contact_id] || '', flag, d.last_send_day || '', d.original_due || ''];
+  }).sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
+  return { today, tz: TZ, mode, bucket, rows };
 }

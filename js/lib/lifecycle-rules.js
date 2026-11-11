@@ -90,6 +90,8 @@
       return { action: 'none', reason: 'already_enrolled' };
     }
     if (!mine.length) return { action: 'enroll', reason: 'first_enrollment' };
+    // A person restarted them from a batch (Admin.js → restart_ids). Never automatic.
+    if (contact.restart_ok) return { action: 'enroll', reason: 'restart_by_operator' };
     var policy = String(sequence.reentry || 'never');
     if (policy === 'always') return { action: 'enroll', reason: 'reentry_always' };
     var m = policy.match(/^after_days:(\d+)$/);
@@ -190,6 +192,16 @@
           d.last_send_day = earlier(byWindow, deadline);
           d.deadline_binding = !!deadline && deadline <= byWindow;
         }
+        // A person's change to this one send (PLAN.md → Per-send overrides). None
+        // applies once it's sent or in flight; a move stays inside the window.
+        var ov = ctx.overrides[key];
+        if (ov && !(rec && (rec.state === 'sent' || IN_FLIGHT[rec.state]))) {
+          if (ov.kind === 'skip') d.override = 'skip';
+          else if (ov.kind === 'next_run') d.override = 'next_run';
+          else if (ov.kind === 'move' && d.due && ov.date >= d.due && ov.date <= d.last_send_day) {
+            d.original_due = d.due; d.due = ov.date; d.override = 'move';
+          }
+        }
 
         if (rec && rec.state === 'sent') {
           d.outcome = 'sent'; d.sent_on = localDay(rec.sent_at, ctx.tz);
@@ -200,6 +212,8 @@
           d.outcome = 'excluded'; d.reason = 'abandoned_by_operator';
         } else if (rec && rec.state === 'failed') {
           d.outcome = 'failed'; d.reason = rec.error || 'failed';
+        } else if (d.override === 'skip') {
+          d.outcome = 'excluded'; d.reason = 'skipped_by_operator';
         } else if (unsupported) {
           d.outcome = 'excluded'; d.reason = 'unsupported_in_this_release';
         } else if (step.status === 'retired') {
@@ -227,9 +241,9 @@
           d.outcome = 'expired';
           d.reason = d.deadline_binding ? 'deadline_passed'
             : (d.held_days > 0 && d.held_days >= (step.max_hold_days || 0) ? 'hold_cap_reached' : 'window_passed');
-        } else if (projected || ctx.today < d.due) {
+        } else if (projected || (ctx.today < d.due && d.override !== 'next_run')) {
           d.outcome = 'upcoming'; if (projected) d.reason = 'projected_from_prerequisite';
-        } else if (ctx.time && sendTime > ctx.time) {
+        } else if (ctx.time && sendTime > ctx.time && d.override !== 'next_run') {
           // Its day has come but not its time: a later run today sends it.
           d.outcome = 'upcoming'; d.reason = 'later_today';
         } else if (ctx.paused.all || (ctx.paused.buckets || []).indexOf(contact.bucket) !== -1) {
@@ -240,7 +254,8 @@
           d.outcome = 'due';
         }
         if (d.outcome === 'expired') flag(state, 'expired_steps');
-        if (k === 0) stepResult[step.step_id] = { sent: d.sent_on || null, due: d.due, outcome: d.outcome };
+        // A skipped step still lets the next one chain, from the date it was due.
+        if (k === 0) stepResult[step.step_id] = { sent: d.sent_on || (d.override === 'skip' ? d.due : null), due: d.due, outcome: d.outcome };
         out.push(d);
       }
       // Later steps see the sub-bucket this step moves the contact into.
@@ -294,7 +309,8 @@
   //          suppressions: [{email_norm, scope: 'all'|'marketing', mode}],
   //          commsSentToday: [email_norm], paused: {all, buckets},
   //          time: 'HH:MM' local (optional; gates today's sends by send time),
-  //          sendTimes: {sequence_id: 'HH:MM'} campaign defaults }
+  //          sendTimes: {sequence_id: 'HH:MM'} campaign defaults,
+  //          overrides: {delivery key: {kind: 'skip'|'move'|'next_run', date}} }
   // output: { today, deliveries: [...], enrollments: [...], due: [...in send order] }
   function decide(input) {
     var tz = input.tz || 'America/Chicago';
@@ -314,7 +330,7 @@
     var ctx = { today: today, tz: tz, rulesets: input.rulesets || {}, contacts: indexBy(input.contacts, 'contact_id'),
       deliveries: indexBy(input.deliveries, 'key'), holds: input.holds || {}, signalsByEnrollment: signalsByEnrollment,
       paused: input.paused || {}, sentToday: sentToday, commsToday: commsToday,
-      time: normTime(input.time), sendTimes: input.sendTimes || {},
+      time: normTime(input.time), sendTimes: input.sendTimes || {}, overrides: input.overrides || {},
       suppression: function (mode, email) { return supp[(mode || 'production') + '|' + norm(email)] || ''; } };
 
     var deliveries = [], enrollments = [];
