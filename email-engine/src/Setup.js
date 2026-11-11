@@ -160,12 +160,10 @@ function eeDemoSetup() {
 // Marketing kit for Tony (run once as Tony; safe to re-run). Creates, in his Drive:
 //   MCPS Marketing/
 //     Email Templates/ (MCP Legacy, MCP Startup, Shared blocks)   ← the Template Library (CP7) reads here
-//     Contact Lists/MCP Legacy Contacts (fill this in)            ← headers match the import exactly
+//     Contact Lists/                                              ← drop existing lists here, any format
 //     START HERE - ChatGPT instructions.txt                         ← paste into a ChatGPT Project
 //     Example - MCP x MCPS Intro (full template).html               ← a compliant starting point
 // and shares the folder with Mau. Nothing is emailed except Drive's own "shared with you" note to Mau.
-var EE_CONTACT_HEADERS = ['First Name', 'Last Name', 'Email', 'Phone', 'Street Address', 'City', 'State', 'ZIP', 'Area',
-  'Pool Build Year', 'Source', 'Tags', 'Notes', 'Do Not Contact', 'Current MCPS Customer'];
 
 function eeSetupMarketingKit() {
   var props = EE_props_(), log = [];
@@ -174,27 +172,7 @@ function eeSetupMarketingKit() {
   ['MCP Legacy', 'MCP Startup', 'Shared blocks'].forEach(function (n) { if (!tpl.getFoldersByName(n).hasNext()) { tpl.createFolder(n); log.push('folder Email Templates/' + n); } });
   var lists = EE_folder_(props, 'EE_FOLDER_CONTACT_LISTS', 'Contact Lists', root);
 
-  // The contact sheet: exact import headers, Yes/No dropdowns, notes on the headers that need them.
-  var sheetName = 'MCP Legacy Contacts (fill this in)';
-  if (!lists.getFilesByName(sheetName).hasNext()) {
-    var ss = SpreadsheetApp.create(sheetName), sh = ss.getSheets()[0];
-    DriveApp.getFileById(ss.getId()).moveTo(lists);
-    sh.setName('Contacts');
-    sh.getRange(1, 1, 1, EE_CONTACT_HEADERS.length).setValues([EE_CONTACT_HEADERS]).setFontWeight('bold').setBackground('#0D3D3E').setFontColor('#FFFFFF');
-    sh.setFrozenRows(1);
-    sh.setColumnWidths(1, EE_CONTACT_HEADERS.length, 140);
-    var col = function (h) { return EE_CONTACT_HEADERS.indexOf(h) + 1; };
-    var yesNo = SpreadsheetApp.newDataValidation().requireValueInList(['Yes', 'No'], true).setAllowInvalid(false).build();
-    ['Do Not Contact', 'Current MCPS Customer'].forEach(function (h) { sh.getRange(2, col(h), 2000, 1).setDataValidation(yesNo); });
-    sh.getRange(2, col('Email'), 2000, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireTextIsEmail().setAllowInvalid(true).build());
-    sh.getRange(1, col('Email')).setNote('Required. One email per row. Duplicates are caught at import.');
-    sh.getRange(1, col('First Name')).setNote('Required.');
-    sh.getRange(1, col('Source')).setNote('Where this list came from, e.g. "MCP 2019-2024 builds".');
-    sh.getRange(1, col('Tags')).setNote('Optional, comma separated, e.g. "spa, VIP".');
-    sh.getRange(1, col('Do Not Contact')).setNote('Yes = never email this person.');
-    sh.getRange(1, col('Current MCPS Customer')).setNote('Yes = already an MCPS customer; they will not get the MCP intro.');
-    log.push('sheet ' + sheetName + ' ' + ss.getUrl());
-  }
+  // Tony's own contact list goes in Contact Lists as-is (any format); the import adapts to it (CP7).
 
   // Instructions for ChatGPT, and an example full template it can start from.
   var guideName = 'START HERE - ChatGPT instructions.txt';
