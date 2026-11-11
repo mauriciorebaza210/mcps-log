@@ -156,3 +156,119 @@ function eeDemoSetup() {
   Logger.log('Demo round ' + round + ' ready (all to Mau):\n  ' + made.join('\n  ') + '\nStartup date for the MCP Startup contact: ' + startup +
     '\nNext: Run now from the Lifecycle Email page. Expect 3 emails: 2 intros, 1 welcome.');
 }
+
+// Marketing kit for Tony (run once as Tony; safe to re-run). Creates, in his Drive:
+//   MCPS Marketing/
+//     Email Templates/ (MCP Legacy, MCP Startup, Shared blocks)   ← the Template Library (CP7) reads here
+//     Contact Lists/MCP Legacy Contacts (fill this in)            ← headers match the import exactly
+//     START HERE - ChatGPT instructions.txt                         ← paste into a ChatGPT Project
+//     Example - MCP x MCPS Intro (full template).html               ← a compliant starting point
+// and shares the folder with Mau. Nothing is emailed except Drive's own "shared with you" note to Mau.
+var EE_CONTACT_HEADERS = ['First Name', 'Last Name', 'Email', 'Phone', 'Street Address', 'City', 'State', 'ZIP', 'Area',
+  'Pool Build Year', 'Source', 'Tags', 'Notes', 'Do Not Contact', 'Current MCPS Customer'];
+
+function eeSetupMarketingKit() {
+  var props = EE_props_(), log = [];
+  var root = EE_folder_(props, 'EE_FOLDER_MARKETING', 'MCPS Marketing', null);
+  var tpl = EE_folder_(props, 'EE_FOLDER_TEMPLATES', 'Email Templates', root);
+  ['MCP Legacy', 'MCP Startup', 'Shared blocks'].forEach(function (n) { if (!tpl.getFoldersByName(n).hasNext()) { tpl.createFolder(n); log.push('folder Email Templates/' + n); } });
+  var lists = EE_folder_(props, 'EE_FOLDER_CONTACT_LISTS', 'Contact Lists', root);
+
+  // The contact sheet: exact import headers, Yes/No dropdowns, notes on the headers that need them.
+  var sheetName = 'MCP Legacy Contacts (fill this in)';
+  if (!lists.getFilesByName(sheetName).hasNext()) {
+    var ss = SpreadsheetApp.create(sheetName), sh = ss.getSheets()[0];
+    DriveApp.getFileById(ss.getId()).moveTo(lists);
+    sh.setName('Contacts');
+    sh.getRange(1, 1, 1, EE_CONTACT_HEADERS.length).setValues([EE_CONTACT_HEADERS]).setFontWeight('bold').setBackground('#0D3D3E').setFontColor('#FFFFFF');
+    sh.setFrozenRows(1);
+    sh.setColumnWidths(1, EE_CONTACT_HEADERS.length, 140);
+    var col = function (h) { return EE_CONTACT_HEADERS.indexOf(h) + 1; };
+    var yesNo = SpreadsheetApp.newDataValidation().requireValueInList(['Yes', 'No'], true).setAllowInvalid(false).build();
+    ['Do Not Contact', 'Current MCPS Customer'].forEach(function (h) { sh.getRange(2, col(h), 2000, 1).setDataValidation(yesNo); });
+    sh.getRange(2, col('Email'), 2000, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireTextIsEmail().setAllowInvalid(true).build());
+    sh.getRange(1, col('Email')).setNote('Required. One email per row. Duplicates are caught at import.');
+    sh.getRange(1, col('First Name')).setNote('Required.');
+    sh.getRange(1, col('Source')).setNote('Where this list came from, e.g. "MCP 2019-2024 builds".');
+    sh.getRange(1, col('Tags')).setNote('Optional, comma separated, e.g. "spa, VIP".');
+    sh.getRange(1, col('Do Not Contact')).setNote('Yes = never email this person.');
+    sh.getRange(1, col('Current MCPS Customer')).setNote('Yes = already an MCPS customer; they will not get the MCP intro.');
+    log.push('sheet ' + sheetName + ' ' + ss.getUrl());
+  }
+
+  // Instructions for ChatGPT, and an example full template it can start from.
+  var guideName = 'START HERE - ChatGPT instructions.txt';
+  if (!root.getFilesByName(guideName).hasNext()) { root.createFile(guideName, EE_CHATGPT_GUIDE, MimeType.PLAIN_TEXT); log.push('file ' + guideName); }
+  var exName = 'Example - MCP x MCPS Intro (full template).html';
+  if (!tpl.getFilesByName(exName).hasNext()) { tpl.createFile(exName, EE_exampleFullTemplate_(), MimeType.HTML); log.push('file Email Templates/' + exName); }
+
+  try { root.addEditor('mauricio@mcpoolsolutions.org'); log.push('shared with Mau'); } catch (e) { log.push('share with Mau failed: ' + e.message); }
+  Logger.log(log.join('\n') + '\nFolder: ' + root.getUrl());
+  return root.getUrl();
+}
+
+// The current Intro, rendered through the MCPS frame into one complete file,
+// with the merge fields put back as placeholders. Rendered with stand-in values
+// first, because the renderer refuses output that still contains {{…}}.
+function EE_exampleFullTemplate_() {
+  var c = EE_SEED.content.steps.b_intro, cfg = EE_SEED.config;
+  var out = MCPS_EMAIL_RENDER.render({
+    revision: { subject: c.subject, preheader: c.preheader, body_html: EE_SEED.templates[c.body] },
+    blocks: {}, fields: EE_SEED.fields, contact: { first_name: 'ZZFIRSTZZ', last_name: 'ZZLASTZZ' },
+    context: { sender_name: cfg.sender_name, business: cfg.business, links: cfg.links, unsubscribeUrl: 'https://zzunsubzz.invalid/', deliveryToken: '' } });
+  if (!out.ok) throw new Error('example render failed: ' + out.errors.join('; '));
+  var quote = new RegExp(String(cfg.links.quote).replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&'), 'g');
+  return out.html.replace(/ZZFIRSTZZ/g, '{{FirstName}}').replace(/ZZLASTZZ/g, '{{LastName}}')
+    .replace(/https:\/\/zzunsubzz\.invalid\//g, '{{UnsubscribeLink}}').replace(quote, '{{QuoteLink}}');
+}
+
+var EE_CHATGPT_GUIDE = [
+  'MCPS EMAIL TEMPLATES WITH CHATGPT',
+  '',
+  'Setup (once): in ChatGPT, create a Project called "MCPS Emails". Paste everything below the line into the',
+  'Project instructions, and add "Example - MCP x MCPS Intro (full template).html" to the Project files.',
+  'The Project keeps every email you make, so you can come back later and ask for edits.',
+  '',
+  'When an email is ready: download the .html file and drop it into Google Drive > MCPS Marketing > Email Templates',
+  '> MCP Legacy (or MCP Startup). It then shows up in the portal, where it is checked and approved before it can send.',
+  'To edit one later: ask in the same Project, or attach the file from that Drive folder.',
+  '',
+  '------------------------------------------------------------------------------',
+  'You write HTML email templates for Mission Custom Pool Solutions (MCPS), a pool service company in the',
+  'San Antonio area. Every email is sent from Tony at MCPS. Follow these rules every time:',
+  '',
+  'OUTPUT',
+  '- One complete HTML file per email, from <!DOCTYPE html> to </html>, ready to save. No explanations inside it.',
+  '- Also give, outside the file: a subject line (under 50 characters) and preview text (under 90 characters).',
+  '- When asked to change a template, return the full updated file, not a fragment.',
+  '',
+  'REQUIRED IN EVERY TEMPLATE (it will be rejected without them)',
+  '- An unsubscribe link: <a href="{{UnsubscribeLink}}">Unsubscribe</a>, in the footer.',
+  '- The business address in the footer: 4640 South Flores Road, Elmendorf, TX 78112',
+  '- The company name: Mission Custom Pool Solutions.',
+  '',
+  'PERSONAL DETAILS: use these placeholders exactly, never real names',
+  '- {{FirstName}}  {{LastName}}  {{Address}}  {{StartupDate}}',
+  '- Example greeting: Hi {{FirstName}},',
+  '',
+  'DESIGN RULES (email apps are strict)',
+  '- 600 px wide, centered, built with <table> layout and inline style="" attributes. No <script>, no forms,',
+  '  no external CSS files; a <style> block is ignored by many apps.',
+  '- Brand colors: Primary Teal #0D3D3E (headers), Aqua #1FA7A8 (buttons, accents), Light Gray #F3F5F6 (panels),',
+  '  Charcoal #222222 (text). Fonts: Montserrat for headings, Open Sans for text, with Arial as fallback.',
+  '- Images: only https:// links, each with alt text. Logo: https://mcps-email-assets.vercel.app/mcps-lockup-badge.png',
+  '  (214 x 59). Never put important words inside an image.',
+  '- One main button per email. Its link will be filled in by the system: use href="{{QuoteLink}}" for the free quote page.',
+  '- Mobile friendly: text at least 15px, buttons at least 44px tall.',
+  '',
+  'VOICE',
+  '- Professional, clear, reliable, direct, caring. Short paragraphs. No pressure tactics, no ALL CAPS, no emojis.',
+  '- Never list service tasks. Say the technician will complete the service following our standard procedures.',
+  '- Sign off as Tony, Mission Custom Pool Solutions. The tagline is "Every pool matters."',
+  '',
+  'AUDIENCE',
+  '- MCP Legacy: past customers of Mission Custom Pools (the builder) being introduced to MCPS, the service side of',
+  '  the same family. Goal: a free quote for weekly pool service.',
+  '- MCP Startup: owners of brand-new pools in their first weeks; MCPS handles the startup.',
+  ''
+].join('\n');
