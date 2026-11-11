@@ -309,3 +309,13 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-ok.big{margin:auto;padding:24px}
 .lc-ok.big b{font-family:var(--f-head);font-size:18px;color:var(--teal)}
 @media (max-width:600px){.lc-imp{width:100%;height:100%;border-radius:0}.lc-imp-h,.lc-imp-body{padding-left:16px;padding-right:16px}.lc-fld{min-width:0;flex:1 1 100%}}
+
+/* Start a batch (CP7a) */
+.lc-sub{color:var(--muted);font-size:12.5px;font-weight:600}
+.lc-chips{display:flex;flex-wrap:wrap;gap:6px}
+.lc-chip{border:1px solid var(--line);background:var(--card);border-radius:999px;height:30px;padding:0 12px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.lc-chip small{color:var(--muted);font-weight:600;margin-left:3px}
+.lc-chip:hover{border-color:var(--aqua)}
+.lc-chip.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.lc-chip.on small{color:#CFE7E7}
+.lc-imp-h h2 + .lc-sub{display:block;margin-top:-6px}

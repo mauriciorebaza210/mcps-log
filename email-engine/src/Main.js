@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp7-1';
+var EE_VERSION = 'cp7-2';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -68,6 +68,10 @@ function EE_run_(trigger) {
   var x = EE_core_();
   var cfg = EE_config_(x.env.store);
   var started = new Date().toISOString(), summary, scan = null;
+  // Batches whose start date has come confirm their people, so this plan starts them (Admin.js).
+  var batches = null;
+  try { batches = EE_startDueBatches_(x.env, x.core); }
+  catch (e) { batches = { error: String(e && e.message || e).slice(0, 200) }; try { x.env.alert('batch_start_failed', batches.error); } catch (e2) { /* the run goes on */ } }
   // Replies and bounces first, so today's plan already sees their stops (Replies.js).
   try { scan = EE_createReplyScanner(x.env, x.core).scan(); }
   catch (e) { scan = { error: String(e && e.message || e).slice(0, 200) }; try { x.env.alert('reply_scan_failed', scan.error); } catch (e2) { /* the run goes on */ } }
@@ -88,7 +92,7 @@ function EE_run_(trigger) {
       reconcile: summary.reconcile, adopted: summary.adopted, failed: summary.failed || 0,
       stopped_reason: summary.stopped_reason, plan_json: summary.plan || {}, scan_json: scan || {} });
   } catch (e) { /* the run itself is already recorded in the Journal */ }
-  summary.scan = scan;
+  summary.scan = scan; summary.batches = batches;
   Logger.log(JSON.stringify(summary));
   return summary;
 }

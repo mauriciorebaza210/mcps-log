@@ -10,9 +10,10 @@ const { fakeWorld, item, MIN } = require('./helpers/ee-fake-env.js');
 
 function world() {
   const w = fakeWorld();
-  const ctx = { JSON, Math, Date, Object, Array, String, Number, Error };
+  const ctx = { JSON, Math, Date, Object, Array, String, Number, Error, RegExp, Intl, isFinite };
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'email-engine', 'src', 'Admin.js'), 'utf8'), ctx);
+  vm.runInContext(['js/lib/lifecycle-rules.js', 'js/lib/batches.js'].map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n') +
+    '\nvar EE_TZ = "America/Chicago";\n' + fs.readFileSync(path.join(__dirname, '..', 'email-engine', 'src', 'Admin.js'), 'utf8'), ctx);
   // Config lives in the store here, like the real env.
   w.env.config.pausedBuckets = () => { const r = w.tables.Config.find(c => c.key === 'paused_buckets'); return r && r.value ? r.value.split(',') : []; };
   w.runs = 0;
@@ -126,4 +127,49 @@ test('Saving an import mapping stores it in Config under its key', () => {
   w.ctx_.EE_adminRun_(w.env, w.core, { action: 'save_import_mapping', actor: 'mau', params: { key: 'email|name', mapping: { 0: 'full_name', 1: 'email' }, source: 'MCP' } }, {});
   const row = w.tables.Config.find(c => c.key === 'import_mapping:email|name');
   assert.deepEqual(JSON.parse(row.value).mapping, { 0: 'full_name', 1: 'email' });
+});
+
+// ── Batches ──────────────────────────────────────────────────────────────────
+function waiting(w, n, extra) {
+  for (let i = 1; i <= n; i++) w.tables.Contacts.push(Object.assign({ contact_id: 'p' + i, email_norm: 'p' + i + '@example.com', bucket: 'B',
+    review_status: 'needs_review', is_test: 'N', area: i % 2 ? 'Boerne' : 'Helotes', tags: i <= 3 ? 'vip' : '', source: 'MCP list',
+    created_at: '2026-11-0' + (i % 9 + 1) + 'T00:00:00Z' }, (extra || {})[i] || {}));
+}
+const batch = (w, p) => w.ctx_.EE_adminRun_(w.env, w.core, { action: 'create_batch', params: p, actor: 'mau' }, {});
+const status = (w, id) => w.tables.Contacts.find(c => c.contact_id === id).review_status;
+const day = (w, d) => new Date(w.env.now() + d * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+
+test('Batch picked now, dated today: those exact people are confirmed right away', () => {
+  const w = world(); waiting(w, 5);
+  const r = batch(w, { group: 'B', pick: 'now', contact_ids: ['p1', 'p3'], start_on: day(w, 0) });
+  assert.equal(r.ok, true);
+  assert.equal(JSON.stringify(r.started), JSON.stringify({ started: 2, skipped: 0 }));
+  assert.deepEqual(['p1', 'p2', 'p3'].map(id => status(w, id)), ['confirmed', 'needs_review', 'confirmed']);
+  assert.equal(w.tables.Batches[0].status, 'started');
+});
+
+test('Batches lined up for later wait for their date, then the run starts them; cancelled ones never start', () => {
+  const w = world(); waiting(w, 10);
+  const a = batch(w, { group: 'B', pick: 'at_start', count: 3, order: 'oldest', start_on: day(w, 7), filters: { area: ['Boerne'] } });
+  const b = batch(w, { group: 'B', pick: 'at_start', count: 2, start_on: day(w, 14) });
+  assert.equal(a.start_on, day(w, 7));
+  assert.equal(w.tables.Contacts.filter(c => c.review_status === 'confirmed').length, 0, 'nothing starts before its date');
+  assert.equal(w.ctx_.EE_adminRun_(w.env, w.core, { action: 'cancel_batch', params: { batch_id: b.batch_id }, actor: 'mau' }, {}).ok, true);
+  w.now += 7 * 86400000;
+  const started = w.ctx_.EE_startDueBatches_(w.env, w.core);
+  assert.equal(started.length, 1);
+  const confirmed = w.tables.Contacts.filter(c => c.review_status === 'confirmed');
+  assert.equal(confirmed.length, 3);
+  assert.ok(confirmed.every(c => c.area === 'Boerne'), 'the filter applied on the start date');
+  w.now += 7 * 86400000;
+  assert.equal(w.ctx_.EE_startDueBatches_(w.env, w.core).length, 0, 'the cancelled batch never starts');
+});
+
+test('A batch skips people who are no longer waiting; bad input is refused', () => {
+  const w = world(); waiting(w, 3, { 2: { review_status: 'confirmed' } });
+  const r = batch(w, { group: 'B', pick: 'now', contact_ids: ['p1', 'p2', 'ghost'] });
+  assert.equal(JSON.stringify(r.started), JSON.stringify({ started: 1, skipped: 2 }));
+  assert.equal(batch(w, { group: 'B', pick: 'now', contact_ids: [] }).ok, false);
+  assert.equal(batch(w, { group: 'B', pick: 'at_start', count: 2, start_on: '2020-01-01' }).ok, false, 'no start dates in the past');
+  assert.equal(w.ctx_.EE_adminRun_(w.env, w.core, { action: 'cancel_batch', params: { batch_id: w.tables.Batches[0].batch_id }, actor: 'mau' }, {}).ok, false, 'a started batch can’t be cancelled');
 });

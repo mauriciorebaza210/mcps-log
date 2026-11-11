@@ -330,13 +330,14 @@ function lcContacts_() {
   const bar = '<div class="lc-bar"><label class="lc-search">' + LC_ICON.search + '<input type="search" placeholder="Search people" value="' + lcEsc_(LC.q) +
     '" data-lc-input="q" aria-label="Search people"></label><div class="lc-seg">' +
     [['', 'All'], ['B', 'MCP Legacy'], ['C', 'MCP Startup']].map(([k, l]) => '<button data-act="bucket" data-bucket="' + k + '" class="' + (LC.bucket === k ? 'on' : '') + '">' + l + '</button>').join('') +
-    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
+    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
   if (!LC.contacts) return bar + '<div class="lc-sk" style="height:320px"></div>';
   const q = LC.q.trim().toLowerCase();
   const rows = LC.contacts.contacts.filter(c => (!LC.bucket || c.bucket === LC.bucket) && (!LC.review || c.review_status === LC.review) &&
     (!q || [c.first_name, c.last_name, c.email].some(v => String(v || '').toLowerCase().includes(q))));
-  if (!rows.length) return bar + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
-  return bar + '<div class="lc-card"><table class="lc-table"><thead><tr><th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
+  const batches = typeof lcBatchesCard_ === 'function' ? lcBatchesCard_() : '';
+  if (!rows.length) return bar + batches + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
+  return bar + batches + '<div class="lc-card"><table class="lc-table"><thead><tr><th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
       const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
@@ -502,6 +503,11 @@ async function lcResolve_(what, id) {
   const done = { mark_sent: 'Marked as sent', resend: 'It sends on the next run', abandon: 'Abandoned' }[what];
   await lcWrite_('r:' + id, what, { delivery_id: id }, done);
 }
+async function lcCancelBatch_(id) {
+  if (!await lcConfirm_({ title: 'Cancel this batch?', ok: 'Cancel batch', danger: true, body: 'Its people stay in Needs review.' })) return;
+  await lcWrite_('b:' + id, 'cancel_batch', { batch_id: id }, 'Batch cancelled');
+  LC.contacts = null; lcLoadContacts_(true);
+}
 async function lcWrite_(busyKey, action, params, okText) {
   LC.busy[busyKey] = true; lcRenderBody_();
   const r = await lcAdmin_(action, params).catch(() => ({ ok: false, error: 'Network error' }));
@@ -552,6 +558,8 @@ function lcOnClick_(e) {
   else if (act === 'bucket') { LC.bucket = t.dataset.bucket; lcRenderBody_(); }
   else if (act === 'run') lcRunNow_();
   else if (act === 'import') lcOpenImport_();
+  else if (act === 'batch') lcOpenBatch_();
+  else if (act === 'cancelbatch') lcCancelBatch_(t.dataset.id);
   else if (act === 'review') { LC.review = LC.review ? '' : 'needs_review'; lcRenderBody_(); }
   else if (act === 'enabled') lcSetEnabled_(!LC.ov.engine.enabled);
   else if (act === 'pause') lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));

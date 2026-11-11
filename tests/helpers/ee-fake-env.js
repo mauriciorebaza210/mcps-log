@@ -17,12 +17,12 @@ function loadCore() {
 const MIN = 60 * 1000;
 const T0 = Date.parse('2026-11-02T15:00:00Z');
 const OWNER = 'antonio@mcpoolsolutions.org';
-const ID = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Revisions: 'revision_id', Holds: 'key', Inbox: 'inbox_id', Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Config: 'key' };
+const ID = { Deliveries: 'delivery_id', Enrollments: 'enrollment_id', Contacts: 'contact_id', Revisions: 'revision_id', Holds: 'key', Inbox: 'inbox_id', Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Config: 'key', Batches: 'batch_id' };
 
 function fakeWorld() {
   const w = { now: T0, user: OWNER, owner: OWNER, enabled: true, paused: [], quota: 1500,
     props: {}, cache: {}, lockHeld: false, dead: false, n: 0,
-    journal: [], tables: { Deliveries: [], Enrollments: [], Contacts: [], Revisions: [], Holds: [], Inbox: [], Secondaries: [], Suppressions_Test: [], Engagement: [], Threads: [], ChangeLog: [], Config: [] }, meta: {},
+    journal: [], tables: { Deliveries: [], Enrollments: [], Contacts: [], Revisions: [], Holds: [], Inbox: [], Secondaries: [], Suppressions_Test: [], Engagement: [], Threads: [], ChangeLog: [], Config: [], Batches: [] }, meta: {},
     events: [],
     optouts: [], drafts: {}, outbox: [], alerts: [], steps: {}, revisions: {}, faults: {}, hooks: {} };
   const fault = name => { const f = w.faults[name]; if (!f) return null; if (f.times !== undefined && f.times-- <= 0) return null; return f; };

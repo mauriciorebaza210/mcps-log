@@ -45,7 +45,10 @@ var EE_TABLES = {
   // Per-thread cursor for the reply scan (Replies.js): messages already handled.
   Threads: ['thread_id', 'message_count', 'seen_json', 'last_scanned_at'],
   // Every action taken from the portal (Admin.js), with the portal user who took it.
-  ChangeLog: ['id', 'at', 'actor', 'action', 'detail', 'result']
+  ChangeLog: ['id', 'at', 'actor', 'action', 'detail', 'result'],
+  // Batches that start contacts from Needs review on a date (Admin.js → create_batch).
+  Batches: ['batch_id', 'name', 'group', 'filters_json', 'count', 'order', 'pick', 'start_on', 'contact_ids', 'status',
+    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at']
 };
 // Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
 var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',
@@ -53,10 +56,10 @@ var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id'
   'reasons', 'classifier_version', 'source', 'gmail_message_id', 'snippet'];
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id' };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Batches: 'batch_id' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
   opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1,
-  auto_replies: 1, soft_bounces: 1, message_count: 1 };
+  auto_replies: 1, soft_bounces: 1, message_count: 1, count: 1, started_count: 1 };
 var EE_JOURNAL_HEADERS = ['seq', 'op_id', 'type', 'entity_id', 'data', 'prev_hash', 'hash', 'at'];
 var EE_TZ = 'America/Chicago';
 

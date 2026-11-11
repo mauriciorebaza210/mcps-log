@@ -26,6 +26,7 @@ const SHEET = {
     ['old:b_intro:1', 'c1', 'e1', 'b_intro', '2', 'test', 'maria@example.com', 'sent', '1', iso(90), iso(90)]],
   Runs: [['run_id', 'trigger', 'started_at', 'sent', 'stopped_reason'], ['r1', 'daily', iso(1), '1', 'done'], ['r2', 'manual', iso(0.5), '0', 'done']],
   Alerts: [['at', 'kind', 'detail'], [iso(1) + ' ab12', 'delivery_unknown', 'e2:c_welcome:1 to james@example.com']],
+  Batches: [['batch_id', 'name', 'group', 'count', 'start_on', 'status', 'created_at', 'filters_json'], ['bat_1', '', 'B', '20', '2026-11-23', 'planned', iso(0.1), '{"area":["Boerne"]}']],
   ChangeLog: [['id', 'at', 'actor', 'action', 'detail', 'result'], ['chg_1', iso(0.2), 'mau', 'set_bucket_paused', '{"bucket":"B","paused":true}', 'ok']],
   Engagement: [['delivery_id', 'opens_total', 'opens_low', 'opens_medium', 'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'first_open_at', 'links_json', 'replied_at', 'last_reply_snippet'],
     ['e1:b_intro:1', '3', '1', '2', '2', '1', '1', '1', iso(1), '{"button1":2}', iso(0.5), 'Call me Tuesday']]
@@ -318,4 +319,11 @@ test('Import: needs edit_contacts; save takes at most 100 rows; mappings are lis
   const m = await importCall({ stage: 'save_mapping', key: 'email|name', mapping: { 0: 'email' } });
   assert.deepEqual([m.res.statusCode, m.sent[0].action], [200, 'save_import_mapping']);
   assert.equal((await importCall({ stage: 'mappings' })).res.body.ok, true);
+});
+
+test('Contacts view lists batches (newest first) and gives each person area and tags for the filters', async () => {
+  const h = (await load())(world().deps);
+  const d = (await call(h, { token: 'tok-mau', query: { view: 'contacts' } })).body.data;
+  assert.deepEqual(d.batches.map(b => [b.batch_id, b.count, b.status, b.filters.area[0]]), [['bat_1', 20, 'planned', 'Boerne']]);
+  assert.ok('area' in d.contacts[0] && Array.isArray(d.contacts[0].tags));
 });

@@ -17,11 +17,11 @@ export const ROLE_CAPS = {
 };
 
 // The engine tabs the portal reads. Never raw Events (PLAN.md → Performance).
-export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement', 'ChangeLog'];
+export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement', 'ChangeLog', 'Batches'];
 
 const NUMERIC = new Set(['occurrence', 'attempt', 'gen', 'last_seq', 'held_days', 'rev_no', 'adopted_from_gen',
   'sent', 'skipped', 'cancelled', 'reconcile', 'adopted', 'failed', 'opens_total', 'opens_low', 'opens_medium',
-  'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'auto_replies', 'soft_bounces']);
+  'clicks_total', 'clicks_low', 'clicks_medium', 'clicks_high', 'auto_replies', 'soft_bounces', 'count', 'started_count']);
 const DAY = 24 * 60 * 60 * 1000;
 const IN_FLIGHT = new Set(['claimed', 'drafted', 'sending', 'reconcile']);
 const NEEDS_ATTENTION = new Set(['reconcile', 'unknown', 'failed']);
@@ -82,7 +82,8 @@ function contactView(c, caps) {
     email: pii ? c.email_norm : maskEmail(c.email_norm),
     address: pii ? (c.address || '') : (c.address ? 'hidden' : ''),
     phone: pii ? (c.phone || '') : (c.phone ? 'hidden' : ''),
-    startup_date: c.startup_date || '', source: c.source || '', created_at: c.created_at || ''
+    startup_date: c.startup_date || '', source: c.source || '', created_at: c.created_at || '',
+    area: c.area || c.city || '', city: c.city || '', tags: String(c.tags || '').split(',').map(t => t.trim()).filter(Boolean)
   };
 }
 // Per-delivery tracking, by evidence level (PLAN.md → Tracking). Opens are
@@ -246,7 +247,13 @@ export function buildContacts(tables, caps, opts = {}) {
   const enr = {}, last = {};
   (tables.Enrollments || []).forEach(e => { (enr[e.contact_id] = enr[e.contact_id] || []).push(e); });
   (tables.Deliveries || []).forEach(d => { if (d.state === 'sent' && ms(d.sent_at) > ms(last[d.contact_id] && last[d.contact_id].sent_at)) last[d.contact_id] = d; });
-  return { total: rows.length, contacts: rows.slice(0, limit).map(c => {
+  const batches = (tables.Batches || []).slice().sort(byDesc('created_at')).slice(0, 30).map(b => ({
+    batch_id: b.batch_id, name: b.name || '', group: b.group, count: b.count, order: b.order, pick: b.pick, start_on: b.start_on,
+    status: b.status, started_count: b.started_count, filters: typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {},
+    created_by: b.created_by, created_at: b.created_at, started_at: b.started_at || '',
+    // Who a planned batch already holds, so a new batch doesn't pick them again.
+    contact_ids: b.status === 'planned' && Array.isArray(b.contact_ids) ? b.contact_ids : [] }));
+  return { total: rows.length, batches, contacts: rows.slice(0, limit).map(c => {
     const e = (enr[c.contact_id] || []).sort(byDesc('enrolled_on'))[0];
     const l = last[c.contact_id];
     return { ...contactView(c, caps), sequence: e ? { status: e.status, stop_reason: e.stop_reason || '', mode: e.mode } : null,

@@ -13,6 +13,10 @@
 //                       including the quiescence lock on Resend)
 //   import_contacts    save imported contacts into Needs review (api/email.js → op=import checks them first;
 //                       the engine re-checks emails). Do-not-contact rows go to the opt-out list.
+//   create_batch       start N contacts from Needs review on a date ("pick now": the exact people; "at start":
+//                       chosen on the date). A batch dated today starts immediately; later ones start in that
+//                       morning's run (EE_startDueBatches_, called from Main.js).
+//   cancel_batch       before it starts
 //   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
 //   maintenance        run one allow-listed setup task as Tony (eeSetup, eeSetupMarketingKit,
 //                       eeDiagnostics), so nobody has to click Run in the Apps Script editor.
@@ -20,7 +24,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
-var EE_ADMIN_ACTIONS = { import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued' }  (Apps Script: a trigger; tests: a fake)
 function EE_adminRun_(env, core, req, deps) {
@@ -32,6 +36,13 @@ function EE_adminRun_(env, core, req, deps) {
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };
   else if (action === 'import_contacts') out = EE_importContacts_(env, core, p, actor);
+  else if (action === 'create_batch') out = EE_createBatch_(env, core, p, actor);
+  else if (action === 'cancel_batch') {
+    var bt = env.store.get('Batches', String(p.batch_id || ''));
+    if (!bt) out = { ok: false, error: 'batch not found' };
+    else if (bt.status !== 'planned') out = { ok: false, error: 'already ' + bt.status };
+    else { env.store.upsert('Batches', EE_merge_(bt, { status: 'cancelled', cancelled_by: actor, cancelled_at: new Date(env.now()).toISOString() })); out = { ok: true }; }
+  }
   else if (action === 'save_import_mapping') {
     var key = String(p.key || '').slice(0, 300);
     if (!key || typeof p.mapping !== 'object') out = { ok: false, error: 'key and mapping required' };
@@ -109,6 +120,62 @@ function EE_importContacts_(env, core, p, actor) {
   var dnc = (p.do_not_contact || []).map(function (e) { return String(e || '').trim().toLowerCase(); }).filter(Boolean);
   dnc.forEach(function (e) { core.ingest({ event_id: 'dnc_' + env.sha256(e).slice(0, 16), type: 'unsubscribe', mode: 'production', email_norm: e, scope: 'all' }); });
   return { ok: true, added: added.length, skipped: skipped, do_not_contact_recorded: dnc.length };
+}
+
+function EE_merge_(a, b) { var o = {}, k; for (k in a || {}) o[k] = a[k]; for (k in b || {}) o[k] = b[k]; return o; }
+
+// ── Batches ──
+var EE_BATCH_MAX = 500;
+function EE_today_(env) { return MCPS_LIFECYCLE.localDate(new Date(env.now()), EE_TZ); }
+function EE_createBatch_(env, core, p, actor) {
+  var group = String(p.group || ''), count = Math.floor(Number(p.count) || 0), startOn = String(p.start_on || '');
+  var pickNow = p.pick !== 'at_start', today = EE_today_(env);
+  if (!/^[A-F]$/.test(group)) return { ok: false, error: 'group A-F required' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startOn)) startOn = today;
+  if (startOn < today) return { ok: false, error: 'the start date is in the past' };
+  var ids = [];
+  if (pickNow) {
+    ids = (p.contact_ids || []).map(String).filter(Boolean);
+    if (!ids.length || ids.length > EE_BATCH_MAX) return { ok: false, error: 'pick 1 to ' + EE_BATCH_MAX + ' people' };
+    count = ids.length;
+  } else if (count < 1 || count > EE_BATCH_MAX) return { ok: false, error: 'count 1 to ' + EE_BATCH_MAX };
+  var filters = p.filters && typeof p.filters === 'object' ? p.filters : {};
+  var id = 'bat_' + env.uuid().replace(/-/g, '').slice(-12);
+  if (env.store.get('Batches', id)) return { ok: false, error: 'id collision, try again' };
+  var batch = { batch_id: id, name: String(p.name || '').slice(0, 80), group: group, filters_json: filters, count: count,
+    order: p.order === 'oldest' ? 'oldest' : 'random', pick: pickNow ? 'now' : 'at_start', start_on: startOn,
+    contact_ids: ids, status: 'planned', created_by: actor, created_at: new Date(env.now()).toISOString() };
+  env.store.upsert('Batches', batch);
+  if (startOn <= today) return { ok: true, batch_id: id, started: EE_startBatch_(env, core, batch, actor) };
+  return { ok: true, batch_id: id, start_on: startOn };
+}
+// Confirms the batch's people, so the next run starts their sequence. Someone who
+// is no longer waiting in Needs review (enrolled, edited, removed) is skipped.
+function EE_startBatch_(env, core, b, actor) {
+  var contacts = env.store.rows('Contacts'), byId = {};
+  contacts.forEach(function (c) { byId[c.contact_id] = c; });
+  var filters = typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {};
+  var ids = b.pick === 'now' ? (b.contact_ids || [])
+    : MCPS_BATCHES.pick(contacts, { group: b.group, filters: filters, count: b.count, order: b.order }, Math.random).map(function (c) { return c.contact_id; });
+  var started = 0, skipped = [];
+  ids.forEach(function (cid) {
+    var c = byId[cid];
+    if (!c || c.review_status !== 'needs_review' || c.bucket !== b.group) { skipped.push({ contact_id: cid, reason: c ? 'no longer waiting' : 'not found' }); return; }
+    core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id },
+      'contact:' + cid + ':batch:' + b.batch_id);
+    started++;
+  });
+  // A sheet write replaces the whole row: always merge into the stored batch.
+  env.store.upsert('Batches', EE_merge_(env.store.get('Batches', b.batch_id) || b, { status: 'started', started_at: new Date(env.now()).toISOString(),
+    started_count: started, skipped_json: skipped, contact_ids: b.pick === 'now' ? b.contact_ids : ids }));
+  return { started: started, skipped: skipped.length };
+}
+// Called at the start of every run: batches whose day has come.
+function EE_startDueBatches_(env, core) {
+  var today = EE_today_(env), out = [];
+  env.store.rows('Batches').filter(function (b) { return b.status === 'planned' && String(b.start_on) <= today; })
+    .forEach(function (b) { out.push({ batch_id: b.batch_id, result: EE_startBatch_(env, core, b, 'schedule') }); });
+  return out;
 }
 
 // Apps Script entry for the relay.

@@ -33,7 +33,7 @@ const RAW_TTL_MS = 15 * 1000;
 const SETTINGS_SS_ID = () => String(process.env.EE_SETTINGS_SS_ID || '1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U').trim();   // "Chem Log": Comms_Optouts
 const IMPORT_CHECK_MAX = 5000, IMPORT_SAVE_MAX = 100;
 // The capability each page action needs (PLAN.md → Configuration & authorization).
-const ADMIN_CAP = { maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
+const ADMIN_CAP = { create_batch: 'edit_contacts', cancel_batch: 'edit_contacts', maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
   abandon: 'resolve_unknown', resend: 'resolve_unknown' };
 let rawVersion = 0;          // bumped after a write, so this instance never serves the pre-write cache
 
