@@ -90,6 +90,9 @@ function EE_ensureTab_(ss, name, headers, log) {
 function EE_folder_(props, key, name, parent) {
   var id = props.getProperty(key);
   if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* recreate below */ } }
+  // A folder made by an earlier version without a saved id: adopt it instead of making a twin.
+  var same = parent ? parent.getFoldersByName(name) : null;
+  if (same && same.hasNext()) { var found = same.next(); props.setProperty(key, found.getId()); return found; }
   var f = parent ? parent.createFolder(name) : DriveApp.createFolder(name);
   props.setProperty(key, f.getId());
   return f;
@@ -159,7 +162,8 @@ function eeDemoSetup() {
 
 // Marketing kit for Tony (run once as Tony; safe to re-run). Creates, in his Drive:
 //   MCPS Marketing/
-//     Email Templates/ (MCP Legacy, MCP Startup, Shared blocks)   ← the Template Library (CP7) reads here
+//     Email Templates/ (MCP Legacy/<one folder per email>, MCP Startup/<one per email>, Shared blocks)
+//                                                                 ← the Template Library (CP7) reads here
 //     START HERE - ChatGPT instructions.txt                         ← ChatGPT reads it through its Drive connector
 //     Example - MCP x MCPS Intro (full template).html               ← a compliant starting point
 // and shares the folder with Mau. Nothing is emailed except Drive's own "shared with you" note to Mau.
@@ -168,13 +172,26 @@ function eeSetupMarketingKit() {
   var props = EE_props_(), log = [];
   var root = EE_folder_(props, 'EE_FOLDER_MARKETING', 'MCPS Marketing', null);
   var tpl = EE_folder_(props, 'EE_FOLDER_TEMPLATES', 'Email Templates', root);
-  ['MCP Legacy', 'MCP Startup', 'Shared blocks'].forEach(function (n) { if (!tpl.getFoldersByName(n).hasNext()) { tpl.createFolder(n); log.push('folder Email Templates/' + n); } });
+  // One folder per sequence, and inside it one per email, so each email can hold several templates.
+  // Folder ids are kept in Script Properties (EE_FOLDER_STEP_<step_id>): renaming a folder in Drive never breaks the link.
+  var seqName = { B: 'MCP Legacy', C: 'MCP Startup' };
+  Object.keys(seqName).forEach(function (seq) {
+    var sf = EE_folder_(props, 'EE_FOLDER_SEQ_' + seq, seqName[seq], tpl);
+    EE_SEED.ruleset.steps.filter(function (st) { return st.sequence_id === seq; }).sort(function (a, b) { return a.order - b.order; })
+      .forEach(function (st) {
+        var key = 'EE_FOLDER_STEP_' + st.step_id, before = props.getProperty(key);
+        EE_folder_(props, key, st.order + ' - ' + st.name, sf);
+        if (!before) log.push('folder Email Templates/' + seqName[seq] + '/' + st.order + ' - ' + st.name);
+      });
+  });
+  EE_folder_(props, 'EE_FOLDER_BLOCKS', 'Shared blocks', tpl);
 
   // Instructions for ChatGPT, and an example full template it can start from.
   var guideName = 'START HERE - ChatGPT instructions.txt';
   if (!root.getFilesByName(guideName).hasNext()) { root.createFile(guideName, EE_CHATGPT_GUIDE, MimeType.PLAIN_TEXT); log.push('file ' + guideName); }
   var exName = 'Example - MCP x MCPS Intro (full template).html';
-  if (!tpl.getFilesByName(exName).hasNext()) { tpl.createFile(exName, EE_exampleFullTemplate_(), MimeType.HTML); log.push('file Email Templates/' + exName); }
+  var introFolder = DriveApp.getFolderById(props.getProperty('EE_FOLDER_STEP_b_intro'));
+  if (!introFolder.getFilesByName(exName).hasNext()) { introFolder.createFile(exName, EE_exampleFullTemplate_(), MimeType.HTML); log.push('file MCP Legacy/1 - MCP x MCPS Intro/' + exName); }
 
   try { root.addEditor('mauricio@mcpoolsolutions.org'); log.push('shared with Mau'); } catch (e) { log.push('share with Mau failed: ' + e.message); }
   Logger.log(log.join('\n') + '\nFolder: ' + root.getUrl());
@@ -201,11 +218,12 @@ var EE_CHATGPT_GUIDE = [
   '',
   'In ChatGPT, connect Google Drive once (Settings > Connectors > Google Drive). Then just say:',
   '  "Read START HERE - ChatGPT instructions in my MCPS Marketing folder and write the MCP Legacy follow-up email."',
-  'ChatGPT follows the rules below and can use the Example file in Email Templates as a starting point.',
+  'ChatGPT follows the rules below and can use the Example file in Email Templates > MCP Legacy > 1 - MCP x MCPS Intro.',
   '(If it can\'t open Drive, attach this file and the example to the chat instead.)',
   '',
-  'When an email is ready: download the .html file and drop it into MCPS Marketing > Email Templates > MCP Legacy',
-  '(or MCP Startup). It then shows up in the portal, where it is checked and approved before it can send.',
+  'When an email is ready: download the .html file and drop it into that email\'s own folder, e.g.',
+  'Email Templates > MCP Legacy > 2 - MCPS Follow Up. A folder can hold several versions; in the portal you pick',
+  'which one is live (or split between them to compare results). Nothing sends until it is checked and approved.',
   'To edit one later: ask ChatGPT to open it from that folder (or attach it) and say what to change.',
   '',
   '------------------------------------------------------------------------------',
