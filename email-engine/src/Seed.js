@@ -276,6 +276,27 @@ var EE_SEED = {
         "blocks": [
           "PoolSchool"
         ]
+      },
+      "c_progress": {
+        "subject": "How your new pool is settling in",
+        "preheader": "A short weekly update during your first month.",
+        "body": "C/c_progress.html",
+        "details_box": "",
+        "blocks": []
+      },
+      "c_maint": {
+        "subject": "Keep your new pool looking its best",
+        "preheader": "Weekly service from the team that started your pool.",
+        "body": "C/c_maint.html",
+        "details_box": "",
+        "blocks": []
+      },
+      "c_final": {
+        "subject": "Your pool's first month is complete",
+        "preheader": "What happens now, and how to reach us.",
+        "body": "C/c_final.html",
+        "details_box": "",
+        "blocks": []
       }
     },
     "blocks": {
@@ -288,6 +309,9 @@ var EE_SEED = {
   "templates": {
     "B/b_intro.html": "<img class=\"fluid\" src=\"https://mcps-email-assets.vercel.app/hero.jpg\" width=\"512\" height=\"256\" alt=\"A pool built by Mission Custom Pools\" style=\"display:block;width:100%;max-width:512px;height:auto;border:0;margin:0 auto 22px;\" />\n<h1>You know Mission Custom Pools.<br />Meet Mission Custom Pool Solutions.</h1>\n<p style=\"margin:0 0 22px;font-family:'Montserrat',Arial,Helvetica,sans-serif;font-size:15px;font-weight:600;line-height:1.4;color:#0D3D3E;text-align:center;\">A trusted introduction from the Mission family.</p>\n<p>Hi {{FirstName}},</p>\n<p>For years, Mission Custom Pools has been trusted to design and build exceptional pools for families like yours. Today we&rsquo;re proud to introduce <strong>Mission Custom Pool Solutions (MCPS)</strong>, a service company connected through family, shared values, and a commitment to caring for your pool long after it is built.</p>\n<p>MCPS provides expert ongoing care so you can enjoy a beautiful, worry-free pool season after season. Every visit is completed by our technicians following our standard procedures.</p>\n<p style=\"margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:18px;line-height:1.45;color:#0D3D3E;text-align:center;\">Same values. Same care. More support for your pool.</p>\n{{button:Get your free quote|quote}}\n<p style=\"margin:8px 0 0;font-family:'Open Sans',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#5A6A6A;text-align:center;\">Or call us at <a href=\"tel:+12105592073\" style=\"color:#0D3D3E;text-decoration:none;font-weight:600;\">(210) 559-2073</a>, or simply reply to this email.</p>\n",
     "C/c_welcome.html": "<h1>Welcome to the Mission family, {{FirstName}}.</h1>\n<p>Your new pool is almost ready for its first swim. Our technician will complete your startup following our standard procedures, and we&rsquo;ll keep you posted along the way, including a short update every week during your first month.</p>\n{{details}}\n{{block:PoolSchool}}\n<p>Questions before your startup? Just reply to this email, or call us at <a href=\"tel:+12105592073\" style=\"color:#0D3D3E;text-decoration:none;font-weight:600;\">(210) 559-2073</a>.</p>\n",
+    "C/c_progress.html": "<h1>How your new pool is settling in</h1>\n<p>Hi {{FirstName}},</p>\n<p>Your pool is in its first weeks, when the water and the new surface need the most attention. Our team is keeping a close eye on it, and every visit is completed following our standard procedures.</p>\n<h2>One thing to keep in mind</h2>\n<p>Please don&rsquo;t add chemicals on your own during the first month. We&rsquo;re balancing the water for the new surface, and extra products can work against that. If something looks different, tell us and we&rsquo;ll take care of it.</p>\n<p>We&rsquo;ll send a short update like this each week during your first month, so you always know your pool is being looked after.</p>\n<p>Questions? Just reply to this email, or call us at <a href=\"tel:+12105592073\" style=\"color:#0D3D3E;text-decoration:none;font-weight:600;\">(210) 559-2073</a>.</p>\n",
+    "C/c_maint.html": "<h1>Keep your new pool looking its best</h1>\n<p>Hi {{FirstName}},</p>\n<p>Your pool&rsquo;s first month is almost complete. After startup, steady care is what keeps the water clear, the surface protected and the equipment running the way it should.</p>\n<p>Our weekly service takes that off your plate. A trained technician visits on a set day each week and completes the service following our standard procedures, and you get a report after every visit.</p>\n<p style=\"margin:6px 0 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:18px;line-height:1.45;color:#0D3D3E;text-align:center;\">Same team that started your pool. Every week.</p>\n{{button:Get your weekly service quote|quote}}\n<p style=\"margin:8px 0 0;font-family:'Open Sans',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#5A6A6A;text-align:center;\">Or call us at <a href=\"tel:+12105592073\" style=\"color:#0D3D3E;text-decoration:none;font-weight:600;\">(210) 559-2073</a>, or simply reply to this email.</p>\n",
+    "C/c_final.html": "<h1>Your pool&rsquo;s first month is complete</h1>\n<p>Hi {{FirstName}},</p>\n<p>Your pool has completed its startup and its first month with us. Thank you for trusting Mission Custom Pool Solutions with this important first step.</p>\n<h2>What happens now</h2>\n<p>From here, your pool needs regular care to stay clean and protected. If you&rsquo;ve chosen weekly service with us, nothing changes: your technician keeps coming on your scheduled day. If not, we&rsquo;re glad to help whenever you need us.</p>\n<p>Questions about your pool or your equipment? Reply to this email or call us at <a href=\"tel:+12105592073\" style=\"color:#0D3D3E;text-decoration:none;font-weight:600;\">(210) 559-2073</a>. We appreciate your business.</p>\n",
     "blocks/PoolSchool.html": "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:4px 0 18px;\"><tr><td style=\"border:1px solid #CFE7E6;background-color:#F1FAF9;border-radius:6px;padding:14px 18px;font-family:'Open Sans',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#2E3A3A;\"><strong style=\"color:#0D3D3E;\">Pool School is included.</strong> On your last startup day we&rsquo;ll send you a link to choose a time. We&rsquo;ll walk you through your new pool and how to keep it looking its best.</td></tr></table>\n"
   }
 };

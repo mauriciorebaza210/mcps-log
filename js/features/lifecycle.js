@@ -451,7 +451,7 @@ function lcRenderDrawer_() {
   if (D.error) { el.innerHTML = '<div class="lc-dr-h"><div class="t"></div>' + close + '</div>' + lcErrorView_(D.error); return; }
   if (D.kind === 'step') {
     const s = (D.data && D.data.step) || (LC.ov && LC.ov.steps.find(x => x.step_id === D.id)) || { name: '', bucket: '' };
-    const tabs = [['performance', 'Performance'], ['recipients', 'Recipients'], ['setup', 'Setup']];
+    const tabs = [['performance', 'Performance'], ['recipients', 'Recipients'], ['templates', 'Templates'], ['setup', 'Setup']];
     el.innerHTML = '<div class="lc-dr-h"><span class="lc-bkt">' + lcEsc_(s.bucket) + '</span><div class="t"><small>' + lcEsc_(LC_SEQ[s.bucket] || '') +
       ' · Email ' + lcEsc_(s.order || '') + '</small><h2>' + lcEsc_(s.name) + '</h2></div>' + close + '</div>' +
       '<div class="lc-dr-tabs">' + tabs.map(([k, l]) => '<button data-act="dtab" data-tab="' + k + '" class="' + (D.tab === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div>' +
@@ -466,6 +466,7 @@ function lcRenderDrawer_() {
 
 function lcStepTab_(D) {
   const d = D.data, s = d.step, c = s.counts, t = s.tracking || {}, sent = c.sent;
+  if (D.tab === 'templates' && typeof lcTemplatesTab_ === 'function') return lcTemplatesTab_(D);
   if (D.tab === 'recipients') {
     if (!d.recipients.length) return '<div class="lc-empty">No one has received this email yet.</div>';
     return '<div>' + d.recipients.map(r => {
@@ -477,7 +478,7 @@ function lcStepTab_(D) {
     }).join('') + '</div>';
   }
   if (D.tab === 'setup') {
-    const rev = d.revisions[0];
+    const rev = (d.revisions || []).find(r => r.status === 'published');
     const rules = (s.stop_rules || []).map(r => '<li>' + LC_ICON.stop + '<span>' + lcEsc_((LC_SIGNAL[r.signal] || r.signal) + ' ' + (LC_STOPS[r.stops] || 'stops it')) + '</span></li>').join('');
     return '<div class="lc-sec"><h4>Sends</h4><dl class="lc-kv"><dt>When</dt><dd>' + lcEsc_(lcTiming_(s.timing, LC.ov.steps)) + '</dd>' +
       '<dt>Type</dt><dd>' + (s.category === 'service' ? 'Service' : 'Marketing') + '</dd>' +
@@ -614,6 +615,7 @@ function lcOnClick_(e) {
   const t = e.target.closest('[data-act]'); if (!t) return;
   const act = t.dataset.act;
   if (act.startsWith('cmp-')) cmpOnClick_(t);
+  else if (act.startsWith('tpl-')) lcTplAct_(act, t.dataset.id, t.dataset.name);
   else if (act === 'tab') { LC.tab = t.dataset.tab; if ((LC.tab === 'contacts' || LC.tab === 'campaigns') && !LC.contacts) lcLoadContacts_(); lcRenderTabs_(); lcRenderBody_(); }
   else if (act === 'refresh') lcRefresh_(true);
   else if (act === 'mode') { if (LC.mode !== t.dataset.mode) { LC.mode = t.dataset.mode; LC.ov = null; lcRender_(); lcRefresh_(); } }

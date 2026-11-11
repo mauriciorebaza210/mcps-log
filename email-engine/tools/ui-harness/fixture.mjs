@@ -14,8 +14,9 @@ rows('Permissions', [{ username: 'mau', roles: 'editor,approver,operator', activ
 rows('Rulesets', [{ rule_rev: 'bc-1', json: ruleset }]);
 rows('Revisions', [
   { revision_id: 'rev_b_intro_1', step_id: 'b_intro', rev_no: 1, subject: 'An introduction from Mission Custom Pools', preheader: 'Meet Mission Custom Pool Solutions, the service side of the family that built your pool.', status: 'published', approver: 'antonio@mcpoolsolutions.org', approved_at: iso(8) },
-  { revision_id: 'rev_b_followup_1', step_id: 'b_followup', rev_no: 1, subject: 'Following up on your pool', status: 'published', approver: 'antonio@mcpoolsolutions.org', approved_at: iso(5) },
+  { revision_id: 'rev_b_followup_1', step_id: 'b_followup', rev_no: 1, subject: 'Following up on your pool', status: 'published', approver: 'antonio@mcpoolsolutions.org', approved_at: iso(5), format: 'full', source_name: 'Follow Up - first try.html', source_file_id: 't3' },
   { revision_id: 'rev_c_welcome_2', step_id: 'c_welcome', rev_no: 2, subject: 'Welcome to Mission Custom Pool Solutions', preheader: 'Your startup date and what happens next.', status: 'published', approver: 'antonio@mcpoolsolutions.org', approved_at: iso(6) },
+  { revision_id: 'draft_b_followup_x1', step_id: 'b_followup', rev_no: 0, subject: 'A quick follow-up, {{FirstName}}', status: 'draft', format: 'full', source_name: 'Follow Up - short.html', source_file_id: 't2', editor: 'mau', created_at: iso(0.2) },
   { revision_id: 'rev_c_progress_1', step_id: 'c_progress', rev_no: 1, subject: 'Your startup: week {{n}}', status: 'published', approver: 'mauricio@mcpoolsolutions.org', approved_at: iso(4) }]);
 const C = [], E = [], D = [], G = [];
 first.forEach((f, i) => {

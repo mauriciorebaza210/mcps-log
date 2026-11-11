@@ -17,6 +17,7 @@
 //                       chosen on the date). A batch dated today starts immediately; later ones start in that
 //                       morning's run (EE_startDueBatches_, called from Main.js).
 //   cancel_batch       before it starts
+//   list_templates | open_template | import_template | approve_draft | discard_draft   Template Library (Templates.js)
 //   move_batch         a planned batch to another start date (today or later)
 //   send_override      one planned send: skip | move (inside its window) | next_run | clear (Overrides tab)
 //   set_send_time      a campaign's default send time (Config send_time_<bucket>), then re-plan today's runs
@@ -28,7 +29,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
-var EE_ADMIN_ACTIONS = { move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
+var EE_ADMIN_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -36,6 +38,8 @@ function EE_adminRun_(env, core, req, deps) {
   var out;
   // The full write path (auth, permissions, relay, engine) with no effect: the speed check (CP6c).
   if (action === 'ping') return { ok: true, at: new Date(env.now()).toISOString() };
+  // Looking at templates changes nothing, so it isn't logged (Templates.js).
+  if ((action === 'list_templates' || action === 'open_template' || action === 'open_draft') && actor) return EE_templateAction_(env, core, action, p, actor, deps);
   if (!EE_ADMIN_ACTIONS[action]) out = { ok: false, error: 'unknown action' };
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };
@@ -59,6 +63,7 @@ function EE_adminRun_(env, core, req, deps) {
     }
   }
   else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
+  else if (EE_TEMPLATE_ACTIONS[action]) out = EE_templateAction_(env, core, action, p, actor, deps);
   else if (action === 'set_send_time') {
     var sb = String(p.bucket || ''), st = EE_validSendTime_(p.time);
     if (!/^[A-F]$/.test(sb) || !st) out = { ok: false, error: 'bucket A–F and a time between 6:00 AM and 8:00 PM on a quarter hour required' };
@@ -234,7 +239,7 @@ function EE_startDueBatches_(env, core) {
 // Apps Script entry for the relay.
 function EE_admin_(req) {
   var x = EE_core_();
-  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
+  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, drive: EE_driveDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
     runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; } });
 }
 // One pending run at a time; the trigger removes itself when it fires.

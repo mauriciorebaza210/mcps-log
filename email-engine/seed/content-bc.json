@@ -1,13 +1,48 @@
 {
   "_comment": "First drafts for the B Intro and C Welcome (CP4). Bodies live in email-engine/templates/; approval publishes an immutable revision of subject + body + blocks + fields.",
   "steps": {
-    "b_intro":   { "subject": "An introduction from Mission Custom Pools",
-                   "preheader": "Meet Mission Custom Pool Solutions, the service side of the family that built your pool.",
-                   "body": "B/b_intro.html", "details_box": "", "blocks": [] },
-    "c_welcome": { "subject": "Welcome to Mission Custom Pool Solutions",
-                   "preheader": "Your startup date and what happens next.",
-                   "body": "C/c_welcome.html", "details_box": "Startup begins: {{StartupDate}}|Pool address: {{Address}}",
-                   "blocks": ["PoolSchool"] }
+    "b_intro": {
+      "subject": "An introduction from Mission Custom Pools",
+      "preheader": "Meet Mission Custom Pool Solutions, the service side of the family that built your pool.",
+      "body": "B/b_intro.html",
+      "details_box": "",
+      "blocks": []
+    },
+    "c_welcome": {
+      "subject": "Welcome to Mission Custom Pool Solutions",
+      "preheader": "Your startup date and what happens next.",
+      "body": "C/c_welcome.html",
+      "details_box": "Startup begins: {{StartupDate}}|Pool address: {{Address}}",
+      "blocks": [
+        "PoolSchool"
+      ]
+    },
+    "c_progress": {
+      "subject": "How your new pool is settling in",
+      "preheader": "A short weekly update during your first month.",
+      "body": "C/c_progress.html",
+      "details_box": "",
+      "blocks": []
+    },
+    "c_maint": {
+      "subject": "Keep your new pool looking its best",
+      "preheader": "Weekly service from the team that started your pool.",
+      "body": "C/c_maint.html",
+      "details_box": "",
+      "blocks": []
+    },
+    "c_final": {
+      "subject": "Your pool's first month is complete",
+      "preheader": "What happens now, and how to reach us.",
+      "body": "C/c_final.html",
+      "details_box": "",
+      "blocks": []
+    }
   },
-  "blocks": { "PoolSchool": { "flag": "pool_school", "html": "blocks/PoolSchool.html" } }
+  "blocks": {
+    "PoolSchool": {
+      "flag": "pool_school",
+      "html": "blocks/PoolSchool.html"
+    }
+  }
 }

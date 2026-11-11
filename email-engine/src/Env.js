@@ -26,7 +26,9 @@ var EE_TABLES = {
   Suppressions_Test: ['email_norm', 'scope'],
   Holds: ['key', 'held_days', 'last_held_on', 'reason'],
   Revisions: ['revision_id', 'step_id', 'rev_no', 'subject', 'preheader', 'details_box', 'body_file_id', 'body_sha256',
-    'blocks_json', 'fields_json', 'status', 'editor', 'approver', 'approved_at', 'content_hash', 'parent_revision_id', 'last_seq'],
+    'blocks_json', 'fields_json', 'status', 'editor', 'approver', 'approved_at', 'content_hash', 'parent_revision_id', 'last_seq',
+    // Template Library: 'body' (MCPS frame) or 'full' (complete file), and where it came from (Templates.js).
+    'format', 'source_file_id', 'source_name', 'source_modified', 'created_at', 'published_as'],
   Rulesets: ['rule_rev', 'json', 'published_at', 'published_by'],
   Fields: ['field', 'source', 'key', 'fallback', 'required', 'format'],
   Config: ['key', 'value'],
@@ -364,7 +366,7 @@ function EE_renderDelivery_(store, row) {
   var L = linkSecret && c.track_base ? MCPS_EMAIL_TRACKING.links({ base: c.track_base, token: row.token, mode: row.mode,
     hmacHex: function (m) { return EE_hmacHex_(linkSecret, m); } }) : null;
   var out = MCPS_EMAIL_RENDER.render({
-    revision: { subject: rev.subject, preheader: rev.preheader, details_box: rev.details_box,
+    revision: { subject: rev.subject, preheader: rev.preheader, details_box: rev.details_box, format: rev.format || '',
       body_html: EE_readVerified_(rev.body_file_id, rev.body_sha256) },
     blocks: blocks, fields: rev.fields_json || [], contact: contact,
     context: { sender_name: c.sender_name, deliveryToken: row.token,

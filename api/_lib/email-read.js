@@ -241,7 +241,8 @@ export function buildStep(tables, caps, stepId, now, opts = {}) {
   rows.forEach(d => { const g = eng[d.delivery_id]; Object.entries((g && g.links_json) || {}).forEach(([k, v]) => { links[k] = (links[k] || 0) + Number(v || 0); }); });
   const rev = (tables.Revisions || []).filter(r => r.step_id === stepId).sort((a, b) => b.rev_no - a.rev_no)
     .map(r => ({ revision_id: r.revision_id, rev_no: r.rev_no, status: r.status, subject: r.subject, preheader: r.preheader || '',
-      approver: r.approver || '', approved_at: r.approved_at || '' }));
+      approver: r.approver || '', approved_at: r.approved_at || '', editor: r.editor || '', created_at: r.created_at || '',
+      format: r.format || 'body', source_name: r.source_name || '', source_file_id: r.source_file_id || '' }));
   return { mode: ov.mode, step, revisions: rev, links,
     recipients: rows.map(d => {
       const c = contacts[d.contact_id] || {};
