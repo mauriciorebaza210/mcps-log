@@ -10,7 +10,7 @@ Resume in any Claude Code session with `/email-engine`.
   - Imported people are real contacts (`is_test` N): in test mode the planner never enrolls them; at go-live, only people started by a batch get emails.
 - **Batches fix (aaa92d5, engine cp7-3):** test contacts and anyone who already had a sequence are never picked (found on the preview).
 - **Waiting on Mau (2026-11-10, ask again when resuming):**
-  1. **Campaign layout** (PLAN.md → Plan changes 2026-11-10 "Open: where campaigns are set up"): Campaigns tab first (recommended) vs. wizard only vs. calendar vs. a button on the Emails panel. Mau said not to edit anything until he picks.
+  1. **Campaign layout** (PLAN.md → Plan changes 2026-11-10 "Open: where campaigns are set up"): Campaigns tab added **alongside** Emails (recommended, "B": Campaigns = who + when, Emails = what/templates/approvals) vs. Campaigns replacing Emails ("A") vs. wizard only vs. a button on the Emails panel. The Emails tab must stay (Mau). Don't edit anything until he picks.
   2. Archive or trash the old test threads in Tony's mailbox (a one-click cleanup, not written yet).
   3. Tony's header row and his ChatGPT templates (Mau is emailing Tony; the short email is final, see Session notes).
 - **Next action:** ask Mau (1); then build the restart-with-warning change and the chosen campaign layout; then the other 5 B/C emails + Template Library.
