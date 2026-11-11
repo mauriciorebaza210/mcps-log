@@ -81,3 +81,11 @@ test('Names: comma order, titles, single words, Spanish compound surnames', () =
   assert.deepEqual(I.splitName('ANA DE LA CRUZ'), { first: 'Ana', last: 'De La Cruz' }, 'all caps is fixed');
   assert.deepEqual(I.splitName('MADONNA'), { first: 'Madonna', last: '' });
 });
+
+test('A paste that opens with a title line is still read as tab-separated (commas inside cells stay put)', () => {
+  const r = run('MCP Customers 2019-2024\n\nCustomer Name\tE-mail Address\tProperty Address\n' +
+    'Lopez, Maria\tmaria@example.com\t118 Canyon Oak, Boerne, TX 78006\n');
+  assert.equal(r.h, 2);
+  const c = r.out.contacts[0];
+  assert.deepEqual([c.first_name, c.last_name, c.email_norm, c.address], ['Maria', 'Lopez', 'maria@example.com', '118 Canyon Oak, Boerne, TX 78006']);
+});

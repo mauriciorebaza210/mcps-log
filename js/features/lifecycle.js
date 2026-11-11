@@ -8,7 +8,7 @@
 // Styles: lifecycle.css (scoped to .lc / .lc-layer).
 // ══════════════════════════════════════════════════════════════════════════════
 
-const LC = { tab: 'emails', mode: null, ov: null, contacts: null, q: '', bucket: '', loading: false, error: null,
+const LC = { tab: 'emails', mode: null, ov: null, contacts: null, q: '', bucket: '', review: '', loading: false, error: null,
   drawer: null, root: null, bound: false, runPending: 0, busy: {} };
 const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
 const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup' };
@@ -330,16 +330,16 @@ function lcContacts_() {
   const bar = '<div class="lc-bar"><label class="lc-search">' + LC_ICON.search + '<input type="search" placeholder="Search people" value="' + lcEsc_(LC.q) +
     '" data-lc-input="q" aria-label="Search people"></label><div class="lc-seg">' +
     [['', 'All'], ['B', 'MCP Legacy'], ['C', 'MCP Startup']].map(([k, l]) => '<button data-act="bucket" data-bucket="' + k + '" class="' + (LC.bucket === k ? 'on' : '') + '">' + l + '</button>').join('') +
-    '</div></div>';
+    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
   if (!LC.contacts) return bar + '<div class="lc-sk" style="height:320px"></div>';
   const q = LC.q.trim().toLowerCase();
-  const rows = LC.contacts.contacts.filter(c => (!LC.bucket || c.bucket === LC.bucket) &&
+  const rows = LC.contacts.contacts.filter(c => (!LC.bucket || c.bucket === LC.bucket) && (!LC.review || c.review_status === LC.review) &&
     (!q || [c.first_name, c.last_name, c.email].some(v => String(v || '').toLowerCase().includes(q))));
   if (!rows.length) return bar + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
   return bar + '<div class="lc-card"><table class="lc-table"><thead><tr><th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
-      const status = !seq ? lcTag_('Not enrolled', '') : seq.status === 'active' ? lcTag_('Active', 'live') :
+      const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
         seq.status === 'stopped' ? lcTag_('Stopped · ' + lcStopWord_(seq.stop_reason), 'warn') : lcTag_(seq.status, '');
       return '<tr class="click" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0"><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' +
         lcEsc_(lcInitials_(c.first_name, c.last_name)) + '</span><div><b>' + lcEsc_([c.first_name, c.last_name].filter(Boolean).join(' ')) +
@@ -347,6 +347,13 @@ function lcContacts_() {
         '<td class="hide-xs"><span class="lc-seqname"><span class="lc-bkt sm">' + lcEsc_(c.bucket) + '</span>' + lcEsc_(LC_SEQ[c.bucket] || '') + '</span></td>' +
         '<td>' + status + '</td><td class="hide-sm">' + (last ? lcEsc_(lcStepName_(last.step_id)) + ' <span style="color:var(--muted)">· ' + lcEsc_(lcAgo_(last.sent_at)) + '</span>' : '<span style="color:var(--muted)">–</span>') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
+}
+
+// Imported people wait in Needs review until a batch starts them.
+function lcReviewChip_() {
+  const n = LC.contacts.contacts.filter(c => c.review_status === 'needs_review').length;
+  if (!n && !LC.review) return '';
+  return '<button class="lc-btn sm' + (LC.review ? ' primary' : '') + '" data-act="review">Needs review · ' + n + '</button>';
 }
 
 // ── Drawers ───────────────────────────────────────────────────────────────────
@@ -544,6 +551,8 @@ function lcOnClick_(e) {
   else if (act === 'dtab' && LC.drawer) { LC.drawer.tab = t.dataset.tab; lcRenderDrawer_(); }
   else if (act === 'bucket') { LC.bucket = t.dataset.bucket; lcRenderBody_(); }
   else if (act === 'run') lcRunNow_();
+  else if (act === 'import') lcOpenImport_();
+  else if (act === 'review') { LC.review = LC.review ? '' : 'needs_review'; lcRenderBody_(); }
   else if (act === 'enabled') lcSetEnabled_(!LC.ov.engine.enabled);
   else if (act === 'pause') lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));
   else if (act === 'resolve') lcResolve_(t.dataset.do, t.dataset.id);

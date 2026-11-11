@@ -58,9 +58,11 @@
   // commas and newlines, CRLF and a BOM are handled.
   function parseDelimited(text) {
     text = String(text || '').replace(/^﻿/, '');
-    var firstLine = text.split(/\r?\n/)[0] || '';
-    var delim = (firstLine.match(/\t/g) || []).length > (firstLine.match(/,/g) || []).length ? '\t'
-      : ((firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',');
+    // The separator is judged on the first 10 lines, not the first: exports often open with a title line.
+    var head = text.split(/\r?\n/).slice(0, 10).join('\n');
+    var count = function (re) { return (head.match(re) || []).length; };
+    var tabs = count(/\t/g), commas = count(/,/g), semis = count(/;/g);
+    var delim = tabs && tabs >= commas / 2 ? '\t' : (semis > commas ? ';' : ',');
     var rows = [], row = [], cell = '', q = false;
     for (var i = 0; i < text.length; i++) {
       var ch = text[i];
