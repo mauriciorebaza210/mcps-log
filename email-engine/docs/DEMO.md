@@ -1,41 +1,31 @@
-# Lifecycle Email demo for Tony
+# Lifecycle Email walkthrough (Mau only)
 
-About 15 minutes. Everything runs in **test mode**: only the demo addresses can receive anything, and no customer is ever emailed.
+About 15 minutes. Everything runs in **test mode** and every email goes to **your** plus-addresses (`mauricio+demo…@`). Nothing reaches Tony or a customer.
 
-## The day before: one setting
+Do it in the Chrome window that's signed in to Vercel. The emails' links point at the preview site, which sits behind Vercel's login, so clicks only work there. Open your Gmail in that same window.
 
-The emails' links point at the preview site, which sits behind Vercel's login. On Tony's phone a click would land on a Vercel sign-in page. Pick one:
+## Setup (2 minutes)
 
-- **A. Turn Vercel's protection off for preview deployments during the demo (recommended).** Vercel → mcps-log → Settings → Deployment Protection → Vercel Authentication → off for Preview. Turn it back on right after. Clicks, opens and unsubscribes then work from any phone. The preview behaves like the live portal: it still needs a portal login.
-- **B. Do the clicking from your laptop.** Use a Chrome window signed in to Vercel (it can open Tony's demo email in Gmail on the web). Replies still come from Tony's phone. Opens won't be counted.
+1. In Tony's Apps Script, run **`eeDemoSetup`**. The log lists three addresses:
+   - `mauricio+demo1b1@`: MCP Legacy, you'll **click** this one
+   - `mauricio+demo1b2@`: MCP Legacy, you'll **reply** to this one
+   - `mauricio+demo1c1@`: MCP Startup (startup in 3 days)
+2. Open the preview → **Lifecycle Email**.
 
-## 10 minutes before: rehearse
+## Walkthrough
 
-1. In Tony's Apps Script, run **`eeDemoSetup`**. The log lists four addresses:
-   - `antonio+demo1b@` (MCP Legacy) and `antonio+demo1c@` (MCP Startup)
-   - `mauricio+demo1b@` and `mauricio+demo1c@`
-2. Open the portal preview → **Lifecycle Email** → **Run now**. Within a minute or two: "Run finished · 4 sent".
-3. Check that the emails arrived on both phones. Then run **`eeDemoSetup`** again, so the real demo starts from a clean round 2.
+| # | Do | What should happen |
+|---|---|---|
+| 1 | **Run now** → confirm | "Run finished · 3 sent": 2 intros and 1 welcome in your inbox, from Tony's address |
+| 2 | Open the intro to **…demo1b1** → tap **Get your free quote** | The quote page opens. On the Intro's **Recipients** tab: **Verified click** |
+| 3 | **Run now** | **Contacts** → Mau Click 1: **Stopped · clicked**. No follow-up will ever go to it |
+| 4 | Reply to the intro to **…demo1b2** ("Sounds good") | |
+| 5 | **Run now** | Mau Reply 1: **Stopped · replied**, and your reply text on the Intro's Recipients tab |
+| 6 | Open the welcome to **…demo1c1** → **Unsubscribe** → **Unsubscribe** | "You're unsubscribed". After the next run: **Stopped · unsubscribed** |
+| 7 | **Activity** | Health, the runs you just made, and every action with your name under **Changes**. Try the **MCP Startup** switch off and on |
 
-## The demo
+Gmail may group the two intros into one conversation, because they have the same subject. Expand the one sent to the right address before you click or reply.
 
-| # | Do | Show / say | What happens |
-|---|---|---|---|
-| 1 | Open **Lifecycle Email** | Two sequences, each email's status and numbers. Click **MCP x MCPS Intro** → **Setup** | The schedule in words and what stops it. Only approved emails are live |
-| 2 | **Run now** → confirm | "Every morning at 9 this runs on its own" | "Run finished · 4 sent". Tony's phone gets the MCP intro and the startup welcome, from his own address |
-| 3 | Tony opens the **intro** and taps **Get your free quote** | The quote page opens | The Intro's **Recipients** tab shows **Verified click** for Tony right away |
-| 4 | **Run now** | "A real click stops the sequence, so he never gets a follow-up" | **Contacts** → Tony Demo: **Stopped · clicked** |
-| 5 | Mau replies to **his** intro from his phone ("Sounds good") | | |
-| 6 | **Run now** | "Replies stop it too. An out-of-office wouldn't" | Mau Demo: **Stopped · replied**. The reply text shows on the Intro's Recipients tab |
-| 7 | Tony taps **Unsubscribe** on the **welcome** email → **Unsubscribe** | "One click, and it's recorded before the page answers" | "You're unsubscribed". That address never gets another email |
-| 8 | **Activity** tab | Health, runs, and every action with who did it. The **MCP Startup** switch pauses one sequence | |
+## Run it again
 
-Things worth saying while it runs:
-- Every email goes out from Tony's Gmail and lands in his Sent folder like any email he writes.
-- If something goes wrong mid-send, it never sends twice. Anything unclear shows up under **Needs a decision** for a person to settle.
-- Opens are estimates (phones prefetch images). Only verified clicks and replies count as interest.
-
-## After
-
-- Option A: turn Vercel's preview protection back on.
-- The demo contacts stay in the engine as test data. They're harmless and only ever reach the demo addresses.
+Run **`eeDemoSetup`** again for a fresh round (`…demo2…`). Old demo contacts stay as test data and only ever reach your addresses.

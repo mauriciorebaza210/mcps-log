@@ -130,33 +130,29 @@ function eeAddTrackingTestContact() {
   Logger.log('Added ' + id + ' at ' + email + '. Run eeRunNow to send its B Intro with tracked links (track_base: ' + (cfg.track_base || 'NOT SET') + ').');
 }
 
-// Demo for Tony (CP6d, email-engine/docs/DEMO.md): a fresh round of four demo
-// contacts, one MCP Legacy and one MCP Startup each for Tony and Mau, at
-// plus-addresses (antonio+demoN… / mauricio+demoN…). The startups start in 3
-// days, so their Welcome is due today. Run again for a new round (rehearsal,
-// then the real thing). Test mode only: the addresses join the allowlist.
+// Demo walkthrough (CP6d, email-engine/docs/DEMO.md). Mau only: every demo
+// address is a plus-address of Mau's, so nothing reaches Tony or a customer.
+// One round = two MCP Legacy contacts (one to click, one to reply) and one MCP
+// Startup contact whose startup is in 3 days, so its Welcome is due today.
+// Run again for a fresh round (rehearsal, then the real walkthrough).
 function eeDemoSetup() {
   var x = EE_core_(), store = x.env.store, cfg = EE_config_(store);
   if (cfg.engine_mode === 'production') throw new Error('Demo contacts are for test mode only.');
   var round = store.rows('Contacts').filter(function (c) { return /^demo\d+_/.test(c.contact_id); })
     .reduce(function (m, c) { return Math.max(m, Number(c.contact_id.match(/^demo(\d+)_/)[1])); }, 0) + 1;
   var today = MCPS_LIFECYCLE.localDate(new Date(), EE_TZ), startup = MCPS_LIFECYCLE.addDays(today, 3);
-  var people = [{ who: 'tony', first: 'Tony', base: 'antonio' }, { who: 'mau', first: 'Mau', base: 'mauricio' }];
   var allow = String(cfg.test_recipients || '').split(',').map(function (s) { return s.trim(); }).filter(String);
   var made = [];
-  people.forEach(function (p) {
-    [['B', 'b'], ['C', 'c']].forEach(function (bk) {
-      var id = 'demo' + round + '_' + p.who + '_' + bk[1];
-      var email = p.base + '+demo' + round + bk[1] + '@mcpoolsolutions.org';
-      if (allow.indexOf(email) === -1) allow.push(email);
-      var c = { contact_id: id, email_norm: email, first_name: p.first, last_name: 'Demo ' + round, bucket: bk[0],
-        sub_bucket: bk[0] === 'B' ? 'B1' : '', review_status: 'confirmed', is_test: 'Y', source: 'demo', created_at: new Date().toISOString() };
-      if (bk[0] === 'C') { c.startup_date = startup; c.address = '4640 South Flores Road, Elmendorf, TX 78112'; c.pool_school = 'Y'; }
-      x.core.commitEntity('contact', c, 'contact:' + id + ':create');
-      made.push(email);
-    });
+  [['b1', 'B', 'Click'], ['b2', 'B', 'Reply'], ['c1', 'C', 'Startup']].forEach(function (d) {
+    var id = 'demo' + round + '_' + d[0], email = 'mauricio+demo' + round + d[0] + '@mcpoolsolutions.org';
+    if (allow.indexOf(email) === -1) allow.push(email);
+    var c = { contact_id: id, email_norm: email, first_name: 'Mau', last_name: d[2] + ' ' + round, bucket: d[1],
+      sub_bucket: d[1] === 'B' ? 'B1' : '', review_status: 'confirmed', is_test: 'Y', source: 'demo', created_at: new Date().toISOString() };
+    if (d[1] === 'C') { c.startup_date = startup; c.address = '4640 South Flores Road, Elmendorf, TX 78112'; c.pool_school = 'Y'; }
+    x.core.commitEntity('contact', c, 'contact:' + id + ':create');
+    made.push(email);
   });
   store.upsert('Config', { key: 'test_recipients', value: allow.join(',') });
-  Logger.log('Demo round ' + round + ' ready:\n  ' + made.join('\n  ') + '\nStartup date for the C contacts: ' + startup +
-    '\nNext: Run now from the Lifecycle Email page (or eeRunNow). Expect 4 emails: 2 intros, 2 welcomes.');
+  Logger.log('Demo round ' + round + ' ready (all to Mau):\n  ' + made.join('\n  ') + '\nStartup date for the MCP Startup contact: ' + startup +
+    '\nNext: Run now from the Lifecycle Email page. Expect 3 emails: 2 intros, 1 welcome.');
 }
