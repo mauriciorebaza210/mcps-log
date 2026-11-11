@@ -160,7 +160,6 @@ function eeDemoSetup() {
 // Marketing kit for Tony (run once as Tony; safe to re-run). Creates, in his Drive:
 //   MCPS Marketing/
 //     Email Templates/ (MCP Legacy, MCP Startup, Shared blocks)   ← the Template Library (CP7) reads here
-//     Contact Lists/                                              ← drop existing lists here, any format
 //     START HERE - ChatGPT instructions.txt                         ← paste into a ChatGPT Project
 //     Example - MCP x MCPS Intro (full template).html               ← a compliant starting point
 // and shares the folder with Mau. Nothing is emailed except Drive's own "shared with you" note to Mau.
@@ -170,9 +169,6 @@ function eeSetupMarketingKit() {
   var root = EE_folder_(props, 'EE_FOLDER_MARKETING', 'MCPS Marketing', null);
   var tpl = EE_folder_(props, 'EE_FOLDER_TEMPLATES', 'Email Templates', root);
   ['MCP Legacy', 'MCP Startup', 'Shared blocks'].forEach(function (n) { if (!tpl.getFoldersByName(n).hasNext()) { tpl.createFolder(n); log.push('folder Email Templates/' + n); } });
-  var lists = EE_folder_(props, 'EE_FOLDER_CONTACT_LISTS', 'Contact Lists', root);
-
-  // Tony's own contact list goes in Contact Lists as-is (any format); the import adapts to it (CP7).
 
   // Instructions for ChatGPT, and an example full template it can start from.
   var guideName = 'START HERE - ChatGPT instructions.txt';
@@ -203,13 +199,14 @@ function EE_exampleFullTemplate_() {
 var EE_CHATGPT_GUIDE = [
   'MCPS EMAIL TEMPLATES WITH CHATGPT',
   '',
-  'Setup (once): in ChatGPT, create a Project called "MCPS Emails". Paste everything below the line into the',
-  'Project instructions, and add "Example - MCP x MCPS Intro (full template).html" to the Project files.',
-  'The Project keeps every email you make, so you can come back later and ask for edits.',
+  'In ChatGPT, connect Google Drive once (Settings > Connectors > Google Drive). Then just say:',
+  '  "Read START HERE - ChatGPT instructions in my MCPS Marketing folder and write the MCP Legacy follow-up email."',
+  'ChatGPT follows the rules below and can use the Example file in Email Templates as a starting point.',
+  '(If it can\'t open Drive, attach this file and the example to the chat instead.)',
   '',
-  'When an email is ready: download the .html file and drop it into Google Drive > MCPS Marketing > Email Templates',
-  '> MCP Legacy (or MCP Startup). It then shows up in the portal, where it is checked and approved before it can send.',
-  'To edit one later: ask in the same Project, or attach the file from that Drive folder.',
+  'When an email is ready: download the .html file and drop it into MCPS Marketing > Email Templates > MCP Legacy',
+  '(or MCP Startup). It then shows up in the portal, where it is checked and approved before it can send.',
+  'To edit one later: ask ChatGPT to open it from that folder (or attach it) and say what to change.',
   '',
   '------------------------------------------------------------------------------',
   'You write HTML email templates for Mission Custom Pool Solutions (MCPS), a pool service company in the',
