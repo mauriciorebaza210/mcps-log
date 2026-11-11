@@ -9,7 +9,10 @@
 var _s={username:'mau',token:'t'}; function currentSessionToken_(){return 't';}
 function escHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 var FX=__FIXTURE__;
-FX.contacts.contacts.forEach(function(c,i){if(i%2===0){c.review_status='needs_review';c.tags=i%4===0?['vip']:['spa'];}c.area=['Boerne','Helotes','Castroville'][i%3];});FX.contacts.batches=[{batch_id:'b1',group:'B',count:20,order:'random',pick:'now',start_on:'2026-11-23',status:'planned',filters:{area:['Boerne']},contact_ids:[]},{batch_id:'b0',group:'B',count:20,order:'oldest',pick:'now',start_on:'2026-11-10',status:'started',started_count:20,started_at:'2026-11-10T15:00:00Z',filters:{}}];
+FX.contacts.contacts.forEach(function(c,i){if(i%2===0){c.review_status='needs_review';c.tags=i%4===0?['vip']:['spa'];}c.area=['Boerne','Helotes','Castroville'][i%3];});(function(){var F=['Hannah','Luis','Grace','Oscar','Megan','Victor','Chloe','Ramon','Emily','Hector','Olivia','Pedro','Ava','Mateo','Zoe','Diego','Lily','Andres','Nora','Felipe'],L=['Perez','Cruz','Diaz','Long','Kim','Soto','Hall','Ruiz','Young','Lara','King','Rios','Scott','Nunez','Green','Vargas','Adams','Leon','Baker','Mora'];
+for(var i=0;i<52;i++){var f=F[i%20],l=L[(i*7)%20];FX.contacts.contacts.push({contact_id:'w'+i,first_name:f,last_name:l,email:(f+'.'+l+i).toLowerCase()+'@example.com',bucket:i<46?'B':'C',review_status:'needs_review',is_test:false,area:['Boerne','Helotes','Castroville','Bulverde'][i%4],tags:i%5===0?['vip']:i%3===0?['spa']:[],source:i%2?'MCP 2019':'MCP 2022',created_at:'2026-10-'+String(1+i%28).padStart(2,'0'),sequence:null,last_email:null});}
+var ids=[];for(var k=0;k<20;k++)ids.push('w'+k);
+FX.contacts.batches=[{batch_id:'b1',group:'B',count:20,order:'random',pick:'now',start_on:'2026-11-23',status:'planned',filters:{area:['Boerne']},contact_ids:ids},{batch_id:'b2',group:'B',count:20,order:'random',pick:'at_start',start_on:'2026-12-07',status:'planned',filters:{},contact_ids:[]},{batch_id:'b0',group:'B',count:14,order:'oldest',pick:'now',start_on:'2026-11-02',status:'started',started_count:14,started_at:'2026-11-02T15:00:00Z',filters:{}}];})();
 window.fetch=function(u,o){u=new URL(u,"https://x.test/");if(u.searchParams.get('op')==='import'){var b=JSON.parse(o.body),out;
  if(b.stage==='mappings')out={ok:true,mappings:{}};
  else if(b.stage==='check'){var st=['new','new','existing','new','same_person','do_not_contact','new','customer'];var rows=b.contacts.map(function(c,i){return {row:c.row,email_norm:c.email_norm,first_name:c.first_name,last_name:c.last_name,status:st[i%st.length],other_email:st[i%st.length]==='same_person'?'old.address@example.com':'',reason:st[i%st.length]==='customer'?'active portal client':''};});var sm={};rows.forEach(function(r){sm[r.status]=(sm[r.status]||0)+1});out={ok:true,rows:rows,summary:sm};}
@@ -19,10 +22,12 @@ window.fetch=function(u,o){u=new URL(u,"https://x.test/");if(u.searchParams.get(
  var d=v==='overview'?FX.overview:v==='contacts'?FX.contacts:v==='step'?FX.step[id]:FX.contact[id];
  return new Promise(function(r){setTimeout(function(){r({ok:true,status:200,json:function(){return Promise.resolve({ok:true,data:d});}});},30);});};
 </script>
-<script src="__ROOT__/js/lib/contact-import.js"></script><script src="__ROOT__/js/features/lifecycle.js"></script><script src="__ROOT__/js/lib/batches.js"></script><script src="__ROOT__/js/features/lifecycle-import.js"></script><script src="__ROOT__/js/features/lifecycle-batches.js"></script>
+<script src="__ROOT__/js/lib/contact-import.js"></script><script src="__ROOT__/js/features/lifecycle.js"></script><script src="__ROOT__/js/lib/batches.js"></script><script src="__ROOT__/js/features/lifecycle-import.js"></script><script src="__ROOT__/js/features/lifecycle-batches.js"></script><script src="__ROOT__/js/features/lifecycle-campaigns.js"></script>
 <script>
 localStorage.clear();
 var p=new URLSearchParams(location.search);
 loadLifecycle(p.get('tab')||'emails');
+setTimeout(function(){if(p.get('cmp')){CMP.id=p.get('cmp');CMP.view=p.get('view')||'list';CMP.day=p.get('day')||'';CMP.stage=p.get('stage')||'active';lcRenderBody_();}
+ if(p.get('wiz')){lcOpenBatch_({group:p.get('cmp')||'B',start_on:p.get('wday')||''});if(p.get('restart'))BAT.restart=true;if(p.get('nb'))BAT.batches=+p.get('nb');BAT.step=p.get('wiz');batRender_();}},350);
 setTimeout(function(){if(p.get('batch'))setTimeout(function(){lcOpenBatch_();if(p.get('batch')==='later'){BAT.start_on='2026-11-23';batRender_();}},300);var d=p.get('drawer');if(p.get('confirm'))lcResolve_('abandon','x');if(d){var x=d.split(':');lcOpenDrawer_(x[0],x[1]);if(p.get('confirm'))lcResolve_('abandon','x');if(p.get('dtab'))setTimeout(function(){LC.drawer.tab=p.get('dtab');lcRenderDrawer_();},150);}},400);
 </script></body></html>

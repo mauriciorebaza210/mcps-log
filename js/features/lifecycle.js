@@ -8,7 +8,7 @@
 // Styles: lifecycle.css (scoped to .lc / .lc-layer).
 // ══════════════════════════════════════════════════════════════════════════════
 
-const LC = { tab: 'emails', mode: null, ov: null, contacts: null, q: '', bucket: '', review: '', loading: false, error: null,
+const LC = { tab: 'campaigns', mode: null, ov: null, contacts: null, q: '', bucket: '', review: '', loading: false, error: null,
   drawer: null, root: null, bound: false, runPending: 0, busy: {} };
 const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
 const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup' };
@@ -144,12 +144,13 @@ function loadLifecycle(sub) {
   LC.t0 = performance.now(); LC.perf = null;
   LC.root = document.getElementById('lc-root');
   if (!LC.root) return;
-  if (sub && ['emails', 'activity', 'contacts'].includes(sub)) LC.tab = sub;
+  if (sub && ['campaigns', 'emails', 'activity', 'contacts'].includes(sub)) LC.tab = sub;
   if (!LC.bound) {
     LC.root.addEventListener('click', lcOnClick_);
     LC.root.addEventListener('input', lcOnInput_);
     // Table rows are focusable (tabindex) but aren't buttons: Enter opens them too.
     LC.root.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('tr[data-act]')) e.target.click(); });
+    if (typeof cmpBind_ === 'function') cmpBind_(LC.root);
     LC.bound = true;
   }
   lcRender_();
@@ -165,12 +166,12 @@ function lcRefresh_(fresh) {
     .catch(e => { LC.error = e; })
     .finally(() => {
       LC.loading = false;
-      if (LC.tab === 'contacts' || LC.contacts) lcLoadContacts_(fresh);
+      if (LC.tab === 'contacts' || LC.tab === 'campaigns' || LC.contacts) lcLoadContacts_(fresh);
       lcRender_();
     });
 }
 function lcLoadContacts_(fresh) {
-  return lcLoad_('contacts', { limit: 1000, fresh: fresh ? '1' : '' }, (data) => { LC.contacts = data; if (LC.tab === 'contacts') lcRenderBody_(); })
+  return lcLoad_('contacts', { limit: 1000, fresh: fresh ? '1' : '' }, (data) => { LC.contacts = data; if (LC.tab === 'contacts' || LC.tab === 'campaigns') lcRenderBody_(); })
     .catch(e => { if (!LC.contacts) { LC.error = e; lcRenderBody_(); } });
 }
 
@@ -221,7 +222,7 @@ function lcRenderKpis_() {
 function lcRenderTabs_() {
   const el = lcSlot_('tabs'); if (!el) return;
   const ov = LC.ov;
-  const tabs = [['emails', 'Emails', ov ? ov.steps.length : ''], ['activity', 'Activity', ov && ov.attention.length ? ov.attention.length : ''],
+  const tabs = [['campaigns', 'Campaigns', ''], ['emails', 'Emails', ov ? ov.steps.length : ''], ['activity', 'Activity', ov && ov.attention.length ? ov.attention.length : ''],
     ['contacts', 'Contacts', ov ? ov.totals.contacts : '']];
   el.innerHTML = tabs.map(([k, l, c]) => '<button data-act="tab" data-tab="' + k + '" class="' + (LC.tab === k ? 'on' : '') + '">' + l +
     (c !== '' ? '<span class="c">' + c + '</span>' : '') + '</button>').join('');
@@ -233,6 +234,7 @@ function lcRenderBody_() {
   if (!LC.ov) { el.innerHTML = '<div class="lc-sk" style="height:260px;margin-bottom:16px"></div><div class="lc-sk" style="height:320px"></div>'; return; }
   if (LC.tab === 'activity') el.innerHTML = lcActivity_();
   else if (LC.tab === 'contacts') el.innerHTML = lcContacts_();
+  else if (LC.tab === 'campaigns') el.innerHTML = lcCampaigns_();
   else el.innerHTML = lcEmails_();
 }
 function lcErrorView_(e) {
@@ -548,7 +550,8 @@ async function lcBench(n = 20) {
 function lcOnClick_(e) {
   const t = e.target.closest('[data-act]'); if (!t) return;
   const act = t.dataset.act;
-  if (act === 'tab') { LC.tab = t.dataset.tab; if (LC.tab === 'contacts' && !LC.contacts) lcLoadContacts_(); lcRenderTabs_(); lcRenderBody_(); }
+  if (act.startsWith('cmp-')) cmpOnClick_(t);
+  else if (act === 'tab') { LC.tab = t.dataset.tab; if ((LC.tab === 'contacts' || LC.tab === 'campaigns') && !LC.contacts) lcLoadContacts_(); lcRenderTabs_(); lcRenderBody_(); }
   else if (act === 'refresh') lcRefresh_(true);
   else if (act === 'mode') { if (LC.mode !== t.dataset.mode) { LC.mode = t.dataset.mode; LC.ov = null; lcRender_(); lcRefresh_(); } }
   else if (act === 'step') lcOpenDrawer_('step', t.dataset.id);
