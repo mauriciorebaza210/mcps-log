@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="__ROOT__/style.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="__ROOT__/lifecycle.css">
+<style>body{margin:0;background:#F5F4EB}.fake{display:flex;min-height:100vh}.fake .sb{width:260px;background:#0d4d44;flex:none}.fake main{flex:1;padding:28px 32px;min-width:0}@media(max-width:700px){.fake .sb{display:none}.fake main{padding:16px}}</style>
+</head><body><div class="fake"><div class="sb"></div><main><div id="lc-root"></div></main></div>
+<script>
+var _s={username:'mau',token:'t'}; function currentSessionToken_(){return 't';}
+function escHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+var FX=__FIXTURE__;
+FX.contacts.contacts.forEach(function(c,i){if(i%2===0){c.review_status='needs_review';c.tags=i%4===0?['vip']:['spa'];}c.area=['Boerne','Helotes','Castroville'][i%3];});FX.contacts.batches=[{batch_id:'b1',group:'B',count:20,order:'random',pick:'now',start_on:'2026-11-23',status:'planned',filters:{area:['Boerne']},contact_ids:[]},{batch_id:'b0',group:'B',count:20,order:'oldest',pick:'now',start_on:'2026-11-10',status:'started',started_count:20,started_at:'2026-11-10T15:00:00Z',filters:{}}];
+window.fetch=function(u,o){u=new URL(u,"https://x.test/");if(u.searchParams.get('op')==='import'){var b=JSON.parse(o.body),out;
+ if(b.stage==='mappings')out={ok:true,mappings:{}};
+ else if(b.stage==='check'){var st=['new','new','existing','new','same_person','do_not_contact','new','customer'];var rows=b.contacts.map(function(c,i){return {row:c.row,email_norm:c.email_norm,first_name:c.first_name,last_name:c.last_name,status:st[i%st.length],other_email:st[i%st.length]==='same_person'?'old.address@example.com':'',reason:st[i%st.length]==='customer'?'active portal client':''};});var sm={};rows.forEach(function(r){sm[r.status]=(sm[r.status]||0)+1});out={ok:true,rows:rows,summary:sm};}
+ else if(b.stage==='save')out={ok:true,added:b.contacts.length-1,skipped:[{}],do_not_contact_recorded:1};
+ else out={ok:true};
+ return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(out);}});}if(u.searchParams.get('op')==='admin'){return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({ok:true,status:'queued'});}});}var v=u.searchParams.get('view'),id=u.searchParams.get('id');
+ var d=v==='overview'?FX.overview:v==='contacts'?FX.contacts:v==='step'?FX.step[id]:FX.contact[id];
+ return new Promise(function(r){setTimeout(function(){r({ok:true,status:200,json:function(){return Promise.resolve({ok:true,data:d});}});},30);});};
+</script>
+<script src="__ROOT__/js/lib/contact-import.js"></script><script src="__ROOT__/js/features/lifecycle.js"></script><script src="__ROOT__/js/lib/batches.js"></script><script src="__ROOT__/js/features/lifecycle-import.js"></script><script src="__ROOT__/js/features/lifecycle-batches.js"></script>
+<script>
+localStorage.clear();
+var p=new URLSearchParams(location.search);
+loadLifecycle(p.get('tab')||'emails');
+setTimeout(function(){if(p.get('batch'))setTimeout(function(){lcOpenBatch_();if(p.get('batch')==='later'){BAT.start_on='2026-11-23';batRender_();}},300);var d=p.get('drawer');if(p.get('confirm'))lcResolve_('abandon','x');if(d){var x=d.split(':');lcOpenDrawer_(x[0],x[1]);if(p.get('confirm'))lcResolve_('abandon','x');if(p.get('dtab'))setTimeout(function(){LC.drawer.tab=p.get('dtab');lcRenderDrawer_();},150);}},400);
+</script></body></html>
