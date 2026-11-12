@@ -833,3 +833,15 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-runs th,.lc-runs td{padding-left:12px;padding-right:12px}
 .lc-runs th:first-child,.lc-runs td:first-child{padding-left:18px}
 .lc-runs th:last-child,.lc-runs td:last-child{padding-right:16px}
+
+/* Start a batch: what each step is for, and field help */
+.lc-wiz-lead{margin:0 0 4px;color:var(--ink-2);font-size:14px;line-height:1.55;max-width:720px}
+.lc-fld-help{color:var(--muted);font-size:12.5px;line-height:1.4;max-width:240px}
+.lc-wiz-sec{display:flex;flex-direction:column;gap:2px;padding-top:14px;border-top:1px solid var(--line)}
+.lc-wiz-sec b{font-size:13.5px}
+.lc-wiz-sec small{color:var(--muted);font-size:12.5px}
+.lc-wiz-empty{border:1px dashed #9CCFCF;background:var(--aqua-bg);border-radius:12px;padding:22px 22px 18px}
+.lc-wiz-empty b{font-family:var(--f-head);color:var(--teal);font-size:16px}
+.lc-wiz-empty p{margin:6px 0 14px;color:var(--ink-2);max-width:560px}
+.lc-bat-acts{white-space:nowrap}
+.lc-bat-acts .lc-bat-move{width:auto;height:30px;margin-right:6px;font-size:12.5px}

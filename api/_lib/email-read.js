@@ -22,6 +22,7 @@ export const ROLE_CAPS = {
 };
 
 // The engine tabs the portal reads. Never raw Events (PLAN.md → Performance).
+const AUTO_ACTIONS = new Set(['sync_startups']);
 export const READ_TABS = ['Permissions', 'Config', 'Rulesets', 'Revisions', 'Contacts', 'Enrollments', 'Deliveries', 'Runs', 'Alerts', 'Engagement', 'ChangeLog', 'Batches'];
 // Read when they exist: the engine creates Overrides on first use (a missing tab fails a batchGet).
 export const OPTIONAL_TABS = ['Holds', 'Overrides'];
@@ -224,7 +225,8 @@ export function buildOverview(tables, caps, now, opts = {}) {
     alerts: (tables.Alerts || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20)
       .map(a => ({ at: String(a.at).split(' ')[0], kind: a.kind, detail: caps.has('view_pii') ? a.detail : '' })),
     // Who did what from the portal (Admin.js), newest first.
-    changes: (tables.ChangeLog || []).slice().sort(byDesc('at')).slice(0, 15).map(c => ({ at: c.at, actor: c.actor, action: c.action,
+    // The portal's automatic startup sync runs on every page open; it isn't someone's change.
+    changes: (tables.ChangeLog || []).filter(c => !AUTO_ACTIONS.has(c.action)).sort(byDesc('at')).slice(0, 15).map(c => ({ at: c.at, actor: c.actor, action: c.action,
       params: typeof c.detail === 'object' && c.detail ? c.detail : {}, result: c.result })),
     capabilities: [...caps].sort(),
     totals: {

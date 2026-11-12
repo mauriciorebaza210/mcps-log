@@ -10,7 +10,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 const BAT = { layer: null, step: 'who', group: 'B', filters: { area: [], tags: [], source: [] }, count: 20, order: 'random', pick: 'now',
-  start_on: '', send_time: '', batches: 1, every: 7, restart: false, removed: new Set(), seed: 1, busy: false };
+  start_on: '', send_time: '', batches: 1, every: 7, restart: false, removed: new Set(), moves: {}, seed: 1, busy: false };
 const BAT_STEPS = [['who', 'Who'], ['when', 'When'], ['people', 'People'], ['review', 'Review']];
 // Restarts: people who finished or stopped the campaign, started again on purpose (people chosen now only).
 var LC_RESTART_READY = true;   // engine support: Admin.js restart_ids (cp7-5)
@@ -25,7 +25,7 @@ function lcOpenBatch_(opts) {
   // Only MCP Legacy is started in batches; MCP Startup's people come from the portal.
   Object.assign(BAT, { step: 'who', group: 'B', filters: { area: [], tags: [], source: [] },
     count: 20, order: 'random', pick: 'now', start_on: opts.start_on && opts.start_on > batToday_() ? opts.start_on : batToday_(), send_time: '', batches: 1, every: 7,
-    restart: false, removed: new Set(), seed: Date.now() % 2147483646 + 1, busy: false });
+    restart: false, removed: new Set(), moves: {}, seed: Date.now() % 2147483646 + 1, busy: false });
   const layer = document.createElement('div');
   layer.className = 'lc-layer';
   layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-bat="close"></div><section class="lc-imp lc-wiz" role="dialog" aria-modal="true" aria-label="Start a batch"></section>';
@@ -79,8 +79,12 @@ function batPlan_() {
   let picked = [];
   if (BAT.pick === 'now') picked = MCPS_BATCHES.pick(batCandidates_(), batSpecOf_(batTotal_()), batRandom_(BAT.seed)).map(c => c._orig || c);
   let left = BAT.pick === 'now' ? picked.length : pool.length;
+  // Someone moved to another batch by hand (People step) goes there, if that batch still exists.
+  const movedTo = id => { const d = BAT.moves[id]; return d && dates.includes(d) ? d : ''; };
   return dates.map((d, i) => {
-    const people = BAT.pick === 'now' ? picked.slice(i * BAT.count, (i + 1) * BAT.count) : [];
+    let people = BAT.pick === 'now' ? picked.slice(i * BAT.count, (i + 1) * BAT.count) : [];
+    if (BAT.pick === 'now') people = people.filter(c => !movedTo(c.contact_id) || movedTo(c.contact_id) === d)
+      .concat(picked.filter((c, j) => Math.floor(j / BAT.count) !== i && movedTo(c.contact_id) === d));
     const n = BAT.pick === 'now' ? people.length : Math.min(BAT.count, Math.max(0, left));
     if (BAT.pick !== 'now') left -= n;
     return { start_on: d, people, count: n };
@@ -113,26 +117,39 @@ function batRender_() {
 
 const batSeg_ = (name, val, items) => '<div class="lc-seg">' + items.map(([v, l]) => '<button data-bat="set" data-name="' + name + '" data-val="' + v + '" class="' + (String(val) === String(v) ? 'on' : '') + '">' + l + '</button>').join('') + '</div>';
 
+// Each step opens with one plain sentence of what it's for; each field says what it does.
+const batLead_ = html => '<p class="lc-wiz-lead">' + html + '</p>';
+const batFld_ = (label, help, control) => '<div class="lc-fld"><span>' + label + '</span>' + control + (help ? '<small class="lc-fld-help">' + help + '</small>' : '') + '</div>';
 function batWho_() {
   const opts = MCPS_BATCHES.filterOptions(batAll_(), BAT.group);
   const chips = (key, label) => opts[key].length ? '<div class="lc-fld"><span>' + label + '</span><div class="lc-chips">' +
     opts[key].map(o => '<button class="lc-chip' + (BAT.filters[key].includes(o.value) ? ' on' : '') + '" data-bat="chip" data-key="' + key + '" data-val="' + lcEsc_(o.value) + '">' +
       lcEsc_(o.value) + ' <small>' + o.count + '</small></button>').join('') + '</div></div>' : '';
+  const all = MCPS_BATCHES.eligible(batAll_(), { group: BAT.group, filters: { area: [], tags: [], source: [] }, exclude: [...batExcluded_()] }).length;
   const waiting = MCPS_BATCHES.eligible(batAll_(), { group: BAT.group, filters: BAT.filters, exclude: [...batExcluded_()] }).length;
+  const filtered = Object.values(BAT.filters).some(l => l.length);
   const re = LC_RESTART_READY ? batRestartPool_().length : 0;
-  return '<div class="lc-wiz-stat"><b>' + waiting + '</b><span>waiting in Needs review' + (Object.values(BAT.filters).some(l => l.length) ? ' match these filters' : '') + '</span>' +
-    '<span class="lc-wiz-links"><button class="lc-link" data-bat="crm">MCP leads</button><button class="lc-link" data-bat="import">Import a file</button></span></div>' +
-    '<div class="lc-imp-row"><div class="lc-fld"><span>Campaign</span>' + batSeg_('group', BAT.group, [['B', 'MCP Legacy']]) + '</div>' +
-    '<label class="lc-fld"><span>People per batch</span><input class="lc-input" type="number" min="1" max="500" value="' + BAT.count + '" data-bat-num="count" style="width:110px"></label>' +
-    '<div class="lc-fld"><span>Order</span>' + batSeg_('order', BAT.order, [['random', 'Random'], ['oldest', 'Oldest first']]) + '</div></div>' +
-    chips('area', 'Area') + chips('tags', 'Tags') + chips('source', 'Source') +
-    (re ? '<label class="lc-wiz-re' + (BAT.restart ? ' on' : '') + '"><input type="checkbox" data-bat-check="restart"' + (BAT.restart ? ' checked' : '') + '><div><b>Also include ' + re + (re === 1 ? ' person' : ' people') +
-      ' who already had ' + lcEsc_(LC_SEQ[BAT.group]) + '</b><small>They start again from the first email. You’ll see who before anything is saved.</small></div></label>' : '');
+  const lead = batLead_('Choose who gets <b>' + lcEsc_(LC_SEQ[BAT.group]) + '</b>. You pick from the people waiting in <b>Needs review</b>: imported, and not emailed yet. Nothing is sent from this step.');
+  const restart = re ? '<label class="lc-wiz-re' + (BAT.restart ? ' on' : '') + '"><input type="checkbox" data-bat-check="restart"' + (BAT.restart ? ' checked' : '') + '><div><b>Also include ' + re + (re === 1 ? ' person' : ' people') +
+      ' who already had ' + lcEsc_(LC_SEQ[BAT.group]) + '</b><small>They start again from the first email. You’ll see who before anything is saved.</small></div></label>' : '';
+  if (!all) return lead + '<div class="lc-wiz-empty"><b>Nobody is waiting yet</b><p>Import a list first. Everyone you import waits in Needs review until a batch starts them, and anyone already on the list just gets your newer details.</p>' +
+    '<div class="lc-acts"><button class="lc-btn primary" data-bat="import">Import a list</button><button class="lc-btn" data-bat="crm">Add Sales Hub leads</button></div></div>' + restart;
+  return lead +
+    '<div class="lc-wiz-stat"><b>' + waiting + '</b><span>' + (waiting === 1 ? 'person' : 'people') + ' can start' + (filtered ? ' (of ' + all + ' waiting, with your filters)' : '') + '</span>' +
+    '<span class="lc-wiz-links"><button class="lc-link" data-bat="import">Import more</button></span></div>' +
+    '<div class="lc-imp-row">' +
+      batFld_('Campaign', 'The series of emails they’ll get.', batSeg_('group', BAT.group, [['B', 'MCP Legacy']])) +
+      batFld_('People per batch', 'How many start on each start day. Smaller batches spread out the replies.', '<input class="lc-input" type="number" min="1" max="500" value="' + BAT.count + '" data-bat-num="count" style="width:110px">') +
+      batFld_('Order', BAT.order === 'random' ? 'Random mixes areas and lists.' : 'Starts with whoever was imported first.', batSeg_('order', BAT.order, [['random', 'Random'], ['oldest', 'Oldest first']])) +
+    '</div>' +
+    ((opts.area.length || opts.tags.length || opts.source.length) ? '<div class="lc-wiz-sec"><b>Only include</b><small>Optional. Pick one or more to narrow it down; leave them all off to include everyone waiting. Source is the list someone came from.</small></div>' +
+      chips('area', 'Area') + chips('tags', 'Tags') + chips('source', 'Source') : '') + restart;
 }
 
 function batWhen_(plan) {
   const pool = batPool_().length, short = BAT.pick === 'now' && pool < batTotal_();
-  return '<div class="lc-imp-row"><label class="lc-fld"><span>First batch starts</span><input class="lc-input" type="date" min="' + batToday_() + '" value="' + BAT.start_on + '" data-bat-date></label>' +
+  return batLead_('Choose when the first emails go out. Split into several batches to spread them over weeks; each batch gets the whole series from its own start day.') +
+    '<div class="lc-imp-row"><label class="lc-fld"><span>First batch starts</span><input class="lc-input" type="date" min="' + batToday_() + '" value="' + BAT.start_on + '" data-bat-date></label>' +
     '<label class="lc-fld"><span>Send time</span><select class="lc-input" data-bat-time style="width:250px">' +
       cmpTimeOptions_(BAT.send_time, '<option value=""' + (BAT.send_time ? '' : ' selected') + '>Campaign default (' + lcEsc_(lcClock_(lcSendTime_(BAT.group))) + ')</option>') + '</select></label>' +
     '<label class="lc-fld"><span>Batches</span><input class="lc-input" type="number" min="1" max="12" value="' + BAT.batches + '" data-bat-num="batches" style="width:90px"></label>' +
@@ -148,12 +165,15 @@ function batPeople_(plan) {
   const restarting = batRestarting_(plan);
   const warn = restarting.length ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>' + restarting.length + (restarting.length === 1 ? ' person has' : ' people have') + ' had ' + lcEsc_(LC_SEQ[BAT.group]) + ' before</b>' +
     '<small>' + restarting.slice(0, 6).map(c => lcEsc_(cmpName_(c)) + ' (' + lcEsc_(batHistory_(c)) + ')').join(', ') + (restarting.length > 6 ? ' and ' + (restarting.length - 6) + ' more' : '') + '</small></div></div>' : '';
+  const move = c => plan.length > 1 ? '<select class="lc-input sm lc-bat-move" data-bat-move="' + lcEsc_(c.contact_id) + '" aria-label="Batch for ' + lcEsc_(cmpName_(c)) + '">' +
+    plan.map((b, i) => '<option value="' + b.start_on + '"' + (b.people.includes(c) ? ' selected' : '') + '>Batch ' + (i + 1) + ' · ' + lcEsc_(batDayLabel_(b.start_on)) + '</option>').join('') + '</select>' : '';
   const row = c => '<tr><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' + lcEsc_(lcInitials_(c.first_name, c.last_name)) + '</span><div><b>' + lcEsc_(cmpName_(c)) +
     (c.sequence ? ' <span class="lc-tag warn sm">Restart</span>' : '') + '</b><small>' + lcEsc_(c.email || '') + (c.area ? ' · ' + lcEsc_(c.area) : '') + (c.sequence ? ' · ' + lcEsc_(batHistory_(c)) : '') + '</small></div></div></td>' +
-    '<td class="r"><button class="lc-icon-btn" data-bat="remove" data-id="' + lcEsc_(c.contact_id) + '" aria-label="Leave out" title="Leave out">' + LC_ICON.x + '</button></td></tr>';
-  return warn + (BAT.order === 'random' && batPool_().length > batTotal_() ? '<div><button class="lc-btn sm" data-bat="shuffle">' + LC_ICON.refresh + 'Pick others</button></div>' : '') +
+    '<td class="r lc-bat-acts">' + move(c) + '<button class="lc-icon-btn" data-bat="remove" data-id="' + lcEsc_(c.contact_id) + '" aria-label="Leave out" title="Leave out">' + LC_ICON.x + '</button></td></tr>';
+  return batLead_('Check who is in each batch. ' + (plan.length > 1 ? 'Use the <b>Batch</b> menu to move someone to an earlier or later batch, ' : '') + 'or ✕ to leave someone out. They stay in Needs review for later.') +
+    warn + (BAT.order === 'random' && batPool_().length > batTotal_() ? '<div><button class="lc-btn sm" data-bat="shuffle">' + LC_ICON.refresh + 'Pick others</button></div>' : '') +
     plan.map(b => '<div class="lc-imp-sub">' + lcEsc_(batWhenLabel_(b.start_on)) +
-      '<small>' + b.count + (b.count === 1 ? ' person' : ' people') + '</small></div><div class="lc-card"><table class="lc-table"><tbody>' + b.people.map(row).join('') + '</tbody></table></div>').join('');
+      '<small>Batch ' + (plan.indexOf(b) + 1) + ' · ' + b.count + (b.count === 1 ? ' person' : ' people') + '</small></div><div class="lc-card"><table class="lc-table"><tbody>' + b.people.map(row).join('') + '</tbody></table></div>').join('');
 }
 function batHistory_(c) {
   const s = c.sequence || {};
@@ -170,7 +190,8 @@ function batReview_(plan) {
     let d = b.start_on;
     return steps.map((s, i) => { if (i) d = batAddDays_(d, Number((s.timing || {}).offset) || 0); return lcEsc_(s.name) + ' ' + lcEsc_(batDayLabel_(d)); }).join(' → ') + ' · ' + lcEsc_(lcClock_(batTime_()));
   };
-  return '<dl class="lc-kv lc-wiz-kv"><dt>Campaign</dt><dd>' + lcEsc_(LC_SEQ[BAT.group]) + '</dd><dt>Who</dt><dd>' + (what ? lcEsc_(what) : 'Everyone waiting') +
+  return batLead_('Check everything, then start. Nothing goes out before each batch’s start day, and planned batches can still be moved or cancelled.') +
+    '<dl class="lc-kv lc-wiz-kv"><dt>Campaign</dt><dd>' + lcEsc_(LC_SEQ[BAT.group]) + '</dd><dt>Who</dt><dd>' + (what ? lcEsc_(what) : 'Everyone waiting') +
     (BAT.restart ? ', plus people who had it before' : '') + ' · ' + (BAT.order === 'oldest' ? 'oldest first' : 'random') + '</dd>' +
     '<dt>People</dt><dd>' + (BAT.pick === 'now' ? 'Chosen now (you saw the list)' : 'Chosen on each start day') + '</dd>' +
     '<dt>Send time</dt><dd>' + lcEsc_(lcClock_(batTime_()) + ' ' + lcZoneOn_(BAT.start_on)) + (BAT.send_time ? '' : ' (campaign default)') + ', for every email in the campaign</dd></dl>' +
@@ -215,7 +236,7 @@ function batOnClick_(e) {
   else if (a === 'back') { BAT.step = order[Math.max(order.indexOf(BAT.step) - 1, 0)]; batRender_(); }
   else if (a === 'set') {
     const k = t.dataset.name; BAT[k] = k === 'every' ? Number(t.dataset.val) : t.dataset.val;
-    if (k === 'group') { BAT.filters = { area: [], tags: [], source: [] }; BAT.restart = false; BAT.removed = new Set(); }
+    if (k === 'group') { BAT.filters = { area: [], tags: [], source: [] }; BAT.restart = false; BAT.removed = new Set(); BAT.moves = {}; }
     batRender_();
   }
   else if (a === 'chip') { const list = BAT.filters[t.dataset.key], v = t.dataset.val, i = list.indexOf(v); if (i === -1) list.push(v); else list.splice(i, 1); batRender_(); }
@@ -230,5 +251,6 @@ function batOnChange_(e) {
   if (el.matches('[data-bat-num]')) { const k = el.dataset.batNum, max = k === 'batches' ? 12 : 500; BAT[k] = Math.max(1, Math.min(max, Number(el.value) || 1)); batRender_(); }
   else if (el.matches('[data-bat-date]')) { BAT.start_on = el.value < batToday_() ? batToday_() : el.value; batRender_(); }
   else if (el.matches('[data-bat-time]')) { BAT.send_time = el.value; batRender_(); }
+  else if (el.matches('[data-bat-move]')) { BAT.moves[el.dataset.batMove] = el.value; batRender_(); }
   else if (el.matches('[data-bat-check="restart"]')) { BAT.restart = el.checked; if (el.checked) BAT.pick = 'now'; batRender_(); }
 }
