@@ -169,7 +169,7 @@ const LC_STATE = { sent: ['Sent', 'live'], unknown: ['Unconfirmed', 'bad'], reco
   released: ['Retrying', ''], abandoned: ['Abandoned', ''] };
 const LC_ISSUE = { no_recent_run: 'No scheduled run in over a day', last_run_crashed: 'The last run crashed', unresolved_unknown: 'A send is unconfirmed',
   unresolved_reconcile: 'A send is still confirming', delivery_failed: 'An email failed', engine_unreadable: 'The engine can’t be reached' };
-const LC_ALERT = { backup_failed: 'Nightly backup failed', too_many_send_times: 'Too many send times', delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped', run_crashed: 'Run crashed',
+const LC_ALERT = { trigger_test_done: 'Trigger timing test finished', security_property_changed: 'Security setting changed', schema_incompatible: 'Engine code too old for its data', backup_failed: 'Nightly backup failed', too_many_send_times: 'Too many send times', delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped', run_crashed: 'Run crashed',
   journal_integrity: 'Safety pause', reply_scan_failed: 'Reply scan failed' };
 const LC_STOP = { clicked: 'clicked', replied: 'replied', form_submitted: 'requested service', suppressed_all: 'unsubscribed',
   prerequisite_expired: 'expired', bucket_changed: 'moved group', manual: 'stopped by hand' };
@@ -367,7 +367,32 @@ function lcActivity_() {
     '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
     (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +
     '<div>' + lcTodayRuns_() + '<div class="lc-card"><div class="lc-card-h"><h3>Recent runs</h3><small>Times in ' + lcEsc_(lcZoneOn_()) + '</small></div>' + runs + '</div>' +
-    '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div></div></div>';
+    '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div>' + lcChecks_() + '</div></div>';
+}
+// Engine checks: the trigger-precision test (Schedule.js → trigger_test). Before the
+// scheduler is installed, this measures how close to the planned minute Apps Script's
+// one-off triggers fire. Nothing is sent.
+function lcChecks_() {
+  if (!lcCan_('edit_config')) return '';
+  if (!LC.trig) { LC.trig = { loading: true }; lcAdmin_('trigger_test', { do: 'result' }).then(r => { LC.trig = r.ok ? { test: r.test } : { error: r.error }; if (LC.tab === 'activity') lcRenderBody_(); }).catch(() => { LC.trig = { error: 'Network error' }; }); }
+  const t = LC.trig.test, fmt = s => s == null ? '–' : (s < 0 ? '−' : '+') + (Math.abs(s) >= 60 ? Math.floor(Math.abs(s) / 60) + ' min ' : '') + (Math.abs(s) % 60) + ' s';
+  const rows = t ? '<ul class="lc-list">' + t.slots.map(s => '<li><div class="main"><b>' + lcEsc_(lcClockAt_(Date.parse(s.planned))) + '</b><small>planned</small></div>' +
+    (s.fired ? '<span class="num">' + lcEsc_(fmt(s.delta_s)) + '</span>' : '<span class="lc-dim">waiting…</span>') + '</li>').join('') + '</ul>' : '';
+  const sum = t && t.summary ? '<p class="lc-note">' + (t.summary.within_20_min ? lcTag_('Within 20 min', 'live') : lcTag_('Outside 20 min', 'bad')) +
+    ' Earliest ' + lcEsc_(fmt(t.summary.earliest_s)) + ', latest ' + lcEsc_(fmt(t.summary.latest_s)) + ' from the planned minute.</p>' : '';
+  const running = t && t.status === 'running';
+  return '<div class="lc-card"><div class="lc-card-h"><h3>Engine checks</h3>' + (running ? '<small>Running · about 8 min</small>' : '') + '</div>' +
+    '<div class="lc-checks"><b style="font-size:13.5px">Trigger timing</b><p class="lc-note" style="margin-top:2px">Plans 4 test timers 2 to 8 minutes out and records how close to the minute each one fires. Nothing is sent. Needed once before the scheduler is turned on.</p>' +
+    (LC.trig.error ? '<div class="lc-empty" style="text-align:left;padding:0">' + lcEsc_(LC.trig.error === 'unknown action' ? 'The engine needs an update for this test.' : LC.trig.error) + '</div>' : rows + sum) +
+    '<button class="lc-btn sm" data-act="trig-test"' + (running ? ' disabled' : '') + '>' + (t ? 'Run it again' : 'Test trigger timing') + '</button>' +
+    (running ? ' <button class="lc-link" data-act="trig-refresh">Refresh</button>' : '') + '</div></div>';
+}
+async function lcTrigTest_(refreshOnly) {
+  const r = await lcAdmin_('trigger_test', { do: refreshOnly ? 'result' : 'start' }).catch(() => ({ ok: false, error: 'Network error' }));
+  if (!r.ok) return lcToast_(r.error || 'That didn’t work', true);
+  LC.trig = { test: r.test };
+  if (!refreshOnly) lcToast_('Timing test started: results in about 8 minutes (and by email)');
+  lcRenderBody_();
 }
 // Engine-level problems only; per-email ones live in "Needs a decision".
 const lcSystemIssues_ = h => (h && h.issues || []).filter(i => !/^unresolved_|^delivery_failed$/.test(i.kind));
@@ -798,6 +823,8 @@ function lcDispatch_(t) {
   if (act === 'sgl-new') return sglOpen_();
   if (act.startsWith('tag-') && typeof tagAct_ === 'function') return tagAct_(t);
   if (act.startsWith('att-') && typeof attAct_ === 'function') return attAct_(t);
+  if (act === 'trig-test') return lcTrigTest_(false);
+  if (act === 'trig-refresh') return lcTrigTest_(true);
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);

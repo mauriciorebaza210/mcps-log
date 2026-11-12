@@ -227,3 +227,17 @@ test('Planned sends (view=plan): the engine\'s own decide() over enrollments, pl
   const pick = row('b_intro', 'b2');
   assert.deepEqual([pick[0], pick[3], pick[5]], ['2026-12-07', '', 20], 'pick-on-the-day: one row weighted by the batch size');
 });
+
+test('Trigger-precision spike: plans 4 one-off triggers, records how early/late each fired, summarises', () => {
+  const w = world('10:00');
+  const made = [];
+  const r = w.ctx_.EE_triggerTestPure_(w.env, 'start', { create: slots => slots.map((at, i) => { made.push(at); return 'uid' + i; }) });
+  assert.equal(r.ok, true); assert.equal(made.length, 4);
+  assert.equal(w.ctx_.EE_triggerTestPure_(w.env, 'start', { create: () => [] }).ok, false, 'one test at a time');
+  const planned = made.map(ms => ms);
+  [[0, 40], [1, -15], [2, 600], [3, 5]].forEach(([i, d]) => w.ctx_.EE_triggerTestFired_(w.env, 'uid' + i, planned[i] + d * 1000));
+  const t = JSON.parse(JSON.stringify(w.ctx_.EE_triggerTestPure_(w.env, 'result').test));
+  assert.equal(t.status, 'done');
+  assert.deepEqual(t.slots.map(s => s.delta_s), [40, -15, 600, 5]);
+  assert.deepEqual(t.summary, { earliest_s: -15, latest_s: 600, within_20_min: true });
+});

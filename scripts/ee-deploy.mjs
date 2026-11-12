@@ -36,16 +36,19 @@ function currentVersion() {
   const m = line.match(/@(\d+)/);
   return m ? Number(m[1]) : null;
 }
-async function whoami() {
-  for (let i = 0; i < 4; i++) {
+// wantVersion: keep asking (up to ~60 s) until that version answers; a just-deployed
+// version can take a while to replace the old one behind /exec.
+async function whoami(wantVersion) {
+  let last = null;
+  for (let i = 0; i < (wantVersion ? 20 : 4); i++) {
     try {
       const r = await fetch(WEBAPP, { redirect: 'follow' });
       const j = JSON.parse(await r.text());
-      if (j && j.effective_user) return j;
+      if (j && j.effective_user) { last = j; if (!wantVersion || j.version === wantVersion) return j; }
     } catch (e) { /* the new version can take a few seconds to answer */ }
     await new Promise(res => setTimeout(res, 3000));
   }
-  return null;
+  return last;
 }
 function codeVersion() {
   const m = fs.readFileSync(path.join(ENGINE, 'src', 'Main.js'), 'utf8').match(/var EE_VERSION = '([^']+)'/);
@@ -86,8 +89,8 @@ async function main() {
   const after = currentVersion();
   console.log('✔ deployed as Tony: @' + before + ' → @' + after + '\n' + dep.trim());
 
-  const live = await whoami();
   const wantVersion = rollback ? null : codeVersion();
+  const live = await whoami(wantVersion);
   const okUser = live && String(live.effective_user).toLowerCase() === OWNER;
   const okVersion = !wantVersion || (live && live.version === wantVersion);
   if (okUser && okVersion) {

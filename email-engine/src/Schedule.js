@@ -103,3 +103,50 @@ function EE_scheduleTrigger() {
   return EE_planRuns_(EE_env(), EE_triggerDeps_());
 }
 function EE_timedRun() { return EE_run_('scheduled'); }
+
+// ── Trigger-precision spike (PLAN.md → CP7: measure one-off .at() triggers before
+// installing the scheduler; failure row 58 assumes they fire within ~20 min of the slot).
+// The portal's "Test trigger timing" (admin action trigger_test) plans 4 one-off triggers
+// a few minutes apart; each records how early or late it fired, then deletes itself.
+// Nothing is sent. Results: Config trigger_test (JSON), shown on the Activity tab.
+var EE_TRIGGER_TEST_OFFSETS_MIN = [2, 4, 6, 8];
+function EE_triggerTestPure_(env, action, deps) {
+  var raw = (env.store.get('Config', 'trigger_test') || {}).value, cur = null;
+  try { cur = raw ? JSON.parse(raw) : null; } catch (e) { cur = null; }
+  if (action === 'result') return { ok: true, test: cur };
+  if (cur && cur.status === 'running' && env.now() - Date.parse(cur.started_at) < 30 * 60 * 1000) return { ok: false, error: 'a timing test is already running' };
+  var now = env.now(), slots = EE_TRIGGER_TEST_OFFSETS_MIN.map(function (m) { return now + m * 60000; });
+  var uids = deps.create(slots);
+  var test = { status: 'running', started_at: new Date(now).toISOString(), slots: slots.map(function (at, i) { return { uid: uids[i], planned: new Date(at).toISOString(), fired: '', delta_s: null }; }) };
+  env.store.upsert('Config', { key: 'trigger_test', value: JSON.stringify(test) });
+  return { ok: true, test: test };
+}
+// Records one firing (by trigger uid). Runs inside the trigger's own execution.
+function EE_triggerTestFired_(env, uid, firedMs) {
+  return env.withLock(function () {
+    var raw = (env.store.get('Config', 'trigger_test') || {}).value, t = raw ? JSON.parse(raw) : null;
+    if (!t) return null;
+    t.slots.forEach(function (s) { if (s.uid === uid && !s.fired) { s.fired = new Date(firedMs).toISOString(); s.delta_s = Math.round((firedMs - Date.parse(s.planned)) / 1000); } });
+    if (t.slots.every(function (s) { return s.fired; })) {
+      var d = t.slots.map(function (s) { return s.delta_s; });
+      t.status = 'done'; t.finished_at = new Date(firedMs).toISOString();
+      t.summary = { earliest_s: Math.min.apply(null, d), latest_s: Math.max.apply(null, d), within_20_min: d.every(function (x) { return Math.abs(x) <= 1200; }) };
+    }
+    env.store.upsert('Config', { key: 'trigger_test', value: JSON.stringify(t) });
+    return t;
+  });
+}
+function EE_triggerTestDeps_() {
+  return { create: function (slots) {
+    return slots.map(function (at) { return ScriptApp.newTrigger('EE_triggerTestFire').timeBased().at(new Date(at)).create().getUniqueId(); });
+  } };
+}
+function EE_triggerTestFire(e) {
+  var firedMs = Date.now(), uid = e && e.triggerUid;
+  ScriptApp.getProjectTriggers().filter(function (t) { return t.getUniqueId() === uid; }).forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  var t = EE_triggerTestFired_(EE_env(), uid, firedMs);
+  if (t && t.status === 'done') {
+    try { EE_env().alert('trigger_test_done', 'Trigger timing: earliest ' + t.summary.earliest_s + ' s, latest ' + t.summary.latest_s + ' s from the planned minute (' +
+      (t.summary.within_20_min ? 'all within 20 min' : 'NOT all within 20 min') + ').'); } catch (err) { /* the result is in Config */ }
+  }
+}

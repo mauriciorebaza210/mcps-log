@@ -725,3 +725,6 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-ed-attl svg{width:13px;height:13px}
 .lc-ed-att .lc-chip small{font-weight:600;opacity:.75}
 @media (max-width:760px){.lc-ed-att{padding-left:16px;padding-right:16px}}
+.lc-checks{padding:14px 18px 16px}
+.lc-checks .lc-list{margin:8px 0 10px;border:1px solid var(--line);border-radius:10px;padding:0 12px}
+.lc-checks .lc-list li{padding:8px 0}
