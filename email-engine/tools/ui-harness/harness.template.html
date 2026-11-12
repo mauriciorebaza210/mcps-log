@@ -11,10 +11,21 @@ function escHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){r
 var FX=__FIXTURE__;
 window.fetch=function(u,o){u=new URL(u,"https://x.test/");if(u.searchParams.get('op')==='import'){var b=JSON.parse(o.body),out;
  if(b.stage==='mappings')out={ok:true,mappings:{}};
- else if(b.stage==='check'){var st=['new','new','existing','new','same_person','do_not_contact','new','customer'];var rows=b.contacts.map(function(c,i){return {row:c.row,email_norm:c.email_norm,first_name:c.first_name,last_name:c.last_name,status:st[i%st.length],other_email:st[i%st.length]==='same_person'?'old.address@example.com':'',reason:st[i%st.length]==='customer'?'active portal client':''};});var sm={};rows.forEach(function(r){sm[r.status]=(sm[r.status]||0)+1});out={ok:true,rows:rows,summary:sm};}
+ else if(b.stage==='check'){var st=['new','possible_duplicate','existing','new','same_person','do_not_contact','new','customer'];var rows=b.contacts.map(function(c,i){var t=st[i%st.length];return {row:c.row,email_norm:c.email_norm,first_name:c.first_name,last_name:c.last_name,status:t,reason:t==='customer'?'active portal client':'',clean:i===0?{changed:['first_name','last_name'],kind:'person'}:i===3?{changed:['first_name'],kind:'couple'}:null,match:t==='possible_duplicate'?{contact_id:'x1',name:'Ana Diaz',email:'ana.diaz@gmail.com',address:'12 Oak St',reason:'same_household'}:t==='same_person'?{contact_id:'x2',name:'Luis Ruiz',email:'luis@old.com',reason:'same_person'}:t==='existing'?{contact_id:'x3',name:'Grace Diaz',email:c.email_norm,reason:'same_email'}:null};});var sm={};rows.forEach(function(r){sm[r.status]=(sm[r.status]||0)+1});out={ok:true,rows:rows,summary:sm,tidied:2};}
  else if(b.stage==='save')out={ok:true,added:b.contacts.length-1,skipped:[{}],do_not_contact_recorded:1};
  else out={ok:true};
- return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(out);}});}if(u.searchParams.get('op')==='crm'){var cb=o&&o.body?JSON.parse(o.body):null,co;
+ return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(out);}});}if(u.searchParams.get('op')==='clean'){var kb=o&&o.body?JSON.parse(o.body):null,ko;
+ if(!kb)ko={ok:true,ai:true,names:[{contact_id:'n1',name:'JOSE RODRIGUEZ',first_name:'JOSE RODRIGUEZ',last_name:'',email:'jose@gmial.com',after:{first_name:'Jose',last_name:'Rodriguez'},kind:'person',flags:[],needs_ai:false,issues:[{kind:'typo',suggestion:'jose@gmail.com'}]},
+ {contact_id:'n2',name:'john & mary smith',first_name:'john & mary smith',last_name:'',email:'smiths@example.com',after:{first_name:'John and Mary',last_name:'Smith'},kind:'couple',flags:[],needs_ai:false,issues:[]},
+ {contact_id:'n3',name:'Garza Family',first_name:'Garza Family',last_name:'',email:'garza@example.com',after:{first_name:'Garza family',last_name:'Garza'},kind:'family',flags:[],needs_ai:false,issues:[]},
+ {contact_id:'n4',name:'Mary Ann Lopez',first_name:'Mary Ann Lopez',last_name:'',email:'mal@example.com',after:{first_name:'Mary',last_name:'Ann Lopez'},kind:'person',flags:[],needs_ai:true,issues:[]},
+ {contact_id:'n5',name:'BLUE WAVE POOLS LLC',first_name:'BLUE WAVE POOLS LLC',last_name:'',email:'office@bluewave.com',after:{first_name:'',last_name:'BLUE WAVE POOLS LLC'},kind:'business',flags:['business'],needs_ai:false,issues:[{kind:'role'}]}],
+ pairs:[{a:{contact_id:'p1',name:'Ana Diaz',email:'ana.diaz@gmail.com',address:'12 Oak St',city:'Boerne',phone:'(210) 555-1234',bucket:'B',status:'needs_review'},b:{contact_id:'p2',name:'Ana Diaz',email:'anadiaz@yahoo.com',address:'12 Oak Street',city:'Boerne',phone:'',bucket:'B',status:'possible_duplicate'},reason:'same_person',confidence:'high'},
+ {a:{contact_id:'p3',name:'Luis Soto',email:'luis@example.com',address:'9 Elm Dr',city:'Helotes',bucket:'B',status:'needs_review'},b:{contact_id:'p4',name:'Rosa Soto',email:'rosa@example.com',address:'9 Elm Drive',city:'Helotes',bucket:'B',status:'needs_review'},reason:'same_household',confidence:'medium'}]};
+ else if(kb.stage==='ai')ko={ok:true,suggestions:[{contact_id:'n4',first_name:'Mary Ann',last_name:'Lopez',kind:'person'}]};
+ else ko={ok:true,updated:3,resolved:2};
+ return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(ko);}});}
+ if(u.searchParams.get('op')==='crm'){var cb=o&&o.body?JSON.parse(o.body):null,co;
  if(!cb)co={ok:true,breakdown:{leads:612,with_email:571,in_engine:52,by_source:{'import':402,unknown:186,service_request:21,one_time_job:3},year_built:{'with':498,without:114},by_area:{BOERNE:210,HELOTES:155,CASTROVILLE:98,BULVERDE:91,'—':58},by_status:{}},rule:{statuses:['LEAD'],lead_sources:['mcp','import','unknown'],year_built:'any',areas:[],group:'B'},auto:true,mcp_leads:{'new':431,existing:41,customer:14,opted_out:9,same_person:3},startups:{found:9,cancelled:1,not_synced:1,last_sync:new Date(Date.now()-42*60e3).toISOString(),result:null}};
  else if(cb.stage==='check')co={ok:true,total:498,summary:{'new':431,existing:41,customer:14,opted_out:9,same_person:3},rows:[{row:1,email_norm:'hannah.perez@example.com',first_name:'Hannah',last_name:'Perez',status:'new'},{row:2,email_norm:'luis.cruz@example.com',first_name:'Luis',last_name:'Cruz',status:'new'},{row:3,email_norm:'grace.diaz@example.com',first_name:'Grace',last_name:'Diaz',status:'new'}]};
  else co={ok:true,added:431,startups:{ok:true,added:1,updated:2,removed:0}};
@@ -26,13 +37,15 @@ window.fetch=function(u,o){u=new URL(u,"https://x.test/");if(u.searchParams.get(
  var d=v==='plan'?FX.plan[u.searchParams.get('bucket')||'B']:v==='overview'?FX.overview:v==='contacts'?FX.contacts:v==='step'?FX.step[id]:FX.contact[id];
  return new Promise(function(r){setTimeout(function(){r({ok:true,status:200,json:function(){return Promise.resolve({ok:true,data:d});}});},30);});};
 </script>
-<script src="__ROOT__/js/lib/contact-import.js"></script><script src="__ROOT__/js/features/lifecycle.js"></script><script src="__ROOT__/js/lib/batches.js"></script><script src="__ROOT__/js/features/lifecycle-import.js"></script><script src="__ROOT__/js/features/lifecycle-batches.js"></script><script src="__ROOT__/js/features/lifecycle-campaigns.js"></script><script src="__ROOT__/js/features/lifecycle-templates.js"></script><script src="__ROOT__/js/features/lifecycle-crm.js"></script>
+<script src="__ROOT__/js/lib/contact-import.js"></script><script src="__ROOT__/js/features/lifecycle.js"></script><script src="__ROOT__/js/lib/batches.js"></script><script src="__ROOT__/js/features/lifecycle-import.js"></script><script src="__ROOT__/js/features/lifecycle-batches.js"></script><script src="__ROOT__/js/features/lifecycle-campaigns.js"></script><script src="__ROOT__/js/features/lifecycle-templates.js"></script><script src="__ROOT__/js/features/lifecycle-crm.js"></script><script src="__ROOT__/js/features/lifecycle-cleanup.js"></script>
 <script>
 localStorage.clear();
 var p=new URLSearchParams(location.search);
 loadLifecycle(p.get('tab')||'emails');
 setTimeout(function(){if(p.get('cmp')){CMP.id=p.get('cmp');CMP.view=p.get('view')||'list';CMP.day=p.get('day')||'';CMP.stage=p.get('stage')||'active';cmpLoadPlan_(CMP.id);lcRenderBody_();}
  if(p.get('tplopen'))setTimeout(function(){lcTplAct_('tpl-open',p.get('tplopen'));},700);
+ if(p.get('imp'))setTimeout(function(){lcOpenImport_();impUseRows_([['Name','Email','Address'],['SUE DIAZ','sue@example.com','12 OAK ST'],['Ana Diaz','ana.d@yahoo.com','12 Oak St'],['Grace Diaz','grace@example.com','1 Elm'],['mo & li chen','mo@example.com','5 Pine'],['Luis Ruiz','luis@new.com','9 Elm'],['Do Not','dnc@example.com',''],['Pat Lee','pat@example.com',''],['Cust Omer','cust@example.com','']]);setTimeout(function(){impCheck_();},300);},500);
+ if(p.get('cln'))setTimeout(function(){clnOpen_(p.get('cln'));},500);
  if(p.get('crm'))setTimeout(function(){crmOpenLeads_();if(p.get('crm')==='check')setTimeout(function(){crmOnClick_({target:{closest:function(){return {dataset:{crm:'check'}};}}});},400);},500);
  if(p.get('more'))setTimeout(function(){document.querySelectorAll('.lc-day-send li').forEach(function(l){l.classList.add('open');});},400);
  if(p.get('time'))cmpEditTime_(p.get('cmp')||'B');

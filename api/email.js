@@ -26,6 +26,8 @@ import { READ_TABS, OPTIONAL_TABS, toTables, capabilitiesFor, buildOverview, bui
 import { relayEvents, relayAdmin } from './_lib/email-relay.js';
 import { checkImport, importRecord } from './_lib/email-import.js';
 import { leadBreakdown, leadCandidates, customerEmails, startupContacts, DEFAULT_MCP_RULE } from './_lib/email-crm.js';
+import { cleanIncoming, flagDuplicates, scanEngine } from './_lib/email-clean.js';
+import { askNames } from './_lib/name-ai.js';
 import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
@@ -55,7 +57,8 @@ function reply(res, status, body) {
 }
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-const DEFAULT_DEPS = { ...sheets, relayEvents, relayAdmin, waitUntil, sendEngineAlert, now: () => Date.now(),
+const DEFAULT_DEPS = { ...sheets, relayEvents, relayAdmin, waitUntil, sendEngineAlert, askNames, now: () => Date.now(),
+  anthropicKey: () => String(process.env.ANTHROPIC_API_KEY || '').trim(),
   cronSecret: () => String(process.env.CRON_SECRET || '').trim(),
   linkSecret: () => String(process.env.EE_LINK_SECRET || '').trim(),
   firstPartyHosts: () => ['mcps-log.vercel.app'].concat(String(process.env.EE_FIRST_PARTY_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean)) };
@@ -289,20 +292,28 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     ]);
     const sources = { engineContacts: tables.Contacts || [], optouts: sheets.rowsToObjects(settings.Comms_Optouts || []),
       clients: sheets.rowsToObjects(crm.Clients || []) };
-    const verdict = checkImport(contacts, sources, { group });
+    const verdict = checkCleaned(contacts, sources, group, tables);
     if (stage === 'check') return reply(res, 200, { ok: true, ...verdict });
 
-    // Save: only rows the server itself calls new (or same_person rows the person chose to include).
-    const include = new Set((body.include_rows || []).map(Number));
-    const byRow = new Map(contacts.map(c => [Number(c.row), c]));
-    const toSave = verdict.rows.filter(r => r.status === 'new' || (r.status === 'same_person' && include.has(Number(r.row))))
+    // Save: rows the server calls new, plus each possible duplicate / repeat the person decided on
+    // (keep_both → added; merge | replace → folded into the matching contact; skip → nothing).
+    const choice = { ...(body.resolutions || {}) };
+    (body.include_rows || []).forEach(n => { if (!choice[n]) choice[n] = 'keep_both'; });
+    const byRow = new Map(verdict.cleaned.map(c => [Number(c.row), c]));
+    const toSave = verdict.rows.filter(r => r.status === 'new' || (/^(possible_duplicate|same_person)$/.test(r.status) && choice[r.row] === 'keep_both'))
       .map(r => importRecord(byRow.get(Number(r.row)), { source: body.source }));
+    const folds = verdict.rows.filter(r => /^(existing|possible_duplicate|same_person)$/.test(r.status) && /^(merge|replace)$/.test(choice[r.row]) && r.match && r.match.contact_id);
     const dnc = verdict.rows.filter(r => r.status === 'do_not_contact').map(r => r.email_norm);
-    if (!toSave.length && !dnc.length) return reply(res, 200, { ok: true, added: 0, skipped: [], rows: verdict.rows });
+    let folded = 0;
+    for (const f of folds.slice(0, 100)) {
+      const fr = await deps.relayAdmin({ action: 'apply_incoming', params: { contact_id: f.match.contact_id, mode: choice[f.row], data: importRecord(byRow.get(Number(f.row))) }, actor: session.username });
+      if (fr && fr.ok && fr.changed) folded++;
+    }
+    if (!toSave.length && !dnc.length) { rawVersion++; return reply(res, 200, { ok: true, added: 0, merged: folded, skipped: [], rows: verdict.rows }); }
     const r = await deps.relayAdmin({ action: 'import_contacts', params: { group, source: String(body.source || ''), contacts: toSave, do_not_contact: dnc }, actor: session.username });
     rawVersion++;
     if (!r || r.error === 'relay not configured') return reply(res, 503, { ok: false, error: 'The engine can’t be reached right now.' });
-    return reply(res, r.ok ? 200 : 502, { ...r, rows: verdict.rows });
+    return reply(res, r.ok ? 200 : 502, { ...r, merged: folded, rows: verdict.rows });
   }
 
   // ── The portal's own data (PLAN.md → "Connected to the portal's own data") ──
@@ -323,12 +334,16 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   // Sales Hub leads matching a rule, through the same check as a file import.
   function checkLeads(src, tables, rule) {
     const cands = leadCandidates(src.quotes, rule);
-    const verdict = checkImport(cands, { engineContacts: tables.Contacts || [], optouts: src.optouts, clients: customerEmails(src.quotes, src.clients) }, { group: rule.group || 'B' });
-    return { cands, verdict };
+    const verdict = checkCleaned(cands, { engineContacts: tables.Contacts || [], optouts: src.optouts, clients: customerEmails(src.quotes, src.clients) }, rule.group || 'B', tables);
+    return { cands: verdict.cleaned, verdict };
   }
+  // New leads are added; possible duplicates are added too but flagged (duplicate_of), so they
+  // wait in Clean up instead of being batched. The sync can't ask, so nobody is merged automatically.
   async function addLeads(cands, verdict, rule, actor, include) {
     const byRow = new Map(cands.map(c => [Number(c.row), c]));
-    const save = verdict.rows.filter(r => r.status === 'new' || (r.status === 'same_person' && include.has(Number(r.row)))).map(r => importRecord(byRow.get(Number(r.row))));
+    const save = verdict.rows.filter(r => r.status === 'new' || /^(possible_duplicate|same_person)$/.test(r.status) || include.has(Number(r.row)))
+      .filter(r => r.status !== 'existing' && r.status !== 'customer' && r.status !== 'opted_out' && r.status !== 'do_not_contact')
+      .map(r => importRecord({ ...byRow.get(Number(r.row)), duplicate_of: r.status !== 'new' && r.match && r.match.contact_id ? r.match.contact_id : '' }));
     let added = 0, failed = '';
     for (let i = 0; i < save.length; i += 100) {
       const r = await deps.relayAdmin({ action: 'import_contacts', params: { group: rule.group || 'B', source: 'sales_hub', contacts: save.slice(i, i + 100) }, actor });
@@ -349,6 +364,51 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     const out = { startups: await syncStartups(src, actor) };
     if (autoOf(cfg)) { const { cands, verdict } = checkLeads(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
     return out;
+  }
+
+  // Clean the rows, run the import check, then flag possible duplicates (api/_lib/email-clean.js).
+  function checkCleaned(contacts, sources, group, tables) {
+    const cleaned = cleanIncoming(contacts);
+    const v = checkImport(cleaned, sources, { group });
+    const rows = flagDuplicates(v.rows, cleaned, tables.Contacts || []);
+    const summary = {}; rows.forEach(r => { summary[r.status] = (summary[r.status] || 0) + 1; });
+    const tidied = cleaned.filter(c => c._clean && c._clean.changed.length).length;
+    return { rows, summary, tidied, cleaned };
+  }
+
+  // ── Clean up (names + duplicates over the engine's contacts) ──
+  async function opClean(req, res) {
+    const session = await deps.validatePortalSession(bearer(req));
+    if (!session) return reply(res, 401, { ok: false, error: 'Unauthorized' });
+    if (!engineSpreadsheetId()) return reply(res, 503, { ok: false, error: 'The email engine is not connected yet (EE_ENGINE_SS_ID).' });
+    const tables = await loadTables(req.method !== 'GET');
+    const caps = capabilitiesFor(session.username, tables.Permissions);
+    if (!caps.has('view_aggregates')) return reply(res, 403, { ok: false, error: 'You don’t have access to Lifecycle Email.' });
+    const aiOn = !!deps.anthropicKey();
+    if (req.method === 'GET') return reply(res, 200, { ok: true, ai: aiOn, ...scanEngine(tables.Contacts || []) });
+    if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });
+    if (!caps.has('edit_contacts')) return reply(res, 403, { ok: false, error: 'You don’t have permission to do that.' });
+    const body = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch (_) { return {}; } })() : (req.body || {});
+    const stage = String(body.stage || '');
+    if (stage === 'ai') {
+      // Only names go to the model (api/_lib/name-ai.js); ids stay here.
+      const ids = new Set((body.contact_ids || []).map(String).slice(0, 400));
+      const list = (tables.Contacts || []).filter(c => ids.has(c.contact_id));
+      const r = await deps.askNames(list.map((c, i) => ({ i, name: [c.first_name, c.last_name].filter(Boolean).join(' ') })), { apiKey: deps.anthropicKey() });
+      if (r && r.error) return reply(res, r.error === 'ai_off' ? 503 : 502, { ok: false, error: r.error === 'ai_off' ? 'The AI check is off: ANTHROPIC_API_KEY isn’t set on Vercel.' : r.error });
+      return reply(res, 200, { ok: true, suggestions: r.map(s => ({ contact_id: list[s.i].contact_id, first_name: s.first_name, last_name: s.last_name, kind: s.kind })) });
+    }
+    const relay = async (action, params) => { const r = await deps.relayAdmin({ action, params, actor: session.username }); rawVersion++; return r || { ok: false, error: 'engine unreachable' }; };
+    if (stage === 'apply_names') {
+      const changes = (body.changes || []).slice(0, 300).map(c => ({ contact_id: String(c.contact_id || ''), fields: c.fields || {} }));
+      const r = await relay('update_contacts', { changes });
+      return reply(res, r.ok ? 200 : 502, r);
+    }
+    if (stage === 'resolve') {
+      const r = await relay('resolve_duplicates', { pairs: (body.pairs || []).slice(0, 200) });
+      return reply(res, r.ok ? 200 : 502, r);
+    }
+    return reply(res, 400, { ok: false, error: 'Unknown stage' });
   }
 
   async function opCrm(req, res) {
@@ -389,7 +449,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return reply(res, 200, { ok: true, added: done.added, summary: verdict.summary, rule_saved: !!(saved && saved.ok) });
   }
 
-  const OPS = { crm: opCrm, import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
+  const OPS = { clean: opClean, crm: opCrm, import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
 
   return async function handler(req, res) {
     const op = String((req.query && req.query.op) || '').trim();

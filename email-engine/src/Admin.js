@@ -30,7 +30,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -64,6 +64,9 @@ function EE_adminRun_(env, core, req, deps) {
   }
   else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
   else if (action === 'sync_startups') out = EE_syncStartups_(env, core, p, actor);
+  else if (action === 'update_contacts') out = EE_updateContacts_(env, core, p, actor);
+  else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
+  else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);
   else if (action === 'set_crm_rule') {
     var rule = p.rule && typeof p.rule === 'object' ? p.rule : null;
     if (!rule) out = { ok: false, error: 'rule required' };
@@ -154,11 +157,12 @@ function EE_importContacts_(env, core, p, actor) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { skipped.push({ email_norm: email, reason: 'bad_email' }); return; }
     if (existing[email]) { skipped.push({ email_norm: email, reason: 'existing', contact_id: existing[email] }); return; }
     var id = 'ct_' + env.sha256(email).slice(0, 16), rec = {};
-    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id']
+    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id', 'name_original', 'name_kind', 'duplicate_of']
       .forEach(function (k) { rec[k] = String(c[k] == null ? '' : c[k]); });
     if (!rec.source) rec.source = String(p.source || '').slice(0, 80);       // the import's source, when rows don't carry one
     rec.contact_id = id; rec.email_norm = email; rec.bucket = group; rec.sub_bucket = group === 'B' ? 'B1' : '';
-    rec.review_status = 'needs_review'; rec.review_reason = 'imported'; rec.is_test = 'N';
+    // A possible duplicate (automatic MCP lead sync can't ask) waits for a person; batches never pick it.
+    rec.review_status = rec.duplicate_of ? 'possible_duplicate' : 'needs_review'; rec.review_reason = rec.duplicate_of ? 'possible duplicate' : 'imported'; rec.is_test = 'N';
     rec.created_at = now; rec.imported_by = actor;
     core.commitEntity('contact', rec, 'contact:' + id + ':import');
     existing[email] = id; added.push(id);
@@ -363,4 +367,108 @@ function EE_syncStartups_(env, core, p, actor) {
   env.store.upsert('Config', { key: 'crm_sync_at', value: now });
   env.store.upsert('Config', { key: 'crm_sync_result', value: JSON.stringify(result) });
   return { ok: true, added: added, updated: updated, removed: gone, skipped: skipped };
+}
+
+// ── Cleanup and duplicates (PLAN.md → "Contact cleanup and duplicates") ────────
+var EE_EDITABLE = ['first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'name_kind', 'email_norm', 'tags'];
+var EE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// changes: [{ contact_id, fields }]. The first name change keeps the original in name_original.
+function EE_updateContacts_(env, core, p, actor) {
+  var list = Array.isArray(p.changes) ? p.changes : [];
+  if (!list.length || list.length > 300) return { ok: false, error: 'send 1 to 300 changes' };
+  var emails = {};
+  env.store.rows('Contacts').forEach(function (c) { emails[String(c.email_norm || '').toLowerCase()] = c.contact_id; });
+  var done = 0, skipped = [];
+  list.forEach(function (ch) {
+    var c = env.store.get('Contacts', String(ch.contact_id || ''));
+    if (!c) { skipped.push({ contact_id: ch.contact_id, reason: 'not_found' }); return; }
+    var data = { contact_id: c.contact_id };
+    EE_EDITABLE.forEach(function (k) {
+      if (!ch.fields || ch.fields[k] === undefined) return;
+      var v = String(ch.fields[k] == null ? '' : ch.fields[k]).replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (k === 'email_norm') {
+        v = v.toLowerCase();
+        if (!EE_EMAIL_RE.test(v) || (emails[v] && emails[v] !== c.contact_id)) return;    // invalid or someone else's
+        if (v !== c.email_norm) data.alt_emails = EE_addEmail_(c.alt_emails, c.email_norm);
+      }
+      if (String(c[k] || '') !== v) data[k] = v;
+    });
+    if ((data.first_name !== undefined || data.last_name !== undefined) && !c.name_original) data.name_original = [c.first_name, c.last_name].filter(Boolean).join(' ');
+    if (Object.keys(data).length === 1) return;
+    data.updated_at = new Date(env.now()).toISOString();
+    core.commitEntity('contact', data, 'contact:' + c.contact_id + ':edit:' + env.sha256(JSON.stringify(data)).slice(0, 12));
+    done++;
+  });
+  return { ok: true, updated: done, skipped: skipped };
+}
+function EE_addEmail_(list, email) {
+  var have = String(list || '').split(',').map(function (e) { return e.trim().toLowerCase(); }).filter(Boolean);
+  email = String(email || '').trim().toLowerCase();
+  if (email && have.indexOf(email) === -1) have.push(email);
+  return have.join(',');
+}
+function EE_stopRunning_(env, core, contactId, reason) {
+  env.store.rows('Enrollments').filter(function (e) { return e.contact_id === contactId && /^(active|waiting_anchor|paused)$/.test(e.status); }).forEach(function (e) {
+    core.commitEntity('enrollment', { enrollment_id: e.enrollment_id, status: 'stopped', stop_reason: reason, stopped_on: EE_today_(env) }, 'enrollment:' + e.enrollment_id + ':' + reason);
+  });
+}
+// Keep one contact, fold the other in: its emails become alternates, blank fields are filled,
+// it is marked merged (pointer kept) and its running sequence stops. Opt-outs are by email and still apply.
+function EE_mergeInto_(env, core, keep, gone) {
+  var data = { contact_id: keep.contact_id, alt_emails: EE_addEmail_(EE_addEmail_(keep.alt_emails, gone.email_norm), '') };
+  String(gone.alt_emails || '').split(',').forEach(function (e) { data.alt_emails = EE_addEmail_(data.alt_emails, e); });
+  data.alt_emails = data.alt_emails.split(',').filter(function (e) { return e && e !== String(keep.email_norm).toLowerCase(); }).join(',');
+  ['first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'pool_build_year', 'quote_id', 'tags'].forEach(function (k) {
+    if (!String(keep[k] || '').trim() && String(gone[k] || '').trim()) data[k] = gone[k];
+  });
+  core.commitEntity('contact', data, 'contact:' + keep.contact_id + ':absorb:' + gone.contact_id);
+  core.commitEntity('contact', { contact_id: gone.contact_id, review_status: 'merged', review_reason: 'merged into ' + keep.contact_id, merged_into: keep.contact_id },
+    'contact:' + gone.contact_id + ':merged');
+  EE_stopRunning_(env, core, gone.contact_id, 'merged');
+}
+// pairs: [{ a, b, action: keep_both | keep_a | keep_b | merge_into_a | merge_into_b }]
+function EE_resolveDuplicates_(env, core, p, actor) {
+  var pairs = Array.isArray(p.pairs) ? p.pairs : [];
+  if (!pairs.length || pairs.length > 200) return { ok: false, error: 'send 1 to 200 pairs' };
+  var done = 0, skipped = [];
+  pairs.forEach(function (pr) {
+    var a = env.store.get('Contacts', String(pr.a || '')), b = env.store.get('Contacts', String(pr.b || ''));
+    if (!a || !b || a.contact_id === b.contact_id) { skipped.push({ a: pr.a, b: pr.b, reason: 'not_found' }); return; }
+    var act = String(pr.action || '');
+    if (act === 'keep_both') {
+      [[a, b], [b, a]].forEach(function (x) {
+        var d = { contact_id: x[0].contact_id, not_duplicate_of: EE_addEmail_(x[0].not_duplicate_of, x[1].contact_id) };
+        if (x[0].review_status === 'possible_duplicate') { d.review_status = 'needs_review'; d.review_reason = 'not a duplicate'; d.duplicate_of = ''; }
+        core.commitEntity('contact', d, 'contact:' + x[0].contact_id + ':notdup:' + x[1].contact_id);
+      });
+    } else if (act === 'keep_a' || act === 'keep_b') {
+      var gone = act === 'keep_a' ? b : a;
+      core.commitEntity('contact', { contact_id: gone.contact_id, review_status: 'removed', review_reason: 'duplicate of ' + (act === 'keep_a' ? a : b).contact_id },
+        'contact:' + gone.contact_id + ':removed_dup');
+      EE_stopRunning_(env, core, gone.contact_id, 'duplicate_removed');
+    } else if (act === 'merge_into_a') EE_mergeInto_(env, core, a, b);
+    else if (act === 'merge_into_b') EE_mergeInto_(env, core, b, a);
+    else { skipped.push({ a: pr.a, b: pr.b, reason: 'unknown action' }); return; }
+    done++;
+  });
+  return { ok: true, resolved: done, skipped: skipped };
+}
+// An incoming row (file import) that matches an engine contact: merge (fill blanks, its email
+// becomes an alternate) or replace (its values win; the old email becomes an alternate).
+function EE_applyIncoming_(env, core, p, actor) {
+  var c = env.store.get('Contacts', String(p.contact_id || '')), inc = p.data || {}, mode = String(p.mode || '');
+  if (!c) return { ok: false, error: 'contact not found' };
+  if (mode !== 'merge' && mode !== 'replace') return { ok: false, error: 'mode must be merge or replace' };
+  var data = { contact_id: c.contact_id }, email = String(inc.email_norm || '').trim().toLowerCase();
+  ['first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'pool_build_year', 'quote_id'].forEach(function (k) {
+    var v = String(inc[k] == null ? '' : inc[k]).trim();
+    if (v && (mode === 'replace' ? v !== String(c[k] || '') : !String(c[k] || '').trim())) data[k] = v.slice(0, 200);
+  });
+  if (EE_EMAIL_RE.test(email) && email !== c.email_norm) {
+    if (mode === 'replace') { data.email_norm = email; data.alt_emails = EE_addEmail_(c.alt_emails, c.email_norm); }
+    else data.alt_emails = EE_addEmail_(c.alt_emails, email);
+  }
+  if (Object.keys(data).length === 1) return { ok: true, changed: false };
+  core.commitEntity('contact', data, 'contact:' + c.contact_id + ':' + mode + ':' + env.sha256(JSON.stringify(data)).slice(0, 12));
+  return { ok: true, changed: true };
 }

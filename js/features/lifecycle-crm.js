@@ -126,7 +126,7 @@ function crmRenderLeads_() {
   const result = !C ? '<p class="lc-note">Check who would be added before adding them, or let automatic adding take care of it.</p>'
     : C.error ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>Couldn’t check</b><small>' + lcEsc_(C.error) + '</small></div></div>'
     : '<div class="lc-imp-sum">' + tile(C.summary.new, 'New: will be added') + tile(C.summary.existing, 'Already here') + tile(C.summary.customer, 'Customers: skipped') +
-      tile(C.summary.opted_out, 'Opted out: skipped') + tile(C.summary.same_person, 'Same person: skipped') + '</div>' +
+      tile(C.summary.opted_out, 'Opted out: skipped') + tile((C.summary.possible_duplicate || 0) + (C.summary.same_person || 0), 'Possible duplicates: added for review') + '</div>' +
       (C.rows.filter(r => r.status === 'new').length ? '<div class="lc-card"><table class="lc-table"><tbody>' + C.rows.filter(r => r.status === 'new').slice(0, 60).map(r =>
         '<tr><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' + lcEsc_(lcInitials_(r.first_name, r.last_name)) + '</span><div><b>' + lcEsc_([r.first_name, r.last_name].filter(Boolean).join(' ') || r.email_norm) +
         '</b><small>' + lcEsc_(r.email_norm) + '</small></div></div></td></tr>').join('') + '</tbody></table></div>' +

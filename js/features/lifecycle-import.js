@@ -12,10 +12,10 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 const IMP = { step: 1, layer: null, file: '', sheets: null, sheet: '', rows: [], header: 0, map: {}, group: 'B', source: '',
-  saved: null, mappings: null, check: null, include: new Set(), progress: null, done: null, busy: false };
+  saved: null, mappings: null, check: null, include: new Set(), choice: {}, progress: null, done: null, busy: false };
 const IMP_XLSX = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const IMP_VERDICT = {
-  new: ['Will be added', 'live'], existing: ['Already in the engine', ''], same_person: ['Same person, other email', 'warn'],
+  new: ['Will be added', 'live'], possible_duplicate: ['Possibly already here', 'warn'], existing: ['Already here (same email)', ''], same_person: ['Same person, other email', 'warn'],
   customer: ['Already an MCPS customer', ''], opted_out: ['Unsubscribed or bounced', ''], do_not_contact: ['Do not contact', 'bad']
 };
 
@@ -141,33 +141,51 @@ function impStepColumns_() {
     (IMP.busy ? 'Checking…' : 'Check ' + res.contacts.length + ' contacts') + '</button></div>';
 }
 
+// Repeats and possible repeats: what to do with each, like copying files into a folder.
+const IMP_CHOICES = { existing: [['skip', 'Skip'], ['merge', 'Fill in blanks'], ['replace', 'Use the new details']],
+  same_person: [['skip', 'Skip'], ['merge', 'Merge (add this email)'], ['replace', 'Use the new details'], ['keep_both', 'Keep both']],
+  possible_duplicate: [['skip', 'Skip'], ['merge', 'Merge (add this email)'], ['replace', 'Use the new details'], ['keep_both', 'Keep both']] };
+const IMP_WHY = { same_email: 'same email', same_inbox: 'same Gmail inbox', same_person: 'same name and street', similar_name: 'similar name, same address', same_household: 'same address', possible_duplicate: 'possible duplicate' };
+const impChoice_ = r => IMP.choice[r.row] || 'skip';
 function impStepCheck_() {
   const c = IMP.check, s = c.summary || {}, local = c.local;
-  const adding = (s.new || 0) + IMP.include.size;
+  const keep = c.rows.filter(r => IMP_CHOICES[r.status] && impChoice_(r) === 'keep_both').length;
+  const fold = c.rows.filter(r => IMP_CHOICES[r.status] && /^(merge|replace)$/.test(impChoice_(r))).length;
+  const adding = (s.new || 0) + keep;
   const group = (status) => {
     const rows = c.rows.filter(r => r.status === status);
     if (!rows.length) return '';
-    const v = IMP_VERDICT[status];
-    return '<details class="lc-verdict"' + (status === 'new' || status === 'same_person' ? ' open' : '') + '><summary>' + lcTag_(v[0], v[1]) + '<b class="num">' + rows.length + '</b></summary><ul>' +
-      rows.slice(0, 200).map(r => '<li>' + (status === 'same_person' ? '<label><input type="checkbox" data-imp-include="' + r.row + '"' + (IMP.include.has(r.row) ? ' checked' : '') + '> Import anyway</label>' : '') +
-        '<span>' + lcEsc_([r.first_name, r.last_name].filter(Boolean).join(' ') || '–') + '</span><small>' + lcEsc_(r.email_norm) +
-        (r.other_email ? ' · in the engine as ' + lcEsc_(r.other_email) : '') + (r.reason ? ' · ' + lcEsc_(r.reason) : '') + (r.note ? ' · ' + lcEsc_(r.note) : '') +
-        ' · row ' + r.row + '</small></li>').join('') + (rows.length > 200 ? '<li><small>and ' + (rows.length - 200) + ' more</small></li>' : '') + '</ul></details>';
+    const v = IMP_VERDICT[status], opts = IMP_CHOICES[status];
+    const all = opts ? '<span class="lc-imp-all">For all: <select class="lc-input sm" data-imp-all="' + status + '"><option value="">Choose…</option>' +
+      opts.map(([k, l]) => '<option value="' + k + '">' + l + '</option>').join('') + '</select></span>' : '';
+    return '<details class="lc-verdict"' + (status === 'new' || (opts && status !== 'existing') ? ' open' : '') + '><summary>' + lcTag_(v[0], v[1]) + '<b class="num">' + rows.length + '</b>' + all + '</summary><ul>' +
+      rows.slice(0, 200).map(r => {
+        const was = r.clean && r.clean.changed && (r.clean.changed.includes('first_name') || r.clean.changed.includes('last_name')) ? ' <small class="lc-dim">(tidied)</small>' : '';
+        const kind = r.clean && r.clean.kind && r.clean.kind !== 'person' ? ' ' + lcTag_(r.clean.kind === 'couple' ? 'Couple' : r.clean.kind === 'family' ? 'Family' : 'Business', '') : '';
+        const m = r.match;
+        const match = m ? '<div class="lc-imp-match"><span>Looks like</span> <b>' + lcEsc_(m.name || m.email) + '</b> · ' + lcEsc_(m.email || '') + (m.address ? ' · ' + lcEsc_(m.address) : '') +
+          ' <em>' + lcEsc_(IMP_WHY[m.reason] || m.reason) + (m.in_file ? ', row ' + m.row + ' of this file' : '') + '</em></div>' : '';
+        const pick = opts ? '<select class="lc-input sm" data-imp-choice="' + r.row + '">' +
+          opts.filter(([k]) => !(m && m.in_file && /^(merge|replace)$/.test(k))).map(([k, l]) => '<option value="' + k + '"' + (impChoice_(r) === k ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>' : '';
+        return '<li><div class="lc-imp-li"><span>' + lcEsc_([r.first_name, r.last_name].filter(Boolean).join(' ') || '–') + was + kind + '</span><small>' + lcEsc_(r.email_norm) +
+          (r.reason ? ' · ' + lcEsc_(r.reason) : '') + (r.note ? ' · ' + lcEsc_(r.note) : '') + ' · row ' + r.row + '</small>' + match + '</div>' + pick + '</li>';
+      }).join('') + (rows.length > 200 ? '<li><small>and ' + (rows.length - 200) + ' more</small></li>' : '') + '</ul></details>';
   };
   const fileIssues = (local.skipped.length || local.duplicates.length) ? '<details class="lc-verdict"><summary>' + lcTag_('Not in the check', '') + '<b class="num">' + (local.skipped.length + local.duplicates.length) + '</b></summary><ul>' +
     local.skipped.map(x => '<li><span>Row ' + x.row + '</span><small>' + (x.reason === 'no_email' ? 'no email' : 'email not valid: ' + lcEsc_(x.detail)) + '</small></li>').join('') +
     local.duplicates.map(x => '<li><span>Row ' + x.row + '</span><small>same email as row ' + x.first_row + ' (' + lcEsc_(x.email) + ')</small></li>').join('') + '</ul></details>' : '';
-  return ['new', 'same_person', 'existing', 'customer', 'opted_out', 'do_not_contact'].map(group).join('') + fileIssues +
+  return (c.tidied ? '<div class="lc-hint">' + LC_ICON.check + c.tidied + ' name' + (c.tidied === 1 ? '' : 's') + ' tidied (capitals, couples, families, phone numbers). The original is kept.</div>' : '') +
+    ['new', 'possible_duplicate', 'same_person', 'existing', 'customer', 'opted_out', 'do_not_contact'].map(group).join('') + fileIssues +
     '<p class="lc-note">They go to <b>Needs review</b>. Nobody is emailed by an import; you start them in batches.' + (s.do_not_contact ? ' People marked do-not-contact are added to the opt-out list.' : '') + '</p>' +
     '<label class="lc-check"><input type="checkbox" data-imp-remember' + (IMP.remember !== false ? ' checked' : '') + '> Remember these columns for files like this</label>' +
-    '<div class="lc-imp-f"><button class="lc-btn" data-imp="back">Back</button><button class="lc-btn primary" data-imp="import"' + (adding || s.do_not_contact ? '' : ' disabled') + '>Import ' + adding + ' contact' + (adding === 1 ? '' : 's') + '</button></div>';
+    '<div class="lc-imp-f"><button class="lc-btn" data-imp="back">Back</button><button class="lc-btn primary" data-imp="import"' + (adding || fold || s.do_not_contact ? '' : ' disabled') + '>Import ' + adding + ' contact' + (adding === 1 ? '' : 's') + (fold ? ' · update ' + fold : '') + '</button></div>';
 }
 
 function impStepImport_() {
   if (IMP.done) {
     const d = IMP.done;
     return '<div class="lc-ok big"><span class="dot">' + LC_ICON.check + '</span><div><b>' + d.added + ' added to Needs review</b><small>' +
-      [d.skipped ? d.skipped + ' already there' : '', d.dnc ? d.dnc + ' added to the opt-out list' : '', d.failed ? d.failed + ' couldn’t be saved, try again' : ''].filter(Boolean).join(' · ') +
+      [d.merged ? d.merged + ' existing contact' + (d.merged === 1 ? '' : 's') + ' updated' : '', d.skipped ? d.skipped + ' already there' : '', d.dnc ? d.dnc + ' added to the opt-out list' : '', d.failed ? d.failed + ' couldn’t be saved, try again' : ''].filter(Boolean).join(' · ') +
       '</small></div></div><div class="lc-imp-f"><span></span><button class="lc-btn primary" data-imp="close">Done</button></div>';
   }
   const p = IMP.progress || { sent: 0, total: 1 };
@@ -181,19 +199,20 @@ async function impCheck_() {
   const r = await impPost_({ stage: 'check', group: IMP.group, contacts: local.contacts }).catch(() => ({ ok: false, error: 'Network error' }));
   IMP.busy = false;
   if (!r.ok) { impRender_(); return lcToast_(r.error || 'The check didn’t work', true); }
-  IMP.check = { rows: r.rows, summary: r.summary, local };
-  IMP.include = new Set(); IMP.step = 3; impRender_();
+  IMP.check = { rows: r.rows, summary: r.summary, tidied: r.tidied || 0, local };
+  IMP.include = new Set(); IMP.choice = {}; IMP.step = 3; impRender_();
 }
 async function impImport_() {
   const local = IMP.check.local;
-  const allowed = new Set(IMP.check.rows.filter(r => r.status === 'new' || r.status === 'do_not_contact' || (r.status === 'same_person' && IMP.include.has(r.row))).map(r => r.row));
+  const allowed = new Set(IMP.check.rows.filter(r => r.status === 'new' || r.status === 'do_not_contact' || (IMP_CHOICES[r.status] && impChoice_(r) !== 'skip')).map(r => r.row));
   const rows = local.contacts.filter(c => allowed.has(c.row));
   IMP.step = 4; IMP.busy = true; IMP.progress = { sent: 0, total: rows.length }; impRender_();
-  const done = { added: 0, skipped: 0, dnc: 0, failed: 0 };
+  const done = { added: 0, skipped: 0, dnc: 0, failed: 0, merged: 0 };
   for (let i = 0; i < rows.length; i += 100) {
     const chunk = rows.slice(i, i + 100);
-    const r = await impPost_({ stage: 'save', group: IMP.group, source: IMP.source, contacts: chunk, include_rows: [...IMP.include] }).catch(() => ({ ok: false }));
-    if (r.ok) { done.added += r.added || 0; done.skipped += (r.skipped || []).length; done.dnc += r.do_not_contact_recorded || 0; } else done.failed += chunk.length;
+    const res = {}; chunk.forEach(c => { if (IMP.choice[c.row]) res[c.row] = IMP.choice[c.row]; });
+    const r = await impPost_({ stage: 'save', group: IMP.group, source: IMP.source, contacts: chunk, resolutions: res }).catch(() => ({ ok: false }));
+    if (r.ok) { done.merged += r.merged || 0; done.added += r.added || 0; done.skipped += (r.skipped || []).length; done.dnc += r.do_not_contact_recorded || 0; } else done.failed += chunk.length;
     IMP.progress.sent = Math.min(rows.length, i + chunk.length); impRender_();
   }
   if (IMP.remember !== false) {
@@ -229,6 +248,8 @@ function impOnChange_(e) {
     IMP.saved = null; impRender_();
   }
   else if (t.matches('[data-imp-group]')) { IMP.group = t.value; impRender_(); }
+  else if (t.matches('[data-imp-choice]')) { IMP.choice[Number(t.dataset.impChoice)] = t.value; impRender_(); }
+  else if (t.matches('[data-imp-all]') && t.value) { IMP.check.rows.filter(r => r.status === t.dataset.impAll).forEach(r => { if (!(r.match && r.match.in_file && /^(merge|replace)$/.test(t.value))) IMP.choice[r.row] = t.value; }); impRender_(); }
   else if (t.matches('[data-imp-include]')) { const r = Number(t.dataset.impInclude); if (t.checked) IMP.include.add(r); else IMP.include.delete(r); impRender_(); }
   else if (t.matches('[data-imp-remember]')) IMP.remember = t.checked;
 }

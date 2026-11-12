@@ -60,6 +60,9 @@ export function importRecord(c, opts = {}) {
     tags: (Array.isArray(c.tags) ? c.tags : []).map(t => String(t).slice(0, 40)).slice(0, 20).join(','),
     source: String(opts.source || c.source || '').slice(0, 80),
     // The Sales Hub row it came from (api/_lib/email-crm.js), so the contact links back.
-    quote_id: String(c.quote_id || '').slice(0, 20)
+    quote_id: String(c.quote_id || '').slice(0, 20),
+    // Cleanup (api/_lib/email-clean.js): the name as typed, couple/family/business, and the contact it may duplicate.
+    name_original: String(c.name_original || '').slice(0, 120), name_kind: String(c.name_kind || '').slice(0, 20),
+    duplicate_of: String(c.duplicate_of || '').slice(0, 40)
   };
 }
