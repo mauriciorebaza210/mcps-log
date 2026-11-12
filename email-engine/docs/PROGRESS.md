@@ -39,7 +39,7 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 
 ### CP7 still to do (exit criteria in PLAN.md → Checkpoints row 7)
 Everything buildable is built. What's left needs Mau (or Tony through Mau):
-- **Run the trigger timing test again** (Activity → Engine checks → Test trigger timing; ~8 min). Mau's first runs (2026-11-11, the last at 8:29 PM under @40) recorded nothing; @42's page frees a run 10 min after its last timer: stored JSON settings come back already parsed from the sheet and the code parsed them again (fixed in cp7-18; the same bug made scheduled runs ignore their run plan, so an early trigger wouldn't have sent its slot). Record the result in SPIKES.md.
+- ~~Trigger timing test~~ **done 2026-11-11 9:09–9:15 PM:** −13, −17, +14, −20 s (SPIKES.md §7). The scheduler can be installed at go-live.
 - ~~Engine alert emails~~ **done 2026-11-11 (d14b459, @42):** the engine only records alerts; the portal emails new ones from Mau's Gmail (service-request relay) to Config `alert_email` or Mau, on the daily heartbeat and page loads, marked with `alerts_forwarded`. **Preview needs `SERVICE_REQUEST_NOTIFY_SECRET` for Preview** (only Production/Development have it) or it skips; then redeploy. Not instant (no engine→portal ping: that would need a new UrlFetch permission from Tony); revisit at CP9 if same-hour alerts matter.
 - ~~Welcome at approval~~ done by Mau 2026-11-11 (new people only). Check on the preview: Welcome Setup should read "When the startup is approved · about a minute after approval".
 - ~~Startup Progress Off~~ intentional (Mau 2026-11-11). The 3 C starter drafts (Progress, Maintenance, Final) **stay unapproved until launch** (Mau): not a CP7 blocker.

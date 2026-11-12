@@ -13,6 +13,7 @@ Each spike records what was measured, how, and what it changes in PLAN.md. CP1 c
 | 4 | Service-account read latency and bytes per op | **done 2026-11-02** | launch size: every page read ≤ 360 KB and ≤ 0.41 s; budgets met |
 | 5 | `Comms_Optouts` and `Comms_Log` exist live | **done 2026-11-02** | both exist; Settings spreadsheet found |
 | 6 | Node test glob discovers the whole suite | **done 2026-11-02** | `node --test "<glob>"` correct; plain `node <glob>` skips files |
+| 7 | One-off `.at()` trigger precision (CP7, failure row 58) | **done 2026-11-11** | 4/4 fired within 20 s of the planned minute (−13, −17, +14, −20 s); assumption "within ~20 min" holds by a wide margin |
 
 Raw data: `EE Phase 0 Spike Results` spreadsheet in Mau's Drive (downloaded copy: `~/Downloads/EE Phase 0 Spike Results.xlsx`). The spike runs were made in Mau's account (mauricio@), in a throwaway standalone project, on 2026-11-02 between 10:16 and 11:35 CT.
 
@@ -139,3 +140,15 @@ Mandatory budgets: overview read p95 < 1.5 s ✔ (≤ 0.41 s); overview payload 
 
 ## Still open for CP1
 - Optional: re-run 2d with the bounce fix.
+
+## 7. Trigger precision (done 2026-11-11)
+Run from the portal (Activity → Engine checks → Test trigger timing) against the live engine @42 (cp7-19), as Tony, in test mode with no scheduler installed. Four one-off `ScriptApp.newTrigger(...).timeBased().at()` triggers planned 2, 4, 6 and 8 min out (9:09, 9:11, 9:13, 9:15 PM CT); each recorded its firing time and deleted itself.
+
+| Planned (CT) | Fired vs planned |
+|---|---|
+| 9:09 PM | −13 s |
+| 9:11 PM | −17 s |
+| 9:13 PM | +14 s |
+| 9:15 PM | −20 s |
+
+Spread 34 s; worst 20 s. Failure row 58 assumed one-off triggers fire within ~20 min of their slot; measured precision is ~60× tighter, so send-time slots (quarter hours) are safe and no extra margin is needed. Triggers can fire **early** (up to 20 s here): already handled, since a scheduled run that fires before its slot gates at the slot (`EE_slotFor_`, Schedule.js), which needed the run plan read correctly (ac29764). Earlier attempts the same evening recorded nothing because of the double-parse bug fixed in ac29764 (@41).
