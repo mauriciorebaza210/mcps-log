@@ -13,6 +13,7 @@ const LC = { tab: 'campaigns', mode: null, ov: null, contacts: null, q: '', buck
 const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
 const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup' };
 const LC_ICON = {
+  pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   // AI marker: a four-point sparkle with a small companion star.
   sparkle: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 5.5c.75 5 2.4 7 7.5 8.5-5.1 1.5-6.75 3.5-7.5 8.5-.75-5-2.4-7-7.5-8.5 5.1-1.5 6.75-3.5 7.5-8.5z"/><path d="M18.5 1.5c.35 2.3 1.1 3.15 3.5 3.5-2.4.35-3.15 1.2-3.5 3.5-.35-2.3-1.1-3.15-3.5-3.5 2.4-.35 3.15-1.2 3.5-3.5z"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>',

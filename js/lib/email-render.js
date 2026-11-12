@@ -285,5 +285,15 @@
       used_fields: used, used_blocks: usedBlocks };
   }
 
-  return { render: render, isFull: isFull, longDate: longDate, escapeHtml: esc };
+  // The branded frame around an unmerged body, for the portal's editor: what the email
+  // looks like, with the author's tokens left for the editor to show as chips.
+  // o: { subject, details: [lines], detailsPlaced }. Never used for sending.
+  function frame(body, ctx, o) {
+    ctx = ctx || {}; o = o || {};
+    return shell({ subject: o.subject || '', body: String(body || ''), details: o.details || [], detailsPlaced: !!o.detailsPlaced,
+      signature: ctx.sender_name || '', preheader: '', track: function (id, url) { return url; } },
+      { business: ctx.business || {}, unsubscribeUrl: ctx.unsubscribeUrl || '#' });
+  }
+
+  return { render: render, frame: frame, isFull: isFull, longDate: longDate, escapeHtml: esc, inline: INLINE };
 });

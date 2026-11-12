@@ -18,11 +18,14 @@ function lcTemplatesTab_(D) {
   const can = c => lcCan_(c);
   const liveHtml = live ? '<div class="lc-tpl-live"><div class="main"><b>' + lcEsc_(live.subject) + '</b><small>Version ' + live.rev_no + ' · approved ' + lcEsc_(lcStamp_(live.approved_at)) +
       ' by ' + who(live.approver) + (live.source_name ? ' · from ' + lcEsc_(live.source_name) : '') + (live.format === 'full' ? ' · full template' : ' · MCPS frame') + '</small></div>' +
-      '<button class="lc-btn sm" data-act="tpl-preview-rev" data-id="' + lcEsc_(live.revision_id) + '">Preview</button></div>'
-    : '<div class="lc-empty" style="text-align:left;padding:0">Nothing approved yet: this email doesn’t send.</div>';
+      '<div class="lc-tpl-acts"><button class="lc-btn sm" data-act="tpl-preview-rev" data-id="' + lcEsc_(live.revision_id) + '">Preview</button>' +
+      (can('edit_drafts') ? '<button class="lc-btn sm" data-act="tpl-edit" data-id="' + lcEsc_(live.revision_id) + '">' + LC_ICON.pen + 'Edit</button>' : '') + '</div></div>'
+    : '<div class="lc-tpl-live none"><div class="main"><b>Nothing approved yet</b><small>This email doesn’t send until a version is approved.</small></div>' +
+      (can('edit_drafts') ? '<button class="lc-btn sm primary" data-act="tpl-edit" data-id="">' + LC_ICON.pen + 'Write it here</button>' : '') + '</div>';
   const draftHtml = drafts.length ? '<ul class="lc-list lc-tpl-list">' + drafts.map(r => '<li><div class="main"><b>' + lcEsc_(r.subject) + '</b><small>From ' + lcEsc_(r.source_name || 'the editor') +
       ' · added ' + lcEsc_(lcStamp_(r.created_at)) + ' by ' + who(r.editor) + '</small></div><div class="lc-tpl-acts">' +
       '<button class="lc-btn sm" data-act="tpl-preview-rev" data-id="' + lcEsc_(r.revision_id) + '">Preview</button>' +
+      (can('edit_drafts') ? '<button class="lc-btn sm" data-act="tpl-edit" data-id="' + lcEsc_(r.revision_id) + '">Edit</button>' : '') +
       (can('edit_drafts') ? '<button class="lc-btn sm danger" data-act="tpl-discard" data-id="' + lcEsc_(r.revision_id) + '">Discard</button>' : '') +
       (can('approve_publish') ? '<button class="lc-btn sm primary" data-act="tpl-approve" data-id="' + lcEsc_(r.revision_id) + '">Approve</button>' : '') + '</div></li>').join('') + '</ul>'
     : '';
@@ -126,6 +129,7 @@ function lcTplAskSubject_(name, suggested, pre, save) {
 async function lcTplAct_(act, id, name) {
   const D = LC.drawer; if (!D) return;
   const stepId = D.id;
+  if (act === 'tpl-edit') return edOpen_(id);
   if (act === 'tpl-reload') { D.tpl = { loading: true }; lcRenderDrawer_(); return lcLoadTemplates_(D); }
   if (act === 'tpl-open') {
     const f0 = ((D.tpl && D.tpl.list) || []).find(x => x.file_id === id) || { name: 'Template' };

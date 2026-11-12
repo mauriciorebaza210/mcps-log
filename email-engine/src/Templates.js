@@ -11,6 +11,11 @@
 //   approve_draft    freeze the draft into an immutable revision and publish it
 //   discard_draft    drop a draft
 //   open_draft       preview a draft (or any version) from its own frozen copy
+//   open_editor      everything the portal's email editor needs to edit an email locally:
+//                    the starting content (live version, a draft, or the starter), its
+//                    blocks, the field registry and the sample context for the renderer
+//   save_draft       the editor's result as a draft (body + blocks + details box), checked
+//                    by the same renderer; editing a draft replaces it
 //
 // Pure helpers take deps so tests run with a fake Drive:
 //   deps.drive = { list(folderId) -> [{id, name, modified, size}], read(fileId) -> {name, html, modified, parents[]},
@@ -29,10 +34,12 @@ function EE_templateFolders_(props) {
 }
 
 // A sample render: what the email looks like, and every problem the renderer finds.
+// t.blocks ([{name, flag, html}]) when the email carries its own (editor drafts); else the seed's.
 function EE_templateCheck_(env, t) {
   var cfg = EE_config_(env.store), fields = env.store.rows('Fields');
   var blocks = {};
-  Object.keys(EE_SEED.content.blocks || {}).forEach(function (name) {
+  if (t.blocks) t.blocks.forEach(function (b) { blocks[b.name] = { flag: b.flag, html: b.html }; });
+  else Object.keys(EE_SEED.content.blocks || {}).forEach(function (name) {
     var b = EE_SEED.content.blocks[name];
     blocks[name] = { flag: b.flag, html: EE_SEED.templates[b.html] || '' };
   });
@@ -57,6 +64,44 @@ function EE_seedTemplate_(stepId, revisions) {
   if (revisions.some(function (r) { return r.step_id === stepId && r.status === 'published'; })) return null;
   var html = EE_SEED.templates[c.body];
   return html ? { id: 'seed:' + stepId, name: 'MCPS starter draft.html', modified: '', size: html.length, html: html, subject: c.subject, preheader: c.preheader || '' } : null;
+}
+
+// The blocks an email may use (name → flag), from the seed registry. A block's flag
+// (which contact field turns it on) is never taken from the page.
+function EE_blockRegistry_() {
+  var out = {};
+  Object.keys(EE_SEED.content.blocks || {}).forEach(function (name) { out[name] = EE_SEED.content.blocks[name].flag; });
+  return out;
+}
+// A revision's (or draft's) blocks with their HTML, hashes checked when they have one.
+function EE_revisionBlocks_(rev, deps, env) {
+  return (rev.blocks_json || []).map(function (b) {
+    var html = deps.drive.readDraft(b.file_id);
+    if (b.sha256 && env.sha256(html) !== b.sha256) throw new Error('block ' + b.name + ' changed after it was saved');
+    return { name: b.name, flag: b.flag, html: html };
+  });
+}
+// Where the editor starts: a given draft or version, else the live version, else the starter.
+function EE_editorSource_(env, stepId, revisionId, revisions, deps) {
+  var rev = revisionId ? revisions.filter(function (r) { return r.revision_id === revisionId && r.step_id === stepId; })[0]
+    : revisions.filter(function (r) { return r.step_id === stepId && r.status === 'published'; })[0];
+  if (revisionId && !rev) return { error: 'version not found' };
+  if (rev) {
+    var html = deps.drive.readDraft(rev.body_file_id);
+    if (rev.body_sha256 && env.sha256(html) !== rev.body_sha256) return { error: 'that version’s file changed after it was saved' };
+    return { from: rev.status === 'draft' ? 'draft' : 'live', revision_id: rev.revision_id, rev_no: rev.rev_no || 0, subject: rev.subject || '', preheader: rev.preheader || '',
+      details_box: rev.details_box || '', format: MCPS_EMAIL_RENDER.isFull({ body_html: html, format: rev.format }) ? 'full' : 'body',
+      body_html: html, blocks: EE_revisionBlocks_(rev, deps, env) };
+  }
+  var c = EE_SEED.content.steps[stepId];
+  if (c && EE_SEED.templates[c.body]) {
+    return { from: 'starter', revision_id: '', subject: c.subject || '', preheader: c.preheader || '', details_box: c.details_box || '', format: 'body',
+      body_html: EE_SEED.templates[c.body], blocks: (c.blocks || []).map(function (name) {
+        var spec = EE_SEED.content.blocks[name]; return { name: name, flag: spec.flag, html: EE_SEED.templates[spec.html] || '' };
+      }) };
+  }
+  return { from: 'blank', revision_id: '', subject: '', preheader: '', details_box: '', format: 'body', blocks: [],
+    body_html: '<h1>Your headline</h1>\n<p>Hi {{FirstName}},</p>\n<p>Write your email here.</p>\n' };
 }
 
 function EE_templateAction_(env, core, action, p, actor, deps) {
@@ -102,11 +147,56 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
       'revision:' + id + ':draft');
     return { ok: true, revision_id: id, drafts: n + 1 };
   }
+  if (action === 'open_editor') {
+    var es = String(p.step_id || '');
+    if (!EE_SEED.ruleset.steps.some(function (st) { return st.step_id === es; })) return { ok: false, error: 'unknown email' };
+    var src = EE_editorSource_(env, es, String(p.revision_id || ''), revisions, deps);
+    if (src.error) return { ok: false, error: src.error };
+    var ecfg = EE_config_(env.store), reg = EE_blockRegistry_();
+    return { ok: true, step_id: es, source: src, fields: env.store.rows('Fields'),
+      block_library: Object.keys(reg).map(function (name) { return { name: name, flag: reg[name], html: EE_SEED.templates[EE_SEED.content.blocks[name].html] || '' }; }),
+      context: { sender_name: ecfg.sender_name || '', links: { quote: ecfg.link_quote || '' },
+        business: { name: ecfg.business_name || '', address: ecfg.business_address || '', phone: ecfg.business_phone || '', website: ecfg.business_website || '' } } };
+  }
+  if (action === 'save_draft') {
+    var ss = String(p.step_id || ''), sbody = String(p.body_html || ''), ssubj = String(p.subject || '').trim();
+    if (!EE_SEED.ruleset.steps.some(function (st) { return st.step_id === ss; })) return { ok: false, error: 'unknown email' };
+    if (!ssubj) return { ok: false, error: 'a subject line is required' };
+    if (!sbody.trim()) return { ok: false, error: 'the email is empty' };
+    var sformat = MCPS_EMAIL_RENDER.isFull({ body_html: sbody }) ? 'full' : 'body';
+    var breg = EE_blockRegistry_(), sblocks = [], bad = '';
+    (Array.isArray(p.blocks) ? p.blocks : []).forEach(function (b) {
+      var name = String(b && b.name || '');
+      if (!breg[name]) { bad = 'unknown block ' + name; return; }
+      if (sblocks.some(function (x) { return x.name === name; })) return;
+      sblocks.push({ name: name, flag: breg[name], html: String(b.html || '') });
+    });
+    if (bad) return { ok: false, error: bad };
+    if (sformat === 'full' && (sblocks.length || String(p.details_box || '').trim())) return { ok: false, error: 'full templates can’t use blocks or the details box' };
+    var total = sbody.length + sblocks.reduce(function (n, b) { return n + b.html.length; }, 0);
+    if (total > EE_TEMPLATE_MAX_BYTES) return { ok: false, error: 'the email is too large (over 200 KB)' };
+    var sdetails = String(p.details_box || '').slice(0, 500), spre = String(p.preheader || '').trim().slice(0, 200);
+    var scheck = EE_templateCheck_(env, { html: sbody, subject: ssubj, preheader: spre, details_box: sdetails, format: sformat, blocks: sblocks });
+    if (!scheck.ok) return { ok: false, error: 'This email has problems: ' + scheck.errors.join('; '), errors: scheck.errors };
+    var based = p.based_on ? env.store.get('Revisions', String(p.based_on)) : null;
+    if (p.based_on && (!based || based.step_id !== ss)) return { ok: false, error: 'the version you started from is gone; reload' };
+    var sid = 'draft_' + ss + '_' + env.uuid().replace(/-/g, '').slice(-8);
+    var sfile = deps.drive.saveDraft(sid + '__body.html', sbody);
+    var bjson = sblocks.map(function (b) { return { name: b.name, flag: b.flag, file_id: deps.drive.saveDraft(sid + '__' + b.name + '.html', b.html), sha256: env.sha256(b.html) }; });
+    core.commitEntity('revision', { revision_id: sid, step_id: ss, rev_no: 0, subject: ssubj.slice(0, 150), preheader: spre, details_box: sdetails,
+      body_file_id: sfile, body_sha256: env.sha256(sbody), blocks_json: bjson, status: 'draft', format: sformat,
+      source_file_id: based ? (based.source_file_id || '') : '', source_name: 'the editor', source_modified: '',
+      parent_revision_id: based ? based.revision_id : '', editor: actor, created_at: new Date(env.now()).toISOString() }, 'revision:' + sid + ':draft');
+    // Editing a draft replaces it, so the list never shows two versions of one edit.
+    if (based && based.status === 'draft') core.commitEntity('revision', { revision_id: based.revision_id, status: 'discarded', replaced_by: sid }, 'revision:' + based.revision_id + ':replaced');
+    return { ok: true, revision_id: sid };
+  }
   if (action === 'open_draft') {
     var od = env.store.get('Revisions', String(p.revision_id || ''));
     if (!od || !od.body_file_id) return { ok: false, error: 'version not found' };
-    var oh = deps.drive.readDraft(od.body_file_id);
-    var oc = EE_templateCheck_(env, { html: oh, subject: od.subject, preheader: od.preheader, details_box: od.details_box, format: od.format });
+    var oh = deps.drive.readDraft(od.body_file_id), oblocks;
+    try { oblocks = (od.blocks_json || []).length ? EE_revisionBlocks_(od, deps, env) : null; } catch (e) { return { ok: false, error: String(e.message || e) }; }
+    var oc = EE_templateCheck_(env, { html: oh, subject: od.subject, preheader: od.preheader, details_box: od.details_box, format: od.format, blocks: oblocks || undefined });
     return { ok: true, subject: oc.ok ? oc.subject : od.subject, errors: oc.ok ? [] : oc.errors, preview_html: oc.ok ? oc.html : '' };
   }
   if (action === 'approve_draft' || action === 'discard_draft') {
@@ -121,19 +211,23 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
     }
     var html = deps.drive.readDraft(d.body_file_id);
     if (env.sha256(html) !== d.body_sha256) return { ok: false, error: 'the draft file changed after it was made; import it again' };
-    var dry = EE_templateCheck_(env, { html: html, subject: d.subject, preheader: d.preheader, format: d.format });
+    var dblocks;
+    try { dblocks = EE_revisionBlocks_(d, deps, env); } catch (e) { return { ok: false, error: 'the draft file changed after it was made; save it again' }; }
+    var dry = EE_templateCheck_(env, { html: html, subject: d.subject, preheader: d.preheader, details_box: d.details_box || '', format: d.format, blocks: dblocks });
     if (!dry.ok) return { ok: false, error: 'Not approved, the draft has problems: ' + dry.errors.join('; ') };
     var prior = revisions.filter(function (r) { return r.step_id === d.step_id && r.status !== 'draft' && r.status !== 'discarded'; });
     var revNo = prior.reduce(function (m, r) { return Math.max(m, Number(r.rev_no || 0)); }, 0) + 1;
     var revisionId = 'rev_' + d.step_id + '_' + revNo;
     var frozen = deps.drive.freeze(revisionId + '__body.html', html);
+    var fblocks = dblocks.map(function (b) { return { name: b.name, flag: b.flag, file_id: deps.drive.freeze(revisionId + '__' + b.name + '.html', b.html), sha256: env.sha256(b.html) }; });
     var fields = env.store.rows('Fields');
-    var rec = { revision_id: revisionId, step_id: d.step_id, rev_no: revNo, subject: d.subject, preheader: d.preheader || '', details_box: '',
-      body_file_id: frozen, body_sha256: d.body_sha256, blocks_json: [], fields_json: fields, status: 'published', format: d.format,
+    var rec = { revision_id: revisionId, step_id: d.step_id, rev_no: revNo, subject: d.subject, preheader: d.preheader || '', details_box: d.details_box || '',
+      body_file_id: frozen, body_sha256: d.body_sha256, blocks_json: fblocks, fields_json: fields, status: 'published', format: d.format,
       source_file_id: d.source_file_id, source_name: d.source_name, source_modified: d.source_modified,
       editor: d.editor, approver: actor, approved_at: new Date(env.now()).toISOString(),
       parent_revision_id: prior.length ? prior[prior.length - 1].revision_id : '' };
-    rec.content_hash = env.sha256(JSON.stringify([rec.subject, rec.preheader, rec.details_box, rec.body_sha256, [], fields, rec.format]));
+    rec.content_hash = env.sha256(JSON.stringify([rec.subject, rec.preheader, rec.details_box, rec.body_sha256,
+      fblocks.map(function (b) { return b.name + ':' + b.sha256; }), fields, rec.format]));
     prior.filter(function (r) { return r.status === 'published'; }).forEach(function (r) {
       core.commitEntity('revision', { revision_id: r.revision_id, status: 'superseded' }, 'revision:' + r.revision_id + ':superseded');
     });

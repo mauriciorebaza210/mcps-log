@@ -64,6 +64,29 @@ const out = { overview: R.buildOverview(tables, caps, now), contacts: R.buildCon
 for (const s of out.overview.steps) out.step[s.step_id] = R.buildStep(tables, caps, s.step_id, now);
 for (const c of C) out.contact[c.contact_id] = R.buildContact(tables, caps, c.contact_id);
 const fs = await import('node:fs/promises'), here = new URL('.', import.meta.url).pathname;
+// The email editor's open_editor answers, from the real seed files.
+const repo = new URL('../../..', import.meta.url).pathname, rd = f => fs.readFile(repo + f, 'utf8');
+const FIELDS = JSON.parse(await rd('email-engine/seed/fields.json')).fields, POOL = await rd('email-engine/templates/blocks/PoolSchool.html');
+const edCtx = { sender_name: 'Tony Rebaza', links: { quote: 'https://mcps-log.vercel.app/service' },
+  business: { name: 'Mission Custom Pool Solutions', address: '4640 South Flores Road, Elmendorf, TX 78112', phone: '(210) 559-2073', website: 'https://mcpoolsolutions.org' } };
+out.editor = {
+  c_welcome: { ok: true, step_id: 'c_welcome', fields: FIELDS, context: edCtx, block_library: [{ name: 'PoolSchool', flag: 'pool_school', html: POOL }],
+    source: { from: 'live', revision_id: 'rev_c_welcome_1', rev_no: 1, subject: 'Welcome to Mission Custom Pool Solutions', preheader: 'Your startup date and what happens next.',
+      details_box: 'Startup begins: {{StartupDate}}|Pool address: {{Address}}', format: 'body', body_html: await rd('email-engine/templates/C/c_welcome.html'), blocks: [{ name: 'PoolSchool', flag: 'pool_school', html: POOL }] } },
+  b_followup: { ok: true, step_id: 'b_followup', fields: FIELDS, context: edCtx, block_library: [],
+    source: { from: 'draft', revision_id: 'draft_b_followup_x', subject: 'Following up on your pool', preheader: '', details_box: '', format: 'full', blocks: [],
+      body_html: '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><title>Following up</title><style>.btn{background:#0D3D3E}</style></head>' +
+        '<body style="margin:0;background:#E9EDEE;font-family:Arial,sans-serif"><table width="600" align="center" cellpadding="0" cellspacing="0" style="background:#fff;margin:24px auto">' +
+        '<tr><td style="padding:24px;text-align:center"><img src="https://mcps-email-assets.vercel.app/mcps-lockup-badge.png" width="214" alt="Mission Custom Pool Solutions"></td></tr>' +
+        '<tr><td style="padding:8px 40px"><h1 style="color:#0D3D3E;font-family:Georgia,serif;font-size:26px">Still thinking about weekly service, {{FirstName}}?</h1>' +
+        '<p style="font-size:15px;line-height:1.6;color:#2E3A3A">Just following up on my note from last week. Our team already knows your pool.</p>' +
+        '<p style="font-size:15px;line-height:1.6;color:#2E3A3A">Reply to this email or tap below for a free quote.</p></td></tr>' +
+        '<tr><td align="center" style="padding:12px 40px 28px"><a class="btn" href="{{QuoteLink}}" style="background:#0D3D3E;color:#fff;padding:16px 32px;border-radius:7px;text-decoration:none;display:inline-block;font-weight:700">Get your free quote</a></td></tr>' +
+        '<tr><td style="padding:20px 40px;background:#F3F5F6;font-size:12px;color:#5A6A6A;text-align:center">Mission Custom Pool Solutions · 4640 South Flores Road, Elmendorf, TX 78112<br><a href="{{UnsubscribeLink}}" style="color:#7A8888">Unsubscribe</a></td></tr>' +
+        '</table></body></html>' } },
+  b_intro: { ok: true, step_id: 'b_intro', fields: FIELDS, context: edCtx, block_library: [],
+    source: { from: 'live', revision_id: 'rev_b_intro_1', rev_no: 1, subject: 'An introduction from Mission Custom Pools', preheader: '', details_box: '', format: 'body', body_html: await rd('email-engine/templates/B/b_intro.html'), blocks: [] } }
+};
 await fs.writeFile(here + 'fixture.json', JSON.stringify(out));
 const root = 'file://' + new URL('../../..', import.meta.url).pathname.replace(/\/$/, '');
 const tpl = await fs.readFile(here + 'harness.template.html', 'utf8');

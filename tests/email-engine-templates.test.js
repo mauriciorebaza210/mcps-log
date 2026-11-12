@@ -118,3 +118,74 @@ test('Starter drafts from the portal: offered for emails with nothing live, pass
   assert.equal(w.admin('approve_draft', { revision_id: imp.revision_id }).ok, true);
   assert.equal((w.admin('list_templates', { step_id: 'c_maint' }).templates.c_maint || []).length, 0, 'gone once something is live');
 });
+
+// ── The portal's email editor (open_editor → save_draft → approve) ───────────
+// Puts a live Welcome in place the way eeApprove does: body + PoolSchool block frozen with hashes.
+function liveWelcome(w) {
+  const body = read('email-engine/templates/C/c_welcome.html'), blk = read('email-engine/templates/blocks/PoolSchool.html');
+  w.frozen.zb = body; w.frozen.zk = blk;
+  const sha = h => w.env.sha256(h);
+  w.tables.Revisions.push({ revision_id: 'rev_c_welcome_1', step_id: 'c_welcome', rev_no: 1, subject: 'Welcome to Mission Custom Pool Solutions', preheader: 'Your startup date',
+    details_box: 'Startup begins: {{StartupDate}}|Pool address: {{Address}}', body_file_id: 'zb', body_sha256: sha(body),
+    blocks_json: [{ name: 'PoolSchool', flag: 'pool_school', file_id: 'zk', sha256: sha(blk) }], status: 'published' });
+  return { body, blk };
+}
+
+test('open_editor: starts from the live version with its blocks and details box, else the starter, else blank', () => {
+  const w = world();
+  w.drafts = new Proxy(w.drafts, { get: (t, k) => k in t ? t[k] : w.frozen[k] });
+  const { body } = liveWelcome(w);
+  const live = w.admin('open_editor', { step_id: 'c_welcome' });
+  assert.equal(live.ok, true, live.error);
+  assert.equal(live.source.from, 'live');
+  assert.equal(live.source.body_html, body);
+  assert.deepEqual(JSON.parse(JSON.stringify(live.source.blocks.map(b => [b.name, b.flag]))), [['PoolSchool', 'pool_school']]);
+  assert.match(live.source.details_box, /StartupDate/);
+  assert.ok(live.fields.some(f => f.field === 'FirstName'));
+  assert.equal(live.context.business.address, ADDR);
+  assert.equal(w.admin('open_editor', { step_id: 'c_progress' }).source.from, 'starter');
+  assert.equal(w.admin('open_editor', { step_id: 'b_checkin' }).source.from, 'blank');
+  assert.equal(w.admin('open_editor', { step_id: 'nope' }).ok, false);
+  assert.equal(w.tables.ChangeLog.length, 0, 'opening the editor isn\'t logged');
+});
+
+test('save_draft → approve: an edited Welcome keeps its Pool School block and details box, frozen with hashes', () => {
+  const w = world();
+  w.drafts = new Proxy(w.drafts, { get: (t, k) => k in t ? t[k] : w.frozen[k] });
+  const { body, blk } = liveWelcome(w);
+  const edited = body.replace('almost ready for its first swim', 'almost ready for its very first swim');
+  const r = w.admin('save_draft', { step_id: 'c_welcome', subject: 'Welcome, {{FirstName}}', preheader: 'Startup soon',
+    details_box: 'Startup begins: {{StartupDate}}|Pool address: {{Address}}', body_html: edited,
+    blocks: [{ name: 'PoolSchool', flag: 'something_else', html: blk.replace('Pool School is included.', 'Pool School is on us.') }], based_on: 'rev_c_welcome_1' });
+  assert.equal(r.ok, true, r.error);
+  const d = w.rev(r.revision_id);
+  assert.equal(d.status, 'draft'); assert.equal(d.source_name, 'the editor'); assert.equal(d.parent_revision_id, 'rev_c_welcome_1');
+  assert.equal(d.blocks_json[0].flag, 'pool_school', 'the flag comes from the registry, never the page');
+  const ok = w.admin('approve_draft', { revision_id: r.revision_id });
+  assert.equal(ok.ok, true, ok.error);
+  const pub = w.rev(ok.revision_id);
+  assert.equal(pub.status, 'published'); assert.equal(pub.details_box, 'Startup begins: {{StartupDate}}|Pool address: {{Address}}');
+  assert.equal(pub.blocks_json.length, 1);
+  assert.match(w.frozen[pub.blocks_json[0].file_id], /Pool School is on us/);
+  assert.equal(pub.blocks_json[0].sha256, w.env.sha256(w.frozen[pub.blocks_json[0].file_id]));
+  assert.equal(w.rev('rev_c_welcome_1').status, 'superseded');
+});
+
+test('save_draft: refuses broken emails and unknown blocks; editing a draft replaces it', () => {
+  const w = world();
+  const base = { step_id: 'b_checkin', subject: 'Checking in', body_html: '<h1>Hi {{FirstName}}</h1><p>How is the pool?</p>' };
+  assert.equal(w.admin('save_draft', Object.assign({}, base, { body_html: '<p>Hi {{Firstname}}</p>' })).ok, false, 'unknown field');
+  assert.match(w.admin('save_draft', Object.assign({}, base, { body_html: '<p onclick="x()">Hi</p>' })).error, /event handler/);
+  assert.match(w.admin('save_draft', Object.assign({}, base, { subject: ' ' })).error, /subject/);
+  assert.match(w.admin('save_draft', Object.assign({}, base, { blocks: [{ name: 'Evil', html: '<p>x</p>' }] })).error, /unknown block/);
+  assert.match(w.admin('save_draft', Object.assign({}, base, { body_html: FULL, blocks: [{ name: 'PoolSchool', html: '<p>x</p>' }] })).error, /full templates/);
+  const a = w.admin('save_draft', base);
+  assert.equal(a.ok, true, a.error);
+  const b = w.admin('save_draft', Object.assign({}, base, { body_html: base.body_html + '<p>One more line.</p>', based_on: a.revision_id }));
+  assert.equal(b.ok, true, b.error);
+  assert.equal(w.rev(a.revision_id).status, 'discarded');
+  assert.equal(w.rev(a.revision_id).replaced_by, b.revision_id);
+  assert.equal(w.tables.Revisions.filter(r => r.status === 'draft').length, 1);
+  // A full template from the editor is allowed when it passes the checks.
+  assert.equal(w.admin('save_draft', { step_id: 'b_followup', subject: 'Following up', body_html: FULL }).ok, true);
+});
