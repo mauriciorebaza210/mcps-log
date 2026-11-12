@@ -11,7 +11,7 @@
 const LC = { tab: 'campaigns', mode: null, ov: null, contacts: null, q: '', bucket: '', review: '', loading: false, error: null,
   drawer: null, root: null, bound: false, runPending: 0, busy: {} };
 const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
-const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup' };
+const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup', Z: 'Staff' };
 const LC_ICON = {
   clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-8"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
@@ -418,6 +418,18 @@ function lcGoLiveCard_() {
       li(!!ready, ready ? 'New keys ready on the live site' : LC.golive && LC.golive.loading ? 'Checking the new keys…' : 'New keys not set up yet (Claude does this)') +
     '</ul><button class="lc-btn primary" data-act="golive"' + (ready ? '' : ' disabled') + '>Go live…</button></div></div>';
 }
+// Staff: MCPS people who can get single emails; no campaign ever picks them (Admin.js EE_addStaff_).
+async function lcAddStaff_() {
+  const html = '<p>Someone at MCPS who can get single emails, like a launch note. No campaign or batch ever picks them.</p>' +
+    '<div class="lc-imp-row"><label class="lc-fld grow"><span>First name</span><input class="lc-input" data-st="first_name" maxlength="60"></label>' +
+    '<label class="lc-fld grow"><span>Last name</span><input class="lc-input" data-st="last_name" maxlength="80"></label></div>' +
+    '<label class="lc-fld"><span>Email</span><input class="lc-input" data-st="email" type="email" maxlength="120"></label>';
+  const r = await lcConfirm_({ title: 'Add a staff member', html, ok: 'Add',
+    run: layer => { const v = k => layer.querySelector('[data-st="' + k + '"]').value; return lcAdmin_('add_staff', { first_name: v('first_name'), last_name: v('last_name'), email: v('email') }); } });
+  if (!r || !r.ok) return;
+  lcToast_(r.existed ? 'Updated' : 'Added to Staff');
+  LC.contacts = null; lcRefresh_(true);
+}
 async function lcGoLive_() {
   const html = '<p>Real customers start getting the emails that are On. After this, use the live portal (mcps-log.vercel.app); this preview stops talking to the engine.</p>' +
     '<label class="lc-fld"><span>Type GO LIVE to confirm</span><input class="lc-input" data-gl autocomplete="off"></label>';
@@ -493,7 +505,7 @@ function lcContacts_() {
   const bar = '<div class="lc-bar"><label class="lc-search">' + LC_ICON.search + '<input type="search" placeholder="Search people" value="' + lcEsc_(LC.q) +
     '" data-lc-input="q" aria-label="Search people"></label><div class="lc-seg">' +
     [['', 'All'], ['B', 'MCP Legacy'], ['C', 'MCP Startup']].map(([k, l]) => '<button data-act="bucket" data-bucket="' + k + '" class="' + (LC.bucket === k ? 'on' : '') + '">' + l + '</button>').join('') +
-    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn" data-act="crm-leads">MCP leads</button><button class="lc-btn" data-act="cleanup">Clean up</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
+    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn" data-act="crm-leads">MCP leads</button><button class="lc-btn" data-act="cleanup">Clean up</button><button class="lc-btn" data-act="staff">Add staff</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
   if (!LC.contacts) return bar + '<div class="lc-sk" style="height:320px"></div>';
   const q = LC.q.trim().toLowerCase();
   // Merged and removed contacts stay in the engine (history, pointers) but not in the list.
@@ -891,6 +903,7 @@ function lcDispatch_(t) {
   if (act === 'run') return lcRunNow_();
   if (act === 'sender') return lcEditSender_();
   if (act === 'golive') return lcGoLive_();
+  if (act === 'staff') return lcAddStaff_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);
   if (act === 'enabled') return lcSetEnabled_(!LC.ov.engine.enabled);
   if (act === 'pause') return lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));

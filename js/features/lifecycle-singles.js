@@ -118,7 +118,7 @@ function sglPeople_() {
   const opts = key => [...new Set(pool.flatMap(c => key === 'tags' ? (c.tags || []) : [c[key]]).filter(Boolean))].sort();
   const chips = (key, label) => { const o = opts(key); return o.length ? '<div class="lc-fld"><span>' + label + '</span><div class="lc-chips">' + o.map(v =>
     '<button class="lc-chip' + (SGL.filters[key].includes(v) ? ' on' : '') + '" data-sgl="chip" data-key="' + key + '" data-val="' + lcEsc_(v) + '">' + lcEsc_(v) + ' <small>' + count(key, v) + '</small></button>').join('') + '</div></div>' : ''; };
-  const seg = [['B', 'MCP Legacy'], ['C', 'MCP Startup'], ['all', 'Everyone']].map(([k, l]) => '<button data-sgl="group" data-v="' + k + '" class="' + (SGL.group === k ? 'on' : '') + '">' + l + '</button>').join('');
+  const seg = [['B', 'MCP Legacy'], ['C', 'MCP Startup'], ['Z', 'Staff'], ['all', 'Everyone']].map(([k, l]) => '<button data-sgl="group" data-v="' + k + '" class="' + (SGL.group === k ? 'on' : '') + '">' + l + '</button>').join('');
   const rows = m.slice(0, 300).map(c => '<li><label class="lc-check"><input type="checkbox" data-sgl-pick="' + lcEsc_(c.contact_id) + '"' + (SGL.off.has(c.contact_id) ? '' : ' checked') + '><span><b>' + lcEsc_(sglName_(c)) +
     '</b> <small class="lc-dim">' + lcEsc_([LC_SEQ[c.bucket], c.area].filter(Boolean).join(' · ')) + '</small></span></label></li>').join('');
   return (test ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>Test mode</b><small>Only test contacts can get it until the engine goes live.</small></div></div>' : '') +

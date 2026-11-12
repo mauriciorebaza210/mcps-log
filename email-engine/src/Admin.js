@@ -37,7 +37,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -98,6 +98,7 @@ function EE_adminRun_(env, core, req, deps) {
   else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);
   else if (action === 'reset_mcp_legacy') out = EE_resetMcpLegacy_(env, core, actor);
   else if (action === 'go_live') out = EE_goLive_(env, core, p, actor, deps);
+  else if (action === 'add_staff') out = EE_addStaff_(env, core, p, actor);
   else if (action === 'set_sender') {
     // The name in the inbox ("From") and the name emails are signed with ({{SenderName}}). Plain text only.
     var clean = function (v) { return String(v == null ? '' : v).replace(/[<>"\r\n\u0000-\u001F]/g, '').replace(/\s+/g, ' ').trim(); };
@@ -521,6 +522,21 @@ function EE_applyIncoming_(env, core, p, actor) {
   core.commitEntity('contact', data, 'contact:' + c.contact_id + ':' + mode + ':' + env.sha256(JSON.stringify(data)).slice(0, 12));
   return { ok: true, changed: true };
 }
+// Staff (bucket Z, Mau 2026-11-11): MCPS people who can get single emails (e.g. the launch note to Tony).
+// Confirmed on creation, never test; no campaign has bucket Z, so no batch or sequence ever picks them.
+function EE_addStaff_(env, core, p, actor) {
+  var plain = function (v, n) { return String(v == null ? '' : v).replace(/[<>"\r\n\u0000-\u001F]/g, '').replace(/\s+/g, ' ').trim().slice(0, n); };
+  var email = String(p.email || '').trim().toLowerCase(), first = plain(p.first_name, 60), last = plain(p.last_name, 80);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return { ok: false, error: 'A valid email is required.' };
+  if (!first) return { ok: false, error: 'A first name is required.' };
+  var cur = env.store.rows('Contacts').filter(function (c) { return String(c.email_norm || '').toLowerCase() === email; })[0];
+  if (cur && cur.bucket !== 'Z') return { ok: false, error: 'That email is already a contact in another list.' };
+  var id = cur ? cur.contact_id : 'ct_' + env.sha256(email).slice(0, 16);
+  core.commitEntity('contact', { contact_id: id, email_norm: email, first_name: first, last_name: last, bucket: 'Z', sub_bucket: '', review_status: 'confirmed',
+    review_reason: 'staff (single emails only)', is_test: 'N', source: 'staff', created_at: cur ? cur.created_at : new Date(env.now()).toISOString(), imported_by: actor }, 'contact:' + id + ':staff');
+  return { ok: true, contact_id: id, existed: !!cur };
+}
+
 // Go live (Mau 2026-11-11, from the portal; Tony isn't needed): in order, and only from test mode.
 //  1. schedule on (eeInstall, as the engine owner: the web app runs as Tony)
 //  2. startups already synced are held: their homeowners got the old approval email (decision A),

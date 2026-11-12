@@ -127,3 +127,18 @@ test('Bad input is refused and publishes nothing', () => {
   assert.equal(w.tables.Rulesets.length, 1);
   assert.equal(w.admin('update_single', { sequence_id: 'B', name: 'x' }).error, 'single email not found');
 });
+
+test('Staff (bucket Z): confirmed, never test, reachable by a single email (in production), never by a batch', () => {
+  const w = world('production');
+  const run = (action, params) => JSON.parse(JSON.stringify(w.admin(action, params)));
+  const r = run('add_staff', { first_name: 'Tony', last_name: 'Martinez', email: 'Antonio@MCPoolSolutions.org' });
+  assert.equal(r.ok, true, r.error);
+  const c = w.tables.Contacts.find(x => x.contact_id === r.contact_id);
+  assert.deepEqual([c.bucket, c.review_status, c.is_test, c.email_norm], ['Z', 'confirmed', 'N', 'antonio@mcpoolsolutions.org']);
+  assert.equal(run('add_staff', { first_name: '', email: 'x@example.com' }).ok, false);
+  assert.equal(run('add_staff', { first_name: 'A', email: 'real@example.com' }).ok, false, 'someone already in a campaign stays there');
+  const single = run('create_single', { name: 'Launch note', date: '2026-11-24', send_time: '08:00', contact_ids: [r.contact_id] });
+  assert.deepEqual([single.ok, single.count], [true, 1]);
+  const picked = w.ctx_.MCPS_BATCHES.eligible(w.tables.Contacts, { group: 'B', filters: {}, exclude: [] }).map(x => x.contact_id);
+  assert.ok(!picked.includes(r.contact_id), 'no MCP Legacy batch can pick staff');
+});

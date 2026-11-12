@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp9-3';
+var EE_VERSION = 'cp9-4';
 // Data schema (PLAN.md → Security boundary & rollback). Additive changes (new columns, new
 // tabs) keep the number; a semantic change goes expand → migrate → contract and raises it.
 // A run refuses data outside read_min..read_max; the deploy script refuses code that can't
@@ -153,7 +153,9 @@ function doGet(e) {
   if (p.action === 'unsubscribe') return EE_unsubscribePage_(p.t, false);
   // whoami / health: who the engine runs as, and its state. No input is accepted here.
   var props = EE_props_(), out = { ok: true, version: EE_VERSION, effective_user: Session.getEffectiveUser().getEmail(),
-    owner: props.getProperty('EE_OWNER_EMAIL') || '', safety_pause: props.getProperty('EE_SAFETY_PAUSE') || '' };
+    owner: props.getProperty('EE_OWNER_EMAIL') || '', safety_pause: props.getProperty('EE_SAFETY_PAUSE') || '',
+    // The data spreadsheet's id (not a secret: reading it needs Google sharing), for wiring up a new portal environment.
+    data_ss_id: props.getProperty('EE_MAIN_SS_ID') || '' };
   out.schema = EE_SCHEMA;
   try { var env = EE_env(); out.applied_seq = Number(env.meta.get('applied_seq') || 0); out.journal_head = (env.journal.last() || { seq: 0 }).seq; out.data_schema = Number(env.meta.get('data_schema') || 0); }
   catch (err) { out.ok = false; out.error = String(err.message || err).slice(0, 200); }
