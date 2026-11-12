@@ -306,16 +306,18 @@ test('Import check: each row gets one verdict (new, existing, same person, custo
   assert.equal(sent.length, 0, 'a check writes nothing');
 });
 
-test('Import save: the server re-checks; only new rows (and chosen same-person rows) reach the engine, with clean fields', async () => {
+test('Import save: the server re-checks; only new rows (and chosen same-person rows) reach the engine, with clean fields; someone already here gets the new details', async () => {
   const tampered = IMPORT_ROWS.map(r => ({ ...r, status: 'new', evil: '<script>' }));
   const { res, sent } = await importCall({ stage: 'save', group: 'B', source: 'MCP list', contacts: tampered, include_rows: [4] });
   assert.equal(res.statusCode, 200);
-  const p = sent[0].params;
+  const fold = sent.filter(a => a.action === 'apply_incoming');
+  assert.deepEqual(fold.map(a => [a.params.mode, a.params.data.source]), [['replace', 'MCP list']], 'row 3 (same email) is replaced by default, no duplicate');
+  const p = sent.find(a => a.action === 'import_contacts').params;
   assert.deepEqual(p.contacts.map(c => c.email_norm), ['new@example.com', 'maria.l@work.example', 'lead@example.com', 'back@example.com']);
   assert.deepEqual(p.do_not_contact, ['dnc@example.com']);
   assert.equal(p.contacts[0].source, 'MCP list');
   assert.equal(p.contacts[0].evil, undefined, 'unknown fields are dropped');
-  assert.equal(sent[0].actor, 'mau');
+  assert.equal(sent.find(a => a.action === 'import_contacts').actor, 'mau');
 });
 
 test('Import: needs edit_contacts; save takes at most 100 rows; mappings are listed and saved', async () => {

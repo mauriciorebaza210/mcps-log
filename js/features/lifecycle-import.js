@@ -15,7 +15,7 @@ const IMP = { step: 1, layer: null, file: '', sheets: null, sheet: '', rows: [],
   saved: null, mappings: null, check: null, include: new Set(), choice: {}, progress: null, done: null, busy: false };
 const IMP_XLSX = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const IMP_VERDICT = {
-  new: ['Will be added', 'live'], possible_duplicate: ['Possibly already here', 'warn'], existing: ['Already here (same email)', ''], same_person: ['Same person, other email', 'warn'],
+  new: ['Will be added', 'live'], possible_duplicate: ['Possibly already here', 'warn'], existing: ['Already here (same email): new details replace the old', ''], same_person: ['Same person, other email', 'warn'],
   customer: ['Already an MCPS customer', ''], opted_out: ['Unsubscribed or bounced', ''], do_not_contact: ['Do not contact', 'bad']
 };
 
@@ -146,7 +146,8 @@ const IMP_CHOICES = { existing: [['skip', 'Skip'], ['merge', 'Fill in blanks'], 
   same_person: [['skip', 'Skip'], ['merge', 'Merge (add this email)'], ['replace', 'Use the new details'], ['keep_both', 'Keep both']],
   possible_duplicate: [['skip', 'Skip'], ['merge', 'Merge (add this email)'], ['replace', 'Use the new details'], ['keep_both', 'Keep both']] };
 const IMP_WHY = { same_email: 'same email', same_inbox: 'same Gmail inbox', same_person: 'same name and street', similar_name: 'similar name, same address', same_household: 'same address', possible_duplicate: 'possible duplicate' };
-const impChoice_ = r => IMP.choice[r.row] || 'skip';
+// Already in the list → the new details replace the old (no duplicates); a repeat inside the file → skip.
+const impChoice_ = r => IMP.choice[r.row] || (r.match && r.match.in_file ? 'skip' : 'replace');
 function impStepCheck_() {
   const c = IMP.check, s = c.summary || {}, local = c.local;
   const keep = c.rows.filter(r => IMP_CHOICES[r.status] && impChoice_(r) === 'keep_both').length;
@@ -212,7 +213,8 @@ async function impImport_() {
   const done = { added: 0, skipped: 0, dnc: 0, failed: 0, merged: 0 };
   for (let i = 0; i < rows.length; i += 100) {
     const chunk = rows.slice(i, i + 100);
-    const res = {}; chunk.forEach(c => { if (IMP.choice[c.row]) res[c.row] = IMP.choice[c.row]; });
+    const res = {}, byRow = new Map(IMP.check.rows.map(r => [r.row, r]));
+    chunk.forEach(c => { const r = byRow.get(c.row); if (r && IMP_CHOICES[r.status]) res[c.row] = impChoice_(r); });
     const r = await impPost_({ stage: 'save', group: IMP.group, source: IMP.source, contacts: chunk, resolutions: res }).catch(() => ({ ok: false }));
     if (r.ok) { done.merged += r.merged || 0; done.added += r.added || 0; done.skipped += (r.skipped || []).length; done.dnc += r.do_not_contact_recorded || 0; } else done.failed += chunk.length;
     IMP.progress.sent = Math.min(rows.length, i + chunk.length); impRender_();

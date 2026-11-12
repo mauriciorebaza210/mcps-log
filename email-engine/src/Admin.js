@@ -37,7 +37,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { retire_synced_leads: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -96,6 +96,7 @@ function EE_adminRun_(env, core, req, deps) {
   else if (action === 'update_contacts') out = EE_updateContacts_(env, core, p, actor);
   else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
   else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);
+  else if (action === 'retire_synced_leads') out = EE_retireSyncedLeads_(env, core, actor);
   else if (action === 'set_crm_rule') {
     var rule = p.rule && typeof p.rule === 'object' ? p.rule : null;
     if (!rule) out = { ok: false, error: 'rule required' };
@@ -497,9 +498,30 @@ function EE_applyIncoming_(env, core, p, actor) {
     if (mode === 'replace') { data.email_norm = email; data.alt_emails = EE_addEmail_(c.alt_emails, c.email_norm); }
     else data.alt_emails = EE_addEmail_(c.alt_emails, email);
   }
+  // Replace: the new list owns the contact now (Mau 2026-11-11: Tony's import wins over older copies).
+  var src = String(inc.source || '').trim().slice(0, 80);
+  if (mode === 'replace' && src && src !== String(c.source || '')) data.source = src;
+  // Someone removed earlier (e.g. a past MCP lead) who is on the new list comes back, for review.
+  if (c.review_status === 'removed') { data.review_status = 'needs_review'; data.review_reason = 'imported again'; }
   if (Object.keys(data).length === 1) return { ok: true, changed: false };
   core.commitEntity('contact', data, 'contact:' + c.contact_id + ':' + mode + ':' + env.sha256(JSON.stringify(data)).slice(0, 12));
   return { ok: true, changed: true };
+}
+// One time (Mau 2026-11-11): past MCP leads the Sales Hub sync added stop showing; Tony imports his
+// own list instead. Only contacts that never started a sequence are removed (kept in the engine,
+// hidden from the list); automatic adding turns off. Anyone on Tony's list comes back with his details.
+function EE_retireSyncedLeads_(env, core, actor) {
+  var started = {};
+  env.store.rows('Enrollments').forEach(function (e) { started[e.contact_id] = 1; });
+  var n = 0;
+  env.store.rows('Contacts').forEach(function (c) {
+    if (c.source !== 'sales_hub' || c.bucket !== 'B' || started[c.contact_id] || String(c.is_test).toUpperCase() === 'Y' || /^(removed|merged)$/.test(c.review_status || '')) return;
+    core.commitEntity('contact', { contact_id: c.contact_id, review_status: 'removed', review_reason: 'past MCP lead (Tony imports his own list)' }, 'contact:' + c.contact_id + ':retired_lead');
+    n++;
+  });
+  env.store.upsert('Config', { key: 'crm_lead_auto', value: 'false' });
+  env.store.upsert('Config', { key: 'mcp_leads_retired', value: new Date(env.now()).toISOString() });
+  return { ok: true, removed: n };
 }
 
 // The current ruleset (parsed) and its revision id.

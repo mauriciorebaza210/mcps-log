@@ -115,7 +115,7 @@ test('op=crm GET: breakdown + startups found, for anyone with access', async () 
   const r = await call({ token: 'tok-viewer' });
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.breakdown.leads, 10);
-  assert.equal(r.body.auto, true, 'automatic unless turned off');
+  assert.equal(r.body.auto, false, 'off unless turned on (Tony imports his own list)');
   assert.deepEqual(r.body.rule.lead_sources, ['mcp', 'import', 'unknown']);
   assert.equal(r.body.mcp_leads.new, 3, 'Ana, Old Import, New Mcp; Bo is in the engine, Eve opted out');
   assert.equal(r.body.startups.found, 2);
@@ -136,12 +136,16 @@ test('op=crm check/add: the import check runs (opted out, engine duplicate, cust
   assert.deepEqual(rule.params, { rule: { lead_sources: ['import'] }, auto: true });
 });
 
-test('Heartbeat syncs startups every morning, and MCP leads unless automatic adding is off', async () => {
-  const off = await api({ config: [{ key: 'engine_mode', value: 'test' }, { key: 'crm_lead_auto', value: 'false' }] });
+test('Heartbeat syncs startups every morning; past MCP leads are retired once; leads are added only when turned on', async () => {
+  const first = await api({});
+  await first.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
+  assert.deepEqual(first.relayed.map(r => r.action), ['sync_startups', 'retire_synced_leads']);
+  assert.deepEqual(first.relayed[0].params.contacts.map(c => c.quote_id).sort(), ['Q-S1', 'Q-S2']);
+  const done = [{ key: 'engine_mode', value: 'test' }, { key: 'mcp_leads_retired', value: '2026-11-11T00:00:00Z' }];
+  const off = await api({ config: done });
   await off.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
-  assert.deepEqual(off.relayed.map(r => r.action), ['sync_startups']);
-  assert.deepEqual(off.relayed[0].params.contacts.map(c => c.quote_id).sort(), ['Q-S1', 'Q-S2']);
-  const on = await api({});
+  assert.deepEqual(off.relayed.map(r => r.action), ['sync_startups'], 'default: no leads added');
+  const on = await api({ config: done.concat([{ key: 'crm_lead_auto', value: 'true' }]) });
   await on.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
   assert.deepEqual(on.relayed.map(r => r.action), ['sync_startups', 'import_contacts']);
   assert.deepEqual(on.relayed[1].params.contacts.map(c => c.quote_id).sort(), ['Q-L1', 'Q-L7', 'Q-L8'], 'default MCP rule; Bo, Eve skipped');
@@ -156,6 +160,7 @@ function engine() {
   vm.runInContext(['js/lib/lifecycle-rules.js', 'js/lib/batches.js'].map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n') +
     '\nvar EE_TZ = "America/Chicago";\n' + fs.readFileSync(path.join(ROOT, 'email-engine', 'src', 'Admin.js'), 'utf8'), ctx);
   w.sync = p => ctx.EE_adminRun_(w.env, w.core, { action: 'sync_startups', params: p, actor: 'heartbeat' }, {});
+  w.run = (action, p) => ctx.EE_adminRun_(w.env, w.core, { action, params: p, actor: 'mau' }, {});
   w.contact = q => w.tables.Contacts.find(c => c.quote_id === q);
   return w;
 }
@@ -185,4 +190,23 @@ test('Engine: a cancelled startup is removed and its sequence stopped; someone i
   const r = w.sync({ contacts: [{ ...S1, quote_id: 'Q-S2', email_norm: 'tia@example.com' }] });
   assert.equal(r.skipped[0].reason, 'in_B_campaign');
   assert.ok(w.tables.Config.find(c => c.key === 'crm_sync_at'));
+});
+
+test('Retire past MCP leads: only synced, never-started MCP Legacy contacts leave the list; auto off; Tony’s import brings one back with his details', () => {
+  const w = engine();
+  const ctx_run = (action, params) => JSON.parse(JSON.stringify(w.run(action, params)));
+  w.tables.Contacts.push(
+    { contact_id: 'l1', email_norm: 'l1@example.com', bucket: 'B', source: 'sales_hub', review_status: 'needs_review', is_test: 'N', first_name: 'Old' },
+    { contact_id: 'l2', email_norm: 'l2@example.com', bucket: 'B', source: 'sales_hub', review_status: 'confirmed', is_test: 'N' },
+    { contact_id: 'f1', email_norm: 'f1@example.com', bucket: 'B', source: 'MCP list', review_status: 'needs_review', is_test: 'N' },
+    { contact_id: 't1', email_norm: 't1@example.com', bucket: 'B', source: 'sales_hub', review_status: 'needs_review', is_test: 'Y' });
+  w.tables.Enrollments.push({ enrollment_id: 'e2', contact_id: 'l2', status: 'active' });
+  assert.deepEqual(ctx_run('retire_synced_leads', {}), { ok: true, removed: 1 });
+  const st = id => w.tables.Contacts.find(c => c.contact_id === id).review_status;
+  assert.deepEqual(['l1', 'l2', 'f1', 't1'].map(st), ['removed', 'confirmed', 'needs_review', 'needs_review']);
+  assert.equal(w.tables.Config.find(r => r.key === 'crm_lead_auto').value, 'false');
+  const back = ctx_run('apply_incoming', { contact_id: 'l1', mode: 'replace', data: { email_norm: 'l1@example.com', first_name: 'Linda', source: 'MCP list' } });
+  assert.equal(back.changed, true);
+  const l1 = w.tables.Contacts.find(c => c.contact_id === 'l1');
+  assert.deepEqual([l1.review_status, l1.first_name, l1.source], ['needs_review', 'Linda', 'MCP list']);
 });

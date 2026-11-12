@@ -335,6 +335,9 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     // (keep_both → added; merge | replace → folded into the matching contact; skip → nothing).
     const choice = { ...(body.resolutions || {}) };
     (body.include_rows || []).forEach(n => { if (!choice[n]) choice[n] = 'keep_both'; });
+    // Someone already in the list: the new details replace the old ones unless the person chose otherwise
+    // (Mau 2026-11-11: no duplicates; Tony's list wins). A repeat inside the same file is skipped.
+    verdict.rows.forEach(r => { if (!choice[r.row] && /^(existing|possible_duplicate|same_person)$/.test(r.status)) choice[r.row] = r.match && r.match.in_file ? 'skip' : 'replace'; });
     const byRow = new Map(verdict.cleaned.map(c => [Number(c.row), c]));
     const toSave = verdict.rows.filter(r => r.status === 'new' || (/^(possible_duplicate|same_person)$/.test(r.status) && choice[r.row] === 'keep_both'))
       .map(r => importRecord(byRow.get(Number(r.row)), { source: body.source }));
@@ -342,7 +345,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     const dnc = verdict.rows.filter(r => r.status === 'do_not_contact').map(r => r.email_norm);
     let folded = 0;
     for (const f of folds.slice(0, 100)) {
-      const fr = await deps.relayAdmin({ action: 'apply_incoming', params: { contact_id: f.match.contact_id, mode: choice[f.row], data: importRecord(byRow.get(Number(f.row))) }, actor: session.username });
+      const fr = await deps.relayAdmin({ action: 'apply_incoming', params: { contact_id: f.match.contact_id, mode: choice[f.row], data: importRecord(byRow.get(Number(f.row)), { source: body.source }) }, actor: session.username });
       if (fr && fr.ok && fr.changed) folded++;
     }
     if (!toSave.length && !dnc.length) { rawVersion++; return reply(res, 200, { ok: true, added: 0, merged: folded, skipped: [], rows: verdict.rows }); }
@@ -357,7 +360,8 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   const cfgOf = tables => { const c = {}; (tables.Config || []).forEach(r => { c[r.key] = r.value; }); return c; };
   // MCP leads: the saved rule, else the default (every imported lead); added automatically unless turned off.
   const ruleOf = cfg => { try { const r = typeof cfg.crm_lead_rule === 'object' ? cfg.crm_lead_rule : JSON.parse(cfg.crm_lead_rule || 'null'); return r && typeof r === 'object' ? r : DEFAULT_MCP_RULE; } catch (_) { return DEFAULT_MCP_RULE; } };
-  const autoOf = cfg => String(cfg.crm_lead_auto) !== 'false';
+  // Off unless turned on (Mau 2026-11-11: Tony imports his own MCP list; leads aren't added by themselves).
+  const autoOf = cfg => String(cfg.crm_lead_auto) === 'true';
   async function crmSources() {
     const [crm, routes, settings] = await Promise.all([
       deps.readSheetRanges(['Quotes', 'Clients'], deps.crmSpreadsheetId()),
@@ -404,6 +408,12 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   async function crmSync(tables, actor) {
     const src = await crmSources(), cfg = cfgOf(tables), rule = ruleOf(cfg);
     const out = { startups: await syncStartups(src, actor) };
+    // Once: past MCP leads the old automatic sync added leave the list (EE_retireSyncedLeads_).
+    if (!cfg.mcp_leads_retired) {
+      out.retired = await deps.relayAdmin({ action: 'retire_synced_leads', params: {}, actor }).catch(e => ({ ok: false, error: String(e) }));
+      rawVersion++;
+      if (out.retired && out.retired.ok) return out;
+    }
     if (autoOf(cfg)) { const { cands, verdict } = await checkLeadsAI(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
     return out;
   }

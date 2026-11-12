@@ -8,7 +8,7 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 
 ### Where things stand
 - **Checkpoint:** CP7 `bc-scheduled` in progress (no `ee/cp7` tag yet). Last tag `ee/cp6-slice-demo`.
-- **Engine (Tony's Apps Script):** deployment **@42**, version **cp7-19**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
+- **Engine (Tony's Apps Script):** deployment **@43**, version **cp7-20**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
 - **Tests:** `npm run test:ee` → 247 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
 - **Vercel env (Preview, branch feat/email-engine unless noted):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET (all *sensitive*: can't be pulled back), **ANTHROPIC_API_KEY** (Preview + Production, added by Mau 2026-11-11; same key the portal's Apps Script uses).
@@ -34,6 +34,8 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 16. **Welcome = the homeowner's approval email** (57c4bf4; PLAN.md → Plan changes 2026-11-11): the portal's plain "Startup is Confirmed" went to the **homeowner** (not the builder, as first thought). The branded Welcome replaces it: **immediate** (no send-time wait, any hour), approval → portal syncs → `sync_startups` queues a run → sent ≈1 min later; editable in Welcome Email → Templates → Edit. The plain email is removed in `appscript/StartupRequests.js` on this branch (**portal GAS, ships at go-live**). Mau published Welcome "When the startup is approved" from Setup (scope: new people only) on 2026-11-11.
 17. **Setup save dialog** now defaults to "Only people who join from now on" and says nobody gets an email twice (Mau found "Everyone in MCP Startup" confusing).
 18. **On the Way stays with HeadsUp** (7510f62): engine step dropped from CP8; Day Log + Startup Summary built in CP8 but **Off at launch**.
+
+- **2026-11-11 (Mau): Tony imports his own MCP list.** Sales Hub leads are no longer added automatically (`crm_lead_auto` off by default); past synced leads that never started a sequence were removed once (`retire_synced_leads` on the first sync after @43; kept in the engine, hidden). On import, someone already in the list gets the new details by default (`replace`, file source wins; a removed contact comes back for review); repeats inside one file are skipped. Manual "Add MCP leads" still exists.
 
 ### CP7 still to do (exit criteria in PLAN.md → Checkpoints row 7)
 Everything buildable is built. What's left needs Mau (or Tony through Mau):
