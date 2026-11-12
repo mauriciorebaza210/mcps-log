@@ -4,13 +4,13 @@ Plan: [PLAN.md](PLAN.md) · Branch: `feat/email-engine` · Worktree: `~/mcps-log
 Resume in any Claude Code session with `/email-engine`.
 
 ## Now
-_Handoff written 2026-11-11 (end of a long chat, to continue in a new one with `/email-engine`). Everything below is committed and pushed on `feat/email-engine`; the detailed history of CP7 is in **CP7 build log** further down._
+_Updated 2026-11-11 (second session: editor, single emails, tags, attachments, runbook, matrix, trigger test). Handoff written for a new chat with `/email-engine`. Everything below is committed and pushed on `feat/email-engine`; the detailed history of CP7 is in **CP7 build log** further down._
 
 ### Where things stand
 - **Checkpoint:** CP7 `bc-scheduled` in progress (no `ee/cp7` tag yet). Last tag `ee/cp6-slice-demo`.
-- **Engine (Tony's Apps Script):** deployment **@31** (2026-11-11: adds `publish_rules`, off steps, startup deadlines; its version label still says cp7-8 because the label-only redeploy was blocked), test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
+- **Engine (Tony's Apps Script):** deployment **@38**, version **cp7-15**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
-- **Tests:** `npm run test:ee` → 213 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
+- **Tests:** `npm run test:ee` → 245 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
 - **Vercel env (Preview, branch feat/email-engine unless noted):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET (all *sensitive*: can't be pulled back), **ANTHROPIC_API_KEY** (Preview + Production, added by Mau 2026-11-11; same key the portal's Apps Script uses).
 
 ### What CP7 has built (all on the preview)
@@ -24,20 +24,25 @@ _Handoff written 2026-11-11 (end of a long chat, to continue in a new one with `
 
 8. **2026-11-11 (71d5a6f):** each email's **Setup is editable** (on/off, timing, stops → new rule revision `bc-N`, scope everyone / new only); **Welcome can send at approval** (portal syncs right after approval; deadline still startup −1); **no double actions** (one click guard + spinners, preview opens at once with a loading state, confirm sheets stay open while saving); **AI sparkle chip**; Startup Progress lost the chemicals line (Mau). Tests 219.
 
+9. **Email editor** (9c0b14b): Templates → **Edit** (live or draft) / **Write it here**. Edit text = the email in the real MCPS frame, click to type, fields as chips (unknown ones red), blocks / details box / buttons as locked islands with editable text, plain-text paste; full ChatGPT templates edit cell by cell. Edit HTML (body, each block, details box) beside the real email; Preview as Maria / Tom / no first name; the sending renderer checks every change. Saves a draft (`save_draft`), which needs approval; drafts and approvals now keep blocks + details box (so an edited Welcome keeps Pool School). Round trip verified in Chrome: unchanged emails render identically.
+10. **Single emails** (913d9ed): Campaigns → **New single email** (Details → People → Review → the editor opens). Rules `date` anchor; `create/update/cancel_single`; window grows with the list (daily cap spreads it); pausing is per sequence now (MCP Legacy pause never holds a single email). Cards on Campaigns, a section on Emails, drawer Setup (edit, cancel).
+11. **Tags** (73f6165): person drawer add/remove; Contacts tag filter, select column, bulk add/remove bar; search matches tags.
+12. **Attachment Library** (8f46934): Emails → **Attachments**; PDFs dropped in Drive → MCPS Marketing → **Email Attachments** (made on first use) become items/versions (locked copy + sha256), approved separately; emails pick them in the editor; sent hash-checked (rows 53, 56, 57).
+13. **Runbook + backups** (fde5b17): `email-engine/RUNBOOK.md`; nightly backup with the midnight scheduler (Backup.js, 30 kept); `eeCatchUp` replays the Journal without sending.
+14. **Matrix** (edad595): every row 1–46 + 56–64 has a test; new: security audit (row 33), schema range + rollback floor (row 32), 409 on stale Setup save (row 30). `tests/email-engine-actions.test.js` guards the portal↔engine action list (a real bug: single-email actions were missing from ADMIN_CAP; fixed).
+15. **Trigger-precision test** (d874b43): Activity → **Engine checks → Test trigger timing** (4 one-off triggers, results + email). Deploy check now waits for the new version.
+
 ### CP7 still to do (exit criteria in PLAN.md → Checkpoints row 7)
-- **Mau, on the preview:** Emails → Welcome Email → Setup → Edit → "When the startup is approved" → Save (everyone) — this publishes `bc-2`. Then Templates: if a Startup Progress draft already exists, Discard it and "Use as draft" on the MCPS starter draft again (the old draft still has the chemicals line).
-- **Next action: the email editor** (click-to-edit text in the live preview + HTML mode, saving drafts that need approval; PLAN.md → Plan changes 2026-11-02 note on the editor). Then:
-- **Single-email campaigns** (`date` anchor; one template to a chosen audience on a date; PLAN.md → Plan changes "Single email sequence type").
-- **Contact tags** editing (drawer add/remove, bulk-tag, filter; tags already a column and a batch filter).
-- **Attachment Library** working (Welcome PDFs can be added later).
-- **All 7 scheduled B/C emails approved:** B Intro ✅ and C Welcome ✅ live; the 3 C starter drafts await Mau/Tony; B Follow Up + Check-In wait for Tony's ChatGPT templates.
-- **Minimum runbook** (PLAN.md → Operations).
-- **Trigger-precision spike** (one-off `.at()` triggers) before installing the scheduler.
-- **Matrix green:** failure rows 1–46 + 56–64 (CP8 adds 47–55).
+Everything buildable is built. What's left needs Mau (or Tony through Mau):
+- **Run the trigger timing test** (Activity → Engine checks → Test trigger timing; ~8 min). Record the result in SPIKES.md.
+- **Welcome at approval:** Emails → Welcome Email → Setup → Edit → "When the startup is approved" → Save → Everyone (publishes `bc-2`).
+- **Startup Progress draft:** if one already exists, Discard it and "Use as draft" on the MCPS starter again (the old one still has the chemicals line).
+- **All 7 scheduled B/C emails approved:** B Intro ✅, C Welcome ✅; the 3 C starter drafts (Progress, Maintenance, Final) await approval; B Follow Up + Check-In wait for Tony's ChatGPT templates.
+- **Try the new parts once on the preview** (editor save → approve; a single email to a test contact; drop a PDF into Email Attachments → add → approve). They're unit-tested, but not yet exercised against the live engine.
 - Then `/email-engine checkpoint` to tag `ee/cp7-bc-scheduled`.
 
 ### Waiting on Mau / Tony
-- **Mau:** try on the preview (Clean up → Check with AI; Contacts → MCP leads counts; MCP Startup "Joining"); approve or edit the 3 C starter drafts (check two claims: "don't add chemicals yourself during the first month", "a report after every visit").
+- **Mau:** the CP7 list above; also still open from before: try Clean up → Check with AI, Contacts → MCP leads counts, MCP Startup "Joining". Chemicals line removed and report-after-every-visit kept (Mau, 2026-11-11).
 - **Tony (Mau handles; don't ask Tony anything):** MCP Legacy list header row; Follow Up + Personal Check-In (and his Intro version) as ChatGPT templates dropped in MCPS Marketing → Email Templates → MCP Legacy → each email's folder.
 - ~~Open decision 0~~ **closed 2026-11-11:** builder keeps the plain confirmation at approval; homeowner Welcome defaults to at approval, changeable in Setup.
 - **Planned for before CP9 (Mau 2026-11-11):** in-portal tutorial for Tony + "Request a change" button (PLAN.md → Plan changes).
