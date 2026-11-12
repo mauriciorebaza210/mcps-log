@@ -33,6 +33,7 @@ const HLP_ICON = {
 const hlp$ = sel => document.querySelector(sel);
 const hlpCard_ = title => () => [...document.querySelectorAll('.lc .lc-card')].find(c => { const h = c.querySelector('h3'); return h && h.textContent.trim() === title; });
 const hlpGone_ = sel => () => !document.querySelector(sel);
+const hlpSec_ = heading => () => [...document.querySelectorAll('.lc-drawer .lc-sec')].find(s => { const h = s.querySelector('h4'); return h && h.textContent.trim().startsWith(heading); });
 const HLP_CHAPTERS = [
   { id: 'start', title: 'The basics', steps: [
     { title: 'Welcome to Lifecycle Email', text: 'This page runs MCPS’s automatic emails: <b>MCP Legacy</b> for past MCP customers and <b>MCP Startup</b> for new pool owners. They go out from your Gmail on a schedule, and stop by themselves when someone replies, clicks or unsubscribes.<br><br>This tour has you click through the real page. Nothing is changed or sent.' },
@@ -56,9 +57,13 @@ const HLP_CHAPTERS = [
     { el: '.lc-drawer .lc-dr-tabs', title: 'Everything about one email', text: '<b>Performance</b> and <b>Recipients</b> show how it’s doing and who got it. <b>Templates</b> is the wording. <b>Setup</b> is when it sends.' },
     { el: '.lc-drawer [data-act="dtab"][data-tab="templates"]', title: 'The wording', text: '', click: 'Templates', next: '.lc-drawer [data-act^="tpl-"]' },
     { el: '.lc-drawer', title: 'Change the wording safely', text: '<b>Edit</b> opens the email as people will see it: click any text and type. Your change is saved as a <b>draft</b>. Nothing changes until it’s <b>approved</b>, and the old version stays in history.' },
+    { el: hlpSec_('In Drive'), title: 'Templates from Google Drive', text: 'Wrote an email somewhere else, like in ChatGPT? Save it as an .html file in Google Drive → <b>MCPS Marketing → Email Templates</b> → the campaign → this email’s folder, and it shows up here. <b>Preview</b> checks it, <b>Use as draft</b> turns it into a draft, and it still needs approval before anyone gets it.' },
     { el: '.lc-drawer [data-act="dtab"][data-tab="setup"]', title: 'The timing', text: '', click: 'Setup', next: '.lc-drawer [data-act="setup-edit"]' },
     { el: '.lc-drawer', title: 'When it sends', text: 'When it goes out, what stops it, and <b>On / Off</b>. <b>Change</b> edits it; when you save, pick who it applies to. “Only people who join from now on” is the safe choice, and nobody ever gets the same email twice.' },
-    { el: '.lc-drawer [data-act="close"]', title: 'Close the email', text: '', click: 'the ✕', next: hlpGone_('.lc-drawer') }
+    { el: '.lc-drawer [data-act="close"]', title: 'Close the email', text: '', click: 'the ✕', next: hlpGone_('.lc-drawer') },
+    { el: '.lc [data-act="att-open"]', title: 'Files that go with an email', text: 'PDFs your emails carry.', click: 'Attachments', next: '.lc-att .lc-imp-h' },
+    { el: '.lc-att .lc-imp-h', title: 'Like the Welcome email’s guides', text: 'The Welcome email can carry the <b>Safety Guidelines</b> and the <b>Startup Guide</b> PDFs. To add one, drop the PDF into Google Drive → <b>MCPS Marketing → Email Attachments</b>, then <b>Add</b> it here and approve it. To send it with an email, pick it when you edit that email. Uploading a newer version of a PDF only needs that PDF approved, not the email again.' },
+    { el: '.lc-att [data-act="att-close"][aria-label="Close"]', title: 'Close it', text: '', click: 'the ✕', next: hlpGone_('.lc-att') }
   ] },
   { id: 'activity', title: 'Activity and problems', start: 'campaigns', steps: [
     { el: '.lc [data-lc="tabs"] [data-tab="activity"]', title: 'The Activity tab', text: 'What went out, and anything that needs you.', click: 'Activity', next: hlpCard_('Health') },

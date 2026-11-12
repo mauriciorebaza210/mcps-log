@@ -35,6 +35,7 @@ async function attLoad_() {
 }
 
 function attRender_() {
+  if (typeof hlpAfterRender_ === 'function') hlpAfterRender_();
   if (!ATT.layer) return;
   const D = ATT.data, canEdit = lcCan_('edit_drafts'), canOk = lcCan_('approve_publish');
   let body;

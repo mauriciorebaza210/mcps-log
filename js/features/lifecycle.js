@@ -253,7 +253,8 @@ function lcRenderHead_() {
     const next = lcNextRun_();
     if (next) health += '<button class="lc-pill" data-act="tab" data-tab="activity"><i class="next"></i>Next run ' + lcEsc_(lcClock_(next) + ' ' + lcZoneOn_()) + '</button>';
   }
-  const mode = ov ? '<div class="lc-seg" role="group" aria-label="Data shown">' +
+  // Test / Live only matters while the engine is in test mode; once it's live, the page just shows live.
+  const mode = ov && ov.engine.mode !== 'production' ? '<div class="lc-seg" role="group" aria-label="Data shown">' +
     ['test', 'production'].map(m => '<button data-act="mode" data-mode="' + m + '" class="' + (LC.mode === m ? 'on' : '') + '">' + (m === 'test' ? 'Test' : 'Live') + '</button>').join('') + '</div>' : '';
   const test = ov && ov.engine.mode !== 'production' ? '<span class="lc-pill test"><i></i>Test mode</span>' : '';
   const off = ov && !ov.engine.enabled ? '<button class="lc-pill bad" data-act="tab" data-tab="activity"><i></i>Sending off</button>' : '';
