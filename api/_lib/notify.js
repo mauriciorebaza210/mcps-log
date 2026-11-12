@@ -140,7 +140,7 @@ async function send(msg) {
     subject: msg.subject,
     htmlBody: msg.html,
     plainBody: msg.text,
-    replyTo: cfg.replyTo,
+    replyTo: msg.replyTo || cfg.replyTo,
     dedupeKey: msg.idempotencyKey || '',
     ts: Date.now(),
     nonce: crypto.randomUUID()
@@ -328,7 +328,9 @@ export async function notifyOffice(request, categoryLabel, matchSummary) {
 // engine's, so an alert still arrives when the engine itself is what broke
 // (email-engine/docs/PLAN.md → Operations → Independent heartbeat). The dedupe
 // key allows one alert per subject per day.
-export async function sendEngineAlert(to, subject, text) {
+// key: a caller's own dedupe key (forwarded engine alerts pass the last alert's id).
+// Replies go back to the recipient, not the office address.
+export async function sendEngineAlert(to, subject, text, key) {
   const html = '<pre style="font-family:Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap;">' + esc(text) + '</pre>';
-  return send({ to, subject, html, text, idempotencyKey: 'ee-heartbeat:' + new Date().toISOString().slice(0, 10) + ':' + subject });
+  return send({ to, subject, html, text, replyTo: to, idempotencyKey: key || ('ee-heartbeat:' + new Date().toISOString().slice(0, 10) + ':' + subject) });
 }

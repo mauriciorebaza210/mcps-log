@@ -377,15 +377,18 @@ function lcActivity_() {
 function lcChecks_() {
   if (!lcCan_('edit_config')) return '';
   if (!LC.trig) { LC.trig = { loading: true }; lcAdmin_('trigger_test', { do: 'result' }).then(r => { LC.trig = r.ok ? { test: r.test } : { error: r.error }; if (LC.tab === 'activity') lcRenderBody_(); }).catch(() => { LC.trig = { error: 'Network error' }; }); }
-  const t = LC.trig.test, fmt = s => s == null ? '–' : (s < 0 ? '−' : '+') + (Math.abs(s) >= 60 ? Math.floor(Math.abs(s) / 60) + ' min ' : '') + (Math.abs(s) % 60) + ' s';
+  // A run counts as finished 10 min after its last timer (the engine allows a new one then too).
+  const t = LC.trig.test, lastAt = t ? Math.max(...t.slots.map(s => Date.parse(s.planned) || 0)) : 0;
+  const stale = !!(t && t.status === 'running' && Date.now() > lastAt + 10 * 60000), fmt = s => s == null ? '–' : (s < 0 ? '−' : '+') + (Math.abs(s) >= 60 ? Math.floor(Math.abs(s) / 60) + ' min ' : '') + (Math.abs(s) % 60) + ' s';
   const rows = t ? '<ul class="lc-list">' + t.slots.map(s => '<li><div class="main"><b>' + lcEsc_(lcClockAt_(Date.parse(s.planned))) + '</b><small>planned</small></div>' +
-    (s.fired ? '<span class="num">' + lcEsc_(fmt(s.delta_s)) + '</span>' : '<span class="lc-dim">waiting…</span>') + '</li>').join('') + '</ul>' : '';
+    (s.fired ? '<span class="num">' + lcEsc_(fmt(s.delta_s)) + '</span>' : '<span class="lc-dim">' + (stale ? 'no report' : 'waiting…') + '</span>') + '</li>').join('') + '</ul>' : '';
   const sum = t && t.summary ? '<p class="lc-note">' + (t.summary.within_20_min ? lcTag_('Within 20 min', 'live') : lcTag_('Outside 20 min', 'bad')) +
     ' Earliest ' + lcEsc_(fmt(t.summary.earliest_s)) + ', latest ' + lcEsc_(fmt(t.summary.latest_s)) + ' from the planned minute.</p>' : '';
-  const running = t && t.status === 'running';
+  const running = t && t.status === 'running' && !stale;
+  const staleNote = stale ? '<p class="lc-note">These timers never reported back, so this run has no result. Run it again.</p>' : '';
   return '<div class="lc-card"><div class="lc-card-h"><h3>Engine checks</h3>' + (running ? '<small>Running · about 8 min</small>' : '') + '</div>' +
     '<div class="lc-checks"><b style="font-size:13.5px">Trigger timing</b><p class="lc-note" style="margin-top:2px">Plans 4 test timers 2 to 8 minutes out and records how close to the minute each one fires. Nothing is sent. Needed once before the scheduler is turned on.</p>' +
-    (LC.trig.error ? '<div class="lc-empty" style="text-align:left;padding:0">' + lcEsc_(LC.trig.error === 'unknown action' ? 'The engine needs an update for this test.' : LC.trig.error) + '</div>' : rows + sum) +
+    (LC.trig.error ? '<div class="lc-empty" style="text-align:left;padding:0">' + lcEsc_(LC.trig.error === 'unknown action' ? 'The engine needs an update for this test.' : LC.trig.error) + '</div>' : rows + sum + staleNote) +
     '<button class="lc-btn sm" data-act="trig-test"' + (running ? ' disabled' : '') + '>' + (t ? 'Run it again' : 'Test trigger timing') + '</button>' +
     (running ? ' <button class="lc-link" data-act="trig-refresh">Refresh</button>' : '') + '</div></div>';
 }

@@ -33,6 +33,10 @@ import { sendEngineAlert } from './_lib/notify.js';
 import TRACKING from '../js/lib/email-tracking.js';
 
 const RAW_TTL_MS = 15 * 1000;
+// Same words as the page's Alerts card (js/features/lifecycle.js → LC_ALERT).
+const ALERT_LABEL = { trigger_test_done: 'Trigger timing test finished', security_property_changed: 'Security setting changed', schema_incompatible: 'Engine code too old for its data',
+  backup_failed: 'Nightly backup failed', too_many_send_times: 'Too many send times', delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped',
+  run_crashed: 'Run crashed', journal_integrity: 'Safety pause', reply_scan_failed: 'Reply scan failed', batch_start_failed: 'Batch didn’t start' };
 const SETTINGS_SS_ID = () => String(process.env.EE_SETTINGS_SS_ID || '1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U').trim();   // "Chem Log": Comms_Optouts
 const IMPORT_CHECK_MAX = 5000, IMPORT_SAVE_MAX = 100;
 // The capability each page action needs (PLAN.md → Configuration & authorization).
@@ -109,6 +113,30 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return fresh ? load() : deps.getCached('ee:raw:' + id + ':' + rawVersion, RAW_TTL_MS, load);
   }
 
+  // Engine alerts by email, from the portal's Gmail (Mau's), never from the engine (it runs as
+  // Tony). New Alerts rows since Config alert_forwarded_at go out as one email, then the engine
+  // records the last one sent. With no marker yet, only the last 6 hours count (no backlog dump).
+  // Runs on the daily heartbeat and, at most once a minute per instance, when the page loads.
+  let alertsCheckedAt = 0;
+  async function forwardAlerts(tables) {
+    const cfg = {}; ((tables && tables.Config) || []).forEach(r => { cfg[r.key] = r.value; });
+    const since = String(cfg.alert_forwarded_at || new Date(deps.now() - 6 * 3600 * 1000).toISOString());
+    const fresh = ((tables && tables.Alerts) || []).filter(a => a.at && String(a.at) > since).sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    if (!fresh.length) return { sent: 0 };
+    const label = k => ALERT_LABEL[k] || String(k || 'alert').replace(/_/g, ' ');
+    const when = a => new Date(String(a.at).split(' ')[0]).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' CT';
+    const subject = '[Email engine] ' + (fresh.length === 1 ? label(fresh[0].kind) : fresh.length + ' alerts: ' + label(fresh[fresh.length - 1].kind) + ' and more');
+    const text = fresh.slice(-20).map(a => '• ' + label(a.kind) + ' (' + when(a) + ')\n  ' + String(a.detail || '')).join('\n\n') +
+      (fresh.length > 20 ? '\n\n…and ' + (fresh.length - 20) + ' older.' : '') +
+      '\n\nLifecycle Email → Activity → Alerts: ' + String(cfg.track_base || 'https://mcps-log.vercel.app').replace(/\/$/, '') + '/#lifecycle';
+    const last = String(fresh[fresh.length - 1].at);
+    const r = await deps.sendEngineAlert(cfg.alert_email || 'mauricio@mcpoolsolutions.org', subject, text, 'ee-alert:' + last);
+    if (!r || !r.ok) return { sent: 0, error: (r && (r.error || r.skipped)) || 'not sent' };
+    const m = await deps.relayAdmin({ action: 'alerts_forwarded', params: { upto: last }, actor: 'portal' }).catch(e => ({ ok: false, error: String(e) }));
+    rawVersion++;
+    return { sent: fresh.length, upto: last, marked: !!(m && m.ok) };
+  }
+
   async function opRead(req, res) {
     if (req.method !== 'GET') return reply(res, 405, { ok: false, error: 'Method not allowed' });
     if (req.query && req.query.token) return reply(res, 400, { ok: false, error: 'Send the token in the Authorization header, not the URL.' });
@@ -137,6 +165,10 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
       data = buildContact(tables, caps, String(q.id || ''));
       if (!data) return reply(res, 404, { ok: false, error: 'Contact not found' });
     } else return reply(res, 400, { ok: false, error: 'Unknown view' });
+    if (view === 'overview' && Date.now() - alertsCheckedAt > 60000) {
+      alertsCheckedAt = Date.now();
+      deps.waitUntil(forwardAlerts(tables).then(r => { if (r && r.error) console.error('engine alert email', r.error); }).catch(e => console.error('engine alert email', e)));
+    }
 
     return reply(res, 200, { ok: true, view, capabilities: [...caps].sort(), data, ms: Date.now() - started });
   }
@@ -230,7 +262,8 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
         '\n\nLast run: ' + (h.last_run_at || 'none') + '\nPortal: https://mcps-log.vercel.app (Lifecycle Email)';
       alerted = await deps.sendEngineAlert(to, '[Email engine] heartbeat: ' + h.issues.length + ' issue(s)', text).catch(e => ({ ok: false, error: String(e) }));
     }
-    return reply(res, 200, { ok: true, healthy: h.ok, issues: h.issues, alerted, synced });
+    const forwarded = tables ? await forwardAlerts(tables).catch(e => ({ sent: 0, error: String(e && e.message || e).slice(0, 200) })) : null;
+    return reply(res, 200, { ok: true, healthy: h.ok, issues: h.issues, alerted, synced, forwarded });
   }
 
   async function opAdmin(req, res) {

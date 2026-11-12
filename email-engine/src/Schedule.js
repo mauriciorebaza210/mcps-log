@@ -113,11 +113,13 @@ function EE_timedRun() { return EE_run_('scheduled'); }
 // a few minutes apart; each records how early or late it fired, then deletes itself.
 // Nothing is sent. Results: Config trigger_test (JSON), shown on the Activity tab.
 var EE_TRIGGER_TEST_OFFSETS_MIN = [2, 4, 6, 8];
+function EE_triggerTestEndMs_(t) { return Math.max.apply(null, (t.slots || []).map(function (s) { return Date.parse(s.planned) || 0; }).concat([Date.parse(t.started_at) || 0])); }
 function EE_triggerTestPure_(env, action, deps) {
   var raw = (env.store.get('Config', 'trigger_test') || {}).value, cur = null;
   cur = EE_jsonOf_(raw);
   if (action === 'result') return { ok: true, test: cur };
-  if (cur && cur.status === 'running' && env.now() - Date.parse(cur.started_at) < 30 * 60 * 1000) return { ok: false, error: 'a timing test is already running' };
+  // Still running only until 10 min after its last timer; after that a timer that never reported won't (e.g. it fired under older code).
+  if (cur && cur.status === 'running' && env.now() < EE_triggerTestEndMs_(cur) + 10 * 60000) return { ok: false, error: 'a timing test is already running' };
   var now = env.now(), slots = EE_TRIGGER_TEST_OFFSETS_MIN.map(function (m) { return now + m * 60000; });
   var uids = deps.create(slots);
   var test = { status: 'running', started_at: new Date(now).toISOString(), slots: slots.map(function (at, i) { return { uid: uids[i], planned: new Date(at).toISOString(), fired: '', delta_s: null }; }) };

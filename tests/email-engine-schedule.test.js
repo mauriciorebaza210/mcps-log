@@ -257,3 +257,25 @@ test('Stored JSON comes back parsed from the real sheet: the run plan and the ti
   const t = JSON.parse(JSON.stringify(w.ctx_.EE_triggerTestPure_(w.env, 'result').test));
   assert.equal(t.status, 'done'); assert.deepEqual(t.slots.map(s => s.delta_s), [30, 30, 30, 30]);
 });
+
+test('Trigger timing: a run whose timers never report (e.g. they fired under older code) frees up 10 min after its last timer', () => {
+  const w = world('10:00');
+  const mk = () => w.ctx_.EE_triggerTestPure_(w.env, 'start', { create: slots => slots.map((at, i) => 'x' + i) });
+  assert.equal(mk().ok, true);
+  w.now += 17 * 60000;                       // last timer at +8 min, so 9 min past it: still running
+  assert.equal(mk().ok, false);
+  w.now += 2 * 60000;                        // 11 min past the last timer
+  const again = mk();
+  assert.equal(again.ok, true); assert.equal(again.test.status, 'running');
+});
+
+test('Alerts: the engine only records them (it runs as Tony); alerts_forwarded moves the marker forward only, outside the ChangeLog', () => {
+  const w = world('10:00');
+  const fwd = upto => JSON.parse(JSON.stringify(w.ctx_.EE_adminRun_(w.env, w.core, { action: 'alerts_forwarded', params: { upto }, actor: 'portal' }, {})));
+  assert.equal(fwd('2026-11-23T16:00:00.000Z ab12').alert_forwarded_at, '2026-11-23T16:00:00.000Z ab12');
+  assert.equal(fwd('2026-11-23T15:00:00.000Z cd34').alert_forwarded_at, '2026-11-23T16:00:00.000Z ab12', 'never backwards');
+  assert.equal(fwd('nope').ok, false);
+  assert.equal(w.env.store.rows('ChangeLog').filter(r => r.action === 'alerts_forwarded').length, 0);
+  const env = require('fs').readFileSync(require('path').join(__dirname, '..', 'email-engine/src/Env.js'), 'utf8');
+  assert.doesNotMatch(env.match(/alert: function[\s\S]*?\n    \},/)[0], /MailApp|GmailApp/, 'no alert email from the engine account');
+});

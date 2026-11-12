@@ -333,3 +333,24 @@ test('Contacts view lists batches (newest first) and gives each person area and 
   assert.deepEqual(d.batches.map(b => [b.batch_id, b.count, b.status, b.filters.area[0]]), [['bat_1', 20, 'planned', 'Boerne']]);
   assert.ok('area' in d.contacts[0] && Array.isArray(d.contacts[0].tags));
 });
+
+test('Engine alerts are emailed by the portal (Mau’s Gmail): new rows since the marker, one email, then the marker moves', async () => {
+  const sent = [], relayed = [], at = new Date(NOW - 5 * 60000).toISOString() + ' zz99';
+  const values = { ...SHEET, Alerts: [['at', 'kind', 'detail'], [iso(1) + ' ab12', 'delivery_unknown', 'old'], [at, 'trigger_test_done', 'Trigger timing: earliest 3 s']],
+    Config: SHEET.Config.concat([['alert_forwarded_at', iso(0.5)]]) };
+  const h = (await load())({
+    ...world({ readSheetRanges: async tabs => { const o = {}; tabs.forEach(t => { if (values[t]) o[t] = values[t]; }); return o; } }).deps,
+    cronSecret: () => 'cron-s3cret', now: () => NOW,
+    relayAdmin: async a => { relayed.push(a); return { ok: true }; },
+    sendEngineAlert: async (to, subject, text, key) => { sent.push({ to, subject, text, key }); return { ok: true }; }
+  });
+  const res = { headers: {}, setHeader() {}, status(c) { this.statusCode = c; return this; }, send(b) { this.body = JSON.parse(b); return this; } };
+  await h({ method: 'GET', query: { op: 'heartbeat' }, headers: { authorization: 'Bearer cron-s3cret' } }, res);
+  const mine = sent.filter(s => s.key === 'ee-alert:' + at);
+  assert.equal(mine.length, 1, 'only the alert after the marker');
+  assert.equal(mine[0].to, 'mauricio@mcpoolsolutions.org');
+  assert.equal(mine[0].subject, '[Email engine] Trigger timing test finished');
+  assert.match(mine[0].text, /earliest 3 s/);
+  assert.deepEqual(relayed.filter(a => a.action === 'alerts_forwarded').map(a => a.params.upto), [at]);
+  assert.equal(res.body.forwarded.sent, 1);
+});

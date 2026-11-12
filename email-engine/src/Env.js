@@ -302,9 +302,9 @@ function EE_env(opts) {
     revisionStatus: function (id) { var r = store.get('Revisions', id); return r ? r.status : 'missing'; },
     quota: function () { return MailApp.getRemainingDailyQuota(); },
     alert: function (kind, detail) {
-      try { store.upsert('Alerts', { at: new Date().toISOString() + ' ' + Utilities.getUuid().slice(0, 4), kind: kind, detail: String(detail) }); } catch (e) { /* the alert email below still goes */ }
-      var to = EE_config_(store).alert_email;
-      if (to) MailApp.sendEmail(to, '[Email engine] ' + kind, String(detail));
+      // The engine never emails alerts itself: it runs as Tony, so they'd leave from his account.
+      // The portal reads this tab and emails new rows from its own Gmail (api/email.js → forwardAlerts).
+      store.upsert('Alerts', { at: new Date().toISOString() + ' ' + Utilities.getUuid().slice(0, 4), kind: kind, detail: String(detail) });
     },
     gmail: {
       createDraft: function (msg) {
