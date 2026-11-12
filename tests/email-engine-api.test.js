@@ -356,3 +356,11 @@ test('Engine alerts are emailed by the portal (Mau’s Gmail): new rows since th
   assert.deepEqual(relayed.filter(a => a.action === 'alerts_forwarded').map(a => a.params.upto), [at]);
   assert.equal(res.body.forwarded.sent, 1);
 });
+
+test('Overview contact count leaves out removed and merged people (kept in the engine for history)', async () => {
+  const head = SHEET.Contacts[0].concat(['review_status']), blank = head.map(() => '');
+  const extra = [['gone1', 'removed'], ['gone2', 'merged']].map(([id, st]) => blank.map((_, i) => head[i] === 'contact_id' ? id : head[i] === 'email_norm' ? id + '@example.com' : head[i] === 'review_status' ? st : ''));
+  const sheet = { ...SHEET, Contacts: [head].concat(SHEET.Contacts.slice(1).map(r => r.concat(['needs_review'])), extra) };
+  const h = (await load())(world({ readSheetRanges: async tabs => { const o = {}; tabs.forEach(t => { if (sheet[t]) o[t] = sheet[t]; }); return o; } }).deps);
+  assert.equal((await call(h, { token: 'tok-mau' })).body.data.totals.contacts, SHEET.Contacts.length - 1);
+});

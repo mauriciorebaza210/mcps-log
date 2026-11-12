@@ -412,9 +412,9 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   async function crmSync(tables, actor) {
     const src = await crmSources(), cfg = cfgOf(tables), rule = ruleOf(cfg);
     const out = { startups: await syncStartups(src, actor) };
-    // Once: past MCP leads the old automatic sync added leave the list (EE_retireSyncedLeads_).
-    if (!cfg.mcp_leads_retired) {
-      out.retired = await deps.relayAdmin({ action: 'retire_synced_leads', params: {}, actor }).catch(e => ({ ok: false, error: String(e) }));
+    // Once: MCP Legacy starts fresh for Tony's import (EE_resetMcpLegacy_).
+    if (!cfg.mcp_legacy_reset) {
+      out.retired = await deps.relayAdmin({ action: 'reset_mcp_legacy', params: {}, actor }).catch(e => ({ ok: false, error: String(e) }));
       rawVersion++;
       if (out.retired && out.retired.ok) return out;
     }
@@ -507,7 +507,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     if (req.method === 'GET') {
       const st = startupContacts(src.quotes, src.visits, todayCT());
       let result = null; try { result = JSON.parse(cfg.crm_sync_result || 'null'); } catch (_) { /* none yet */ }
-      return reply(res, 200, { ok: true, breakdown: leadBreakdown(src.quotes, tables.Contacts || []), rule: ruleOf(cfg), auto: autoOf(cfg), mcp_leads: checkLeads(src, tables, ruleOf(cfg)).verdict.summary,
+      return reply(res, 200, { ok: true, reset_pending: !cfg.mcp_legacy_reset, breakdown: leadBreakdown(src.quotes, tables.Contacts || []), rule: ruleOf(cfg), auto: autoOf(cfg), mcp_leads: checkLeads(src, tables, ruleOf(cfg)).verdict.summary,
         startups: { found: st.contacts.length, cancelled: st.removed.length, not_synced: st.skipped.length, last_sync: cfg.crm_sync_at || '', result } });
     }
     if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });

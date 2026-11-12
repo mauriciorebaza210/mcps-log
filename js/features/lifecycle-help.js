@@ -14,7 +14,7 @@
 // Depends on lifecycle.js (LC, lcEsc_, lcToast_, lcRenderTabs_, lcRenderBody_).
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HLP = { menu: false, offer: null, rq: null };
+const HLP = { menu: false, offer: null, rq: null, d: null, doing: null };
 const HLP_ICON = {
   help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
   msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg>',
@@ -25,39 +25,59 @@ const HLP_ICON = {
 };
 
 // ── Tour ──────────────────────────────────────────────────────────────────────
-// Each step names its tab; the element is found when the step opens (cards by title).
-const hlpCard_ = title => () => [...document.querySelectorAll('.lc .lc-card')].find(c => { const h = c.querySelector('h3'); return h && h.textContent.trim() === title; }) || document.querySelector('.lc [data-lc="body"]');
-const hlpQ_ = sel => () => document.querySelector(sel) || document.querySelector('.lc [data-lc="body"]');
+// Interactive: a "do" step highlights a real button and waits for the person to
+// click it (Next is hidden); the tour moves on once the screen it opens is there.
+// "Look" steps lock the page under the highlight, so a stray click can't run
+// anything or end the tour. Only safe clicks are ever asked for (opening tabs,
+// campaigns, emails, people; the batch wizard is opened and then cancelled).
+const hlp$ = sel => document.querySelector(sel);
+const hlpCard_ = title => () => [...document.querySelectorAll('.lc .lc-card')].find(c => { const h = c.querySelector('h3'); return h && h.textContent.trim() === title; });
+const hlpGone_ = sel => () => !document.querySelector(sel);
 const HLP_CHAPTERS = [
   { id: 'start', title: 'The basics', steps: [
-    { title: 'Welcome to Lifecycle Email', text: 'This page sends MCPS’s automatic emails: the MCP Legacy series to past MCP customers and the MCP Startup series to new pool owners. Every email is sent from your Gmail, on a schedule, and stops by itself when someone replies, clicks or unsubscribes.' },
-    { el: hlpQ_('.lc [data-lc="tabs"]'), title: 'Four tabs', text: '<b>Campaigns</b> is where you start and plan sends. <b>Emails</b> holds each email: its wording, approval and timing. <b>Activity</b> shows what ran and anything that needs you. <b>Contacts</b> is everyone on the lists.' },
-    { el: hlpQ_('.lc .lc-status'), title: 'Health at a glance', text: 'Green means the last run went fine. The next planned run is shown beside it. If something needs you, this turns amber or red; click it to see why.' },
-    { el: hlpQ_('.lc [data-act="run"]'), title: 'Run now', text: 'Runs happen on their own at your send times. <b>Run now</b> just runs one right away; it never sends anyone an email early or twice.' }
+    { title: 'Welcome to Lifecycle Email', text: 'This page runs MCPS’s automatic emails: <b>MCP Legacy</b> for past MCP customers and <b>MCP Startup</b> for new pool owners. They go out from your Gmail on a schedule, and stop by themselves when someone replies, clicks or unsubscribes.<br><br>This tour has you click through the real page. Nothing is changed or sent.' },
+    { el: '.lc [data-lc="tabs"]', title: 'Four tabs', text: '<b>Campaigns</b>: start and plan sends. <b>Emails</b>: each email’s wording, approval and timing. <b>Activity</b>: what went out and anything that needs you. <b>Contacts</b>: everyone on the lists.' },
+    { el: '.lc .lc-status .lc-pill:not(.test)', title: 'Is everything OK?', text: 'Green means the last check went fine. If something needs you, this turns amber or red; click it to see what.' },
+    { el: '.lc [data-act="run"]', title: 'Run now', text: 'The page checks for emails that are due at your send times, by itself. <b>Run now</b> does that check right away, for example right after you approve an email. It only sends what is already due, never early and never twice. Most days you won’t need it.' }
   ] },
-  { id: 'campaigns', title: 'Campaigns and batches', tab: 'campaigns', steps: [
-    { el: hlpQ_('.lc .lc-cmp-card'), title: 'A campaign', text: 'Each card is one series of emails. Open it to see who is at which email, the batches you started, and what sends on which day.' },
-    { el: hlpQ_('.lc [data-act="cmp-batch"]'), title: 'Start a batch', text: 'Pick who gets the series, the day it starts and how many to send at a time. Nothing goes out until that day, and you can move or cancel a planned batch.' },
-    { el: hlpQ_('.lc .lc-cmp-card'), title: 'The calendar', text: 'Inside a campaign, <b>Calendar</b> shows every planned email by day. Click a day to <b>Skip</b> one person, <b>Move</b> them to another day, or <b>Send in the next run</b>. Drag a batch to move it.' }
+  { id: 'campaigns', title: 'Campaigns and batches', start: 'campaigns', steps: [
+    { el: '.lc [data-act="cmp-open"][data-id="B"]', title: 'Open a campaign', text: 'Each card is one series of emails.', click: 'the MCP Legacy card', next: '.lc .lc-pipe' },
+    { el: '.lc .lc-pipe', title: 'Where everyone is', text: '<b>Waiting</b>: imported, not started. <b>Lined up</b>: in a planned batch. <b>In sequence</b>: getting the emails. <b>Finished</b>, or <b>Stopped</b> because they replied, clicked or unsubscribed. Click a stage to see the people in it.' },
+    { el: '.lc [data-act="cmp-view"][data-view="calendar"]', title: 'The calendar', text: 'Every planned email, by day.', click: 'Calendar', next: '.lc [data-act="cmp-day"]' },
+    { el: '.lc .lc-cal, .lc [data-act="cmp-day"]', title: 'Plan by day', text: 'Click a day to see who gets what. There you can <b>Skip</b> one person, <b>Move</b> them to another day, or <b>Send in the next run</b>. Drag a batch to another day to move all of it.' },
+    { el: '.lc [data-lc="body"] [data-act="cmp-batch"]', title: 'Start a batch', text: 'This is how people get the series.', click: 'Start a batch', next: '.lc-wiz .lc-steps' },
+    { el: '.lc-wiz .lc-steps', title: 'Four short steps', text: '<b>Who</b> (and how many), <b>When</b> (one day, or several batches a week apart), <b>People</b> (check the list), <b>Review</b>. Nothing is sent until the start day, and a planned batch can be moved or cancelled.' },
+    { el: '.lc-wiz .lc-imp-h [data-bat="close"]', title: 'Close it for now', text: 'You’ll start real batches when you’re ready.', click: 'the ✕', next: hlpGone_('.lc-wiz') },
+    { el: '.lc [data-act="cmp-back"]', title: 'Back to all campaigns', text: '', click: 'All campaigns', next: '.lc .lc-cmp-card' }
   ] },
-  { id: 'emails', title: 'Emails and approval', tab: 'emails', steps: [
-    { el: hlpQ_('.lc [data-lc="body"] table, .lc [data-lc="body"] .lc-card'), title: 'Every email in one place', text: 'Click an email to open it. <b>Setup</b> is when it sends and what stops it, and it can be turned On or Off. <b>Templates</b> is its wording.' },
-    { title: 'Changing the wording', text: 'In Templates, <b>Edit</b> opens the email as people see it: click and type. Your change is saved as a <b>draft</b> and nothing changes until it’s <b>approved</b>. The old version stays in history, so you can always go back.' },
-    { title: 'Changing the timing', text: 'In Setup, <b>Change</b> lets you edit timing and stops. When you save, choose who it applies to. “Only people who join from now on” is the safe choice; either way nobody gets the same email twice.' }
+  { id: 'emails', title: 'Emails and approval', start: 'campaigns', steps: [
+    { el: '.lc [data-lc="tabs"] [data-tab="emails"]', title: 'The Emails tab', text: 'Every email, its status and how it’s doing.', click: 'Emails', next: '.lc [data-act="step"]' },
+    { el: '.lc [data-lc="body"] table', title: 'Each email', text: '<b>Live</b> emails are approved and on. <b>Not approved</b> ones wait for their wording to be approved. The numbers show sends, opens, clicks and replies.' },
+    { el: () => hlp$('.lc [data-act="step"][data-id="c_welcome"]') || hlp$('.lc [data-act="step"]'), title: 'Open an email', text: '', click: 'Welcome Email', next: '.lc-drawer [data-act="dtab"]' },
+    { el: '.lc-drawer .lc-dr-tabs', title: 'Everything about one email', text: '<b>Performance</b> and <b>Recipients</b> show how it’s doing and who got it. <b>Templates</b> is the wording. <b>Setup</b> is when it sends.' },
+    { el: '.lc-drawer [data-act="dtab"][data-tab="templates"]', title: 'The wording', text: '', click: 'Templates', next: '.lc-drawer [data-act^="tpl-"]' },
+    { el: '.lc-drawer', title: 'Change the wording safely', text: '<b>Edit</b> opens the email as people will see it: click any text and type. Your change is saved as a <b>draft</b>. Nothing changes until it’s <b>approved</b>, and the old version stays in history.' },
+    { el: '.lc-drawer [data-act="dtab"][data-tab="setup"]', title: 'The timing', text: '', click: 'Setup', next: '.lc-drawer [data-act="setup-edit"]' },
+    { el: '.lc-drawer', title: 'When it sends', text: 'When it goes out, what stops it, and <b>On / Off</b>. <b>Change</b> edits it; when you save, pick who it applies to. “Only people who join from now on” is the safe choice, and nobody ever gets the same email twice.' },
+    { el: '.lc-drawer [data-act="close"]', title: 'Close the email', text: '', click: 'the ✕', next: hlpGone_('.lc-drawer') }
   ] },
-  { id: 'activity', title: 'Activity and problems', tab: 'activity', steps: [
-    { el: hlpCard_('Needs a decision'), title: 'Needs a decision', text: 'Rarely, Gmail doesn’t confirm a send. Check your Sent folder for that email, then choose <b>It was sent</b> or <b>Send again</b>. The page waits a few minutes before it lets you resend, so nobody gets two.' },
-    { el: hlpCard_('Health'), title: 'Pausing', text: 'You can stop all sending, or one series, with the switches here. Paused emails wait; nothing is lost.' },
-    { el: hlpCard_('Alerts'), title: 'Alerts', text: 'Anything the engine had trouble with is listed here, and Mau gets an email about it.' }
+  { id: 'activity', title: 'Activity and problems', start: 'campaigns', steps: [
+    { el: '.lc [data-lc="tabs"] [data-tab="activity"]', title: 'The Activity tab', text: 'What went out, and anything that needs you.', click: 'Activity', next: hlpCard_('Health') },
+    { el: hlpCard_('Health'), title: 'Pause anytime', text: 'These switches stop all sending, or one series. Paused emails just wait; nothing is lost.' },
+    { el: hlpCard_('Needs a decision'), title: 'When Gmail doesn’t confirm', text: 'Rarely a send isn’t confirmed. Check your Sent folder for it, then choose <b>Mark sent</b> or <b>Resend</b>. Resend waits a few minutes first, so nobody gets two.' },
+    { el: hlpCard_('Change requests'), title: 'Your requests', text: 'Everything you send with <b>Request a change</b> is listed here, with whether Mau has done it.' }
   ] },
-  { id: 'contacts', title: 'Contacts', tab: 'contacts', steps: [
-    { el: hlpQ_('.lc [data-act="import"]'), title: 'Import a list', text: 'Drop in any spreadsheet. The page finds the columns, tidies names, and checks each person against the list, the opt-outs and current customers. Someone already here gets the new details, so there are no duplicates.' },
-    { el: hlpQ_('.lc [data-lc="body"] table, .lc [data-lc="body"] .lc-card'), title: 'Needs review', text: 'Imported people wait in <b>Needs review</b> until a batch picks them. Click anyone to see every email they got and what they did with it. Use tags to group people.' }
+  { id: 'contacts', title: 'Contacts', start: 'campaigns', steps: [
+    { el: '.lc [data-lc="tabs"] [data-tab="contacts"]', title: 'The Contacts tab', text: 'Everyone on the lists.', click: 'Contacts', next: '.lc [data-act="import"]' },
+    { el: '.lc [data-act="import"]', title: 'Import your list', text: 'Drop in any spreadsheet. The page finds the columns, tidies names, and checks everyone against the list, the opt-outs and current customers. Anyone already here gets your newer details, so there are never duplicates. New people wait in <b>Needs review</b> until a batch picks them.' },
+    { el: '.lc [data-act="contact"]', title: 'Open a person', text: '', click: 'a name', next: '.lc-drawer' },
+    { el: '.lc-drawer', title: 'Their whole history', text: 'Every email they got, what they did with it, and why their emails stopped. You can add tags here to group people.' },
+    { el: '.lc-drawer [data-act="close"]', title: 'Close', text: '', click: 'the ✕', next: hlpGone_('.lc-drawer') }
   ] },
-  { id: 'rules', title: 'Good to know', steps: [
-    { title: 'A few rules', text: '<ul class="lc-hlp-list"><li>Test emails go only to Mau. Don’t reply to them.</li><li>Don’t edit the engine’s spreadsheet by hand; use this page.</li><li>Unsubscribes and replies always stop the emails. That can’t be turned off.</li></ul>' },
-    { el: () => document.querySelector('.lc-rq-fab'), title: 'Request a change', text: 'Want something different, or something looks wrong? Click here, say what you want, and point at the part you mean. Mau gets it with a screenshot.' },
-    { el: hlpQ_('.lc [data-act="help"]'), title: 'Come back anytime', text: 'Help reopens any part of this tour.' }
+  { id: 'rules', title: 'Good to know', start: 'campaigns', steps: [
+    { title: 'A few rules', text: '<ul class="lc-hlp-list"><li>Don’t reply to test emails.</li><li>Don’t edit the engine’s spreadsheet by hand; use this page.</li><li>Replies and unsubscribes always stop the emails. That can’t be turned off.</li></ul>' },
+    { el: '.lc-rq-fab', title: 'Request a change', text: 'Want something different, or something looks wrong? Click here, say what you want and point at the part you mean. Mau gets it with a screenshot.' },
+    { el: '.lc [data-act="help"]', title: 'Come back anytime', text: '<b>Help</b> replays any part of this tour.' }
   ] }
 ];
 const hlpKey_ = () => 'mcps_lc_tour_' + ((typeof _s !== 'undefined' && _s && _s.username) || 'me');
@@ -71,7 +91,7 @@ function hlpHeadBtn_() {
 }
 function hlpMenu_() {
   const seen = hlpSeen_();
-  return '<div class="lc-hlp-menu" role="menu"><p>Take the tour, or replay one part.</p>' +
+  return '<div class="lc-hlp-menu" role="menu"><p>Take the tour, or replay one part. You click through the real page; nothing is changed.</p>' +
     HLP_CHAPTERS.map((c, i) => '<button role="menuitem" data-act="help-ch" data-id="' + c.id + '"><span class="n">' + (seen[c.id] ? HLP_ICON.check : (i + 1)) + '</span><span>' + lcEsc_(c.title) + '<small>' + c.steps.length + ' steps</small></span></button>').join('') +
     '<div class="lc-hlp-menu-f"><button class="lc-btn sm primary" data-act="help-ch" data-id="all">Start from the beginning</button></div></div>';
 }
@@ -79,7 +99,7 @@ function hlpMenu_() {
 function hlpRenderOffer_() {
   const el = LC.root && LC.root.querySelector('[data-lc="hlp"]'); if (!el) return;
   if (HLP.offer === null) { const s = hlpSeen_(); HLP.offer = !s._offer && !Object.keys(s).length; }
-  el.innerHTML = HLP.offer ? '<div class="lc-hlp-offer">' + HLP_ICON.help + '<div><b>New here? Take the 3-minute tour.</b><span>It walks through each tab on the real page. Nothing is changed or sent.</span></div>' +
+  el.innerHTML = HLP.offer ? '<div class="lc-hlp-offer">' + HLP_ICON.help + '<div><b>New here? Take the 5-minute tour.</b><span>You click through the real page, one step at a time. Nothing is changed or sent.</span></div>' +
     '<button class="lc-btn sm primary" data-act="help-ch" data-id="all">Start the tour</button><button class="lc-btn sm ghost" data-act="help-later">Not now</button></div>' : '';
 }
 function hlpAct_(t) {
@@ -90,41 +110,70 @@ function hlpAct_(t) {
 }
 document.addEventListener('click', e => { if (HLP.menu && !e.target.closest('.lc-hlp-wrap')) { HLP.menu = false; lcRenderHead_(); } });
 
-function hlpGoTab_(tab) {
-  if (!tab || LC.tab === tab) return;
-  LC.tab = tab;
-  if ((tab === 'contacts' || tab === 'campaigns') && !LC.contacts && typeof lcLoadContacts_ === 'function') lcLoadContacts_();
-  if (tab === 'campaigns' && typeof CMP !== 'undefined') CMP.id = '';
+// A clean starting point: no drawer, no wizard, the campaign list.
+function hlpReset_(tab) {
+  if (LC.drawer && typeof lcCloseDrawer_ === 'function') lcCloseDrawer_();
+  if (typeof BAT !== 'undefined' && BAT.layer && BAT.layer.isConnected) BAT.layer.remove();
+  document.querySelectorAll('.lc-wiz').forEach(w => { const l = w.closest('.lc-layer'); if (l) l.remove(); });
+  if (typeof CMP !== 'undefined') { CMP.id = ''; CMP.view = 'list'; CMP.day = ''; }
+  LC.tab = tab || 'campaigns';
   lcRenderTabs_(); lcRenderBody_();
 }
-// Load what the tour's tabs need first, so nothing redraws under a highlighted step.
+const hlpFind_ = el => typeof el === 'function' ? el() : el ? document.querySelector(el) : null;
+// Waits (up to 8 s) for what a click opens, then moves on.
+function hlpWait_(cond, done) {
+  const ok = typeof cond === 'function' ? cond : () => document.querySelector(cond);
+  const t0 = Date.now();
+  (function poll() { if (!HLP.d) return; if (ok() || Date.now() - t0 > 8000) return done(); setTimeout(poll, 120); })();
+}
+// One listener for every "do" step: a click on the step's target advances the tour.
+document.addEventListener('click', e => {
+  const s = HLP.doing; if (!s || !HLP.d) return;
+  const target = hlpFind_(s.el);
+  if (!target || !(target === e.target || target.contains(e.target))) return;
+  HLP.doing = null;
+  if (s.last) hlpMark_(s.chapter.id);
+  hlpWait_(s.next, () => { if (HLP.d && HLP.d.isActive()) HLP.d.moveNext(); });
+}, true);
+
 async function hlpTour_(which, startAt) {
   await Promise.all([!LC.contacts && typeof lcLoadContacts_ === 'function' ? lcLoadContacts_() : null, RQL.list === null ? rqLoadList_() : null].map(p => Promise.resolve(p).catch(() => {})));
   const chapters = which === 'all' ? HLP_CHAPTERS : HLP_CHAPTERS.filter(c => c.id === which);
   const steps = [];
-  chapters.forEach(c => c.steps.forEach((s, i) => steps.push({ ...s, chapter: c, first: i === 0, last: i === c.steps.length - 1 })));
+  chapters.forEach(c => c.steps.forEach((s, i) => steps.push({ ...s, chapter: c, last: i === c.steps.length - 1 })));
   if (!steps.length || !window.driver || !window.driver.js) return lcToast_('The tour couldn’t load. Refresh the page and try again.', true);
-  if (LC.drawer && typeof lcCloseDrawer_ === 'function') lcCloseDrawer_();
+  hlpReset_(chapters[0].start);
   const d = window.driver.js.driver({
     showProgress: true, progressText: '{{current}} of {{total}}', nextBtnText: 'Next', prevBtnText: 'Back', doneBtnText: 'Done',
-    popoverClass: 'lc-tour', animate: !HLP.still, overlayOpacity: 0.45, stagePadding: 6, stageRadius: 10, allowClose: true,
-    steps: steps.map(s => ({
-      element: s.el ? () => (hlpGoTab_(s.chapter.tab), s.el()) : undefined,
-      popover: { title: '<small>' + lcEsc_(s.chapter.title) + '</small>' + lcEsc_(s.title), description: s.text, side: 'bottom', align: 'start',
-        onNextClick: () => { if (s.last) hlpMark_(s.chapter.id); d.moveNext(); } },
-      onHighlightStarted: () => hlpGoTab_(s.chapter.tab)
-    })),
-    onDestroyed: () => { HLP.d = null; const last = steps[steps.length - 1]; if (d.getActiveIndex && d.getActiveIndex() === undefined) { /* closed early: keep what was finished */ } if (last) lcRenderHead_(); }
+    popoverClass: 'lc-tour', animate: !HLP.still, overlayOpacity: 0.45, stagePadding: 6, stageRadius: 10,
+    allowClose: true, overlayClickBehavior: () => {},          // only ✕ or Esc end the tour
+    steps: steps.map((s, i) => {
+      const prev = steps[i - 1];
+      return {
+        element: s.el ? () => hlpFind_(s.el) || document.querySelector('.lc [data-lc="body"]') : undefined,
+        disableActiveInteraction: !s.click,
+        popover: {
+          title: '<small>' + lcEsc_(s.chapter.title) + '</small>' + lcEsc_(s.title),
+          description: (s.text || '') + (s.click ? '<p class="lc-tour-do">' + HLP_ICON.target + '<span>Click <b>' + lcEsc_(s.click) + '</b> to continue</span></p>' : ''),
+          side: 'bottom', align: 'start',
+          // A click step has no Next; Back only when the step before didn't change the screen.
+          showButtons: (s.click ? [] : ['next']).concat(prev && !prev.click && prev.chapter === s.chapter ? ['previous'] : []).concat(['close']),
+          onNextClick: () => { if (s.last) hlpMark_(s.chapter.id); d.moveNext(); }
+        },
+        onHighlightStarted: () => { HLP.doing = s.click ? s : null; }
+      };
+    }),
+    onDestroyed: () => { HLP.d = null; HLP.doing = null; lcRenderHead_(); }
   });
   HLP.d = d;
   d.drive(startAt || 0);
 }
-// The page redrew under an open step (data arrived): point the step at the new element.
+// The page redrew under an open step (data arrived, a drawer filled in): point the step at the new element.
 function hlpAfterRender_() {
   const d = HLP.d;
   if (!d || !d.isActive || !d.isActive() || HLP.reattach) return;
   HLP.reattach = true;
-  setTimeout(() => { HLP.reattach = false; if (d.isActive()) { const i = d.getActiveIndex(); if (typeof i === 'number') d.moveTo(i); } }, 0);
+  setTimeout(() => { HLP.reattach = false; if (d.isActive()) { const i = d.getActiveIndex(); if (typeof i === 'number') d.moveTo(i); } }, 60);
 }
 
 // ── Request a change ──────────────────────────────────────────────────────────

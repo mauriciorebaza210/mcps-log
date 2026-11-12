@@ -90,6 +90,7 @@ const batRestarting_ = plan => plan.flatMap(b => b.people).filter(c => c.sequenc
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 function batRender_() {
+  if (typeof hlpAfterRender_ === 'function') hlpAfterRender_();
   if (!BAT.layer) return;
   const steps = BAT.pick === 'now' ? BAT_STEPS : BAT_STEPS.filter(s => s[0] !== 'people');
   const at = steps.findIndex(s => s[0] === BAT.step);

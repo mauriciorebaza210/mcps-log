@@ -228,7 +228,8 @@ export function buildOverview(tables, caps, now, opts = {}) {
       params: typeof c.detail === 'object' && c.detail ? c.detail : {}, result: c.result })),
     capabilities: [...caps].sort(),
     totals: {
-      contacts: (tables.Contacts || []).length,
+      // Removed and merged people stay in the engine for history, not in the count.
+      contacts: (tables.Contacts || []).filter(c => !/^(removed|merged)$/.test(String(c.review_status || ''))).length,
       active_enrollments: enrollments.filter(e => e.status === 'active' && !/^S[0-9A-F]{6}$/.test(e.sequence_id || '')).length,   // single emails aren't a sequence
       sent_7d: deliveries.filter(d => d.state === 'sent' && ms(d.sent_at) >= week).length
     }

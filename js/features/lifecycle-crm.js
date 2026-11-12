@@ -31,7 +31,7 @@ async function crmLoad_(after) {
   if (LC.tab === 'campaigns') lcRenderBody_();
   if (r.ok && !CRM.autoSynced && lcCan_('edit_contacts')) {
     const last = Date.parse((r.startups && r.startups.last_sync) || '') || 0;
-    if (Date.now() - last > CRM_SYNC_EVERY_MS) { CRM.autoSynced = true; crmSyncStartups_(true); }
+    if (r.reset_pending || Date.now() - last > CRM_SYNC_EVERY_MS) { CRM.autoSynced = true; crmSyncStartups_(true); }
   }
 }
 async function crmSyncStartups_(quiet) {

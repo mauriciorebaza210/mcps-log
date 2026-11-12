@@ -524,6 +524,7 @@ function lcOnKey_(e) { if (e.key === 'Escape') lcCloseDrawer_(); }
 
 function lcRenderDrawer_() {
   const D = LC.drawer; if (!D) return;
+  if (typeof hlpAfterRender_ === 'function') hlpAfterRender_();
   const el = D.layer.querySelector('.lc-drawer');
   const close = '<button class="lc-icon-btn" data-act="close" aria-label="Close">' + LC_ICON.x + '</button>';
   if (D.error) { el.innerHTML = '<div class="lc-dr-h"><div class="t"></div>' + close + '</div>' + lcErrorView_(D.error); return; }

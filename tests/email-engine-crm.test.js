@@ -139,9 +139,9 @@ test('op=crm check/add: the import check runs (opted out, engine duplicate, cust
 test('Heartbeat syncs startups every morning; past MCP leads are retired once; leads are added only when turned on', async () => {
   const first = await api({});
   await first.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
-  assert.deepEqual(first.relayed.map(r => r.action), ['sync_startups', 'retire_synced_leads']);
+  assert.deepEqual(first.relayed.map(r => r.action), ['sync_startups', 'reset_mcp_legacy']);
   assert.deepEqual(first.relayed[0].params.contacts.map(c => c.quote_id).sort(), ['Q-S1', 'Q-S2']);
-  const done = [{ key: 'engine_mode', value: 'test' }, { key: 'mcp_leads_retired', value: '2026-11-11T00:00:00Z' }];
+  const done = [{ key: 'engine_mode', value: 'test' }, { key: 'mcp_legacy_reset', value: '2026-11-11T00:00:00Z' }];
   const off = await api({ config: done });
   await off.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
   assert.deepEqual(off.relayed.map(r => r.action), ['sync_startups'], 'default: no leads added');
@@ -192,7 +192,7 @@ test('Engine: a cancelled startup is removed and its sequence stopped; someone i
   assert.ok(w.tables.Config.find(c => c.key === 'crm_sync_at'));
 });
 
-test('Retire past MCP leads: only synced, never-started MCP Legacy contacts leave the list; auto off; Tony’s import brings one back with his details', () => {
+test('MCP Legacy reset: every never-started MCP Legacy contact (sync or file) leaves the list; auto off; Tony’s import brings one back with his details', () => {
   const w = engine();
   const ctx_run = (action, params) => JSON.parse(JSON.stringify(w.run(action, params)));
   w.tables.Contacts.push(
@@ -201,9 +201,9 @@ test('Retire past MCP leads: only synced, never-started MCP Legacy contacts leav
     { contact_id: 'f1', email_norm: 'f1@example.com', bucket: 'B', source: 'MCP list', review_status: 'needs_review', is_test: 'N' },
     { contact_id: 't1', email_norm: 't1@example.com', bucket: 'B', source: 'sales_hub', review_status: 'needs_review', is_test: 'Y' });
   w.tables.Enrollments.push({ enrollment_id: 'e2', contact_id: 'l2', status: 'active' });
-  assert.deepEqual(ctx_run('retire_synced_leads', {}), { ok: true, removed: 1 });
+  assert.deepEqual(ctx_run('reset_mcp_legacy', {}), { ok: true, removed: 2 });
   const st = id => w.tables.Contacts.find(c => c.contact_id === id).review_status;
-  assert.deepEqual(['l1', 'l2', 'f1', 't1'].map(st), ['removed', 'confirmed', 'needs_review', 'needs_review']);
+  assert.deepEqual(['l1', 'l2', 'f1', 't1'].map(st), ['removed', 'confirmed', 'removed', 'needs_review'], 'file imports go too; test contacts and anyone who started stay');
   assert.equal(w.tables.Config.find(r => r.key === 'crm_lead_auto').value, 'false');
   const back = ctx_run('apply_incoming', { contact_id: 'l1', mode: 'replace', data: { email_norm: 'l1@example.com', first_name: 'Linda', source: 'MCP list' } });
   assert.equal(back.changed, true);
