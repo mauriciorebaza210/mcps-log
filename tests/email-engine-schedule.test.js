@@ -291,3 +291,25 @@ test('set_sender: the inbox name and sign-off are plain text with length limits;
   assert.match(setup, /\{\{QuoteLink\}\} opens the MCPS service request form/);
   assert.match(setup, /Sign off as \{\{SenderName\}\}/);
 });
+
+test('Go live: from test mode only, typed confirmation; schedule on, earlier startups held, live links, production, new keys', () => {
+  const w = world('10:00');
+  w.tables.Contacts.push(
+    { contact_id: 's1', email_norm: 's1@example.com', bucket: 'C', review_status: 'confirmed', is_test: 'N' },
+    { contact_id: 's2', email_norm: 's2@example.com', bucket: 'C', review_status: 'confirmed', is_test: 'Y' });
+  const props = {}; w.env.props = { get: k => props[k], set: (k, v) => { props[k] = v; }, del: k => { delete props[k]; } };
+  let installed = 0;
+  const go = p => JSON.parse(JSON.stringify(w.ctx_.EE_adminRun_(w.env, w.core, { action: 'go_live', params: p, actor: 'mau' }, { installScheduler: () => { installed++; return { times: ['08:00'] }; } })));
+  const keys = { track_base: 'https://mcps-log.vercel.app', link_quote: 'https://mcps-log.vercel.app/service', link_secret: 'l'.repeat(40), relay_secret: 'r'.repeat(40) };
+  assert.equal(go({ ...keys, confirm: 'go' }).ok, false, 'typed confirmation');
+  assert.equal(go({ ...keys, confirm: 'GO LIVE', relay_secret: 'short' }).ok, false, 'real keys only');
+  assert.equal(installed, 0, 'nothing happens before every check passes');
+  const r = go({ ...keys, confirm: 'GO LIVE' });
+  assert.deepEqual([r.ok, r.held, installed], [true, 1, 1]);
+  const cfg = k => w.env.store.get('Config', k).value;
+  assert.deepEqual([cfg('engine_mode'), cfg('track_base'), cfg('link_quote')], ['production', 'https://mcps-log.vercel.app', 'https://mcps-log.vercel.app/service']);
+  assert.equal(w.tables.Contacts.find(c => c.contact_id === 's1').review_status, 'held');
+  assert.equal(w.tables.Contacts.find(c => c.contact_id === 's2').review_status, 'confirmed', 'test contacts untouched');
+  assert.deepEqual([props.EE_LINK_SECRET, props.EE_RELAY_SECRET], [keys.link_secret, keys.relay_secret]);
+  assert.equal(go({ ...keys, confirm: 'GO LIVE' }).error, 'The engine is already live.');
+});

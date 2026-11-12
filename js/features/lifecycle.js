@@ -378,7 +378,7 @@ function lcActivity_() {
     '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
     (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +
     '<div>' + lcTodayRuns_() + '<div class="lc-card"><div class="lc-card-h"><h3>Recent runs</h3><small>Times in ' + lcEsc_(lcZoneOn_()) + '</small></div>' + runs + '</div>' +
-    '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div>' + (typeof rqListCard_ === 'function' ? rqListCard_() : '') + lcChecks_() + '</div></div>';
+    '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div>' + (typeof rqListCard_ === 'function' ? rqListCard_() : '') + lcGoLiveCard_() + lcChecks_() + '</div></div>';
 }
 // Engine checks: the trigger-precision test (Schedule.js → trigger_test). Before the
 // scheduler is installed, this measures how close to the planned minute Apps Script's
@@ -400,6 +400,32 @@ function lcChecks_() {
     (LC.trig.error ? '<div class="lc-empty" style="text-align:left;padding:0">' + lcEsc_(LC.trig.error === 'unknown action' ? 'The engine needs an update for this test.' : LC.trig.error) + '</div>' : rows + sum + staleNote) +
     '<button class="lc-btn sm" data-act="trig-test"' + (running ? ' disabled' : '') + '>' + (t ? 'Run it again' : 'Test trigger timing') + '</button>' +
     (running ? ' <button class="lc-link" data-act="trig-refresh">Refresh</button>' : '') + '</div></div>';
+}
+// Go live (Admin.js EE_goLive_): only for whoever can change settings, only while in test mode.
+function lcGoLiveCard_() {
+  const ov = LC.ov;
+  if (!lcCan_('edit_config') || ov.engine.mode === 'production') return '';
+  if (!LC.golive) { LC.golive = { loading: true }; lcAdmin_('go_live', { check: true }).then(r => { LC.golive = r; if (LC.tab === 'activity') lcRenderBody_(); }).catch(() => { LC.golive = { ok: false }; }); }
+  const on = ov.steps.filter(s => s.status !== 'off' && s.published);
+  const joining = typeof cmpPeople_ === 'function' ? cmpPeople_('C').joining.length : 0;
+  const ready = LC.golive && LC.golive.ready;
+  const li = (ok, text) => '<li><span class="lc-gl-dot ' + (ok ? 'ok' : 'warn') + '">' + (ok ? LC_ICON.check : '!') + '</span><span>' + text + '</span></li>';
+  return '<div class="lc-card lc-golive"><div class="lc-card-h"><h3>Go live</h3><small>Test mode now</small></div><div class="lc-checks">' +
+    '<p class="lc-note" style="margin-top:0">One click switches from testing to real customers. It turns on the daily schedule, points email links at the live site and swaps in new security keys.</p>' +
+    '<ul class="lc-gl-list">' +
+      li(on.length === 1 && on[0].step_id === 'c_welcome', on.length ? 'Emails that will be On: <b>' + on.map(s => lcEsc_(s.name)).join(', ') + '</b>' + (on.some(s => s.step_id !== 'c_welcome') ? ' (only Welcome should be; turn the others Off in their Setup first)' : '') : 'No email is On yet') +
+      li(true, joining ? '<b>' + joining + '</b> startup' + (joining === 1 ? '' : 's') + ' already synced will be skipped (they got the old approval email)' : 'Startups approved from now on get the Welcome') +
+      li(!!ready, ready ? 'New keys ready on the live site' : LC.golive && LC.golive.loading ? 'Checking the new keys…' : 'New keys not set up yet (Claude does this)') +
+    '</ul><button class="lc-btn primary" data-act="golive"' + (ready ? '' : ' disabled') + '>Go live…</button></div></div>';
+}
+async function lcGoLive_() {
+  const html = '<p>Real customers start getting the emails that are On. After this, use the live portal (mcps-log.vercel.app); this preview stops talking to the engine.</p>' +
+    '<label class="lc-fld"><span>Type GO LIVE to confirm</span><input class="lc-input" data-gl autocomplete="off"></label>';
+  const r = await lcConfirm_({ title: 'Go live now?', html, ok: 'Go live', danger: true,
+    run: layer => lcAdmin_('go_live', { confirm: String(layer.querySelector('[data-gl]').value || '').trim().toUpperCase() }) });
+  if (!r || !r.ok) return;
+  lcToast_('Live. ' + (r.held ? r.held + ' earlier startups skipped. ' : '') + 'Open mcps-log.vercel.app from now on.');
+  LC.golive = null; lcRefresh_(true);
 }
 async function lcTrigTest_(refreshOnly) {
   const r = await lcAdmin_('trigger_test', { do: refreshOnly ? 'result' : 'start' }).catch(() => ({ ok: false, error: 'Network error' }));
@@ -483,7 +509,7 @@ function lcContacts_() {
     (sel ? '<th class="lc-selcol"><input type="checkbox" data-act="tag-selall" data-ids="' + lcEsc_(JSON.stringify(shownIds)) + '"' + (allOn ? ' checked' : '') + ' aria-label="Select everyone shown"></th>' : '') + '<th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
-      const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : c.review_status === 'possible_duplicate' ? lcTag_('Possible duplicate', 'warn') : c.review_status === 'removed' ? lcTag_('Removed', '')
+      const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : c.review_status === 'possible_duplicate' ? lcTag_('Possible duplicate', 'warn') : c.review_status === 'held' ? lcTag_('Before go-live', '') : c.review_status === 'removed' ? lcTag_('Removed', '')
         : c.review_status === 'confirmed' ? lcTag_(c.bucket === 'C' ? 'From the portal' : 'Starting', 'live') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
         seq.status === 'stopped' ? lcTag_('Stopped · ' + lcStopWord_(seq.stop_reason), 'warn') : lcTag_(seq.status, '');
       return '<tr class="click' + (sel && TAGS.sel.has(c.contact_id) ? ' sel' : '') + '" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0">' +
@@ -864,6 +890,7 @@ function lcDispatch_(t) {
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
   if (act === 'sender') return lcEditSender_();
+  if (act === 'golive') return lcGoLive_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);
   if (act === 'enabled') return lcSetEnabled_(!LC.ov.engine.enabled);
   if (act === 'pause') return lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));

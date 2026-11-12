@@ -857,3 +857,11 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-from-prev em{font-style:normal;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lc-sheet .lc-fld-help{max-width:none}
 .lc-sheet .lc-fld{margin-top:10px}
+
+/* Go live card (Activity) */
+.lc-gl-list{list-style:none;margin:10px 0 14px;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13.5px}
+.lc-gl-list li{display:flex;gap:10px;align-items:flex-start}
+.lc-gl-dot{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;margin-top:1px}
+.lc-gl-dot.ok{background:var(--aqua-bg);color:var(--aqua)}
+.lc-gl-dot.ok svg{width:12px;height:12px}
+.lc-gl-dot.warn{background:var(--amber-bg);color:var(--amber)}

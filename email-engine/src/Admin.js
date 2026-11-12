@@ -37,7 +37,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -97,6 +97,7 @@ function EE_adminRun_(env, core, req, deps) {
   else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
   else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);
   else if (action === 'reset_mcp_legacy') out = EE_resetMcpLegacy_(env, core, actor);
+  else if (action === 'go_live') out = EE_goLive_(env, core, p, actor, deps);
   else if (action === 'set_sender') {
     // The name in the inbox ("From") and the name emails are signed with ({{SenderName}}). Plain text only.
     var clean = function (v) { return String(v == null ? '' : v).replace(/[<>"\r\n\u0000-\u001F]/g, '').replace(/\s+/g, ' ').trim(); };
@@ -297,7 +298,8 @@ function EE_startDueBatches_(env, core) {
 function EE_admin_(req) {
   var x = EE_core_();
   return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, drive: EE_driveDeps_(), files: EE_attachFilesDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
-    runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; } });
+    runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; },
+    installScheduler: function () { eeInstall(); return EE_runPlan_(EE_config_(x.env.store)); } });
 }
 // One pending run at a time; the trigger removes itself when it fires.
 function EE_scheduleRunNow_() {
@@ -519,6 +521,36 @@ function EE_applyIncoming_(env, core, p, actor) {
   core.commitEntity('contact', data, 'contact:' + c.contact_id + ':' + mode + ':' + env.sha256(JSON.stringify(data)).slice(0, 12));
   return { ok: true, changed: true };
 }
+// Go live (Mau 2026-11-11, from the portal; Tony isn't needed): in order, and only from test mode.
+//  1. schedule on (eeInstall, as the engine owner: the web app runs as Tony)
+//  2. startups already synced are held: their homeowners got the old approval email (decision A),
+//     so only startups approved from now on get the Welcome
+//  3. links point at the live site; engine_mode → production
+//  4. new link + relay keys (the portal's production env already has them; this request was signed with the old ones)
+function EE_goLive_(env, core, p, actor, deps) {
+  var cfgVal = function (k) { var r = env.store.get('Config', k); return r ? String(r.value) : ''; };
+  if (cfgVal('engine_mode') === 'production') return { ok: false, error: 'The engine is already live.' };
+  if (p.confirm !== 'GO LIVE') return { ok: false, error: 'Type GO LIVE to confirm.' };
+  if (!/^https:\/\/\S+$/.test(String(p.track_base || '')) || !/^https:\/\/\S+$/.test(String(p.link_quote || ''))) return { ok: false, error: 'The live site links are missing.' };
+  if (String(p.link_secret || '').length < 32 || String(p.relay_secret || '').length < 32) return { ok: false, error: 'The new keys aren’t set up yet.' };
+  var runs = null;
+  if (deps.installScheduler) { try { runs = deps.installScheduler(); } catch (e) { return { ok: false, error: 'Couldn’t turn on the schedule: ' + String(e && e.message || e).slice(0, 200) }; } }
+  var started = {}, held = 0;
+  env.store.rows('Enrollments').forEach(function (e) { started[e.contact_id] = 1; });
+  env.store.rows('Contacts').forEach(function (c) {
+    if (c.bucket !== 'C' || c.review_status !== 'confirmed' || started[c.contact_id] || String(c.is_test).toUpperCase() === 'Y') return;
+    core.commitEntity('contact', { contact_id: c.contact_id, review_status: 'held', review_reason: 'joined before go-live (had the old approval email)' }, 'contact:' + c.contact_id + ':held_golive');
+    held++;
+  });
+  env.store.upsert('Config', { key: 'track_base', value: String(p.track_base) });
+  env.store.upsert('Config', { key: 'link_quote', value: String(p.link_quote) });
+  env.store.upsert('Config', { key: 'engine_mode', value: 'production' });
+  env.store.upsert('Config', { key: 'went_live_at', value: new Date(env.now()).toISOString() + ' by ' + actor });
+  env.props.set('EE_LINK_SECRET', String(p.link_secret));
+  env.props.set('EE_RELAY_SECRET', String(p.relay_secret));
+  return { ok: true, held: held, runs: runs };
+}
+
 // One time (Mau 2026-11-11): MCP Legacy starts fresh with Tony's own import. Every earlier MCP Legacy
 // contact (Sales Hub sync or file imports) that never started a sequence leaves the list (kept in the
 // engine, hidden); test contacts stay; automatic lead adding turns off. Anyone on Tony's list comes back

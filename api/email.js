@@ -35,6 +35,7 @@ import { put as blobPut, get as blobGet, list as blobList } from '@vercel/blob';
 import TRACKING from '../js/lib/email-tracking.js';
 
 const RAW_TTL_MS = 15 * 1000;
+const LIVE_URL = 'https://mcps-log.vercel.app';
 // Same words as the page's Alerts card (js/features/lifecycle.js → LC_ALERT).
 const ALERT_LABEL = { trigger_test_done: 'Trigger timing test finished', security_property_changed: 'Security setting changed', schema_incompatible: 'Engine code too old for its data',
   backup_failed: 'Nightly backup failed', too_many_send_times: 'Too many send times', delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped',
@@ -42,7 +43,7 @@ const ALERT_LABEL = { trigger_test_done: 'Trigger timing test finished', securit
 const SETTINGS_SS_ID = () => String(process.env.EE_SETTINGS_SS_ID || '1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U').trim();   // "Chem Log": Comms_Optouts
 const IMPORT_CHECK_MAX = 5000, IMPORT_SAVE_MAX = 100;
 // The capability each page action needs (PLAN.md → Configuration & authorization).
-const ADMIN_CAP = { set_sender: 'edit_drafts', trigger_test: 'edit_config', list_attachments: 'view_aggregates', add_attachment: 'edit_drafts', approve_attachment: 'approve_publish', discard_attachment: 'edit_drafts',
+const ADMIN_CAP = { go_live: 'edit_config', set_sender: 'edit_drafts', trigger_test: 'edit_config', list_attachments: 'view_aggregates', add_attachment: 'edit_drafts', approve_attachment: 'approve_publish', discard_attachment: 'edit_drafts',
   rollback_attachment: 'edit_drafts', retire_attachment: 'edit_drafts', create_single: 'edit_contacts', update_single: 'edit_contacts', cancel_single: 'edit_contacts', open_editor: 'view_aggregates', save_draft: 'edit_drafts', publish_rules: 'edit_config', list_templates: 'view_aggregates', open_template: 'view_aggregates', open_draft: 'view_aggregates', import_template: 'edit_drafts', approve_draft: 'approve_publish', discard_draft: 'edit_drafts',
   set_send_time: 'edit_config', move_batch: 'edit_contacts', send_override: 'edit_contacts', create_batch: 'edit_contacts', cancel_batch: 'edit_contacts', maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
   abandon: 'resolve_unknown', resend: 'resolve_unknown' };
@@ -68,6 +69,8 @@ const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA
 const DEFAULT_DEPS = { ...sheets, relayEvents, relayAdmin, waitUntil, sendEngineAlert, sendChangeRequest, askNames, now: () => Date.now(),
   blob: { put: blobPut, get: blobGet, list: blobList }, blobReady: () => !!process.env.BLOB_READ_WRITE_TOKEN,
   changeRequestTo: () => String(process.env.EE_CHANGE_REQUEST_TO || 'mauricio@mcpoolsolutions.org').trim(),
+  // The production keys, staged on the preview for the go-live hand-over (api op=admin go_live).
+  goLiveKeys: () => { const link = String(process.env.EE_LINK_SECRET_NEXT || '').trim(), relay = String(process.env.EE_RELAY_SECRET_NEXT || '').trim(); return link.length >= 32 && relay.length >= 32 ? { link, relay } : null; },
   anthropicKey: () => String(process.env.ANTHROPIC_API_KEY || '').trim(),
   cronSecret: () => String(process.env.CRON_SECRET || '').trim(),
   linkSecret: () => String(process.env.EE_LINK_SECRET || '').trim(),
@@ -290,7 +293,14 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     catch (e) { if (e.status === 503) return reply(res, 503, { ok: false, error: 'The engine sheet is missing tabs; run eeSetup.' }); throw e; }
     const caps = capabilitiesFor(session.username, tables.Permissions);
     if (!caps.has(ADMIN_CAP[action])) return reply(res, 403, { ok: false, error: 'You don’t have permission to do that.' });
-    const params = body.params && typeof body.params === 'object' ? body.params : {};
+    let params = body.params && typeof body.params === 'object' ? body.params : {};
+    // Go live: the live links and the new keys come from this server's env, never from the browser.
+    if (action === 'go_live') {
+      const next = deps.goLiveKeys();
+      if (params.check) return reply(res, 200, { ok: true, ready: !!next, live_url: LIVE_URL });
+      if (!next) return reply(res, 503, { ok: false, error: 'The new keys aren’t set up yet (EE_LINK_SECRET_NEXT / EE_RELAY_SECRET_NEXT).' });
+      params = { confirm: String(params.confirm || ''), track_base: LIVE_URL, link_quote: LIVE_URL + '/service', link_secret: next.link, relay_secret: next.relay };
+    }
     const r = await deps.relayAdmin({ action, params, actor: String(session.username || '') });
     rawVersion++;
     if (!r || r.error === 'relay not configured') return reply(res, 503, { ok: false, error: 'The engine can’t be reached right now.' });
