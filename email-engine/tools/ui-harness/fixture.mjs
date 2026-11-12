@@ -11,6 +11,12 @@ const cfg = { engine_mode: 'test', rule_rev: 'bc-1', engine_enabled: 'true', dai
   send_time_B: '09:00', send_time_C: '08:30', run_plan: JSON.stringify({ date: todayCT, times: ['08:30', '09:00', '10:30', '14:15', '16:00'], dropped: [] }) };
 rows('Config', Object.entries(cfg).map(([key, value]) => ({ key, value })));
 rows('Permissions', [{ username: 'mau', roles: 'editor,approver,operator', active: 'Y' }]);
+// A single email (Singles.js) five days out, and a cancelled one.
+const dayAt = n => new Date(now + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+ruleset.sequences = (ruleset.sequences || []).concat([{ sequence_id: 'S1A2B3C', kind: 'single', name: 'Holiday hours 2026' }, { sequence_id: 'S9F8E7D', kind: 'single', name: 'Fall cleanup offer' }]);
+ruleset.steps = ruleset.steps.concat([
+  { step_id: 's_1a2b3c', sequence_id: 'S1A2B3C', order: 1, name: 'Holiday hours 2026', category: 'marketing', status: 'active', anchor: 'date', date: dayAt(5), offset: 0, window_days: 3, max_hold_days: 2, stop_rules: [] },
+  { step_id: 's_9f8e7d', sequence_id: 'S9F8E7D', order: 1, name: 'Fall cleanup offer', category: 'marketing', status: 'off', anchor: 'date', date: dayAt(-3), offset: 0, window_days: 3, max_hold_days: 2, stop_rules: [] }]);
 rows('Rulesets', [{ rule_rev: 'bc-1', json: ruleset }]);
 rows('Revisions', [
   { revision_id: 'rev_b_intro_1', step_id: 'b_intro', rev_no: 1, subject: 'An introduction from Mission Custom Pools', preheader: 'Meet Mission Custom Pool Solutions, the service side of the family that built your pool.', status: 'published', approver: 'antonio@mcpoolsolutions.org', approved_at: iso(8) },
@@ -50,6 +56,9 @@ rows('Batches', [
   { batch_id: 'b0', group: 'B', count: 14, order: 'oldest', pick: 'now', start_on: day(-9), status: 'started', started_count: 14, started_at: new Date(now - 9 * 86400000).toISOString(), filters_json: {}, contact_ids: [] }]);
 rows('Overrides', [{ key: 'e5:b_followup:1', kind: 'next_run', date: '', by: 'mau', at: iso(0.1) }]);
 rows('Holds', [{ key: 'none', held_days: 0 }]);
+// Some confirmed people are test contacts, so a single email can pick them in test mode.
+C.filter(c => c.review_status === 'confirmed').forEach((c, i) => { if (i % 2 === 0) c.is_test = 'Y'; });
+C.filter(c => c.review_status === 'confirmed').slice(0, 9).forEach(c => E.push({ enrollment_id: 'en_' + c.contact_id + '_S1A2B3C_1', contact_id: c.contact_id, sequence_id: 'S1A2B3C', rule_rev: 'bc-1', mode: 'test', status: 'active', enrolled_on: dayAt(-1), send_time: '10:00' }));
 rows('Contacts', C); rows('Enrollments', E); rows('Deliveries', D); rows('Engagement', G);
 const atCT = t => new Date(todayCT + 'T' + t + ':00-06:00').toISOString();
 rows('Runs', [{ run_id: 's1', trigger: 'scheduled', planned_for: '08:30', started_at: atCT('08:31'), finished_at: atCT('08:32'), sent: 4, skipped: 0, stopped_reason: 'done' },

@@ -169,6 +169,8 @@
       var count = Math.max(1, step.repeat_count || 1);
       var base = null, projected = false, prereqExpired = false;
       if (step.anchor === 'enrollment') base = en.enrolled_on;
+      // A single email (PLAN.md → "Single email" sequence type): one fixed calendar day.
+      else if (step.anchor === 'date') base = /^\d{4}-\d{2}-\d{2}$/.test(String(step.date || '')) ? step.date : null;
       else if (step.anchor === 'startup') base = contact.startup_date || null;
       else if (step.anchor === 'previous') {
         var req = stepResult[step.requires];
@@ -177,7 +179,7 @@
         else if (req.outcome === 'expired' || req.outcome === 'expired_prerequisite') prereqExpired = true;
         else if (req.due) { base = req.due; projected = true; }
       }
-      var unsupported = (step.unit && step.unit !== 'calendar') || ['enrollment', 'startup', 'previous'].indexOf(step.anchor) === -1;
+      var unsupported = (step.unit && step.unit !== 'calendar') || ['enrollment', 'startup', 'previous', 'date'].indexOf(step.anchor) === -1;
 
       for (var k = 0; k < count; k++) {
         var occ = k + 1, key = deliveryKey(en.enrollment_id, step.step_id, occ);
@@ -250,7 +252,8 @@
         } else if (ctx.time && sendTime > ctx.time && d.override !== 'next_run') {
           // Its day has come but not its time: a later run today sends it.
           d.outcome = 'upcoming'; d.reason = 'later_today';
-        } else if (ctx.paused.all || (ctx.paused.buckets || []).indexOf(contact.bucket) !== -1) {
+        // Pausing is per sequence: pausing MCP Legacy doesn't hold a single email to the same people.
+        } else if (ctx.paused.all || (ctx.paused.buckets || []).indexOf(en.sequence_id) !== -1) {
           d.outcome = 'paused';
         } else if (contact.review_status !== 'confirmed') {
           d.outcome = 'excluded'; d.reason = 'needs_review';

@@ -104,6 +104,13 @@ function EE_editorSource_(env, stepId, revisionId, revisions, deps) {
     body_html: '<h1>Your headline</h1>\n<p>Hi {{FirstName}},</p>\n<p>Write your email here.</p>\n' };
 }
 
+// Any email in the current rules (seeded B/C steps and single emails made since).
+function EE_knownStep_(env, stepId) {
+  var rs = typeof EE_currentRuleset_ === 'function' ? EE_currentRuleset_(env) : null;
+  var steps = rs ? rs.json.steps : EE_SEED.ruleset.steps;
+  return steps.some(function (st) { return st.step_id === stepId; });
+}
+
 function EE_templateAction_(env, core, action, p, actor, deps) {
   var folders = EE_templateFolders_(env.props);
   var revisions = env.store.rows('Revisions');
@@ -149,7 +156,7 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
   }
   if (action === 'open_editor') {
     var es = String(p.step_id || '');
-    if (!EE_SEED.ruleset.steps.some(function (st) { return st.step_id === es; })) return { ok: false, error: 'unknown email' };
+    if (!EE_knownStep_(env, es)) return { ok: false, error: 'unknown email' };
     var src = EE_editorSource_(env, es, String(p.revision_id || ''), revisions, deps);
     if (src.error) return { ok: false, error: src.error };
     var ecfg = EE_config_(env.store), reg = EE_blockRegistry_();
@@ -160,7 +167,7 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
   }
   if (action === 'save_draft') {
     var ss = String(p.step_id || ''), sbody = String(p.body_html || ''), ssubj = String(p.subject || '').trim();
-    if (!EE_SEED.ruleset.steps.some(function (st) { return st.step_id === ss; })) return { ok: false, error: 'unknown email' };
+    if (!EE_knownStep_(env, ss)) return { ok: false, error: 'unknown email' };
     if (!ssubj) return { ok: false, error: 'a subject line is required' };
     if (!sbody.trim()) return { ok: false, error: 'the email is empty' };
     var sformat = MCPS_EMAIL_RENDER.isFull({ body_html: sbody }) ? 'full' : 'body';

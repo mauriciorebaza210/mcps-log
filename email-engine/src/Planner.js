@@ -112,7 +112,9 @@ function EE_planDay(snap) {
     if (!rev) { notApproved.push(d.key); return; }
     var c = contactsById[d.contact_id] || {};
     due.push({ key: d.key, enrollment_id: d.enrollment_id, contact_id: d.contact_id, step_id: d.step_id,
-      occurrence: d.occurrence, mode: d.mode, email_norm: c.email_norm, bucket: c.bucket, category: d.category,
+      // The send gate pauses by this (Config paused_buckets): the email's own sequence, so pausing
+      // MCP Legacy (B) never holds a single email to the same person. For B and C it equals the contact's group.
+      occurrence: d.occurrence, mode: d.mode, email_norm: c.email_norm, bucket: (stepsById[d.step_id] || {}).sequence_id || c.bucket, category: d.category,
       revision_id: rev });
   });
 

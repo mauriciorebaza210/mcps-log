@@ -13,6 +13,7 @@ const CMP = { id: '', view: 'list', stage: 'active', month: '', day: '' };
 const CMP_STAGES = [['waiting', 'Waiting', 'In Needs review'], ['lined', 'Lined up', 'In a planned batch'],
   ['active', 'In sequence', 'Getting emails'], ['finished', 'Finished', 'Got every email'], ['stopped', 'Stopped', 'Replied, clicked or opted out']];
 const CMP_ICON = {
+  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3.5 6.5 12 13 20.5 6.5"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><line x1="3.5" y1="10" x2="20.5" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
@@ -110,7 +111,7 @@ function lcCampaigns_() {
   if (!LC.contacts) return '<div class="lc-sk" style="height:220px;margin-bottom:16px"></div><div class="lc-sk" style="height:320px"></div>';
   if (typeof crmLoad_ === 'function' && !CRM.data && !CRM.loading) crmLoad_();
   if (CMP.id && cmpSteps_(CMP.id).length) return cmpPage_(CMP.id);
-  return '<div class="lc-cmp-grid">' + ['B', 'C'].filter(b => cmpSteps_(b).length).map(cmpCard_).join('') + '</div>';
+  return '<div class="lc-cmp-grid">' + ['B', 'C'].filter(b => cmpSteps_(b).length).map(cmpCard_).join('') + '</div>' + (typeof sglSection_ === 'function' ? sglSection_() : '');
 }
 
 function cmpStatus_(b) {

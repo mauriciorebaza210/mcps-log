@@ -175,10 +175,11 @@ export function buildOverview(tables, caps, now, opts = {}) {
     return {
       step_id: s.step_id, name: s.name, bucket: s.sequence_id, order: s.order, category: s.category, status: s.status,
       timing: { anchor: s.anchor, offset: s.offset, repeat_every: s.repeat_every || 0, repeat_count: s.repeat_count || 0,
-        requires: s.requires || '', window_days: s.window_days, max_hold_days: s.max_hold_days, deadline: s.hard_deadline || null },
+        requires: s.requires || '', window_days: s.window_days, max_hold_days: s.max_hold_days, deadline: s.hard_deadline || null, date: s.date || '' },
       stop_rules: (s.stop_rules || []).map(r => ({ signal: r.signal, min_confidence: r.min_confidence || '', stops: r.stops })),
       audience_filter: s.audience_filter || null,
       audience: enrollments.filter(e => e.sequence_id === s.sequence_id && e.status === 'active').length,
+      enrolled: enrollments.filter(e => e.sequence_id === s.sequence_id).length,
       published: rev ? { revision_id: rev.revision_id, rev_no: rev.rev_no, subject: rev.subject, approved_at: rev.approved_at, approver: rev.approver } : null,
       counts: {
         sent: count(d => d.state === 'sent'), sent_7d: count(d => d.state === 'sent' && ms(d.sent_at) >= week),
@@ -212,6 +213,12 @@ export function buildOverview(tables, caps, now, opts = {}) {
       send_times: { B: sendTime(cfg.send_time_B), C: sendTime(cfg.send_time_C) }, run_plan: runPlan(cfg)
     },
     steps,
+    // A single email's send time sits on its people's enrollments (Singles.js); one is enough.
+    single_times: Object.fromEntries((tables.Enrollments || []).filter(e => /^S[0-9A-F]{6}$/.test(e.sequence_id || '') && e.send_time)
+      .map(e => [e.sequence_id, e.send_time])),
+    // Campaigns: the B/C sequences and single emails (Singles.js), from the current rules.
+    sequences: ((((tables.Rulesets || []).find(r => r.rule_rev === cfg.rule_rev) || {}).json || {}).sequences || [])
+      .map(q => ({ sequence_id: q.sequence_id, kind: q.kind || 'sequence', name: q.name || '', created_at: q.created_at || '', created_by: q.created_by || '' })),
     attention: deliveries.filter(d => NEEDS_ATTENTION.has(d.state)).sort(byDesc('claimed_at')).map(d => deliveryView(d, caps, eng[d.delivery_id])),
     runs,
     alerts: (tables.Alerts || []).slice().sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 20)
@@ -222,7 +229,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
     capabilities: [...caps].sort(),
     totals: {
       contacts: (tables.Contacts || []).length,
-      active_enrollments: enrollments.filter(e => e.status === 'active').length,
+      active_enrollments: enrollments.filter(e => e.status === 'active' && !/^S[0-9A-F]{6}$/.test(e.sequence_id || '')).length,   // single emails aren't a sequence
       sent_7d: deliveries.filter(d => d.state === 'sent' && ms(d.sent_at) >= week).length
     }
   };

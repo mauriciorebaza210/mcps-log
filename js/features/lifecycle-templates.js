@@ -13,7 +13,7 @@ function lcTemplatesTab_(D) {
   const d = D.data, revs = d.revisions || [];
   const live = revs.find(r => r.status === 'published');
   const drafts = revs.filter(r => r.status === 'draft');
-  if (!D.tpl) { D.tpl = { loading: true }; lcLoadTemplates_(D); }
+  if (!D.tpl) { D.tpl = { loading: true }; if (!(typeof sglIsSingle_ === 'function' && sglIsSingle_(d.step.bucket))) lcLoadTemplates_(D); }
   const who = v => lcEsc_(String(v || '').split('@')[0] || 'someone');
   const can = c => lcCan_(c);
   const liveHtml = live ? '<div class="lc-tpl-live"><div class="main"><b>' + lcEsc_(live.subject) + '</b><small>Version ' + live.rev_no + ' · approved ' + lcEsc_(lcStamp_(live.approved_at)) +
@@ -40,9 +40,11 @@ function lcTemplatesTab_(D) {
       ' · ' + Math.max(1, Math.round(f.size / 1024)) + ' KB</small></div>' + state(f) + '<div class="lc-tpl-acts"><button class="lc-btn sm" data-act="tpl-open" data-id="' + lcEsc_(f.file_id) + '">Preview</button>' +
       (can('edit_drafts') && (f.revision_status !== 'draft' || f.newer_in_drive) ? '<button class="lc-btn sm primary" data-act="tpl-use" data-id="' + lcEsc_(f.file_id) + '" data-name="' + lcEsc_(f.name) + '">Use as draft</button>' : '') +
       '</div></li>').join('') + '</ul>';
+  const single = typeof sglIsSingle_ === 'function' && sglIsSingle_(d.step.bucket);
   return '<div class="lc-sec"><h4>Live</h4>' + liveHtml + '</div>' +
     (drafts.length ? '<div class="lc-sec"><h4>Waiting for approval</h4>' + draftHtml + '<div class="lc-note">Approving freezes this copy: later changes in Drive never change an approved email.</div></div>' : '') +
-    '<div class="lc-sec"><h4>In Drive <button class="lc-link" data-act="tpl-reload" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:600">Refresh</button></h4>' + drive + '</div>';
+    (single ? '<p class="lc-note">Write it with the editor (Write it here / Edit), or paste a ChatGPT template into Edit HTML. Approving it makes it ready to send on its day.</p>' :
+    '<div class="lc-sec"><h4>In Drive <button class="lc-link" data-act="tpl-reload" style="margin-left:8px;text-transform:none;letter-spacing:0;font-weight:600">Refresh</button></h4>' + drive + '</div>');
 }
 
 async function lcLoadTemplates_(D) {

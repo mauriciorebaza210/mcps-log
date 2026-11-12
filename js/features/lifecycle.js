@@ -211,7 +211,7 @@ function lcRefresh_(fresh) {
   LC.loading = true; LC.error = null; lcRenderHead_();
   const params = { mode: LC.mode || '', fresh: fresh ? '1' : '' };
   lcLoad_('overview', params, (data, cached) => {
-    LC.ov = data; if (!LC.mode) LC.mode = data.mode; lcRender_();
+    LC.ov = data; if (typeof sglNames_ === 'function') sglNames_(data); if (!LC.mode) LC.mode = data.mode; lcRender_();
     if (!LC.perf && LC.t0) LC.perf = { paint_ms: Math.round(performance.now() - LC.t0), paint_from: cached ? 'cache' : 'network' };
   }, LC.mode || 'default')
     .catch(e => { LC.error = e; })
@@ -301,6 +301,17 @@ function lcErrorView_(e) {
 // Emails: one panel per sequence. Timing lives in the drawer, not the table.
 function lcEmails_() {
   const ov = LC.ov;
+  const singles = typeof sglList_ === 'function' ? sglList_() : [];
+  const singleRows = singles.map(x => {
+    const s = x.step, c = s.counts, t = s.tracking || {}, sent = c.sent, st = sglState_(x);
+    const m = (n, base) => '<div class="lc-metric' + (sent ? '' : ' dim') + '"><b>' + (sent ? n : '–') + '</b>' + (sent && base && n ? '<small>' + lcPct_(n, base) + '</small>' : '') + '</div>';
+    return '<button class="lc-row" data-act="step" data-id="' + lcEsc_(s.step_id) + '"><div class="lc-name"><span class="lc-step lc-sgl-ic">' + CMP_ICON.mail + '</span><div style="min-width:0"><b>' + lcEsc_(s.name) + '</b>' +
+      '<small>' + lcEsc_(sglWhen_(s) + ' · ' + (s.enrolled || 0) + ' people') + '</small></div></div><div>' + lcTag_(st[0], st[1]) + '</div>' +
+      m(sent, 0) + m(t.opened_est || 0, sent) + m(t.clicked || 0, sent) + m(t.replied || 0, sent) + '<span class="chev">' + LC_ICON.chev + '</span></button>';
+  }).join('');
+  const singleSec = singles.length ? '<section class="lc-seq"><div class="lc-seq-h"><span class="lc-bkt lc-sgl-ic">' + CMP_ICON.mail + '</span><div class="grow"><h2>Single emails</h2>' +
+    '<small>' + singles.length + ' made · one day each</small></div></div>' +
+    '<div class="lc-cols"><span>Email</span><span>Status</span><span class="r">Sent</span><span class="r">Opened</span><span class="r">Clicked</span><span class="r">Replied</span><span></span></div>' + singleRows + '</section>' : '';
   return ['B', 'C'].map(b => {
     const steps = ov.steps.filter(s => s.bucket === b).sort((x, y) => x.order - y.order);
     if (!steps.length) return '';
@@ -321,7 +332,7 @@ function lcEmails_() {
       '<small>' + audience + ' in sequence · ' + live + ' of ' + steps.length + ' emails live</small></div></div>' +
       '<div class="lc-cols"><span>Email</span><span>Status</span><span class="r">Sent</span><span class="r">Opened</span><span class="r">Clicked</span><span class="r">Replied</span><span></span></div>' +
       rows + '</section>';
-  }).join('');
+  }).join('') + singleSec;
 }
 
 function lcActivity_() {
@@ -476,8 +487,10 @@ function lcRenderDrawer_() {
   if (D.kind === 'step') {
     const s = (D.data && D.data.step) || (LC.ov && LC.ov.steps.find(x => x.step_id === D.id)) || { name: '', bucket: '' };
     const tabs = [['performance', 'Performance'], ['recipients', 'Recipients'], ['templates', 'Templates'], ['setup', 'Setup']];
-    el.innerHTML = '<div class="lc-dr-h"><span class="lc-bkt">' + lcEsc_(s.bucket) + '</span><div class="t"><small>' + lcEsc_(LC_SEQ[s.bucket] || '') +
-      ' · Email ' + lcEsc_(s.order || '') + '</small><h2>' + lcEsc_(s.name) + '</h2></div>' + close + '</div>' +
+    const single = typeof sglIsSingle_ === 'function' && sglIsSingle_(s.bucket);
+    el.innerHTML = '<div class="lc-dr-h"><span class="lc-bkt' + (single ? ' lc-sgl-ic' : '') + '">' + (single ? CMP_ICON.mail : lcEsc_(s.bucket)) + '</span><div class="t"><small>' +
+      (single ? 'Single email' + (s.timing && s.timing.date ? ' · ' + lcEsc_(sglWhen_(s)) : '') : lcEsc_(LC_SEQ[s.bucket] || '') + ' · Email ' + lcEsc_(s.order || '')) +
+      '</small><h2>' + lcEsc_(s.name) + '</h2></div>' + close + '</div>' +
       '<div class="lc-dr-tabs">' + tabs.map(([k, l]) => '<button data-act="dtab" data-tab="' + k + '" class="' + (D.tab === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div>' +
       '<div class="lc-dr-body">' + (D.data ? lcStepTab_(D) : '<div class="lc-sk" style="height:120px"></div><div class="lc-sk" style="height:200px"></div>') + '</div>';
   } else {
@@ -502,6 +515,7 @@ function lcStepTab_(D) {
     }).join('') + '</div>';
   }
   if (D.tab === 'setup') {
+    if (typeof sglIsSingle_ === 'function' && sglIsSingle_(s.bucket)) return sglSetupTab_(D);
     if (D.edit) return lcSetupForm_(D);
     const rev = (d.revisions || []).find(r => r.status === 'published');
     const rules = (s.stop_rules || []).map(r => '<li>' + LC_ICON.stop + '<span>' + lcEsc_((LC_SIGNAL[r.signal] || r.signal) + ' ' + (LC_STOPS[r.stops] || 'stops it')) + '</span></li>').join('');
@@ -672,7 +686,7 @@ function lcWatchRun_() {
     if (Date.now() - LC.runPending > 7 * 60 * 1000) { LC.runPending = 0; lcRenderHead_(); return lcToast_('The run hasn’t reported yet. Check Activity later.', true); }
     lcFetch_('overview', { mode: LC.mode || '', fresh: '1' }).then(data => {
       const r = (data.runs || []).find(x => Date.parse(x.started_at) >= since && x.finished_at);
-      LC.ov = data; lcCacheSet_(lcKey_('overview', LC.mode || 'default'), data);
+      LC.ov = data; if (typeof sglNames_ === 'function') sglNames_(data); lcCacheSet_(lcKey_('overview', LC.mode || 'default'), data);
       if (r) { LC.runPending = 0; lcToast_('Run finished · ' + r.sent + ' sent'); }
       lcRender_();
       if (LC.runPending) setTimeout(tick, 15000);
@@ -769,6 +783,8 @@ function lcDispatch_(t) {
   if (act.startsWith('cmp-')) return cmpOnClick_(t);
   if (act.startsWith('tpl-')) return lcTplAct_(act, t.dataset.id, t.dataset.name);
   if (act === 'setup-edit') return lcSetupAct_(t);
+  if (act === 'sgl-setup') return sglSetupAct_(t);
+  if (act === 'sgl-new') return sglOpen_();
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);

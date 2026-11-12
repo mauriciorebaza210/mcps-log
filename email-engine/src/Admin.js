@@ -23,6 +23,7 @@
 //   send_override      one planned send: skip | move (inside its window) | next_run | clear (Overrides tab)
 //   set_send_time      a campaign's default send time (Config send_time_<bucket>), then re-plan today's runs
 //                       (create_batch also takes send_time: the batch's people keep it; Schedule.js)
+//   create_single | update_single | cancel_single   single emails: one email, one day, a chosen list (Singles.js)
 //   publish_rules      an email's Setup edits (timing, stops, on/off) as a new immutable ruleset revision;
 //                       scope 'all' moves running enrollments onto it, 'new' leaves them on theirs (EE_publishRules_)
 //   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
@@ -33,7 +34,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -66,6 +67,10 @@ function EE_adminRun_(env, core, req, deps) {
     }
   }
   else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
+  else if (action === 'create_single' || action === 'update_single' || action === 'cancel_single') {
+    out = EE_singleAction_(env, core, action, p, actor);
+    if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
+  }
   else if (action === 'publish_rules') {
     out = EE_publishRules_(env, core, p, actor);
     if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
@@ -119,7 +124,7 @@ function EE_adminRun_(env, core, req, deps) {
     else { env.store.upsert('Config', { key: 'engine_enabled', value: p.enabled ? 'true' : 'false' }); out = { ok: true, enabled: p.enabled }; }
   } else if (action === 'set_bucket_paused') {
     var b = String(p.bucket || '');
-    if (!/^[A-F]$/.test(b) || typeof p.paused !== 'boolean') out = { ok: false, error: 'bucket A–F and paused true/false required' };
+    if (!/^(?:[A-F]|S[0-9A-F]{6})$/.test(b) || typeof p.paused !== 'boolean') out = { ok: false, error: 'a sequence (A–F or a single email) and paused true/false required' };
     else {
       var cur = env.config.pausedBuckets().filter(function (x) { return x !== b; });
       if (p.paused) cur.push(b);
@@ -480,6 +485,27 @@ function EE_applyIncoming_(env, core, p, actor) {
   return { ok: true, changed: true };
 }
 
+// The current ruleset (parsed) and its revision id.
+function EE_currentRuleset_(env) {
+  var row = env.store.get('Config', 'rule_rev'), rev = row && row.value, rs = rev && env.store.get('Rulesets', rev);
+  if (!rs) return null;
+  return { rev: rev, json: typeof rs.json === 'string' ? JSON.parse(rs.json) : rs.json };
+}
+// Publishes json as the next revision after curRev (bc-1 → bc-2) and points Config at it.
+// Revisions are never changed in place.
+function EE_publishRuleset_(env, curRev, json, actor) {
+  var prefix = String(curRev).replace(/-\d+$/, ''), max = 0;
+  env.store.rows('Rulesets').forEach(function (x) {
+    var m = String(x.rule_rev).match(/^(.*)-(\d+)$/);
+    if (m && m[1] === prefix) max = Math.max(max, Number(m[2]));
+  });
+  var rev = prefix + '-' + (max + 1);
+  json.rule_rev = rev;
+  env.store.upsert('Rulesets', { rule_rev: rev, json: json, published_at: new Date(env.now()).toISOString(), published_by: actor });
+  env.store.upsert('Config', { key: 'rule_rev', value: rev });
+  return rev;
+}
+
 // ── Email Setup edits (PLAN.md → Scheduling: per-enrollment rule_rev, publish scope) ──
 // p = { edits: [{ step_id, offset?, anchor?, status?: 'active'|'off', stops?: {reply, click, form} }], scope: 'all'|'new' }
 // The current ruleset is never changed: the edits become a new revision (bc-2, bc-3, …)
@@ -540,15 +566,7 @@ function EE_publishRules_(env, core, p, actor) {
   var r = EE_applyRuleEdits_(curJson, edits);
   if (r.error) return { ok: false, error: r.error };
   if (JSON.stringify(r.ruleset.steps) === JSON.stringify(curJson.steps)) return { ok: true, rule_rev: curRev, unchanged: true };
-  var prefix = String(curRev).replace(/-\d+$/, ''), max = 0;
-  env.store.rows('Rulesets').forEach(function (x) {
-    var m = String(x.rule_rev).match(/^(.*)-(\d+)$/);
-    if (m && m[1] === prefix) max = Math.max(max, Number(m[2]));
-  });
-  var rev = prefix + '-' + (max + 1), now = new Date(env.now()).toISOString();
-  r.ruleset.rule_rev = rev;
-  env.store.upsert('Rulesets', { rule_rev: rev, json: r.ruleset, published_at: now, published_by: actor });
-  env.store.upsert('Config', { key: 'rule_rev', value: rev });
+  var rev = EE_publishRuleset_(env, curRev, r.ruleset, actor);
   var moved = 0;
   if (p.scope === 'all') {
     var seqs = {};

@@ -663,3 +663,24 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
   .lc-ed-main.html{flex-direction:column}
   .lc-ed-main.html .lc-ed-code{flex:0 0 45%}
 }
+
+/* ── Single emails (js/features/lifecycle-singles.js) ── */
+.lc-sgl{margin-top:26px}
+.lc-sgl-h{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+.lc-sgl-h h2{font-family:var(--f-head);font-weight:700;font-size:17px;color:var(--teal);margin:0}
+.lc-sgl-h small{color:var(--muted);font-size:12.5px}
+.lc-sgl-ic{display:inline-flex;align-items:center;justify-content:center}
+.lc-sgl-ic svg{width:15px;height:15px}
+.lc-sgl-card.off{opacity:.65}
+.lc-sgl-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 20px 20px}
+.lc-sgl-nums div{background:var(--gray);border-radius:10px;padding:9px 10px}
+.lc-sgl-nums b{display:block;font-family:var(--f-head);font-size:18px;color:var(--teal)}
+.lc-sgl-nums span{font-size:11.5px;font-weight:600;color:var(--muted)}
+.lc-sgl-people{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:4px 12px}
+.lc-sgl-people li{padding:6px 0}
+.lc-sgl-people small{font-size:12px}
+.lc-sgl-rev dd{font-weight:600}
+@media (max-width:600px){.lc-sgl-h{flex-direction:column;align-items:flex-start}.lc-sgl-nums{grid-template-columns:repeat(2,1fr)}}
+.lc-wiz-warn.info{border-color:#BFE3E1;background:var(--aqua-bg);color:var(--teal)}
+.lc-wiz-warn.info small{color:var(--ink-2)}
+.lc-sgl-people li{border-bottom:0!important}
