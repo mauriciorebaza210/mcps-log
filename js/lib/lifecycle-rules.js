@@ -74,6 +74,9 @@
     return normTime(t);
   }
   var DEFAULT_SEND_TIME = '09:00';
+  // "Send when it happens" emails (the Welcome at startup approval: it replaces the portal's
+  // old approval email) skip the send-time gate and go out on the run the approval queues.
+  function isImmediate(step) { return !!(step.immediate || (step.anchor === 'enrollment' && step.hard_deadline && step.hard_deadline.from === 'startup')); }
   function norm(email) { return String(email || '').trim().toLowerCase(); }
   function deliveryKey(enrollmentId, stepId, occurrence) { return enrollmentId + ':' + stepId + ':' + occurrence; }
   function indexBy(list, field) { var m = {}; (list || []).forEach(function (x) { m[x[field]] = x; }); return m; }
@@ -249,7 +252,7 @@
             : (d.held_days > 0 && d.held_days >= (step.max_hold_days || 0) ? 'hold_cap_reached' : 'window_passed');
         } else if (projected || (ctx.today < d.due && d.override !== 'next_run')) {
           d.outcome = 'upcoming'; if (projected) d.reason = 'projected_from_prerequisite';
-        } else if (ctx.time && sendTime > ctx.time && d.override !== 'next_run') {
+        } else if (!isImmediate(step) && ctx.time && sendTime > ctx.time && d.override !== 'next_run') {
           // Its day has come but not its time: a later run today sends it.
           d.outcome = 'upcoming'; d.reason = 'later_today';
         // Pausing is per sequence: pausing MCP Legacy doesn't hold a single email to the same people.
@@ -356,6 +359,7 @@
   return {
     decide: decide,
     decideEnrollment: decideEnrollment,
+    isImmediate: isImmediate,
     deliveryKey: deliveryKey,
     localDate: localDate,
     localTime: localTime,

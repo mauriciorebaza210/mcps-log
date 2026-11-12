@@ -1082,13 +1082,10 @@ function handleStartupRequestApprove_(payload) {
       c.remove('weekly_goal');
     } catch (e) {}
 
-    srSendBuilderEmail_(
-      req.email,
-      'Your MCPS Pool Startup is Confirmed — ' + found.row.request_id,
-      'Hi' + (req.first_name ? ' ' + req.first_name : '') + ',\n\n' +
-      'Your pool startup has been approved and is scheduled to begin on ' + startDate + '.\n\n' +
-      '— Mission Custom Pool Solutions'
-    );
+    // The homeowner's approval email is now the Lifecycle Email Welcome (branded, editable in
+    // the portal: Lifecycle Email → Welcome Email → Templates). The portal syncs the new startup
+    // to the engine right after approval, and the engine sends it within about a minute.
+    // Deployed together with the engine's production switch (email-engine PROGRESS → go-live).
 
     return {
       ok: true,

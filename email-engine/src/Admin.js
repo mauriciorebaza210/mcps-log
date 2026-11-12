@@ -81,7 +81,11 @@ function EE_adminRun_(env, core, req, deps) {
     out = EE_publishRules_(env, core, p, actor);
     if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
   }
-  else if (action === 'sync_startups') out = EE_syncStartups_(env, core, p, actor);
+  else if (action === 'sync_startups') {
+    out = EE_syncStartups_(env, core, p, actor);
+    // A newly approved startup gets its at-approval Welcome within minutes (quiet hours apply).
+    if (out.ok && out.added && deps.scheduleRun) { try { out.run = deps.scheduleRun(); } catch (e) { /* the next planned run sends it */ } }
+  }
   else if (action === 'update_contacts') out = EE_updateContacts_(env, core, p, actor);
   else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
   else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);

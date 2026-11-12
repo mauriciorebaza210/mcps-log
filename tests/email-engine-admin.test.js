@@ -181,3 +181,12 @@ test('Starting a batch skips someone who already had a sequence (a returning con
   assert.equal(JSON.stringify(r.started), JSON.stringify({ started: 1, skipped: 1 }));
   assert.equal(status(w, 'p2'), 'needs_review');
 });
+
+test('A newly synced startup queues a run right away (its at-approval Welcome); an unchanged sync does not', () => {
+  const w = world();
+  const s = { quote_id: 'Q1', email_norm: 'new@example.com', first_name: 'Ana', startup_date: '2026-12-01' };
+  const r = w.admin('sync_startups', { contacts: [s] });
+  assert.equal(r.added, 1); assert.equal(r.run, 'queued'); assert.equal(w.runs, 1);
+  w.admin('sync_startups', { contacts: [s] });
+  assert.equal(w.runs, 1, 'nothing new, no run');
+});

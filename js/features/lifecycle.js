@@ -142,6 +142,8 @@ function lcNextRun_() {
 const lcSendTime_ = b => (LC.ov && LC.ov.engine.send_times && LC.ov.engine.send_times[b]) || '09:00';
 const lcPct_ = (n, d) => d ? Math.round(100 * n / d) + '%' : '';
 const lcInitials_ = (a, b) => ((String(a || '')[0] || '') + (String(b || '')[0] || '')).toUpperCase() || '·';
+// Sends when it happens rather than at the campaign's send time (lifecycle-rules.js → isImmediate).
+const lcImmediate_ = t => !!(t && (t.immediate || (t.anchor === 'enrollment' && t.deadline && t.deadline.from === 'startup')));
 function lcTiming_(t, steps) {
   if (!t) return '';
   const d = n => Math.abs(n) + (Math.abs(n) === 1 ? ' day' : ' days');
@@ -559,7 +561,7 @@ function lcStepTab_(D) {
     const edit = lcCan_('edit_config') ? '<button class="lc-btn sm" data-act="setup-edit" data-do="open" style="margin-left:auto">Edit</button>' : '';
     return (off ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>This email is turned off</b><small>Nobody gets it. The emails after it still go out on their usual days.</small></div></div>' : '') +
       '<div class="lc-sec"><h4 style="display:flex;align-items:center">Sends' + edit + '</h4><dl class="lc-kv"><dt>When</dt><dd>' + lcEsc_(lcTiming_(s.timing, seqSteps)) +
-      ' <span style="color:var(--muted)">· at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket))) + '</span></dd>' +
+      ' <span style="color:var(--muted)">· ' + (lcImmediate_(s.timing) ? 'about a minute after approval' : 'at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket)))) + '</span></dd>' +
       '<dt>Type</dt><dd>' + (s.category === 'service' ? 'Service' : 'Marketing') + '</dd>' +
       '<dt>Audience</dt><dd>' + s.audience + ' in ' + lcEsc_(LC_SEQ[s.bucket]) + '</dd></dl></div>' +
       '<div class="lc-sec"><h4>Content</h4>' + (rev ? '<dl class="lc-kv"><dt>Subject</dt><dd>' + lcEsc_(rev.subject) + '</dd>' +
@@ -620,7 +622,7 @@ function lcSetupForm_(D) {
   if (t.repeat_every) when = '<p class="lc-note" style="margin:0">' + lcEsc_(lcTiming_(t, seqSteps)) + '. Repeating emails keep their timing.</p>';
   else if (hasStartup && (t.anchor === 'enrollment' || (t.anchor === 'startup' && t.offset < 0))) {
     const before = E.before;
-    when = '<label class="lc-radio"><input type="radio" name="lc-anchor" data-setup="anchor" value="enrollment"' + (before ? '' : ' checked') + '><span><b>When the startup is approved</b><small>On the first run after it’s approved in the portal.</small></span></label>' +
+    when = '<label class="lc-radio"><input type="radio" name="lc-anchor" data-setup="anchor" value="enrollment"' + (before ? '' : ' checked') + '><span><b>When the startup is approved</b><small>About a minute after it’s approved in the portal. It replaces the old plain approval email.</small></span></label>' +
       '<label class="lc-radio"><input type="radio" name="lc-anchor" data-setup="anchor" value="startup"' + (before ? ' checked' : '') + '><span><b>Before the startup</b><small>' +
       (before ? num(-E.offset, 1, 30) + ' days before the startup date' : 'Pick how many days before.') + '</small></span></label>';
   } else if (E.anchor === 'previous') when = '<div class="lc-inline">' + num(E.offset, 1, 60) + '<span>days after “' + lcEsc_(prev ? prev.name : 'the previous email') + '”</span></div>';
@@ -634,7 +636,7 @@ function lcSetupForm_(D) {
   return '<div class="lc-sec"><h4>Send this email</h4><div class="lc-seg"><button data-act="setup-edit" data-do="status" data-v="active" class="' + (E.status === 'active' ? 'on' : '') + '">On</button>' +
       '<button data-act="setup-edit" data-do="status" data-v="off" class="' + (E.status === 'off' ? 'on' : '') + '">Off</button></div>' +
       (E.status === 'off' ? '<div class="lc-note">Off: nobody gets it. The emails after it still go out on their usual days.</div>' : '') + '</div>' +
-    '<div class="lc-sec"><h4>When</h4>' + when + '<div class="lc-note">It goes out at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket))) + ' ' + lcEsc_(lcZoneOn_()) + ' (the campaign’s send time).</div></div>' + stops +
+    '<div class="lc-sec"><h4>When</h4>' + when + (E.anchor === 'enrollment' && hasStartup ? '' : '<div class="lc-note">It goes out at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket))) + ' ' + lcEsc_(lcZoneOn_()) + ' (the campaign’s send time).</div>') + '</div>' + stops +
     '<div class="lc-imp-f"><button class="lc-btn" data-act="setup-edit" data-do="cancel">Cancel</button><button class="lc-btn primary" data-act="setup-edit" data-do="save">Save changes</button></div>';
 }
 function lcSetupInput_(el) {

@@ -133,3 +133,21 @@ test('A turned-off email is never sent, and the next one still chains from the d
   // The core's gate refuses it too (Env.stepStatus reads the current revision).
   assert.equal(w.step('bc-2', 'b_followup').status, 'off');
 });
+
+test('Welcome at approval sends right away, at any hour (it replaces the portal’s instant approval email)', () => {
+  const w = engine();
+  w.admin('publish_rules', { edits: [{ step_id: 'c_welcome', anchor: 'enrollment', offset: 0 }], scope: 'new' });
+  const rs = w.rules('bc-2');
+  const c = { contact_id: 'c1', bucket: 'C', review_status: 'confirmed', startup_date: '2026-11-20' };
+  const en = { enrollment_id: 'e1', contact_id: 'c1', sequence_id: 'C', rule_rev: 'bc-2', mode: 'production', status: 'active', enrolled_on: '2026-11-11', stopped_branches: [] };
+  const at = time => L.decide({ today: '2026-11-11', time, sendTimes: { C: '09:00' }, rulesets: { 'bc-2': rs }, contacts: [c], enrollments: [en],
+    deliveries: [], holds: {}, signals: [], suppressions: [], paused: {} }).deliveries.find(x => x.step_id === 'c_welcome');
+  assert.equal(at('08:05').outcome, 'due', 'approved 8 AM: sent now, not at 9');
+  assert.equal(at('15:40').outcome, 'due');
+  assert.equal(at('21:30').outcome, 'due');
+  assert.equal(at('06:10').outcome, 'due');
+  // The other emails still wait for the campaign's send time.
+  const p = L.decide({ today: '2026-11-11', time: '08:05', sendTimes: { C: '09:00' }, rulesets: { 'bc-2': rs }, contacts: [Object.assign({}, c, { startup_date: '2026-11-04' })],
+    enrollments: [Object.assign({}, en, { enrolled_on: '2026-10-28' })], deliveries: [], holds: {}, signals: [], suppressions: [], paused: {} }).deliveries.find(x => x.step_id === 'c_progress');
+  assert.equal(p.reason, 'later_today');
+});
