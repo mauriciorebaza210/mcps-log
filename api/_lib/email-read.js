@@ -175,7 +175,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
     return {
       step_id: s.step_id, name: s.name, bucket: s.sequence_id, order: s.order, category: s.category, status: s.status,
       timing: { anchor: s.anchor, offset: s.offset, repeat_every: s.repeat_every || 0, repeat_count: s.repeat_count || 0,
-        requires: s.requires || '', window_days: s.window_days, max_hold_days: s.max_hold_days },
+        requires: s.requires || '', window_days: s.window_days, max_hold_days: s.max_hold_days, deadline: s.hard_deadline || null },
       stop_rules: (s.stop_rules || []).map(r => ({ signal: r.signal, min_confidence: r.min_confidence || '', stops: r.stops })),
       audience_filter: s.audience_filter || null,
       audience: enrollments.filter(e => e.sequence_id === s.sequence_id && e.status === 'active').length,

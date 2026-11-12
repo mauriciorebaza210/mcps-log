@@ -83,7 +83,7 @@ function clnNames_(names, aiOn) {
   const aiBar = waiting.length ? '<div class="lc-crm-auto"><div class="main"><b>' + waiting.length + ' name' + (waiting.length === 1 ? '' : 's') + ' the rules can’t settle</b><small>' +
     (aiOn ? 'Like “Mary Ann Smith” or couples with two surnames. A quick AI check (names only, no emails or addresses) suggests how to split them; you still choose.'
       : 'The AI check is off: an ANTHROPIC_API_KEY needs to be added in Vercel. You can still fix these by hand in each contact.') + '</small></div>' +
-    (aiOn ? '<button class="lc-btn primary" data-cln="ai"' + (CLN.busy ? ' disabled' : '') + '>' + (CLN.busy ? 'Checking…' : 'Check with AI') + '</button>' : '') + '</div>' : '';
+    (aiOn ? '<button class="lc-btn primary" data-cln="ai"' + (CLN.busy ? ' disabled' : '') + '>' + LC_ICON.sparkle + (CLN.busy ? 'Checking…' : 'Check with AI') + '</button>' : '') + '</div>' : '';
   const rows = names.map(n => {
     const a = clnAfter_(n), changed = Object.keys(clnFields_(n)).length;
     const typo = (n.issues || []).find(i => i.kind === 'typo'), role = (n.issues || []).some(i => i.kind === 'role');
@@ -94,7 +94,7 @@ function clnNames_(names, aiOn) {
     const extra = ['phone', 'city', 'address'].filter(k => n.after[k] !== undefined).map(k => '<small>' + lcEsc_(n[k]) + ' → <b>' + lcEsc_(n.after[k]) + '</b></small>').join('');
     return '<li class="lc-cln-row"><label class="lc-cln-pick"><input type="checkbox" data-cln-pick="' + lcEsc_(n.contact_id) + '"' + (CLN.pick[n.contact_id] ? ' checked' : '') + (changed ? '' : ' disabled') + '></label>' +
       '<div class="main"><div class="lc-cln-names"><span class="was">' + lcEsc_(before) + '</span>' + (nameMoved ? '<span class="arrow">→</span><b>' + lcEsc_(after) + '</b>' : '') +
-      (CLN_KIND[a.kind] ? lcTag_(CLN_KIND[a.kind], a.kind === 'business' ? 'warn' : '') : '') + (CLN.ai[n.contact_id] ? lcTag_('AI', 'teal') : n.needs_ai ? lcTag_('Unclear', '') : '') + '</div>' + extra +
+      (CLN_KIND[a.kind] ? lcTag_(CLN_KIND[a.kind], a.kind === 'business' ? 'warn' : '') : '') + (CLN.ai[n.contact_id] ? lcAiTag_('Suggested by the AI check. You still choose.') : n.needs_ai ? lcTag_('Unclear', '') : '') + '</div>' + extra +
       '<small class="lc-dim">' + lcEsc_(n.email) + '</small>' +
       (typo ? '<label class="lc-cln-fix"><input type="checkbox" data-cln-email="' + lcEsc_(n.contact_id) + '" data-to="' + lcEsc_(typo.suggestion) + '"' + (CLN.emailFix[n.contact_id] ? ' checked' : '') + '> Email looks mistyped: use <b>' + lcEsc_(typo.suggestion) + '</b></label>' : '') +
       (role ? '<small class="lc-cln-warn">' + LC_ICON.alert + 'A shared address (like info@ or office@): it may not reach a person.</small>' : '') +
@@ -125,6 +125,7 @@ async function clnOnClick_(e) {
   const t = e.target.closest('[data-cln]'); if (!t) return;
   const a = t.dataset.cln, d = CLN.data;
   if (a === 'close') return clnClose_(CLN.changed);
+  if (CLN.busy && (a === 'ai' || a === 'apply' || a === 'resolve')) return;
   if (a === 'tab') { CLN.tab = t.dataset.tab; return clnRender_(); }
   if (a === 'all') { const names = (d && d.names) || [], any = names.some(n => CLN.pick[n.contact_id]); names.forEach(n => { CLN.pick[n.contact_id] = !any && Object.keys(clnFields_(n)).length > 0; }); return clnRender_(); }
   if (a === 'decide') { const i = Number(t.dataset.i); CLN.decide[i] = CLN.decide[i] === t.dataset.v ? undefined : t.dataset.v; if (!CLN.decide[i]) delete CLN.decide[i]; return clnRender_(); }

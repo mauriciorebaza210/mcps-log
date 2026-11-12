@@ -22,6 +22,8 @@
 //   send_override      one planned send: skip | move (inside its window) | next_run | clear (Overrides tab)
 //   set_send_time      a campaign's default send time (Config send_time_<bucket>), then re-plan today's runs
 //                       (create_batch also takes send_time: the batch's people keep it; Schedule.js)
+//   publish_rules      an email's Setup edits (timing, stops, on/off) as a new immutable ruleset revision;
+//                       scope 'all' moves running enrollments onto it, 'new' leaves them on theirs (EE_publishRules_)
 //   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
 //   maintenance        run one allow-listed setup task as Tony (eeSetup, eeSetupMarketingKit,
 //                       eeDiagnostics), so nobody has to click Run in the Apps Script editor.
@@ -30,7 +32,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -63,6 +65,10 @@ function EE_adminRun_(env, core, req, deps) {
     }
   }
   else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
+  else if (action === 'publish_rules') {
+    out = EE_publishRules_(env, core, p, actor);
+    if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
+  }
   else if (action === 'sync_startups') out = EE_syncStartups_(env, core, p, actor);
   else if (action === 'update_contacts') out = EE_updateContacts_(env, core, p, actor);
   else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
@@ -471,4 +477,86 @@ function EE_applyIncoming_(env, core, p, actor) {
   if (Object.keys(data).length === 1) return { ok: true, changed: false };
   core.commitEntity('contact', data, 'contact:' + c.contact_id + ':' + mode + ':' + env.sha256(JSON.stringify(data)).slice(0, 12));
   return { ok: true, changed: true };
+}
+
+// ── Email Setup edits (PLAN.md → Scheduling: per-enrollment rule_rev, publish scope) ──
+// p = { edits: [{ step_id, offset?, anchor?, status?: 'active'|'off', stops?: {reply, click, form} }], scope: 'all'|'new' }
+// The current ruleset is never changed: the edits become a new revision (bc-2, bc-3, …)
+// and Config rule_rev points at it. Runs pick it up at their next snapshot.
+var EE_STOP_SIGNALS = ['reply', 'click', 'form'];
+function EE_applyRuleEdits_(ruleset, edits) {
+  var rs = JSON.parse(JSON.stringify(ruleset)), byId = {};
+  rs.steps.forEach(function (s) { byId[s.step_id] = s; });
+  var startupSeq = {};
+  rs.steps.forEach(function (s) { if (s.anchor === 'startup') startupSeq[s.sequence_id] = true; });
+  for (var i = 0; i < edits.length; i++) {
+    var e = edits[i] || {}, st = byId[String(e.step_id || '')];
+    if (!st) return { error: 'unknown email ' + e.step_id };
+    if (st.repeat_every && (e.anchor !== undefined || e.offset !== undefined)) return { error: st.name + ' repeats weekly; its timing can’t be changed here' };
+    if (e.anchor !== undefined && e.anchor !== st.anchor) {
+      // Only between "when they join" and "around the startup", and only where there is a startup date.
+      var ok = { enrollment: 1, startup: 1 };
+      if (!ok[e.anchor] || !ok[st.anchor] || !startupSeq[st.sequence_id]) return { error: st.name + ': that timing isn’t available' };
+      // A deadline counted from the old anchor stays tied to the startup.
+      if (st.hard_deadline && st.hard_deadline.from === 'anchor' && st.anchor === 'startup') st.hard_deadline = { from: 'startup', offset: st.hard_deadline.offset };
+      if (st.hard_deadline && st.hard_deadline.from === 'startup' && e.anchor === 'startup') st.hard_deadline = { from: 'anchor', offset: st.hard_deadline.offset };
+      st.anchor = e.anchor;
+    }
+    if (e.offset !== undefined) {
+      var n = Number(e.offset);
+      if (!isFinite(n) || Math.floor(n) !== n) return { error: st.name + ': days must be a whole number' };
+      var lim = st.anchor === 'previous' ? [1, 60] : st.anchor === 'enrollment' ? [0, 60] : [-30, 60];
+      if (n < lim[0] || n > lim[1]) return { error: st.name + ': days must be between ' + lim[0] + ' and ' + lim[1] };
+      st.offset = n;
+    }
+    if (st.hard_deadline && st.anchor === 'startup' && st.hard_deadline.from === 'anchor' && st.offset > st.hard_deadline.offset) {
+      return { error: st.name + ' must send at least ' + Math.abs(st.hard_deadline.offset) + ' day(s) before the startup' };
+    }
+    if (e.status !== undefined) {
+      if (e.status !== 'active' && e.status !== 'off') return { error: 'status must be on or off' };
+      st.status = e.status;
+    }
+    if (e.stops !== undefined) {
+      if (st.category !== 'marketing') return { error: st.name + ' is a service email; nothing stops it' };
+      var prev = {}, scope = st.sequence_id === 'B' ? 'enrollment' : 'marketing_branch';
+      (st.stop_rules || []).forEach(function (r) { prev[r.signal] = r; scope = r.stops || scope; });
+      st.stop_rules = EE_STOP_SIGNALS.filter(function (sig) { return !!e.stops[sig]; }).map(function (sig) {
+        return prev[sig] || (sig === 'click' ? { signal: 'click', min_confidence: 'high', stops: scope } : { signal: sig, stops: scope });
+      });
+    }
+  }
+  return { ruleset: rs };
+}
+function EE_publishRules_(env, core, p, actor) {
+  var edits = Array.isArray(p.edits) ? p.edits : [];
+  if (!edits.length || edits.length > 20) return { ok: false, error: 'edits required' };
+  if (p.scope !== 'all' && p.scope !== 'new') return { ok: false, error: 'scope must be all or new' };
+  var cfgRow = env.store.get('Config', 'rule_rev'), curRev = cfgRow && cfgRow.value;
+  var cur = curRev && env.store.get('Rulesets', curRev);
+  if (!cur) return { ok: false, error: 'current rules not found' };
+  if (p.base_rev && p.base_rev !== curRev) return { ok: false, error: 'Someone changed these settings a moment ago. Reload and try again.' };
+  var curJson = typeof cur.json === 'string' ? JSON.parse(cur.json) : cur.json;
+  var r = EE_applyRuleEdits_(curJson, edits);
+  if (r.error) return { ok: false, error: r.error };
+  if (JSON.stringify(r.ruleset.steps) === JSON.stringify(curJson.steps)) return { ok: true, rule_rev: curRev, unchanged: true };
+  var prefix = String(curRev).replace(/-\d+$/, ''), max = 0;
+  env.store.rows('Rulesets').forEach(function (x) {
+    var m = String(x.rule_rev).match(/^(.*)-(\d+)$/);
+    if (m && m[1] === prefix) max = Math.max(max, Number(m[2]));
+  });
+  var rev = prefix + '-' + (max + 1), now = new Date(env.now()).toISOString();
+  r.ruleset.rule_rev = rev;
+  env.store.upsert('Rulesets', { rule_rev: rev, json: r.ruleset, published_at: now, published_by: actor });
+  env.store.upsert('Config', { key: 'rule_rev', value: rev });
+  var moved = 0;
+  if (p.scope === 'all') {
+    var seqs = {};
+    edits.forEach(function (e) { r.ruleset.steps.forEach(function (s) { if (s.step_id === e.step_id) seqs[s.sequence_id] = true; }); });
+    env.store.rows('Enrollments').forEach(function (en) {
+      if (!seqs[en.sequence_id] || en.rule_rev === rev || !/^(active|waiting_anchor|paused)$/.test(en.status)) return;
+      core.commitEntity('enrollment', { enrollment_id: en.enrollment_id, rule_rev: rev }, 'enrollment:' + en.enrollment_id + ':rules:' + rev);
+      moved++;
+    });
+  }
+  return { ok: true, rule_rev: rev, previous: curRev, moved: moved };
 }

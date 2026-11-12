@@ -493,6 +493,9 @@ function srApprove(requestId) {
     }
     _srPending = _srPending.filter(r => r.request_id !== requestId);
     _srExpanded = null;
+    // Hand the new startup to Lifecycle Email now (not at the next morning sync), so the
+    // homeowner's Welcome can go out on the engine's next run. Best effort: the daily sync catches it otherwise.
+    if (typeof crmApi_ === 'function') crmApi_('POST', { stage: 'sync' }).catch(() => {});
     const title = document.getElementById('sr-card-title');
     if (title) title.textContent = 'Pool Startup Requests' + (_srPending.length ? ` (${_srPending.length})` : '');
   }).catch(() => {
@@ -510,6 +513,9 @@ function srReject(requestId) {
     if (card) card.innerHTML = '<div style="padding:.5rem 0;color:var(--muted);font-weight:600">Request rejected.</div>';
     _srPending = _srPending.filter(r => r.request_id !== requestId);
     _srExpanded = null;
+    // Hand the new startup to Lifecycle Email now (not at the next morning sync), so the
+    // homeowner's Welcome can go out on the engine's next run. Best effort: the daily sync catches it otherwise.
+    if (typeof crmApi_ === 'function') crmApi_('POST', { stage: 'sync' }).catch(() => {});
   }).catch(() => alert('Network error.'));
 }
 

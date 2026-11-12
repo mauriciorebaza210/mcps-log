@@ -168,7 +168,7 @@ function cmpList_(b, p) {
 // MCP Startup's people join on their own from the portal's startups; batches are for lists (MCP Legacy).
 const cmpBatchable_ = b => b !== 'C';
 function cmpBatches_(b) {
-  if (!cmpBatchable_(b)) return '<div class="lc-empty">Startups join automatically from the portal, about 3 days before their startup.</div>';
+  if (!cmpBatchable_(b)) return '<div class="lc-empty">Startups join automatically when they’re approved in the portal.</div>';
   const list = ((LC.contacts && LC.contacts.batches) || []).filter(x => x.group === b && x.status !== 'cancelled')
     .sort((x, y) => (x.status === 'planned') === (y.status === 'planned') ? String(x.status === 'planned' ? x.start_on : y.start_on).localeCompare(x.status === 'planned' ? y.start_on : x.start_on) : x.status === 'planned' ? -1 : 1);
   if (!list.length) return '<div class="lc-empty">No batches yet.' + (lcCan_('edit_contacts') ? ' <button class="lc-link" data-act="cmp-batch" data-id="' + b + '">Start one</button>' : '') + '</div>';
@@ -292,16 +292,15 @@ function cmpOnClick_(t) {
   else if (a === 'cmp-day-close') { CMP.day = ''; lcRenderBody_(); }
   else if (a === 'cmp-time') cmpEditTime_(t.dataset.id);
   else if (a === 'cmp-more') t.closest('li').classList.toggle('open');
-  else if (a === 'cmp-send') cmpSendChange_(t.dataset);
+  else if (a === 'cmp-send') return cmpSendChange_(t.dataset);
 }
 async function cmpMoveBatch_(id, to) {
   const x = ((LC.contacts && LC.contacts.batches) || []).find(y => y.batch_id === id);
   if (!x || !to || to === x.start_on) return;
   if (to < batToday_()) return lcToast_('Pick today or a later day', true);
   if (!await lcConfirm_({ title: 'Move ' + x.count + ' people to ' + batDayLabel_(to) + '?', ok: 'Move',
-    body: 'Their first email goes out on ' + cmpLong_(to) + ' instead of ' + cmpLong_(x.start_on) + '.' })) { lcRenderBody_(); return; }
-  const r = await lcAdmin_('move_batch', { batch_id: id, start_on: to }).catch(() => ({ ok: false, error: 'Network error' }));
-  if (!r.ok) { lcToast_(r.error || 'That didn’t work', true); lcRenderBody_(); return; }
+    body: 'Their first email goes out on ' + cmpLong_(to) + ' instead of ' + cmpLong_(x.start_on) + '.',
+    run: () => lcAdmin_('move_batch', { batch_id: id, start_on: to }) })) { lcRenderBody_(); return; }
   lcToast_(x.count + ' people now start ' + batDayLabel_(to));
   cmpAfterChange_();
 }
@@ -314,14 +313,18 @@ function cmpAfterChange_() {
 async function cmpSendChange_(ds) {
   const step = lcStepName_(ds.step), who = ds.name;
   let date = '';
-  if (ds.do === 'skip' && !await lcConfirm_({ title: 'Skip this email for ' + who + '?', ok: 'Skip', danger: true,
-    body: who + ' won’t get “' + step + '”. Later emails still go out on their usual days.' })) return;
-  if (ds.do === 'move') {
-    date = await cmpPickDate_('Move “' + step + '” for ' + who, ds.from < batToday_() ? batToday_() : ds.from, ds.last);
-    if (!date) return;
+  if (ds.do === 'skip') {
+    if (!await lcConfirm_({ title: 'Skip this email for ' + who + '?', ok: 'Skip', danger: true,
+      body: who + ' won’t get “' + step + '”. Later emails still go out on their usual days.',
+      run: () => lcAdmin_('send_override', { key: ds.key, kind: 'skip', date: '' }) })) return;
+  } else {
+    if (ds.do === 'move') {
+      date = await cmpPickDate_('Move “' + step + '” for ' + who, ds.from < batToday_() ? batToday_() : ds.from, ds.last);
+      if (!date) return;
+    }
+    const r = await lcAdmin_('send_override', { key: ds.key, kind: ds.do, date }).catch(() => ({ ok: false, error: 'Network error' }));
+    if (!r.ok) return lcToast_(r.error || 'That didn’t work', true);
   }
-  const r = await lcAdmin_('send_override', { key: ds.key, kind: ds.do, date }).catch(() => ({ ok: false, error: 'Network error' }));
-  if (!r.ok) return lcToast_(r.error || 'That didn’t work', true);
   lcToast_(ds.do === 'skip' ? 'Skipped' : ds.do === 'move' ? 'Moved to ' + batDayLabel_(date) : ds.do === 'next_run' ? 'Goes out on the next run' : 'Back to its planned day');
   cmpAfterChange_();
 }

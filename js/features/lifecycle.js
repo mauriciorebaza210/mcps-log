@@ -13,6 +13,8 @@ const LC = { tab: 'campaigns', mode: null, ov: null, contacts: null, q: '', buck
 const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
 const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup' };
 const LC_ICON = {
+  // AI marker: a four-point sparkle with a small companion star.
+  sparkle: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 5.5c.75 5 2.4 7 7.5 8.5-5.1 1.5-6.75 3.5-7.5 8.5-.75-5-2.4-7-7.5-8.5 5.1-1.5 6.75-3.5 7.5-8.5z"/><path d="M18.5 1.5c.35 2.3 1.1 3.15 3.5 3.5-2.4.35-3.15 1.2-3.5 3.5-.35-2.3-1.1-3.15-3.5-3.5 2.4-.35 3.15-1.2 3.5-3.5z"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"/></svg>',
@@ -62,16 +64,27 @@ function lcToast_(text, bad) {
   clearTimeout(lcToast_.t); lcToast_.t = setTimeout(() => el.classList.remove('show'), 3200);
 }
 // A small confirm sheet in the page's own style. Resolves true / false.
+// With o.run (an async action returning {ok, error}), the sheet stays open with a
+// spinner while it runs, shows a failure inline, and resolves to the result (or false).
 function lcConfirm_(o) {
   return new Promise(resolve => {
     const layer = document.createElement('div');
     layer.className = 'lc-layer';
     layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet" role="alertdialog" aria-modal="true">' +
-      '<h3>' + lcEsc_(o.title) + '</h3><p>' + lcEsc_(o.body || '') + '</p><div class="row"><button class="lc-btn" data-x="0">Cancel</button>' +
+      '<h3>' + lcEsc_(o.title) + '</h3><p>' + lcEsc_(o.body || '') + '</p><p class="lc-note" data-err hidden style="color:var(--red)"></p><div class="row"><button class="lc-btn" data-x="0">Cancel</button>' +
       '<button class="lc-btn ' + (o.danger ? 'danger solid' : 'primary') + '" data-x="1">' + lcEsc_(o.ok || 'Confirm') + '</button></div></div>';
+    let running = false;
     const done = v => { layer.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
-    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
-    layer.addEventListener('click', e => { const t = e.target.closest('[data-x]'); if (t) done(t.dataset.x === '1'); });
+    const key = e => { if (e.key === 'Escape' && !running) { e.stopPropagation(); done(false); } };
+    layer.addEventListener('click', async e => {
+      const t = e.target.closest('[data-x]'); if (!t || running) return;
+      if (t.dataset.x !== '1' || !o.run) return done(t.dataset.x === '1');
+      running = true; lcBusyBtn_(t, true); layer.querySelector('[data-x="0"].lc-btn').disabled = true;
+      const r = await Promise.resolve().then(o.run).catch(() => ({ ok: false, error: 'Network error' }));
+      running = false; lcBusyBtn_(t, false); layer.querySelector('[data-x="0"].lc-btn').disabled = false;
+      if (r && r.ok) return done(r);
+      const err = layer.querySelector('[data-err]'); err.hidden = false; err.textContent = (r && (r.error || r.reason)) || 'That didn’t work';
+    });
     document.addEventListener('keydown', key, true);
     document.body.appendChild(layer);
     layer.querySelector('.lc-btn.' + (o.danger ? 'danger' : 'primary')).focus();
@@ -130,7 +143,11 @@ const lcInitials_ = (a, b) => ((String(a || '')[0] || '') + (String(b || '')[0] 
 function lcTiming_(t, steps) {
   if (!t) return '';
   const d = n => Math.abs(n) + (Math.abs(n) === 1 ? ' day' : ' days');
-  if (t.anchor === 'enrollment') return t.offset ? d(t.offset) + ' after joining' : 'The day they join';
+  // B people join when their batch starts; C people when their startup is approved in the portal.
+  if (t.anchor === 'enrollment') {
+    const from = (steps || []).some(s => s.timing && s.timing.anchor === 'startup') ? 'the startup is approved' : 'their batch starts';
+    return t.offset ? d(t.offset) + ' after ' + from.replace('is approved', 'approval').replace('their batch starts', 'their batch’s start date') : 'When ' + from;
+  }
   if (t.anchor === 'previous') {
     const prev = (steps || []).find(s => s.step_id === t.requires);
     return d(t.offset) + ' after ' + (prev ? prev.name : 'the previous email');
@@ -155,6 +172,8 @@ const LC_ALERT = { delivery_failed: 'Email failed', delivery_unknown: 'Send unco
 const LC_STOP = { clicked: 'clicked', replied: 'replied', form_submitted: 'requested service', suppressed_all: 'unsubscribed',
   prerequisite_expired: 'expired', bucket_changed: 'moved group', manual: 'stopped by hand' };
 const lcStopWord_ = r => LC_STOP[r] || String(r || 'manual').replace(/_/g, ' ');
+// What the AI suggested: the sparkle plus "AI", on a teal-to-aqua chip.
+function lcAiTag_(title) { return '<span class="lc-tag lc-ai"' + (title ? ' title="' + lcEsc_(title) + '"' : '') + '>' + LC_ICON.sparkle + 'AI</span>'; }
 function lcTag_(text, kind) { return '<span class="lc-tag ' + (kind || '') + '"><i></i>' + lcEsc_(text) + '</span>'; }
 function lcStateTag_(state) { const s = LC_STATE[state] || [state, '']; return lcTag_(s[0], s[1]); }
 function lcEvidence_(g) {
@@ -289,7 +308,7 @@ function lcEmails_() {
       const c = s.counts, t = s.tracking || {}, sent = c.sent;
       const m = (n, base) => '<div class="lc-metric' + (s.published ? '' : ' dim') + '"><b>' + (s.published ? n : '–') + '</b>' +
         (s.published && base && n ? '<small>' + lcPct_(n, base) + '</small>' : '') + '</div>';
-      const status = !s.published ? lcTag_('Not approved', '') : (ov.engine.paused_buckets.includes(b) ? lcTag_('Paused', 'warn') : lcTag_('Live', 'live'));
+      const status = s.status === 'off' ? lcTag_('Off', '') : !s.published ? lcTag_('Not approved', '') : (ov.engine.paused_buckets.includes(b) ? lcTag_('Paused', 'warn') : lcTag_('Live', 'live'));
       return '<button class="lc-row" data-act="step" data-id="' + lcEsc_(s.step_id) + '">' +
         '<div class="lc-name"><span class="lc-step">' + s.order + '</span><div style="min-width:0"><b>' + lcEsc_(s.name) + '</b>' +
         '<small>' + lcEsc_(s.published ? s.published.subject : 'Waiting for approval') + '</small></div></div>' +
@@ -431,6 +450,8 @@ function lcOpenDrawer_(kind, id) {
   layer.innerHTML = '<div class="lc-scrim" data-act="close"></div><aside class="lc-drawer" role="dialog" aria-modal="true"></aside>';
   document.body.appendChild(layer);
   layer.addEventListener('click', lcOnClick_);
+  layer.addEventListener('change', e => { if (e.target.dataset.setup) lcSetupInput_(e.target); });
+  layer.addEventListener('input', e => { if (e.target.dataset.setup === 'offset') lcSetupInput_(e.target); });
   LC.drawer = { kind, id, tab: kind === 'step' ? 'performance' : 'timeline', data: null, layer };
   document.addEventListener('keydown', lcOnKey_);
   lcRenderDrawer_();
@@ -480,9 +501,15 @@ function lcStepTab_(D) {
     }).join('') + '</div>';
   }
   if (D.tab === 'setup') {
+    if (D.edit) return lcSetupForm_(D);
     const rev = (d.revisions || []).find(r => r.status === 'published');
     const rules = (s.stop_rules || []).map(r => '<li>' + LC_ICON.stop + '<span>' + lcEsc_((LC_SIGNAL[r.signal] || r.signal) + ' ' + (LC_STOPS[r.stops] || 'stops it')) + '</span></li>').join('');
-    return '<div class="lc-sec"><h4>Sends</h4><dl class="lc-kv"><dt>When</dt><dd>' + lcEsc_(lcTiming_(s.timing, LC.ov.steps)) + '</dd>' +
+    const seqSteps = LC.ov.steps.filter(x => x.bucket === s.bucket);
+    const off = s.status === 'off';
+    const edit = lcCan_('edit_config') ? '<button class="lc-btn sm" data-act="setup-edit" data-do="open" style="margin-left:auto">Edit</button>' : '';
+    return (off ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>This email is turned off</b><small>Nobody gets it. The emails after it still go out on their usual days.</small></div></div>' : '') +
+      '<div class="lc-sec"><h4 style="display:flex;align-items:center">Sends' + edit + '</h4><dl class="lc-kv"><dt>When</dt><dd>' + lcEsc_(lcTiming_(s.timing, seqSteps)) +
+      ' <span style="color:var(--muted)">· at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket))) + '</span></dd>' +
       '<dt>Type</dt><dd>' + (s.category === 'service' ? 'Service' : 'Marketing') + '</dd>' +
       '<dt>Audience</dt><dd>' + s.audience + ' in ' + lcEsc_(LC_SEQ[s.bucket]) + '</dd></dl></div>' +
       '<div class="lc-sec"><h4>Content</h4>' + (rev ? '<dl class="lc-kv"><dt>Subject</dt><dd>' + lcEsc_(rev.subject) + '</dd>' +
@@ -522,6 +549,106 @@ function lcContactBody_(d) {
     (c.address && c.address !== 'hidden' ? '<dt>Address</dt><dd>' + lcEsc_(c.address) + '</dd>' : '') +
     (c.startup_date ? '<dt>Startup</dt><dd>' + lcEsc_(c.startup_date) + '</dd>' : '') + '</dl></div>' +
     '<div class="lc-sec"><h4>Emails</h4>' + tl + '</div>';
+}
+
+// ── Email Setup editing (Admin.js → publish_rules) ───────────────────────────
+// Timing, what stops it, and on/off. Saving makes a new rules version; the person
+// chooses whether people already in the sequence move to it or keep the old one.
+function lcSetupStart_(D) {
+  const s = D.data.step, t = s.timing;
+  D.edit = { anchor: t.anchor, offset: t.offset, before: t.anchor === 'startup' && t.offset < 0, status: s.status === 'off' ? 'off' : 'active',
+    stops: Object.fromEntries(['reply', 'click', 'form'].map(k => [k, (s.stop_rules || []).some(r => r.signal === k)])) };
+}
+function lcSetupForm_(D) {
+  const s = D.data.step, t = s.timing, E = D.edit;
+  const seqSteps = LC.ov.steps.filter(x => x.bucket === s.bucket);
+  const hasStartup = seqSteps.some(x => x.timing && x.timing.anchor === 'startup');
+  const prev = t.anchor === 'previous' ? seqSteps.find(x => x.step_id === t.requires) : null;
+  const num = (v, min, max) => '<input class="lc-input lc-num" type="number" inputmode="numeric" data-setup="offset" min="' + min + '" max="' + max + '" value="' + lcEsc_(v) + '">';
+  let when;
+  if (t.repeat_every) when = '<p class="lc-note" style="margin:0">' + lcEsc_(lcTiming_(t, seqSteps)) + '. Repeating emails keep their timing.</p>';
+  else if (hasStartup && (t.anchor === 'enrollment' || (t.anchor === 'startup' && t.offset < 0))) {
+    const before = E.before;
+    when = '<label class="lc-radio"><input type="radio" name="lc-anchor" data-setup="anchor" value="enrollment"' + (before ? '' : ' checked') + '><span><b>When the startup is approved</b><small>On the first run after it’s approved in the portal.</small></span></label>' +
+      '<label class="lc-radio"><input type="radio" name="lc-anchor" data-setup="anchor" value="startup"' + (before ? ' checked' : '') + '><span><b>Before the startup</b><small>' +
+      (before ? num(-E.offset, 1, 30) + ' days before the startup date' : 'Pick how many days before.') + '</small></span></label>';
+  } else if (E.anchor === 'previous') when = '<div class="lc-inline">' + num(E.offset, 1, 60) + '<span>days after “' + lcEsc_(prev ? prev.name : 'the previous email') + '”</span></div>';
+  else if (E.anchor === 'enrollment') when = '<div class="lc-inline">' + num(E.offset, 0, 60) + '<span>days after their batch’s start date <small class="lc-dim">(0 = on the start date)</small></span></div>';
+  else when = '<div class="lc-inline">' + num(E.offset, 0, 60) + '<span>days after the startup</span></div>';
+  const stops = s.category === 'marketing'
+    ? '<div class="lc-sec"><h4>Stops when</h4>' + [['reply', 'They reply'], ['click', 'They click a link (verified click)'], ['form', 'They send a service request']].map(([k, l]) =>
+        '<label class="lc-check"><input type="checkbox" data-setup="stop" value="' + k + '"' + (E.stops[k] ? ' checked' : '') + '><span>' + l + '</span></label>').join('') +
+      '<div class="lc-note">' + (s.bucket === 'B' ? 'A stop ends the whole sequence for that person.' : 'A stop ends the marketing emails; service emails still go out.') + ' Unsubscribes and bounces always stop every email.</div></div>'
+    : '<div class="lc-sec"><h4>Stops when</h4><div style="color:var(--muted)">Nothing stops a service email.</div></div>';
+  return '<div class="lc-sec"><h4>Send this email</h4><div class="lc-seg"><button data-act="setup-edit" data-do="status" data-v="active" class="' + (E.status === 'active' ? 'on' : '') + '">On</button>' +
+      '<button data-act="setup-edit" data-do="status" data-v="off" class="' + (E.status === 'off' ? 'on' : '') + '">Off</button></div>' +
+      (E.status === 'off' ? '<div class="lc-note">Off: nobody gets it. The emails after it still go out on their usual days.</div>' : '') + '</div>' +
+    '<div class="lc-sec"><h4>When</h4>' + when + '<div class="lc-note">It goes out at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket))) + ' ' + lcEsc_(lcZoneOn_()) + ' (the campaign’s send time).</div></div>' + stops +
+    '<div class="lc-imp-f"><button class="lc-btn" data-act="setup-edit" data-do="cancel">Cancel</button><button class="lc-btn primary" data-act="setup-edit" data-do="save">Save changes</button></div>';
+}
+function lcSetupInput_(el) {
+  const D = LC.drawer; if (!D || !D.edit) return;
+  const E = D.edit, k = el.dataset.setup;
+  if (k === 'anchor') { E.anchor = el.value; E.before = el.value === 'startup'; E.offset = E.before ? -3 : 0; lcRenderDrawer_(); }
+  // In "before the startup" the box shows days before (positive); the rule stores a negative offset.
+  else if (k === 'offset') { const n = Math.round(Number(el.value)); if (el.value !== '' && Number.isFinite(n)) E.offset = E.before ? -Math.abs(n) : n; }
+  else if (k === 'stop') E.stops[el.value] = el.checked;
+}
+async function lcSetupAct_(t) {
+  const D = LC.drawer; if (!D || !D.data) return;
+  const s = D.data.step, what = t.dataset.do;
+  if (what === 'open') { lcSetupStart_(D); return lcRenderDrawer_(); }
+  if (what === 'cancel') { D.edit = null; return lcRenderDrawer_(); }
+  if (what === 'status') { D.edit.status = t.dataset.v; return lcRenderDrawer_(); }
+  if (what !== 'save') return;
+  const E = D.edit, tm = s.timing, edit = { step_id: s.step_id };
+  if (E.status !== (s.status === 'off' ? 'off' : 'active')) edit.status = E.status;
+  if (!tm.repeat_every) {
+    if (E.anchor !== tm.anchor) edit.anchor = E.anchor;
+    if (E.offset !== tm.offset || edit.anchor) edit.offset = E.offset;
+  }
+  if (s.category === 'marketing') {
+    const was = Object.fromEntries(['reply', 'click', 'form'].map(k => [k, (s.stop_rules || []).some(r => r.signal === k)]));
+    if (['reply', 'click', 'form'].some(k => !!E.stops[k] !== was[k])) edit.stops = E.stops;
+  }
+  if (Object.keys(edit).length === 1) { D.edit = null; lcRenderDrawer_(); return lcToast_('Nothing changed'); }
+  const r = await lcSetupScope_(s, edit);
+  if (!r) return;
+  D.edit = null;
+  lcToast_(r.unchanged ? 'Nothing changed' : 'Saved · ' + (r.moved ? r.moved + (r.moved === 1 ? ' person follows' : ' people follow') + ' the new setup' : 'new people follow the new setup'));
+  lcRefresh_(true);
+  lcFetch_('step', { id: D.id, mode: LC.mode || '', fresh: '1' }).then(data => { if (LC.drawer === D) { D.data = data; lcRenderDrawer_(); } }).catch(() => {});
+}
+// Who follows the change: everyone in the sequence now, or only people who join later.
+function lcSetupScope_(s, edit) {
+  const n = s.audience || 0, seq = LC_SEQ[s.bucket];
+  return new Promise(resolve => {
+    const layer = document.createElement('div');
+    layer.className = 'lc-layer';
+    layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet" role="dialog" aria-modal="true">' +
+      '<h3>Save the new setup for “' + lcEsc_(s.name) + '”?</h3><p>Emails already sent don’t change.</p>' +
+      '<label class="lc-radio"><input type="radio" name="lc-scope" value="all" checked><span><b>Everyone in ' + lcEsc_(seq) + '</b><small>The ' + n + ' ' + (n === 1 ? 'person' : 'people') + ' in it now, and everyone who joins later.</small></span></label>' +
+      '<label class="lc-radio"><input type="radio" name="lc-scope" value="new"><span><b>Only people who join from now on</b><small>People already in it keep the old setup.</small></span></label>' +
+      '<p class="lc-note" data-err hidden style="color:var(--red)"></p>' +
+      '<div class="row"><button class="lc-btn" data-x="0">Cancel</button><button class="lc-btn primary" data-x="1">Save</button></div></div>';
+    let saving = false;
+    const done = v => { layer.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+    const key = e => { if (e.key === 'Escape' && !saving) { e.stopPropagation(); done(null); } };
+    layer.addEventListener('click', async e => {
+      const x = e.target.closest('[data-x]'); if (!x || saving) return;
+      if (x.dataset.x !== '1') return done(null);
+      saving = true; lcBusyBtn_(x, true);
+      const scope = layer.querySelector('input[name="lc-scope"]:checked').value;
+      const r = await lcAdmin_('publish_rules', { edits: [edit], scope, base_rev: LC.ov.engine.rule_rev }).catch(() => ({ ok: false, error: 'Network error' }));
+      saving = false; lcBusyBtn_(x, false);
+      if (r.ok) return done(r);
+      const err = layer.querySelector('[data-err]'); err.hidden = false;
+      err.textContent = r.error === 'unknown action' ? 'The engine needs an update before setups can be changed.' : (r.error || 'That didn’t work');
+    });
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(layer);
+    layer.querySelector('.lc-btn.primary').focus();
+  });
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -571,8 +698,9 @@ async function lcResolve_(what, id) {
   await lcWrite_('r:' + id, what, { delivery_id: id }, done);
 }
 async function lcCancelBatch_(id) {
-  if (!await lcConfirm_({ title: 'Cancel this batch?', ok: 'Cancel batch', danger: true, body: 'Its people stay in Needs review.' })) return;
-  await lcWrite_('b:' + id, 'cancel_batch', { batch_id: id }, 'Batch cancelled');
+  if (!await lcConfirm_({ title: 'Cancel this batch?', ok: 'Cancel batch', danger: true, body: 'Its people stay in Needs review.',
+    run: () => lcAdmin_('cancel_batch', { batch_id: id }) })) return;
+  lcToast_('Batch cancelled'); lcRefresh_(true);
   LC.contacts = null; lcLoadContacts_(true);
   if (typeof CMP !== 'undefined' && CMP.id) cmpLoadPlan_(CMP.id, true);
 }
@@ -613,14 +741,41 @@ async function lcBench(n = 20) {
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
+// One click, one action: while an action that talks to the engine is in flight,
+// its button shows a spinner and repeat clicks (on it or a re-rendered copy) do nothing.
+const LC_INFLIGHT = new Set();
 function lcOnClick_(e) {
   const t = e.target.closest('[data-act]'); if (!t) return;
+  const key = t.dataset.act + ':' + (t.dataset.id || t.dataset.key || t.dataset.bucket || t.dataset.do || '');
+  if (t.disabled) return;
+  lcGuard_(key, t, () => lcDispatch_(t));
+}
+// Runs fn unless the same action is already in flight; spins btn (if any) until it settles.
+function lcGuard_(key, btn, fn) {
+  if (LC_INFLIGHT.has(key)) return;
+  const r = fn();
+  if (!r || typeof r.then !== 'function') return;
+  LC_INFLIGHT.add(key); lcBusyBtn_(btn, true);
+  r.catch(() => {}).finally(() => { LC_INFLIGHT.delete(key); lcBusyBtn_(btn, false); });
+}
+function lcBusyBtn_(b, on) {
+  if (!b || !b.isConnected || !b.classList.contains('lc-btn')) return;
+  b.classList.toggle('is-busy', on); b.disabled = on;
+  if (on) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
+}
+function lcDispatch_(t) {
   const act = t.dataset.act;
-  if (act.startsWith('cmp-')) cmpOnClick_(t);
-  else if (act.startsWith('tpl-')) lcTplAct_(act, t.dataset.id, t.dataset.name);
-  else if (act === 'crm-leads') crmOpenLeads_();
+  if (act.startsWith('cmp-')) return cmpOnClick_(t);
+  if (act.startsWith('tpl-')) return lcTplAct_(act, t.dataset.id, t.dataset.name);
+  if (act === 'setup-edit') return lcSetupAct_(t);
+  if (act === 'crm-sync') return crmSyncStartups_();
+  if (act === 'run') return lcRunNow_();
+  if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);
+  if (act === 'enabled') return lcSetEnabled_(!LC.ov.engine.enabled);
+  if (act === 'pause') return lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));
+  if (act === 'resolve') return lcResolve_(t.dataset.do, t.dataset.id);
+  if (act === 'crm-leads') crmOpenLeads_();
   else if (act === 'cleanup') clnOpen_();
-  else if (act === 'crm-sync') crmSyncStartups_();
   else if (act === 'tab') { LC.tab = t.dataset.tab; if ((LC.tab === 'contacts' || LC.tab === 'campaigns') && !LC.contacts) lcLoadContacts_(); lcRenderTabs_(); lcRenderBody_(); }
   else if (act === 'refresh') lcRefresh_(true);
   else if (act === 'mode') { if (LC.mode !== t.dataset.mode) { LC.mode = t.dataset.mode; LC.ov = null; lcRender_(); lcRefresh_(); } }
@@ -629,14 +784,9 @@ function lcOnClick_(e) {
   else if (act === 'close') lcCloseDrawer_();
   else if (act === 'dtab' && LC.drawer) { LC.drawer.tab = t.dataset.tab; lcRenderDrawer_(); }
   else if (act === 'bucket') { LC.bucket = t.dataset.bucket; lcRenderBody_(); }
-  else if (act === 'run') lcRunNow_();
   else if (act === 'import') lcOpenImport_();
   else if (act === 'batch') lcOpenBatch_();
-  else if (act === 'cancelbatch') lcCancelBatch_(t.dataset.id);
   else if (act === 'review') { LC.review = LC.review ? '' : 'needs_review'; lcRenderBody_(); }
-  else if (act === 'enabled') lcSetEnabled_(!LC.ov.engine.enabled);
-  else if (act === 'pause') lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));
-  else if (act === 'resolve') lcResolve_(t.dataset.do, t.dataset.id);
 }
 function lcOnInput_(e) {
   if (e.target.dataset.lcInput !== 'q') return;

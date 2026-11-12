@@ -230,6 +230,11 @@
 .lc-btn:disabled{opacity:.5;cursor:not-allowed}
 .lc-btn svg{width:14px;height:14px}
 .lc-btn.busy svg{animation:lc-spin .9s linear infinite}
+/* An action in flight: the label stays (for width), a spinner sits on top, clicks are ignored. */
+.lc-btn.is-busy,.lc-btn.is-busy:disabled{position:relative;color:transparent!important;opacity:1;cursor:progress}
+.lc-btn.is-busy svg{visibility:hidden}
+.lc-btn.is-busy::after{content:"";position:absolute;inset:0;margin:auto;width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--teal);animation:lc-spin .7s linear infinite}
+.lc-btn.primary.is-busy::after,.lc-btn.danger.solid.is-busy::after{border-color:rgba(255,255,255,.35);border-top-color:#fff}
 .lc-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .lc-ctrls{list-style:none;margin:0;padding:4px 18px 10px;display:flex;flex-direction:column;border-top:1px solid var(--line)}
 .lc-ctrls li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px}
@@ -591,3 +596,27 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-imp-match em{font-style:normal;color:#7A4E0F}
 .lc-imp-h .lc-seg{margin-top:2px}
 @media (max-width:600px){.lc-cln-pair .sides{grid-template-columns:1fr}.lc-cln-pair .lc-seg{flex-wrap:wrap;border-radius:12px}}
+
+/* Template preview while the engine renders it */
+.lc-tpl-loading{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:12px;border-radius:12px;background:var(--gray)}
+.lc-tpl-loading b{display:block;font-size:13.5px}
+.lc-tpl-loading small{color:var(--muted);font-size:12.5px}
+.lc-spinner{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--teal);animation:lc-spin .7s linear infinite}
+
+/* Email Setup editor */
+.lc-radio{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px;cursor:pointer}
+.lc-radio:has(input:checked){border-color:var(--teal);background:var(--aqua-bg)}
+.lc-radio input{margin-top:3px;accent-color:var(--teal)}
+.lc-radio b{display:block;font-size:13.5px}
+.lc-radio small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.lc-radio small .lc-num{margin-right:6px}
+.lc-inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px}
+.lc-num{width:72px!important;text-align:center}
+.lc-sec .lc-check{display:flex;margin-top:8px}
+.lc-check input{accent-color:var(--teal)}
+
+/* AI marker */
+.lc-tag.lc-ai{gap:4px;padding:0 9px 0 7px;color:#fff;background:linear-gradient(135deg,var(--teal) 0%,#1b8a8b 55%,#3fb8b3 100%);letter-spacing:.02em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+.lc-tag.lc-ai svg{width:13px;height:13px;filter:drop-shadow(0 0 3px rgba(255,255,255,.55))}
+.lc-btn svg[aria-hidden]{width:15px;height:15px}
+.lc-hint .lc-ai{margin-left:4px;height:20px;font-size:11px;vertical-align:middle}

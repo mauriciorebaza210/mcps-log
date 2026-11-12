@@ -125,10 +125,12 @@
     });
   }
 
-  function hardDeadline(step, base, nextDue) {
+  function hardDeadline(step, base, nextDue, startupDate) {
     var h = step.hard_deadline;
     if (!h || !base) return null;
     if (h.from === 'anchor') return addDays(base, h.offset);
+    // e.g. the Welcome sent at approval must still go out before the startup.
+    if (h.from === 'startup') return startupDate ? addDays(startupDate, h.offset) : null;
     if (h.from === 'next_occurrence') return nextDue ? addDays(nextDue, h.offset) : null;
     return null;
   }
@@ -187,7 +189,7 @@
         if (base && !unsupported) {
           d.due = addDays(base, step.offset + k * (step.repeat_every || 0));
           var nextDue = k + 1 < count ? addDays(base, step.offset + (k + 1) * (step.repeat_every || 0)) : null;
-          var deadline = hardDeadline(step, base, nextDue);
+          var deadline = hardDeadline(step, base, nextDue, contact.startup_date || null);
           var byWindow = addDays(d.due, (step.window_days || 0) + Math.min(d.held_days, step.max_hold_days || 0));
           d.last_send_day = earlier(byWindow, deadline);
           d.deadline_binding = !!deadline && deadline <= byWindow;
@@ -218,6 +220,8 @@
           d.outcome = 'excluded'; d.reason = 'unsupported_in_this_release';
         } else if (step.status === 'retired') {
           d.outcome = 'excluded'; d.reason = 'retired';
+        } else if (step.status === 'off') {
+          d.outcome = 'excluded'; d.reason = 'turned_off';
         } else if (state.status === 'stopped') {
           d.outcome = 'stopped'; d.reason = state.stop_reason;
         } else if (state.status === 'paused') {
@@ -254,8 +258,8 @@
           d.outcome = 'due';
         }
         if (d.outcome === 'expired') flag(state, 'expired_steps');
-        // A skipped step still lets the next one chain, from the date it was due.
-        if (k === 0) stepResult[step.step_id] = { sent: d.sent_on || (d.override === 'skip' ? d.due : null), due: d.due, outcome: d.outcome };
+        // A skipped or turned-off step still lets the next one chain, from the date it was due.
+        if (k === 0) stepResult[step.step_id] = { sent: d.sent_on || ((d.override === 'skip' || d.reason === 'turned_off') ? d.due : null), due: d.due, outcome: d.outcome };
         out.push(d);
       }
       // Later steps see the sub-bucket this step moves the contact into.
