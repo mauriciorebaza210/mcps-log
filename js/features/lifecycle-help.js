@@ -37,8 +37,7 @@ const HLP_CHAPTERS = [
   { id: 'start', title: 'The basics', steps: [
     { title: 'Welcome to Lifecycle Email', text: 'This page runs MCPS’s automatic emails: <b>MCP Legacy</b> for past MCP customers and <b>MCP Startup</b> for new pool owners. They go out from your Gmail on a schedule, and stop by themselves when someone replies, clicks or unsubscribes.<br><br>This tour has you click through the real page. Nothing is changed or sent.' },
     { el: '.lc [data-lc="tabs"]', title: 'Four tabs', text: '<b>Campaigns</b>: start and plan sends. <b>Emails</b>: each email’s wording, approval and timing. <b>Activity</b>: what went out and anything that needs you. <b>Contacts</b>: everyone on the lists.' },
-    { el: '.lc .lc-status .lc-pill:not(.test)', title: 'Is everything OK?', text: 'Green means the last check went fine. If something needs you, this turns amber or red; click it to see what.' },
-    { el: '.lc [data-act="run"]', title: 'Run now', text: 'The page checks for emails that are due at your send times, by itself. <b>Run now</b> does that check right away, for example right after you approve an email. It only sends what is already due, never early and never twice. Most days you won’t need it.' }
+    { el: '.lc .lc-status .lc-pill:not(.test)', title: 'Is everything OK?', text: 'Green means the last send went fine. If something needs you, this turns amber or red; click it to see what.' }
   ] },
   { id: 'campaigns', title: 'Campaigns and batches', start: 'campaigns', steps: [
     { el: '.lc [data-act="cmp-open"][data-id="B"]', title: 'Open a campaign', text: 'Each card is one series of emails.', click: 'the MCP Legacy card', next: '.lc .lc-pipe' },
@@ -63,7 +62,8 @@ const HLP_CHAPTERS = [
   ] },
   { id: 'activity', title: 'Activity and problems', start: 'campaigns', steps: [
     { el: '.lc [data-lc="tabs"] [data-tab="activity"]', title: 'The Activity tab', text: 'What went out, and anything that needs you.', click: 'Activity', next: hlpCard_('Health') },
-    { el: hlpCard_('Health'), title: 'Pause anytime', text: 'These switches stop all sending, or one series. Paused emails just wait; nothing is lost.' },
+    { el: '.lc .lc-ctrls', title: 'Pause anytime', text: 'These switches stop all sending, or one series. Paused emails just wait; nothing is lost.' },
+    { el: '.lc .lc-ctrl-run', title: 'Send due emails now', text: 'Emails go out by themselves at your send times. If something is already due and you don’t want to wait (say you just approved an email), this sends it right away. It never sends early and never twice, so you’ll rarely need it.' },
     { el: hlpCard_('Needs a decision'), title: 'When Gmail doesn’t confirm', text: 'Rarely a send isn’t confirmed. Check your Sent folder for it, then choose <b>Mark sent</b> or <b>Resend</b>. Resend waits a few minutes first, so nobody gets two.' },
     { el: hlpCard_('Change requests'), title: 'Your requests', text: 'Everything you send with <b>Request a change</b> is listed here, with whether Mau has done it.' }
   ] },

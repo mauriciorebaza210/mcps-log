@@ -257,8 +257,8 @@ function lcRenderHead_() {
     ['test', 'production'].map(m => '<button data-act="mode" data-mode="' + m + '" class="' + (LC.mode === m ? 'on' : '') + '">' + (m === 'test' ? 'Test' : 'Live') + '</button>').join('') + '</div>' : '';
   const test = ov && ov.engine.mode !== 'production' ? '<span class="lc-pill test"><i></i>Test mode</span>' : '';
   const off = ov && !ov.engine.enabled ? '<button class="lc-pill bad" data-act="tab" data-tab="activity"><i></i>Sending off</button>' : '';
-  const run = lcCan_('run_now') ? '<button class="lc-btn primary' + (LC.runPending ? ' busy' : '') + '" data-act="run"' + (LC.runPending ? ' disabled' : '') + '>' +
-    (LC.runPending ? LC_ICON.refresh + 'Running…' : LC_ICON.play + 'Run now') + '</button>' : '';
+  // "Send due emails now" lives on the Activity tab (Health card); the header only shows that it's happening.
+  const run = LC.runPending ? '<button class="lc-pill" data-act="tab" data-tab="activity"><i class="next"></i>Sending due emails…</button>' : '';
   el.innerHTML = '<header class="lc-head"><div class="lc-title"><h1>Lifecycle Email</h1>' + mode + '</div>' +
     '<div class="lc-status">' + test + off + health +
     '<button class="lc-icon-btn' + (LC.loading ? ' spin' : '') + '" data-act="refresh" aria-label="Refresh" title="Refresh">' + LC_ICON.refresh + '</button>' +
@@ -357,7 +357,9 @@ function lcActivity_() {
     (extra || '') + (canPause && !LC.busy[key] ? '' : ' disabled') + '></button>';
   const ctrls = '<ul class="lc-ctrls"><li><div><b>Sending</b><small>' + (e.enabled ? 'On' : 'Off · nothing sends') + '</small></div>' + sw(e.enabled, 'enabled', '', 'Sending', 'enabled') + '</li>' +
     ['B', 'C'].map(b => { const on = !e.paused_buckets.includes(b); return '<li><div><b>' + LC_SEQ[b] + '</b><small>' + (on ? 'Running' : 'Paused') + '</small></div>' +
-      sw(on, 'pause', ' data-bucket="' + b + '"', LC_SEQ[b], 'pause' + b) + '</li>'; }).join('') + '</ul>';
+      sw(on, 'pause', ' data-bucket="' + b + '"', LC_SEQ[b], 'pause' + b) + '</li>'; }).join('') +
+    (lcCan_('run_now') ? '<li class="lc-ctrl-run"><div><b>Send due emails now</b><small>Emails go out by themselves at your send times. This sends anything that’s already due right away, e.g. just after you approve an email. Never early, never twice.</small></div>' +
+      '<button class="lc-btn sm' + (LC.runPending ? ' busy' : '') + '" data-act="run"' + (LC.runPending ? ' disabled' : '') + '>' + (LC.runPending ? LC_ICON.refresh + 'Sending…' : LC_ICON.play + 'Send now') + '</button></li>' : '') + '</ul>';
   const changes = (ov.changes || []).length ? '<ul class="lc-list">' + ov.changes.slice(0, 8).map(c => '<li><div class="main"><b>' + lcEsc_(lcChangeText_(c)) +
       '</b>' + (c.result !== 'ok' ? '<small>Refused: ' + lcEsc_(c.result) + '</small>' : '') + '</div>' + lcAgoT_(c.at) + '</li>').join('') + '</ul>' : '';
   const runs = ov.runs.length ? '<table class="lc-table"><thead><tr><th>Run</th><th class="hide-sm">Trigger</th><th class="r">Sent</th><th class="r hide-sm">Skipped</th><th>Result</th></tr></thead><tbody>' +
@@ -426,7 +428,7 @@ const LC_CHANGE = { run_now: () => 'started a run', set_enabled: p => (p.enabled
 const lcChangeText_ = c => (c.actor || 'Someone') + ' ' + (LC_CHANGE[c.action] ? LC_CHANGE[c.action](c.params || {}) : c.action);
 // How a run was started, with its planned time when the schedule started it.
 const lcTrigger_ = r => r.trigger === 'scheduled' ? 'Scheduled' + (r.planned_for ? ' · ' + lcClock_(r.planned_for) : '')
-  : r.trigger === 'daily' ? 'Daily' : 'Run now';
+  : r.trigger === 'daily' ? 'Daily' : 'Sent by hand';
 // Today's runs: the engine's plan for today, each marked done (with what it sent) or still ahead.
 function lcTodayRuns_() {
   const ov = LC.ov, p = ov.engine.run_plan, today = lcTodayCT_(), zone = lcZoneOn_(today);
@@ -713,14 +715,15 @@ function lcSetupScope_(s, edit) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 // Each one: confirm if it matters, call the engine, say what happened, then refresh.
+const lcRenderRun_ = () => { lcRenderHead_(); if (LC.tab === 'activity') lcRenderBody_(); };
 async function lcRunNow_() {
   const live = LC.ov && LC.ov.engine.mode === 'production';
-  if (!await lcConfirm_({ title: 'Run now?', ok: 'Run now',
-    body: live ? 'Emails that are due go out to customers right away.' : 'Emails that are due go out now, to test contacts only.' })) return;
-  LC.runPending = Date.now(); lcRenderHead_();
+  if (!await lcConfirm_({ title: 'Send due emails now?', ok: 'Send now',
+    body: live ? 'Emails that are already due go out to customers right away instead of at the next send time.' : 'Emails that are already due go out now, to test contacts only.' })) return;
+  LC.runPending = Date.now(); lcRenderRun_();
   const r = await lcAdmin_('run_now');
-  if (!r.ok) { LC.runPending = 0; lcRenderHead_(); return lcToast_(r.error || 'Couldn’t start the run', true); }
-  lcToast_(r.status === 'already_queued' ? 'A run is already starting' : 'Run starts within a minute');
+  if (!r.ok) { LC.runPending = 0; lcRenderRun_(); return lcToast_(r.error || 'Couldn’t start sending', true); }
+  lcToast_(r.status === 'already_queued' ? 'Already starting' : 'Sending starts within a minute');
   lcWatchRun_();
 }
 // Polls until a run newer than the click shows up, then reports it.
@@ -728,11 +731,11 @@ function lcWatchRun_() {
   const since = LC.runPending - 5000;
   const tick = () => {
     if (!LC.runPending) return;
-    if (Date.now() - LC.runPending > 7 * 60 * 1000) { LC.runPending = 0; lcRenderHead_(); return lcToast_('The run hasn’t reported yet. Check Activity later.', true); }
+    if (Date.now() - LC.runPending > 7 * 60 * 1000) { LC.runPending = 0; lcRenderRun_(); return lcToast_('It hasn’t reported back yet. Check Activity later.', true); }
     lcFetch_('overview', { mode: LC.mode || '', fresh: '1' }).then(data => {
       const r = (data.runs || []).find(x => Date.parse(x.started_at) >= since && x.finished_at);
       LC.ov = data; if (typeof sglNames_ === 'function') sglNames_(data); lcCacheSet_(lcKey_('overview', LC.mode || 'default'), data);
-      if (r) { LC.runPending = 0; lcToast_('Run finished · ' + r.sent + ' sent'); }
+      if (r) { LC.runPending = 0; lcToast_('Done · ' + r.sent + ' sent'); }
       lcRender_();
       if (LC.runPending) setTimeout(tick, 15000);
     }).catch(() => setTimeout(tick, 15000));

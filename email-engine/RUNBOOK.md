@@ -21,7 +21,7 @@ The plan's contract is in [docs/PLAN.md](docs/PLAN.md) (Operations, Guarantees, 
 - **One email in a sequence:** Emails → the email → Setup → Edit → **Off**. The emails after it still go on their usual days.
 - **One person:** Campaigns → calendar → their send → **Skip**.
 
-Turning back on: the same switch. Due emails go out at the next planned run, or right away with **Run now**.
+Turning back on: the same switch. Due emails go out at the next planned run, or right away with **Send due emails now** (Activity tab).
 
 ## 2. Resolve an unconfirmed send (`unknown` / `reconcile`)
 **What it means:** the engine asked Gmail to send, and the execution ended before it could record the answer. The email may or may not have gone out. The engine never guesses, so it waits for a person.
@@ -61,7 +61,7 @@ Use this if the main spreadsheet is damaged, rows were deleted, or a bad edit ca
 2. In Drive → MCPS Email Engine → Backups, pick the newest **main** backup taken before the damage. Its name and description include `seq N`.
 3. Copy its tabs over the live main spreadsheet: open the backup, then on each tab use right-click → *Copy to* → the live sheet, replacing the live tab's contents. Keep the live file itself, because Vercel and the engine know it by its id. **Include the `Meta` tab**, because it holds `applied_seq`.
 4. **Don't restore the Journal** unless it's the Journal that's damaged (section 3). The Journal is the record that brings the main sheet up to date.
-5. Replay the Journal: in Tony's Apps Script project run **eeCatchUp** (it sends nothing, even with sending on). It replays every Journal record after `seq N`. Then open the web app URL (`…/exec`) and check that `applied_seq` equals `journal_head`. (**Run now** doesn't do this while sending is off: it stops before touching anything.)
+5. Replay the Journal: in Tony's Apps Script project run **eeCatchUp** (it sends nothing, even with sending on). It replays every Journal record after `seq N`. Then open the web app URL (`…/exec`) and check that `applied_seq` equals `journal_head`. (**Send due emails now** doesn’t do this while sending is off: it stops before touching anything.)
 6. Compare **sent** deliveries against Tony's **Sent** folder for the period since the backup: every Ref code in Sent should be a `sent` delivery. Mark any missing ones with **Mark sent** (section 2).
 7. Turn sending back on.
 
