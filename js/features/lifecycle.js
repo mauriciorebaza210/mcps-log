@@ -363,8 +363,8 @@ function lcActivity_() {
       '<button class="lc-btn sm' + (LC.runPending ? ' busy' : '') + '" data-act="run"' + (LC.runPending ? ' disabled' : '') + '>' + (LC.runPending ? LC_ICON.refresh + 'Sending…' : LC_ICON.play + 'Send now') + '</button></li>' : '') + '</ul>';
   const changes = (ov.changes || []).length ? '<ul class="lc-list">' + ov.changes.slice(0, 8).map(c => '<li><div class="main"><b>' + lcEsc_(lcChangeText_(c)) +
       '</b>' + (c.result !== 'ok' ? '<small>Refused: ' + lcEsc_(c.result) + '</small>' : '') + '</div>' + lcAgoT_(c.at) + '</li>').join('') + '</ul>' : '';
-  const runs = ov.runs.length ? '<table class="lc-table"><thead><tr><th>Run</th><th class="hide-sm">Trigger</th><th class="r">Sent</th><th class="r hide-sm">Skipped</th><th>Result</th></tr></thead><tbody>' +
-      ov.runs.map(r => '<tr><td>' + lcEsc_(lcStamp_(r.started_at, true)) + '</td><td class="hide-sm">' + lcEsc_(lcTrigger_(r)) +
+  const runs = ov.runs.length ? '<table class="lc-table lc-runs"><thead><tr><th>Run</th><th class="hide-sm">Trigger</th><th class="r">Sent</th><th class="r hide-sm">Skipped</th><th>Result</th></tr></thead><tbody>' +
+      ov.runs.map(r => '<tr><td>' + lcEsc_(lcStamp_(r.started_at, true)) + '</td><td class="hide-sm lc-fit"' + (r.planned_for ? ' title="Planned for ' + lcEsc_(lcClock_(r.planned_for)) + '"' : '') + '>' + lcEsc_(lcTrigger_(r)) +
         '</td><td class="r num">' + r.sent + '</td><td class="r num hide-sm">' + r.skipped + '</td><td>' +
         (r.stopped_reason === 'done' ? lcTag_('Completed', 'live') : /^crashed/.test(r.stopped_reason) ? lcTag_('Crashed', 'bad') : lcTag_(LC_RESULT[r.stopped_reason] || r.stopped_reason, 'warn')) +
         '</td></tr>').join('') + '</tbody></table>' : '<div class="lc-empty">No runs yet.</div>';
@@ -428,8 +428,9 @@ const LC_CHANGE = { run_now: () => 'started a run', set_enabled: p => (p.enabled
   abandon: () => 'abandoned an unconfirmed send', resend: () => 'asked to resend an email' };
 const lcChangeText_ = c => (c.actor || 'Someone') + ' ' + (LC_CHANGE[c.action] ? LC_CHANGE[c.action](c.params || {}) : c.action);
 // How a run was started, with its planned time when the schedule started it.
-const lcTrigger_ = r => r.trigger === 'scheduled' ? 'Scheduled' + (r.planned_for ? ' · ' + lcClock_(r.planned_for) : '')
-  : r.trigger === 'daily' ? 'Daily' : 'Sent by hand';
+// The run column already shows the time, so the trigger is one word (the planned slot stays in the tooltip).
+const lcTrigger_ = r => r.trigger === 'scheduled' ? 'Scheduled'
+  : r.trigger === 'daily' ? 'Daily' : 'By hand';
 // Today's runs: the engine's plan for today, each marked done (with what it sent) or still ahead.
 function lcTodayRuns_() {
   const ov = LC.ov, p = ov.engine.run_plan, today = lcTodayCT_(), zone = lcZoneOn_(today);

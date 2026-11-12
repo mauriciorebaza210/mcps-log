@@ -828,3 +828,8 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 
 .lc-ctrls .lc-ctrl-run small{max-width:420px}
 .lc-ctrls .lc-ctrl-run .lc-btn{flex:none}
+
+/* Recent runs: the date wraps so the Result column always fits its card */
+.lc-runs th,.lc-runs td{padding-left:12px;padding-right:12px}
+.lc-runs th:first-child,.lc-runs td:first-child{padding-left:18px}
+.lc-runs th:last-child,.lc-runs td:last-child{padding-right:16px}
