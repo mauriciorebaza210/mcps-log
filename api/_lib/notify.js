@@ -165,6 +165,31 @@ async function send(msg) {
   return { ok: true, id: json.messageId || '' };
 }
 
+// Asks Apps Script who currently wants this event (the Users-sheet preference
+// system in appscript/StaffNotify.js), signed the same way every call in this
+// file already is. Falls back to the static SERVICE_REQUEST_OFFICE_EMAIL list
+// on any failure — including before get_notification_recipients is deployed —
+// so an office alert never goes silently unsent while this rolls out.
+async function fetchNotificationRecipients_(eventType, cfg) {
+  try {
+    if (!cfg.secret) return [];
+    const body = asciiJson({
+      action: 'get_notification_recipients',
+      event_type: eventType,
+      ts: Date.now(),
+      nonce: crypto.randomUUID()
+    });
+    const sig = crypto.createHmac('sha256', cfg.secret).update(body).digest('hex');
+    const url = appsScriptUrl() + (appsScriptUrl().includes('?') ? '&' : '?') + 'sig=' + sig;
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+    const json = await res.json();
+    if (json && json.ok && Array.isArray(json.emails)) return json.emails.filter(Boolean);
+  } catch (_) {
+    // Fall through to the static fallback below.
+  }
+  return [];
+}
+
 // ── Shell ───────────────────────────────────────────────────────────────────
 
 // The house email shell, matching buildCommsEmailHtml_ in appscript/Comms.js.
@@ -271,7 +296,9 @@ export async function notifyCustomer(request, categoryLabel) {
 export async function notifyOffice(request, categoryLabel, matchSummary) {
   try {
     const cfg = notifyConfig();
-    if (!cfg.office.length) return { ok: false, skipped: 'no SERVICE_REQUEST_OFFICE_EMAIL configured' };
+    const dynamicRecipients = await fetchNotificationRecipients_('service_request_submitted', cfg);
+    const recipients = dynamicRecipients.length ? dynamicRecipients : cfg.office;
+    if (!recipients.length) return { ok: false, skipped: 'no SERVICE_REQUEST_OFFICE_EMAIL configured' };
 
     const name = [request.first_name, request.last_name].filter(Boolean).join(' ').trim() || 'No name given';
     const address = [request.service_address, request.city, request.zip_code].filter(Boolean).join(', ');
@@ -312,7 +339,7 @@ export async function notifyOffice(request, categoryLabel, matchSummary) {
     ].filter(Boolean).join('\n');
 
     return await send({
-      to: cfg.office,
+      to: recipients,
       subject: `${urgent ? '[ASAP] ' : ''}New service request — ${name} (${categoryLabel})`,
       html: shell(body, cfg, { preheader: `${name} — ${categoryLabel}` }),
       text,

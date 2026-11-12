@@ -23,6 +23,7 @@ function doLogin() {
         username:u,
         avatar_url:res.avatar_url||'',
         email:res.email||'',
+        notify_prefs:res.notify_prefs||{},
         tutorial_status:res.tutorial_status||'',
         tutorial_version:res.tutorial_version||'',
         tutorial_started_at:res.tutorial_started_at||'',

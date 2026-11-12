@@ -14,16 +14,27 @@ let _notesExpanded = new Set(); // pool_ids whose notes panel is open (survives 
 
 function _safeId_(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, '_'); }
 
+let _poolNotesFetchInFlight = null;   // { key, promise } — same shape as _routeFetchInFlight
+
 // Fetch notes for the current week and re-render (decoupled from route_data cache).
 function _loadPoolNotes_() {
-  return apiGet({ action: 'get_pool_notes', token: _s.token, week_start: _weekStartForOffset_(_weekOffset) })
+  const weekStart = _weekStartForOffset_(_weekOffset);
+  if (_poolNotesFetchInFlight && _poolNotesFetchInFlight.key === weekStart) {
+    return _poolNotesFetchInFlight.promise;
+  }
+  const promise = apiGet({ action: 'get_pool_notes', token: _s.token, week_start: weekStart })
     .then(res => {
       if (res && res.ok) {
         _poolNotes = res.notes || {};
         if (_routeData) renderRoutePage();
       }
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+      if (_poolNotesFetchInFlight && _poolNotesFetchInFlight.key === weekStart) _poolNotesFetchInFlight = null;
+    });
+  _poolNotesFetchInFlight = { key: weekStart, promise };
+  return promise;
 }
 
 // Renders the collapsible NOTES block for one pool card. Shown when the pool has
@@ -685,18 +696,32 @@ function navMonth(dir) {
   loadCalendarData(_calMonth, _calYear);
 }
 
+let _calLoadSeq = 0;   // guards against an earlier, slower month's response landing after a later one
+
 function loadCalendarData(m, y) {
-  document.getElementById('route-loading').style.display = 'block';
-  document.getElementById('route-content').style.display = 'none';
+  // ⚠️ NEVER hide #route-content here — it's the shared wrapper #map-month-view
+  // itself lives inside (see index.html), so toggling it off blanked the ENTIRE
+  // Technician Hub schedule page (header, view toggle, everything), not just the
+  // calendar grid, and #route-loading has no spinner markup of its own — the
+  // result was a plain blank screen for however long calendar_data took. The
+  // week view's loading state (_showRouteSkeleton in app.js) keeps its wrapper
+  // visible and only replaces its own inner content; do the same here.
+  const cellsEl = document.getElementById('cal-cells');
+  if (cellsEl) cellsEl.innerHTML = `<div class="route-loading" style="grid-column: span 7"><div class="spinner"></div></div>`;
 
   const t = new Date(y, m - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
   const titleEl = document.getElementById('cal-month-title');
   if (titleEl) titleEl.textContent = t;
 
+  // Rapid clicks on the month-nav arrows (or Week→Month→Week→Month) fire a new
+  // request without cancelling the last one. GAS calls don't race in order, so
+  // without this a slower, now-stale earlier month's response could land AFTER
+  // the one the user is actually looking at and silently overwrite it.
+  const seq = ++_calLoadSeq;
+
   apiGet({ action: 'calendar_data', token: _s.token, month: m, year: y, operator: _activeOp })
     .then(res => {
-      document.getElementById('route-loading').style.display = 'none';
-      document.getElementById('route-content').style.display = 'block';
+      if (seq !== _calLoadSeq) return;   // superseded by a newer month request
       if (!res.ok) {
         document.getElementById('cal-cells').innerHTML = `<div style="grid-column: span 7; padding: 2rem; text-align: center;">Error: ${res.error}</div>`;
         return;
@@ -715,8 +740,7 @@ function loadCalendarData(m, y) {
       renderMapCalendar();
     })
     .catch(e => {
-      document.getElementById('route-loading').style.display = 'none';
-      document.getElementById('route-content').style.display = 'block';
+      if (seq !== _calLoadSeq) return;
       document.getElementById('cal-cells').innerHTML = `<div style="grid-column: span 7; padding: 2rem; text-align: center;">Network Error: ${e.message}</div>`;
     });
 }
@@ -1801,6 +1825,84 @@ function renderProfileTab() {
     try { prefs = JSON.parse(user.shift_preferences); } catch (e) { prefs = {}; }
   }
   renderShiftRows(prefs);
+  renderNotifyPrefsSection();
+}
+
+// ─── Notification preferences ────────────────────────────────────────────────
+// Catalog mirrors appscript/StaffNotify.js's STAFF_NOTIFY_EVENTS. Kept in sync
+// by hand since there's no build step to generate one from the other — a label
+// change on either side never needs a change on the other.
+const NOTIFY_EVENT_CATALOG = [
+  { key: 'agreement_signed',         label: 'Agreement signed',              hint: "A customer signs their service agreement." },
+  { key: 'startup_scheduled',        label: 'Startup scheduled',             hint: 'A pool startup gets scheduled.' },
+  { key: 'issue_alert_reported',     label: 'Issue/alert reported',          hint: 'A technician reports an issue from the field.' },
+  { key: 'service_request_submitted', label: 'New service request submitted', hint: 'A customer submits a pool service request form.' }
+];
+
+// Self only, for now — editing a teammate's prefs would need their prefs
+// fetched separately (they don't arrive with _usersCache), and nobody asked
+// for that yet. Hidden rather than removed from the DOM so a later admin-edit
+// feature just needs to flip this check and supply the other user's prefs.
+function renderNotifyPrefsSection() {
+  const wrap = document.getElementById('profile-notify-section');
+  const rows = document.getElementById('profile-notify-rows');
+  if (!wrap || !rows) return;
+
+  const isSelf = _profileOp === _s.username;
+  wrap.style.display = isSelf ? 'block' : 'none';
+  if (!isSelf) return;
+
+  const prefs = _s.notify_prefs || {};
+  rows.innerHTML = NOTIFY_EVENT_CATALOG.map(ev => {
+    const on = !!(prefs[ev.key] && prefs[ev.key].email);
+    return `<div class="notify-pref-row" data-event="${ev.key}">
+      <div>
+        <div class="notify-pref-label">${escHtml(ev.label)}</div>
+        <div class="notify-pref-hint">${escHtml(ev.hint)}</div>
+      </div>
+      <div class="notify-pref-toggles">
+        <label class="notify-toggle">
+          <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleNotifyPref('${ev.key}', this)">
+          <span>Email</span>
+        </label>
+        <label class="notify-toggle notify-toggle-disabled" title="Coming soon">
+          <input type="checkbox" disabled>
+          <span>Push — coming soon</span>
+        </label>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Optimistic: the toggle (and the session's own copy of the pref) flips
+// immediately; only a failed save rolls it back, with an inline error rather
+// than a reload or a blocking confirmation.
+function toggleNotifyPref(eventKey, checkboxEl) {
+  const enabled = checkboxEl.checked;
+  const msgEl = document.getElementById('profile-notify-msg');
+  if (msgEl) msgEl.style.display = 'none';
+
+  _s.notify_prefs = _s.notify_prefs || {};
+  _s.notify_prefs[eventKey] = _s.notify_prefs[eventKey] || {};
+  const prior = !!_s.notify_prefs[eventKey].email;
+  _s.notify_prefs[eventKey].email = enabled;
+  localStorage.setItem('mcps_s', JSON.stringify(_s));
+
+  function rollback(message) {
+    checkboxEl.checked = prior;
+    _s.notify_prefs[eventKey].email = prior;
+    localStorage.setItem('mcps_s', JSON.stringify(_s));
+    if (msgEl) {
+      msgEl.className = 'im error';
+      msgEl.textContent = message;
+      msgEl.style.display = 'block';
+      setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
+    }
+  }
+
+  api({ action: 'update_notification_prefs', token: _s.token, event_type: eventKey, channel: 'email', enabled })
+    .then(res => { if (!res.ok) rollback(res.error || 'Could not save that preference.'); })
+    .catch(() => rollback('Network error — could not save that preference.'));
 }
 
 function switchProfileOp(op) {

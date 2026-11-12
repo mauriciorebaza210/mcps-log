@@ -875,7 +875,7 @@ async function _commsRenderHistory(body, silent) {
               <div class="comms-muted">${c.sent_count} sent · ${c.failed_count} failed · ${c.skipped_count} skipped / ${c.total_recipients} total</div>
               ${_commsPacingNote(c)}
             </div>
-            ${canCancel?`<button class="comms-btn ghost sm danger" onclick="commsCancelCampaign('${c.campaign_id}')">Cancel</button>`:''}
+            ${canCancel?`<button class="comms-btn ghost sm danger" onclick="commsCancelCampaign('${c.campaign_id}',this)">Cancel</button>`:''}
           </div>`;
         }).join('') : '<div class="comms-hint">No campaigns yet.</div>'}
       </div>
@@ -988,9 +988,19 @@ async function commsCampaignDetail(id) {
     </div>`;
   } catch(e){ box.innerHTML = `<div class="comms-msg error">${escHtml(e.message||'Error')}</div>`; }
 }
-async function commsCancelCampaign(id) {
+async function commsCancelCampaign(id, btn) {
   if (!confirm('Cancel this campaign? Queued recipients will not be sent.')) return;
-  try { await api({ action:'comms_cancel_campaign', campaign_id:id }); _commsRenderTab(); } catch(e){}
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Cancelling...'; }
+  try {
+    const res = await api({ action:'comms_cancel_campaign', campaign_id:id });
+    if (!res || !res.ok) { alert((res && res.error) || 'Could not cancel the campaign.'); return; }
+    _commsRenderTab();
+  } catch(e) {
+    alert('Network error cancelling the campaign.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1009,11 +1019,11 @@ async function _commsRenderOptouts(body) {
           <option value="all">All emails</option>
           <option value="marketing_announcements">Marketing &amp; announcements</option>
         </select>
-        <button class="comms-btn primary" onclick="commsAddOptout()">Add</button>
+        <button class="comms-btn primary" id="opt-add-btn" onclick="commsAddOptout()">Add</button>
       </div>
       <div id="opt-msg" class="comms-msg"></div>
       <div class="comms-prelist">
-        ${list.length ? list.map(o=>`<div class="comms-precol"><span>${escHtml(o.email)}</span><span class="comms-tag">${escHtml(o.scope)}</span><span class="comms-muted">${escHtml(o.source||'')}</span><button class="comms-btn ghost sm danger" onclick="commsRemoveOptout('${escHtml(o.email)}')">Remove</button></div>`).join('') : '<div class="comms-hint">No opt-outs.</div>'}
+        ${list.length ? list.map(o=>`<div class="comms-precol"><span>${escHtml(o.email)}</span><span class="comms-tag">${escHtml(o.scope)}</span><span class="comms-muted">${escHtml(o.source||'')}</span><button class="comms-btn ghost sm danger" onclick="commsRemoveOptout('${escHtml(o.email)}',this)">Remove</button></div>`).join('') : '<div class="comms-hint">No opt-outs.</div>'}
       </div>
     </div>`;
 }
@@ -1021,13 +1031,31 @@ async function commsAddOptout() {
   const email = document.getElementById('opt-email').value.trim();
   const scope = document.getElementById('opt-scope').value;
   const el = document.getElementById('opt-msg');
+  const btn = document.getElementById('opt-add-btn');
   if (!email) { _commsMsg(el,'Enter an email.','error'); return; }
-  try { const res = await api({ action:'comms_add_optout', email, scope }); if (res.ok) _commsRenderTab(); else _commsMsg(el,res.error||'Failed','error'); }
-  catch(e){ _commsMsg(el,e.message||'Error','error'); }
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+  try {
+    const res = await api({ action:'comms_add_optout', email, scope });
+    if (res.ok) _commsRenderTab(); else _commsMsg(el,res.error||'Failed','error');
+  } catch(e) {
+    _commsMsg(el,e.message||'Error','error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
+  }
 }
-async function commsRemoveOptout(email) {
+async function commsRemoveOptout(email, btn) {
   if (!confirm('Remove '+email+' from the opt-out list?')) return;
-  try { await api({ action:'comms_remove_optout', email }); _commsRenderTab(); } catch(e){}
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Removing...'; }
+  try {
+    const res = await api({ action:'comms_remove_optout', email });
+    if (!res || !res.ok) { alert((res && res.error) || 'Could not remove the opt-out.'); return; }
+    _commsRenderTab();
+  } catch(e) {
+    alert('Network error removing the opt-out.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

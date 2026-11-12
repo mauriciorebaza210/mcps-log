@@ -68,10 +68,21 @@ function ctToken_() {
   return (typeof _s !== 'undefined' && _s && _s.token) ? _s.token : '';
 }
 
+// ⚠️ PARSE, DON'T STRING-COMPARE. Most rows write signed_at/sent_at/created_at
+// as ISO strings, but legacy rows signed through the old SignRequest/Zapier
+// callback (handleServiceAgreementSigned_) carry whatever date format that
+// webhook sent — not necessarily ISO. localeCompare on mixed formats sorts
+// alphabetically, not chronologically, which is why the list looked shuffled.
+// new Date(...) parses either shape; an unparseable value sorts to the very
+// end rather than silently scrambling its neighbors.
+function ctSortKey_(a) {
+  const raw = a.signed_at || a.sent_at || a.created_at || '';
+  const ms = new Date(raw).getTime();
+  return isNaN(ms) ? -Infinity : ms;
+}
+
 function ctSortAgreements_(agreements) {
-  return (agreements || []).slice().sort((a, b) =>
-    String(b.signed_at || b.sent_at || b.created_at || '')
-      .localeCompare(String(a.signed_at || a.sent_at || a.created_at || '')));
+  return (agreements || []).slice().sort((a, b) => ctSortKey_(b) - ctSortKey_(a));
 }
 
 function ctApplyAgreements_(agreements) {
@@ -550,13 +561,30 @@ function ctViewDetail(agreementId) {
   })();
 
   const isTracked = !!(a.approval_id || a.approval_sent_at);
+  // ⚠️ NOT "status === SENT" alone. A link nobody has touched since it lapsed
+  // keeps the raw status SENT forever — EXPIRED is only ever stamped lazily,
+  // the moment someone tries a dead link (see handleSignAgreement_) — so the
+  // overwhelming majority of actually-expired contracts never carry that
+  // status at all. Gate on "not yet responded to" instead, so edit/resend stay
+  // reachable for exactly the contracts staff are chasing: sent-and-waiting,
+  // sent-and-lapsed, or the rare one that did get stamped EXPIRED.
+  const canEditExpiration = isTracked && !!String(a.source_quote_id || '').trim() &&
+    ['SIGNED', 'APPROVED', 'DECLINED', 'NOT_REQUIRED', 'VOID'].indexOf(ctStatus(a)) === -1;
 
-  const tracking = (ctStatus(a) === 'SENT' && isTracked) ? `
+  const tracking = canEditExpiration ? `
     <div class="ct-sec">
       <div class="ct-sec-h">Out for signature</div>
       ${row('Link sent', ctDate(a.approval_sent_at || a.sent_at))}
       ${row('Customer opened', a.approval_viewed_at ? ctDate(a.approval_viewed_at) : 'Not yet')}
-      ${row('Expires', [ctDate(a.approval_expires_at), daysLeft].filter(Boolean).join('  ·  '))}
+      <div class="ct-kv">
+        <span>Expires</span>
+        <b>
+          <input id="ct-exp-input" class="amd-in" type="date" style="display:inline-block;width:auto;margin-right:.5rem"
+                 value="${escHtml(ctDateInputValue_(a.approval_expires_at))}">
+          <button class="ct-btn" id="ct-exp-save" onclick="ctSaveExpiration(${jsArg(a.source_quote_id)}, ${jsArg(a.agreement_id)})">Save date</button>
+          <span class="ct-sub" style="margin-left:.4rem">${escHtml(daysLeft)}</span>
+        </b>
+      </div>
       ${row('Reminders', String(a.followup_enabled || '').toLowerCase() === 'false'
         ? 'Off'
         : 'On — day ' + (a.followup_schedule || CT_DEFAULT_FOLLOWUP_SCHEDULE).split(',').join(', '))}
@@ -564,6 +592,11 @@ function ctViewDetail(agreementId) {
       ${a.approval_url
         ? `<div class="ct-kv"><span>Signing link</span><b><a href="${escHtml(a.approval_url)}" target="_blank" rel="noopener">Open the customer's page</a></b></div>`
         : ''}
+      <div class="ct-kv">
+        <span>Resend</span>
+        <b><button class="ct-btn primary" id="ct-resend-btn" onclick="ctResendAgreement(${jsArg(a.source_quote_id)}, ${jsArg(a.agreement_id)})">Resend signing link</button></b>
+      </div>
+      <div class="amd-msg" id="ct-exp-msg"></div>
       ${a.is_pending_approval
         ? `<div class="ct-note">No contract record exists yet — one is created when they sign. Until then this
            row is the live approval (${escHtml(a.approval_id || '')}).</div>`
@@ -721,6 +754,84 @@ function ctSaveFollowups(agreementId) {
     if (btn) { btn.disabled = false; btn.textContent = 'Save cadence'; }
     ctFollowupMsg('Network error saving cadence.', true);
   });
+}
+
+// ── Edit expiration / resend ─────────────────────────────────────────────────
+function ctDateInputValue_(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function ctExpMsg(text, isErr) {
+  const el = document.getElementById('ct-exp-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'amd-msg' + (isErr ? ' err' : '');
+  el.style.display = text ? 'block' : 'none';
+}
+
+function ctSaveExpiration(quoteId, agreementId) {
+  const input = document.getElementById('ct-exp-input');
+  const val = input ? input.value : '';
+  if (!val) { ctExpMsg('Pick a date.', true); return; }
+
+  // End-of-day local time, so picking "today" does not read as already expired.
+  const expiresAt = new Date(val + 'T23:59:59');
+  if (isNaN(expiresAt.getTime())) { ctExpMsg('Invalid date.', true); return; }
+
+  const btn = document.getElementById('ct-exp-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  ctExpMsg('Saving...', false);
+
+  api({
+    action: 'update_agreement_expiration',
+    token: ctToken_(),
+    quote_id: quoteId,
+    expires_at: expiresAt.toISOString()
+  }).then(res => {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save date'; }
+    if (!res || !res.ok) {
+      ctExpMsg((res && res.error) || 'Could not update the expiration.', true);
+      return;
+    }
+    const a = _contracts.find(x => String(x.agreement_id) === String(agreementId));
+    if (a) {
+      a.approval_expires_at = res.expires_at;
+      if (res.status) a.approval_status = res.status;
+    }
+    ctExpMsg('Expiration updated.', false);
+    loadContracts(true);
+    if (agreementId) ctViewDetail(agreementId);
+  }).catch(() => {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save date'; }
+    ctExpMsg('Network error updating the expiration.', true);
+  });
+}
+
+function ctResendAgreement(quoteId, agreementId) {
+  if (!confirm('Resend the signing link? This emails the customer a fresh link, good for another 30 days.')) return;
+
+  const btn = document.getElementById('ct-resend-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Resending...'; }
+  ctExpMsg('Resending...', false);
+
+  api({ action: 'send_proposal_for_approval', token: ctToken_(), quote_id: quoteId })
+    .then(res => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Resend signing link'; }
+      if (!res || !res.ok) {
+        ctExpMsg((res && res.error) || 'Could not resend the agreement.', true);
+        return;
+      }
+      ctExpMsg('Signing link resent.', false);
+      loadContracts(true);
+      if (agreementId) ctViewDetail(agreementId);
+    }).catch(() => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Resend signing link'; }
+      ctExpMsg('Network error resending the agreement.', true);
+    });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

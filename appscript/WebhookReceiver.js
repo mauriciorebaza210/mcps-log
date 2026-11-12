@@ -1514,6 +1514,14 @@ function doPost(e) {
       return jsonResponse_(handleSetTutorialState(payload));
     }
 
+    if (payload.action === 'get_notification_prefs') {
+      return jsonResponse_(handleGetNotificationPrefs_(payload));
+    }
+
+    if (payload.action === 'update_notification_prefs') {
+      return jsonResponse_(handleUpdateNotificationPrefs_(payload));
+    }
+
     if (payload.action === 'admin_create_employee_invite') {
       return jsonResponse_(handleCreateEmployeeInvite(payload));
     }
@@ -2251,6 +2259,7 @@ function doPost(e) {
       get_location_service_agreements: true,
       get_service_agreement: true,
       update_contract_followups: true,
+      update_agreement_expiration: true,
       create_service_agreement_from_proposal: true,
       create_direct_service_agreement: true,
       update_service_agreement: true,
@@ -2278,14 +2287,16 @@ function doPost(e) {
            payload.action === 'get_service_agreement' ||
            payload.action === 'get_client_service_agreements' ||
            payload.action === 'get_location_service_agreements' ||
-           payload.action === 'update_contract_followups') &&
+           payload.action === 'update_contract_followups' ||
+           payload.action === 'update_agreement_expiration') &&
           !hasRole(auth, 'admin') && !hasRole(auth, 'manager')) {
         return jsonResponse_({ ok: false, error: 'Not authorized.' });
       }
       const nsRes = handleNormalizedSalesAction_(payload);
       if (payload.action === 'send_proposal_for_approval' ||
           payload.action === 'update_proposal_status' ||
-          payload.action === 'update_service_agreement') {
+          payload.action === 'update_service_agreement' ||
+          payload.action === 'update_agreement_expiration') {
         invalidateCrmCache_();
       }
       return jsonResponse_(nsRes);
@@ -2314,6 +2325,10 @@ function doPost(e) {
     // nonce, verified inside the handler — the same scheme the per-person
     // campaign senders use. It takes `e` rather than `payload` because the
     // signature covers the exact bytes received, not the reparsed object.
+    if (payload.action === 'get_notification_recipients') {
+      return jsonResponse_(handleGetNotificationRecipients_(e));
+    }
+
     if (payload.action === 'service_request_notify') {
       return jsonResponse_(handleServiceRequestNotify_(e));
     }

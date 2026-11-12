@@ -1473,12 +1473,22 @@ function getCalendarData(token, month, year, operatorFilter) {
 
   const weekdayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
+  // getWeeklyOverrides_ reopens the Routes spreadsheet and rereads the whole
+  // Weekly_Overrides sheet on every call. A month grid spans ~5-6 distinct
+  // weeks but up to 42 days, so calling it per-day (as this loop used to)
+  // reread the same week's overrides 6-7x each — memoize per weekStart instead.
+  const overridesByWeek_ = {};
+  const overridesForWeek_ = (weekStart) => {
+    if (!(weekStart in overridesByWeek_)) overridesByWeek_[weekStart] = getWeeklyOverrides_(weekStart);
+    return overridesByWeek_[weekStart];
+  };
+
   while(current <= calEnd) {
       const dStr = Utilities.formatDate(current, RD_TZ, "yyyy-MM-dd");
       const dMonth = current.getMonth() + 1;
       const wDay = weekdayNames[current.getDay()];
       const weekStart = getWeekStartForDate_(dStr);
-      const overrides = getWeeklyOverrides_(weekStart);
+      const overrides = overridesForWeek_(weekStart);
       const dayWeeklies = routeRows.reduce((list, r) => {
         if (!isPoolVisibleForWeek_(r.raw, r.col, weekStart)) return list;
         const ov = overrides[r.pool_id] || {};
