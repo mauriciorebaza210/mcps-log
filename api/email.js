@@ -155,6 +155,12 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     catch (e) { if (e.status === 503) return reply(res, 503, { ok: false, error: 'The engine sheet is missing tabs (Permissions?); run eeSetup.' }); throw e; }
     const caps = capabilitiesFor(session.username, tables.Permissions);
     if (!caps.has('view_aggregates')) return reply(res, 403, { ok: false, error: 'You don’t have access to Lifecycle Email.' });
+    // One-time MCP Legacy reset (EE_resetMcpLegacy_), on the first page load by someone who can edit
+    // contacts, whatever tab is open; the page then shows the result.
+    if (!cfgOf(tables).mcp_legacy_reset && caps.has('edit_contacts')) {
+      const r = await deps.relayAdmin({ action: 'reset_mcp_legacy', params: {}, actor: String(session.username || '') }).catch(e => ({ ok: false, error: String(e) }));
+      if (r && r.ok) { rawVersion++; tables = await loadTables(true); } else console.error('mcp legacy reset', r && r.error);
+    }
 
     const view = String(q.view || 'overview');
     let data;

@@ -210,3 +210,14 @@ test('MCP Legacy reset: every never-started MCP Legacy contact (sync or file) le
   const l1 = w.tables.Contacts.find(c => c.contact_id === 'l1');
   assert.deepEqual([l1.review_status, l1.first_name, l1.source], ['needs_review', 'Linda', 'MCP list']);
 });
+
+test('The MCP Legacy reset runs on the first page read (any tab) by someone who can edit contacts, once', async () => {
+  const pending = await api({});
+  await pending.call({ method: 'GET', op: 'read', token: 'tok-viewer' });
+  assert.equal(pending.relayed.length, 0, 'a viewer’s visit never changes data');
+  await pending.call({ method: 'GET', op: 'read' });
+  assert.deepEqual(pending.relayed.map(r => r.action), ['reset_mcp_legacy']);
+  const done = await api({ config: [{ key: 'engine_mode', value: 'test' }, { key: 'mcp_legacy_reset', value: '2026-11-11T00:00:00Z' }] });
+  await done.call({ method: 'GET', op: 'read' });
+  assert.equal(done.relayed.length, 0);
+});
