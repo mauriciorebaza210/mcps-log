@@ -429,19 +429,27 @@ function lcContacts_() {
   if (!LC.contacts) return bar + '<div class="lc-sk" style="height:320px"></div>';
   const q = LC.q.trim().toLowerCase();
   // Merged and removed contacts stay in the engine (history, pointers) but not in the list.
+  const tags = typeof tagMatches_ === 'function';
   const rows = LC.contacts.contacts.filter(c => !/^(merged|removed)$/.test(c.review_status || '') && (!LC.bucket || c.bucket === LC.bucket) && (!LC.review || c.review_status === LC.review) &&
-    (!q || [c.first_name, c.last_name, c.email].some(v => String(v || '').toLowerCase().includes(q))));
+    (!tags || tagMatches_(c)) && (!q || [c.first_name, c.last_name, c.email].concat(c.tags || []).some(v => String(v || '').toLowerCase().includes(q))));
+  const sel = tags && lcCan_('edit_contacts');
+  const filters = tags ? tagFilterBar_() : '', bulk = tags ? tagBulkBar_(rows) : '';
   const batches = typeof lcBatchesCard_ === 'function' ? lcBatchesCard_() : '';
-  if (!rows.length) return bar + batches + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
-  return bar + batches + '<div class="lc-card"><table class="lc-table"><thead><tr><th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
+  if (!rows.length) return bar + filters + batches + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
+  const shownIds = rows.slice(0, 2000).map(c => c.contact_id), allOn = sel && shownIds.length && shownIds.every(id => TAGS.sel.has(id));
+  return bar + filters + bulk + batches + '<div class="lc-card"><table class="lc-table"><thead><tr>' +
+    (sel ? '<th class="lc-selcol"><input type="checkbox" data-act="tag-selall" data-ids="' + lcEsc_(JSON.stringify(shownIds)) + '"' + (allOn ? ' checked' : '') + ' aria-label="Select everyone shown"></th>' : '') + '<th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
       const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : c.review_status === 'possible_duplicate' ? lcTag_('Possible duplicate', 'warn') : c.review_status === 'removed' ? lcTag_('Removed', '')
         : c.review_status === 'confirmed' ? lcTag_(c.bucket === 'C' ? 'From the portal' : 'Starting', 'live') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
         seq.status === 'stopped' ? lcTag_('Stopped · ' + lcStopWord_(seq.stop_reason), 'warn') : lcTag_(seq.status, '');
-      return '<tr class="click" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0"><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' +
+      return '<tr class="click' + (sel && TAGS.sel.has(c.contact_id) ? ' sel' : '') + '" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0">' +
+        (sel ? '<td class="lc-selcol"><input type="checkbox" data-act="tag-sel" data-id="' + lcEsc_(c.contact_id) + '"' + (TAGS.sel.has(c.contact_id) ? ' checked' : '') + ' aria-label="Select"></td>' : '') +
+        '<td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' +
         lcEsc_(lcInitials_(c.first_name, c.last_name)) + '</span><div><b>' + lcEsc_([c.first_name, c.last_name].filter(Boolean).join(' ')) +
-        (c.is_test ? ' <span class="lc-tag" style="height:18px;font-size:10.5px">Test</span>' : '') + '</b><small>' + lcEsc_(c.email) + '</small></div></div></td>' +
+        (c.is_test ? ' <span class="lc-tag" style="height:18px;font-size:10.5px">Test</span>' : '') + '</b><small>' + lcEsc_(c.email) + '</small>' +
+        ((c.tags || []).length ? '<div class="lc-tagrow sm">' + c.tags.map(t => '<span class="lc-tagchip">' + lcEsc_(t) + '</span>').join('') + '</div>' : '') + '</div></div></td>' +
         '<td class="hide-xs"><span class="lc-seqname"><span class="lc-bkt sm">' + lcEsc_(c.bucket) + '</span>' + lcEsc_(LC_SEQ[c.bucket] || '') + '</span></td>' +
         '<td>' + status + '</td><td class="hide-sm">' + (last ? lcEsc_(lcStepName_(last.step_id)) + ' <span style="color:var(--muted)">· ' + lcAgoT_(last.sent_at) + '</span>' : '<span style="color:var(--muted)">–</span>') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
@@ -563,6 +571,7 @@ function lcContactBody_(d) {
     '<div class="lc-sec"><h4>Details</h4><dl class="lc-kv"><dt>Group</dt><dd>' + lcEsc_(LC_SEQ[c.bucket] || c.bucket) + '</dd>' +
     (c.address && c.address !== 'hidden' ? '<dt>Address</dt><dd>' + lcEsc_(c.address) + '</dd>' : '') +
     (c.startup_date ? '<dt>Startup</dt><dd>' + lcEsc_(c.startup_date) + '</dd>' : '') + '</dl></div>' +
+    (typeof tagSection_ === 'function' ? tagSection_(c) : '') +
     '<div class="lc-sec"><h4>Emails</h4>' + tl + '</div>';
 }
 
@@ -785,6 +794,7 @@ function lcDispatch_(t) {
   if (act === 'setup-edit') return lcSetupAct_(t);
   if (act === 'sgl-setup') return sglSetupAct_(t);
   if (act === 'sgl-new') return sglOpen_();
+  if (act.startsWith('tag-') && typeof tagAct_ === 'function') return tagAct_(t);
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);

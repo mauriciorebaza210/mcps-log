@@ -434,7 +434,8 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
       return reply(res, 200, { ok: true, suggestions: r.map(s => ({ contact_id: list[s.i].contact_id, first_name: s.first_name, last_name: s.last_name, kind: s.kind })) });
     }
     const relay = async (action, params) => { const r = await deps.relayAdmin({ action, params, actor: session.username }); rawVersion++; return r || { ok: false, error: 'engine unreachable' }; };
-    if (stage === 'apply_names') {
+    // apply_names (Clean up) and update (tags, any editable field) are the same engine action.
+    if (stage === 'apply_names' || stage === 'update') {
       const changes = (body.changes || []).slice(0, 300).map(c => ({ contact_id: String(c.contact_id || ''), fields: c.fields || {} }));
       const r = await relay('update_contacts', { changes });
       return reply(res, r.ok ? 200 : 502, r);
