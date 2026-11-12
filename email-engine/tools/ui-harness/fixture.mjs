@@ -40,6 +40,9 @@ for (let i = 0; i < 52; i++) C.push({ contact_id: 'w' + i, email_norm: (WF[i % 2
   bucket: i < 46 ? 'B' : 'C', sub_bucket: i < 46 ? 'B1' : '', review_status: 'needs_review', is_test: 'N', area: ['Boerne', 'Helotes', 'Castroville', 'Bulverde'][i % 4],
   tags: i % 5 === 0 ? 'vip' : i % 3 === 0 ? 'spa' : '', source: i % 2 ? 'MCP 2019' : 'MCP 2022', created_at: '2026-10-' + String(1 + i % 28).padStart(2, '0') + 'T00:00:00Z' });
 C.forEach((c, i) => { if (c.bucket === 'B' && i % 3 === 1 && !c.contact_id.startsWith('w')) c.send_time = '10:30'; });
+['Sam Ruiz', 'Tia Moreno'].forEach((n, k) => C.push({ contact_id: 'ps' + k, email_norm: n.toLowerCase().replace(' ', '.') + '@example.com', first_name: n.split(' ')[0], last_name: n.split(' ')[1],
+  bucket: 'C', review_status: 'confirmed', review_reason: 'startup from the portal', source: 'portal_startup', is_test: 'N', quote_id: 'Q-S' + k, pool_id: 'MCPS-01' + k,
+  startup_date: new Date(now + (5 + k * 6) * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }), startup_source: 'schedule', address: '9 Oak Ln, Boerne' }));
 const day = n => new Date(now + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
 rows('Batches', [
   { batch_id: 'b1', group: 'B', count: 20, order: 'random', pick: 'now', start_on: day(12), send_time: '14:15', status: 'planned', filters_json: { area: ['Boerne'] }, contact_ids: Array.from({ length: 20 }, (_, k) => 'w' + k) },

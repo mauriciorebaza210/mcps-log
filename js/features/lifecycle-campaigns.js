@@ -41,7 +41,7 @@ function cmpPeople_(b) {
   const planned = ((LC.contacts && LC.contacts.batches) || []).filter(x => x.group === b && x.status === 'planned');
   const held = new Set();
   planned.forEach(x => (x.contact_ids || []).forEach(id => held.add(id)));
-  const out = { waiting: [], lined: [], active: [], finished: [], stopped: [], later: 0 };
+  const out = { waiting: [], joining: [], lined: [], active: [], finished: [], stopped: [], later: 0 };
   all.forEach(c => {
     const s = c.sequence && (!c.sequence.mode || c.sequence.mode === LC.mode) ? c.sequence : null;
     if (s && /^(active|waiting_anchor|paused)$/.test(s.status)) out.active.push(c);
@@ -49,12 +49,19 @@ function cmpPeople_(b) {
     else if (s && s.status === 'completed') out.finished.push(c);
     else if (s && s.status === 'stopped') out.stopped.push(c);
     else if (c.review_status === 'needs_review' && !c.is_test) out.waiting.push(c);
+    // Confirmed but not started yet: synced startups (they start on the next run; in test mode only at go-live).
+    else if (c.review_status === 'confirmed' && !c.is_test && !s) out.joining.push(c);
   });
   // "Pick on the day" batches hold a number, not people yet.
   out.later = planned.filter(x => x.pick === 'at_start').reduce((a, x) => a + Number(x.count || 0), 0);
   return out;
 }
-const cmpCount_ = (p, k) => p[k].length + (k === 'lined' ? p.later : 0);
+const cmpCount_ = (p, k) => (k === 'waiting' ? p.waiting.length + p.joining.length : p[k].length) + (k === 'lined' ? p.later : 0);
+// Stage labels per campaign: MCP Startup's people come from the portal, so its first stage is "Joining".
+function cmpStages_(b) {
+  if (cmpBatchable_(b)) return CMP_STAGES;
+  return CMP_STAGES.filter(s => s[0] !== 'lined').map(s => s[0] === 'waiting' ? ['waiting', 'Joining', LC.ov && LC.ov.engine.mode !== 'production' ? 'From the portal · start at go-live' : 'From the portal, before their first email'] : s);
+}
 
 // ── Planned sends: from the engine's own decide() (api/email.js view=plan) ────
 // The page never works out dates itself (PLAN.md → Planned sends on the page).
@@ -120,10 +127,10 @@ function cmpNextBatch_(b) {
 function cmpCard_(b) {
   const p = cmpPeople_(b), steps = cmpSteps_(b), nb = cmpNextBatch_(b);
   const live = steps.filter(s => s.published).length;
-  const stages = CMP_STAGES.map(([k, l]) => '<div class="' + (k === 'active' ? 'on' : '') + '"><b>' + cmpCount_(p, k) + '</b><span>' + l + '</span></div>').join('');
+  const stages = cmpStages_(b).map(([k, l]) => '<div class="' + (k === 'active' ? 'on' : '') + '"><b>' + cmpCount_(p, k) + '</b><span>' + l + '</span></div>').join('');
   return '<article class="lc-cmp-card"><button class="lc-cmp-open" data-act="cmp-open" data-id="' + b + '" aria-label="Open ' + LC_SEQ[b] + '"></button>' +
     '<header><span class="lc-bkt">' + b + '</span><div class="grow"><h2>' + LC_SEQ[b] + '</h2><small>' + steps.length + ' emails · ' + live + ' approved</small></div>' + cmpStatus_(b) + '</header>' +
-    '<div class="lc-cmp-mini">' + stages + '</div>' +
+    '<div class="lc-cmp-mini' + (cmpBatchable_(b) ? '' : ' four') + '">' + stages + '</div>' +
     '<footer><span class="lc-cmp-next">' + CMP_ICON.cal + (b === 'C' && typeof crmStartupLine_ === 'function' ? crmStartupLine_(true) : nb ? lcEsc_(nb.count + ' start ' + batDayLabel_(nb.start_on) + ', ' + lcClock_(nb.send_time || lcSendTime_(b))) : 'No batches lined up') +
       (b === 'C' ? '' : '<span class="lc-dim">· sends ' + lcEsc_(lcClock_(lcSendTime_(b))) + '</span>') + '</span>' +
     (lcCan_('edit_contacts') && cmpBatchable_(b) ? '<button class="lc-btn sm primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</footer></article>';
@@ -136,7 +143,7 @@ function cmpPage_(b) {
     '<div class="lc-cmp-acts"><div class="lc-seg" role="group" aria-label="View">' + [['list', 'List'], ['calendar', 'Calendar']].map(([k, l]) =>
       '<button data-act="cmp-view" data-view="' + k + '" class="' + (CMP.view === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div>' +
     (lcCan_('edit_contacts') && cmpBatchable_(b) ? '<button class="lc-btn primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</div></div>';
-  const pipe = '<div class="lc-pipe" role="tablist" aria-label="Where people are">' + CMP_STAGES.map(([k, l, hint], i) =>
+  const pipe = '<div class="lc-pipe' + (cmpBatchable_(b) ? '' : ' four') + '" role="tablist" aria-label="Where people are">' + cmpStages_(b).map(([k, l, hint], i) =>
     '<button role="tab" aria-selected="' + (CMP.stage === k) + '" data-act="cmp-stage" data-stage="' + k + '" class="' + (CMP.stage === k ? 'on' : '') + (i > 2 ? ' end' : '') + '">' +
     '<b>' + cmpCount_(p, k) + '</b><span>' + l + '</span><small>' + hint + '</small></button>').join('') + '</div>';
   return head + pipe + (b === 'C' && typeof crmStartupStrip_ === 'function' ? crmStartupStrip_() : '') + (CMP.view === 'calendar' ? cmpCalendar_(b) : cmpList_(b, p));
@@ -178,19 +185,20 @@ function cmpBatches_(b) {
 }
 
 function cmpStageTable_(b, p) {
-  const rows = p[CMP.stage] || [];
-  const label = (CMP_STAGES.find(s => s[0] === CMP.stage) || [])[1];
+  const rows = CMP.stage === 'waiting' ? p.waiting.concat(p.joining) : (p[CMP.stage] || []);
+  const label = (cmpStages_(b).find(s => s[0] === CMP.stage) || [])[1];
   const fc = cmpForecast_(b) || {}, next = {};
   Object.keys(fc).sort().forEach(d => cmpSends_(fc[d]).forEach(e => e.people.forEach(p => { if (!next[p.c.contact_id]) next[p.c.contact_id] = { d, s: e.step, time: e.time }; })));
   const head = '<div class="lc-card-h"><h3>' + lcEsc_(label) + '</h3><small>' + rows.length + (rows.length === 1 ? ' person' : ' people') +
     (CMP.stage === 'lined' && p.later ? ' · ' + p.later + ' more picked on their start day' : '') + '</small></div>';
   if (!rows.length) return '<section class="lc-card" style="margin-top:16px">' + head + '<div class="lc-empty">No one here.</div></section>';
-  const col = { waiting: 'Added', lined: 'Starts', active: 'Next email', finished: 'Last email', stopped: 'Why' }[CMP.stage];
+  const col = { waiting: cmpBatchable_(b) ? 'Added' : 'Startup', lined: 'Starts', active: 'Next email', finished: 'Last email', stopped: 'Why' }[CMP.stage];
   const cell = c => {
     if (CMP.stage === 'active') { const n = next[c.contact_id]; return n ? lcEsc_(n.s.name) + ' <span class="lc-dim">· ' + lcEsc_(batDayLabel_(n.d) + ', ' + lcClock_(n.time)) + '</span>' : '<span class="lc-dim">–</span>'; }
     if (CMP.stage === 'stopped') return lcTag_(lcStopWord_(c.sequence.stop_reason), 'warn');
     if (CMP.stage === 'lined') { const x = (LC.contacts.batches || []).find(y => y.status === 'planned' && (y.contact_ids || []).includes(c.contact_id)); return x ? lcEsc_(batDayLabel_(x.start_on) + ', ' + lcClock_(x.send_time || lcSendTime_(CMP.id))) : ''; }
     if (CMP.stage === 'finished') return c.last_email ? lcEsc_(lcDay_(c.last_email.sent_at)) : '';
+    if (c.startup_date) return 'Startup ' + lcEsc_(batDayLabel_(c.startup_date));
     return c.created_at ? lcEsc_(lcDay_(c.created_at)) : '<span class="lc-dim">–</span>';
   };
   return '<section class="lc-card" style="margin-top:16px">' + head + '<table class="lc-table"><thead><tr><th>Person</th><th class="hide-xs">Area</th><th>' + col + '</th></tr></thead><tbody>' +

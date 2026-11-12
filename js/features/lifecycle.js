@@ -404,7 +404,8 @@ function lcContacts_() {
   return bar + batches + '<div class="lc-card"><table class="lc-table"><thead><tr><th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
-      const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
+      const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : c.review_status === 'removed' ? lcTag_('Removed', '')
+        : c.review_status === 'confirmed' ? lcTag_(c.bucket === 'C' ? 'From the portal' : 'Starting', 'live') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
         seq.status === 'stopped' ? lcTag_('Stopped · ' + lcStopWord_(seq.stop_reason), 'warn') : lcTag_(seq.status, '');
       return '<tr class="click" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0"><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' +
         lcEsc_(lcInitials_(c.first_name, c.last_name)) + '</span><div><b>' + lcEsc_([c.first_name, c.last_name].filter(Boolean).join(' ')) +

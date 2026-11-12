@@ -546,3 +546,9 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-crm-strip .main{flex:1;min-width:0;font-size:13.5px}
 .lc-crm-strip .main small{display:block;color:var(--muted);font-size:12px}
 .lc-wiz-stat span small,.lc-seg button small{opacity:.7;font-weight:600}
+.lc-pipe.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.lc-wiz-links{margin-left:auto;display:inline-flex;gap:14px}
+.lc-wiz-links .lc-link{font-size:13px}
+.lc-wiz-links .lc-link{margin-left:0}
+.lc-cmp-mini.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:600px){.lc-cmp-mini.four div:nth-child(n+4){display:none}.lc-pipe.four{grid-template-columns:repeat(2,minmax(0,1fr))}}

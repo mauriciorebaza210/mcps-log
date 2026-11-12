@@ -22,7 +22,8 @@ function batRandom_(seed) { let s = seed; return () => (s = (s * 16807) % 214748
 
 function lcOpenBatch_(opts) {
   opts = opts || {};
-  Object.assign(BAT, { step: 'who', group: opts.group || (typeof CMP !== 'undefined' && CMP.id) || LC.bucket || 'B', filters: { area: [], tags: [], source: [] },
+  // Only MCP Legacy is started in batches; MCP Startup's people come from the portal.
+  Object.assign(BAT, { step: 'who', group: 'B', filters: { area: [], tags: [], source: [] },
     count: 20, order: 'random', pick: 'now', start_on: opts.start_on && opts.start_on > batToday_() ? opts.start_on : batToday_(), send_time: '', batches: 1, every: 7,
     restart: false, removed: new Set(), seed: Date.now() % 2147483646 + 1, busy: false });
   const layer = document.createElement('div');
@@ -119,8 +120,8 @@ function batWho_() {
   const waiting = MCPS_BATCHES.eligible(batAll_(), { group: BAT.group, filters: BAT.filters, exclude: [...batExcluded_()] }).length;
   const re = LC_RESTART_READY ? batRestartPool_().length : 0;
   return '<div class="lc-wiz-stat"><b>' + waiting + '</b><span>waiting in Needs review' + (Object.values(BAT.filters).some(l => l.length) ? ' match these filters' : '') + '</span>' +
-    '<button class="lc-link" data-bat="import">Import more</button></div>' +
-    '<div class="lc-imp-row"><div class="lc-fld"><span>Campaign</span>' + batSeg_('group', BAT.group, [['B', 'MCP Legacy'], ['C', 'MCP Startup']]) + '</div>' +
+    '<span class="lc-wiz-links"><button class="lc-link" data-bat="crm">Add Sales Hub leads</button><button class="lc-link" data-bat="import">Import a file</button></span></div>' +
+    '<div class="lc-imp-row"><div class="lc-fld"><span>Campaign</span>' + batSeg_('group', BAT.group, [['B', 'MCP Legacy']]) + '</div>' +
     '<label class="lc-fld"><span>People per batch</span><input class="lc-input" type="number" min="1" max="500" value="' + BAT.count + '" data-bat-num="count" style="width:110px"></label>' +
     '<div class="lc-fld"><span>Order</span>' + batSeg_('order', BAT.order, [['random', 'Random'], ['oldest', 'Oldest first']]) + '</div></div>' +
     chips('area', 'Area') + chips('tags', 'Tags') + chips('source', 'Source') +
@@ -220,6 +221,7 @@ function batOnClick_(e) {
   else if (a === 'remove') { BAT.removed.add(t.dataset.id); batRender_(); }
   else if (a === 'shuffle') { BAT.seed = (BAT.seed * 48271) % 2147483647; batRender_(); }
   else if (a === 'import') { batClose_(); lcOpenImport_(); }
+  else if (a === 'crm') { batClose_(); crmOpenLeads_(); }
   else if (a === 'create') batCreate_();
 }
 function batOnChange_(e) {
