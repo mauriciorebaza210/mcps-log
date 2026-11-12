@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Recover Visit Photos</title>
+<style>
+  :root{
+    --bg:#f4f6f6; --card:#fff; --ink:#1b2a28; --muted:#5f6b69; --line:#dde3e2;
+    --brand:#0d4d44; --brand-ink:#fff; --warn-bg:#fff7e6; --warn-ink:#8a5300;
+    --err-bg:#fdecec; --err-ink:#9b1c1c; --ok-bg:#e8f5ee; --ok-ink:#1d6b3f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1514; --card:#18211f; --ink:#e6eeec; --muted:#9aa8a5; --line:#2a3633;
+      --brand:#3fb39f; --brand-ink:#06201b; --warn-bg:#2d2412; --warn-ink:#f0c46b;
+      --err-bg:#2e1616; --err-ink:#f19a9a; --ok-bg:#132a1e; --ok-ink:#86d7a6;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  main{max-width:760px;margin:0 auto;padding:16px}
+  h1{font-size:1.35rem;margin:4px 0 4px}
+  h2{font-size:1.05rem;margin:0 0 4px;word-break:break-word}
+  p{margin:6px 0}
+  .muted{color:var(--muted);font-size:.88rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .note{border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.9rem}
+  .warn{background:var(--warn-bg);color:var(--warn-ink)}
+  .err{background:var(--err-bg);color:var(--err-ink)}
+  .ok{background:var(--ok-bg);color:var(--ok-ink)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:10px}
+  .ph{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+  .ph img{display:block;width:100%;height:130px;object-fit:cover;cursor:zoom-in}
+  .ph .cap{padding:6px 8px;font-size:.78rem;word-break:break-all}
+  .ph .acts{display:flex;gap:6px;padding:0 8px 8px;flex-wrap:wrap}
+  button{font:inherit;border-radius:9px;border:1px solid var(--brand);background:var(--brand);color:var(--brand-ink);padding:8px 12px;cursor:pointer}
+  button.sec{background:transparent;color:var(--brand)}
+  button.sm{padding:5px 9px;font-size:.8rem}
+  button:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  label{font-size:.82rem;color:var(--muted);display:block;margin-top:8px}
+  input[type=text],input[type=date]{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  td,th{text-align:left;padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:top;word-break:break-word}
+  .badge{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--muted);margin-right:4px}
+  #zoom{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:9;padding:12px}
+  #zoom img{max-width:100%;max-height:100%}
+  code{font-size:.82rem;word-break:break-all}
+</style>
+</head>
+<body>
+<main>
+  <h1>Recover visit photos</h1>
+  <p class="muted">Looks for service-log photos still stored in <strong>this browser</strong> on this device. This page only <strong>reads</strong>. It never deletes or changes anything stored here.</p>
+  <div id="origin" class="note warn"></div>
+  <div id="status" class="note">Scanning…</div>
+  <div id="results"></div>
+  <div class="card">
+    <h2>Everything this page looked at</h2>
+    <div id="inventory" class="muted">…</div>
+  </div>
+</main>
+<div id="zoom" onclick="this.style.display='none'"><img alt=""></div>
+
+<!-- SEC (the shared portal secret) for the upload call. Already public in the portal bundle. -->
+<script src="/js/lib/constants.js"></script>
+<script>
+'use strict';
+// ════════════════════════════════════════════════════════════════════════════
+// READ-ONLY RECOVERY PAGE
+//
+// Where the service log keeps photos on the phone (js/features/service-log.js
+// and service-log-v2.js):
+//   * IndexedDB  "mcps_service_log_photo_drafts", store "photos", keyPath "key"
+//       key = "<draftKey>::<slotId>",  draftKey = "visit:<scheduled_visit_id>"
+//             when the log was opened from the schedule, else "pool:<pool_id>"
+//       value = { key, draftKey, slotId, photo:{base64,mimeType,name}, updatedAt }
+//   * localStorage "svc_queued_submit" = { payload, photos:[{base64,mimeType,name}], ts }
+//       (the offline queue; holds photos only if they fit in localStorage)
+//   * localStorage "svc_draft_<pool_id>" = form fields only, no photos
+//
+// Safety rules this file follows:
+//   * localStorage: only getItem / key / length. Never setItem/removeItem/clear.
+//   * IndexedDB: open WITHOUT a version (never triggers an upgrade on an
+//     existing DB). If the DB does not exist, open() would create it, so the
+//     upgrade transaction is aborted, which leaves nothing behind. (A DB
+//     created here empty at version 1 would stop the service log from creating
+//     its "photos" store later.) Only "readonly" transactions are used.
+// ════════════════════════════════════════════════════════════════════════════
+
+const PHOTO_DB = 'mcps_service_log_photo_drafts';
+const PHOTO_STORE = 'photos';
+const QUEUE_KEY = 'svc_queued_submit';
+const TZ = 'America/Chicago';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inventory = [];   // human-readable log of every place looked at
+const groups = [];      // { id, source, title, poolId, visitId, when, photos:[{b64,mime,name,slot}] }
+const seen = new Set(); // de-dupe the same image found in two places
+
+function fmtWhen(ms){
+  if (!ms) return 'unknown time';
+  try { return new Date(ms).toLocaleString('en-US',{timeZone:TZ,dateStyle:'medium',timeStyle:'short'}); }
+  catch(_) { return new Date(ms).toString(); }
+}
+function ymd(ms){
+  try { return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ms || Date.now())); }
+  catch(_) { return new Date(ms || Date.now()).toISOString().slice(0,10); }
+}
+function approxBytes(b64){ return Math.floor(String(b64).length * 3 / 4); }
+function fmtBytes(n){ return n >= 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.round(n/1024)+' KB'; }
+
+// Accepts "data:image/...;base64,XXX" or bare base64 that decodes to JPEG/PNG/WebP.
+function asImage(value){
+  if (typeof value !== 'string' || value.length < 200) return null;
+  const m = value.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+  if (m) return { mime: m[1], b64: m[2] };
+  if (value.startsWith('/9j/')) return { mime:'image/jpeg', b64:value };
+  if (value.startsWith('iVBORw0KGgo')) return { mime:'image/png', b64:value };
+  if (value.startsWith('UklGR')) return { mime:'image/webp', b64:value };
+  return null;
+}
+function fingerprint(b64){ return b64.length + ':' + b64.slice(0,48) + b64.slice(-48); }
+
+function addPhoto(group, b64, mime, name, slot){
+  const fp = fingerprint(b64);
+  if (seen.has(fp)) { group.dupes = (group.dupes||0) + 1; return; }
+  seen.add(fp);
+  group.photos.push({ b64, mime: mime || 'image/jpeg', name: name || 'photo.jpg', slot: slot || '' });
+}
+
+// Walk any parsed value looking for embedded images (fallback for unknown shapes).
+function deepScan(value, onImage, path, depth){
+  if (depth > 8 || value == null) return;
+  if (typeof value === 'string') { const img = asImage(value); if (img) onImage(img, path); return; }
+  if (typeof Blob !== 'undefined' && value instanceof Blob) { if (/^image\//.test(value.type)) onImage({ blob:value, mime:value.type }, path); return; }
+  if (Array.isArray(value)) { value.forEach((v,i) => deepScan(v, onImage, path+'['+i+']', depth+1)); return; }
+  if (typeof value === 'object') {
+    // {base64, mimeType, name} — the service-log photo shape
+    if (typeof value.base64 === 'string' && value.base64.length > 200) {
+      onImage({ b64:value.base64.replace(/^data:[^;]+;base64,/,''), mime:value.mimeType || 'image/jpeg', name:value.name }, path);
+      return;
+    }
+    Object.keys(value).forEach(k => deepScan(value[k], onImage, path+'.'+k, depth+1));
+  }
+}
+function blobToB64(blob){
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+}
+
+// ── localStorage (read only) ────────────────────────────────────────────────
+async function scanLocalStorage(){
+  let ls;
+  try { ls = window.localStorage; void ls.length; }
+  catch(e){ inventory.push(['localStorage','not readable: '+e.message]); return; }
+
+  const keys = [];
+  for (let i = 0; i < ls.length; i++) keys.push(ls.key(i));
+  inventory.push(['localStorage', keys.length + ' keys']);
+
+  // Offline queue
+  const raw = ls.getItem(QUEUE_KEY);
+  if (raw == null) {
+    inventory.push([QUEUE_KEY, 'not present (cleared after a successful send, or never queued)']);
+  } else {
+    let q = null;
+    try { q = JSON.parse(raw); } catch(_) {}
+    const payload = (q && q.payload) || {};
+    const pool = payload.pool_id || '';
+    const g = { id:'q', source:'Offline queue (localStorage “'+QUEUE_KEY+'”)', title: pool || 'Queued log (no pool)',
+                poolId: pool, visitId: payload._scheduled_visit_id || payload._service_visit_id || '',
+                when: q && q.ts, photos: [] };
+    (q && Array.isArray(q.photos) ? q.photos : []).forEach(p => { if (p && p.base64) addPhoto(g, p.base64.replace(/^data:[^;]+;base64,/,''), p.mimeType, p.name); });
+    inventory.push([QUEUE_KEY, 'present: pool “'+(pool||'?')+'”, queued '+fmtWhen(q&&q.ts)+', '+g.photos.length+' photo(s)'+
+      (q && Array.isArray(q.photos) && !q.photos.length ? ' (queue was saved WITHOUT photos; they did not fit in localStorage)' : '')]);
+    groups.push(g);
+  }
+
+  // Form drafts (no photos, but tell us which visits never finished)
+  const drafts = keys.filter(k => k && k.indexOf('svc_draft_') === 0);
+  inventory.push(['svc_draft_*', drafts.length ? drafts.map(k => k.slice(10)).join(' | ') : 'none (each is removed after its log sends)']);
+
+  // Anything else holding images
+  keys.forEach(k => {
+    if (!k || k === QUEUE_KEY) return;
+    const v = ls.getItem(k);
+    if (!v || v.length < 200) return;
+    let parsed = v; try { parsed = JSON.parse(v); } catch(_) {}
+    const g = { id:'ls:'+k, source:'localStorage “'+k+'”', title:k, poolId:'', visitId:'', when:null, photos:[] };
+    deepScan(parsed, img => { if (img.b64) addPhoto(g, img.b64, img.mime, img.name); }, k, 0);
+    if (g.photos.length || g.dupes) { inventory.push(['localStorage “'+k+'”', g.photos.length+' image(s)']); if (g.photos.length) groups.push(g); }
+  });
+}
+
+// ── IndexedDB (read only) ───────────────────────────────────────────────────
+function openExistingDb(name){
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = indexedDB.open(name); } catch(e){ return reject(e); }
+    req.onupgradeneeded = () => {
+      // The DB did not exist. Abort so nothing gets created on this device.
+      try { req.transaction.abort(); } catch(_) {}
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('open failed'));
+    req.onblocked = () => reject(new Error('blocked by another open tab; close other portal tabs and reload'));
+  });
+}
+function getAllReadonly(db, storeName){
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function scanIndexedDb(){
+  if (!window.indexedDB) { inventory.push(['IndexedDB','not available in this browser']); return; }
+  let names = null;
+  if (typeof indexedDB.databases === 'function') {
+    try { names = (await indexedDB.databases()).map(d => d.name).filter(Boolean); } catch(_) { names = null; }
+  }
+  inventory.push(['IndexedDB databases', names ? (names.join(', ') || 'none') : 'list not supported; checking the photo-draft DB by name']);
+  const toScan = names ? names : [PHOTO_DB];
+  if (names && names.indexOf(PHOTO_DB) === -1) inventory.push([PHOTO_DB, 'does not exist in this browser']);
+
+  for (const name of toScan) {
+    let db;
+    try { db = await openExistingDb(name); }
+    catch(e){ inventory.push([name, name === PHOTO_DB ? 'not present ('+(e && e.name === 'AbortError' ? 'never created here' : e.message)+')' : 'could not open: '+e.message]); continue; }
+    try {
+      const stores = Array.from(db.objectStoreNames);
+      for (const store of stores) {
+        let rows = [];
+        try { rows = await getAllReadonly(db, store); } catch(e){ inventory.push([name+' / '+store, 'read failed: '+e.message]); continue; }
+        if (name === PHOTO_DB && store === PHOTO_STORE) await ingestDraftRows(rows);
+        else await ingestUnknownRows(name, store, rows);
+      }
+      if (!stores.length) inventory.push([name, 'no object stores']);
+    } finally { try { db.close(); } catch(_) {} }
+  }
+}
+
+async function ingestDraftRows(rows){
+  inventory.push([PHOTO_DB+' / '+PHOTO_STORE, rows.length + ' photo record(s)']);
+  const byDraft = {};
+  rows.forEach(r => {
+    const dk = (r && r.draftKey) || String((r && r.key) || '').split('::')[0] || 'unknown';
+    (byDraft[dk] = byDraft[dk] || []).push(r);
+  });
+  Object.keys(byDraft).forEach(dk => {
+    const list = byDraft[dk];
+    const isPool = dk.indexOf('pool:') === 0, isVisit = dk.indexOf('visit:') === 0;
+    const when = Math.max.apply(null, list.map(r => Number(r.updatedAt) || 0)) || null;
+    const g = { id:'idb:'+dk, source:'Photo drafts (IndexedDB “'+PHOTO_DB+'”), key “'+dk+'”',
+                title: isPool ? dk.slice(5) : (isVisit ? 'Scheduled visit '+dk.slice(6) : dk),
+                poolId: isPool ? dk.slice(5) : '', visitId: isVisit ? dk.slice(6) : '', when, photos: [] };
+    list.sort((a,b) => String(a.slotId).localeCompare(String(b.slotId))).forEach(r => {
+      const p = r && r.photo;
+      if (p && p.base64) addPhoto(g, String(p.base64).replace(/^data:[^;]+;base64,/,''), p.mimeType, p.name, r.slotId);
+    });
+    groups.push(g);
+  });
+}
+
+async function ingestUnknownRows(dbName, store, rows){
+  const g = { id:'idb:'+dbName+'/'+store, source:'IndexedDB “'+dbName+'” / “'+store+'”', title:dbName+' / '+store, poolId:'', visitId:'', when:null, photos:[] };
+  const found = [];
+  rows.forEach((row, i) => deepScan(row, img => found.push(img), '#'+i, 0));
+  for (const img of found) {
+    if (img.blob) { try { addPhoto(g, await blobToB64(img.blob), img.mime, img.blob.name || 'image'); } catch(_) {} }
+    else addPhoto(g, img.b64, img.mime, img.name);
+  }
+  inventory.push([dbName+' / '+store, rows.length+' record(s), '+g.photos.length+' image(s)']);
+  if (g.photos.length) groups.push(g);
+}
+
+// ── Download / share ────────────────────────────────────────────────────────
+function b64ToBlob(b64, mime){
+  const bin = atob(b64); const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new Blob([u], { type: mime || 'image/jpeg' });
+}
+function safe(s){ return String(s||'').replace(/[^\w.-]+/g,'_').replace(/_+/g,'_').slice(0,60); }
+function fileNameFor(g, p, i){
+  const base = (p.name || ('photo'+(i+1)+'.jpg'));
+  const ext = /\.\w+$/.test(base) ? '' : '.jpg';
+  const poolTag = safe((g.poolId.match(/MCPS-\d+/) || [g.poolId || g.visitId || 'unknown'])[0]);
+  return poolTag + '_' + ymd(g.when) + '_' + safe(base) + ext;
+}
+function toFile(g, p, i){ return new File([b64ToBlob(p.b64, p.mime)], fileNameFor(g,p,i), { type:p.mime }); }
+
+function downloadOne(gi, pi){
+  const g = groups[gi], p = g.photos[pi];
+  const url = URL.createObjectURL(b64ToBlob(p.b64, p.mime));
+  const a = document.createElement('a');
+  a.href = url; a.download = fileNameFor(g,p,pi); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+async function shareFiles(files){
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.share({ files, title:'Recovered visit photos' }); return true; }
+    catch(e){ if (e && e.name === 'AbortError') return true; }
+  }
+  return false;
+}
+async function shareOne(gi, pi){
+  const g = groups[gi];
+  if (!(await shareFiles([toFile(g, g.photos[pi], pi)]))) downloadOne(gi, pi);
+}
+async function saveAll(gi){
+  const g = groups[gi];
+  if (await shareFiles(g.photos.map((p,i) => toFile(g,p,i)))) return;
+  for (let i = 0; i < g.photos.length; i++) { downloadOne(gi, i); await new Promise(r => setTimeout(r, 700)); }
+}
+
+// ── Upload to Drive via /api/gas ────────────────────────────────────────────
+// Server side: action "recover_visit_photos" (Apps Script). Until that action
+// is deployed with `npm run gas:deploy`, the server answers "Unknown action"
+// and this page says so; downloading still works.
+function sessionToken(){
+  try { const s = JSON.parse(localStorage.getItem('mcps_s') || 'null'); return (s && s.token) || ''; } catch(_) { return ''; }
+}
+async function uploadGroup(gi){
+  const g = groups[gi];
+  const out = $('up-msg-'+gi), btn = $('up-btn-'+gi);
+  const poolId = $('up-pool-'+gi).value.trim();
+  const date = $('up-date-'+gi).value.trim();
+  const show = (cls, html) => { out.className = 'note '+cls; out.innerHTML = html; };
+  if (!poolId) return show('err','Enter the pool folder name first (it must match the Drive folder exactly).');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return show('err','Enter the date as YYYY-MM-DD.');
+  const token = sessionToken();
+  if (!token) return show('err','You are not logged in to the portal in this browser. Log in at the portal (same address), then come back. Download still works.');
+  if (typeof SEC === 'undefined') return show('err','Could not load the portal config. Download still works.');
+
+  btn.disabled = true;
+  const results = [];
+  for (let i = 0; i < g.photos.length; i++) {
+    const p = g.photos[i];
+    show('', 'Uploading '+(i+1)+' of '+g.photos.length+'…');
+    try {
+      const res = await fetch('/api/gas', {
+        method:'POST', headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ secret:SEC, token, action:'recover_visit_photos', pool_id:poolId, date,
+                               photos:[{ base64:p.b64, mimeType:p.mime, name:p.name }] })
+      });
+      const text = await res.text(); let json = {};
+      try { json = JSON.parse(text); } catch(_) { json = { ok:false, error:'HTTP '+res.status+': '+text.slice(0,120) }; }
+      if (!json.ok && /unknown action/i.test(String(json.error||''))) {
+        btn.disabled = false;
+        return show('warn','Drive upload isn’t switched on yet: the Apps Script action hasn’t been deployed. Use <strong>Save all</strong> above to keep the photos on this phone for now.');
+      }
+      results.push({ name:p.name, ok:!!json.ok, err:json.error, saved:json.saved });
+    } catch(e) { results.push({ name:p.name, ok:false, err:e.message }); }
+  }
+  btn.disabled = false;
+  const good = results.filter(r => r.ok).length;
+  show(good === results.length ? 'ok' : 'err',
+    good+' of '+results.length+' uploaded to “'+esc(poolId)+'/'+esc(date)+'”.' +
+    results.filter(r => !r.ok).map(r => '<br>✗ '+esc(r.name)+': '+esc(r.err||'failed')).join(''));
+}
+
+// ── Render ──────────────────────────────────────────────────────────────────
+function render(){
+  const withPhotos = groups.filter(g => g.photos.length);
+  const total = withPhotos.reduce((n,g) => n + g.photos.length, 0);
+  $('status').className = 'note ' + (total ? 'ok' : 'err');
+  $('status').innerHTML = total
+    ? '<strong>Found '+total+' photo(s)</strong> in '+withPhotos.length+' place(s). Save them before doing anything else in the portal on this phone.'
+    : '<strong>No photos found in this browser.</strong> If the logs sent normally, the service log removes the drafts when the send succeeds. Make sure you opened this page in the same browser you used for the portal (Safari vs Chrome keep separate storage).';
+
+  $('results').innerHTML = groups.map((g, gi) => {
+    const pool = g.poolId;
+    return '<div class="card">'
+      + '<h2>'+esc(g.title)+'</h2>'
+      + '<div class="muted">'+esc(g.source)+'</div>'
+      + '<div style="margin-top:6px"><span class="badge">'+g.photos.length+' photo(s)</span><span class="badge">'+esc(fmtWhen(g.when))+'</span>'
+      + (g.visitId ? '<span class="badge">visit '+esc(g.visitId)+'</span>' : '')
+      + (g.dupes ? '<span class="badge">'+g.dupes+' duplicate(s) shown elsewhere</span>' : '') + '</div>'
+      + (g.photos.length ? '<div class="grid">' + g.photos.map((p, pi) =>
+          '<div class="ph"><img loading="lazy" alt="" src="data:'+esc(p.mime)+';base64,'+p.b64+'" onclick="zoomImg(this.src)">'
+          + '<div class="cap">'+esc(p.slot ? p.slot+' · ' : '')+esc(p.name)+' · '+fmtBytes(approxBytes(p.b64))+'</div>'
+          + '<div class="acts"><button class="sm" onclick="downloadOne('+gi+','+pi+')">Download</button>'
+          + '<button class="sm sec" onclick="shareOne('+gi+','+pi+')">Share / Save</button></div></div>').join('') + '</div>'
+          + '<div class="row"><button onclick="saveAll('+gi+')">Save all '+g.photos.length+'</button></div>'
+          + '<details style="margin-top:12px"><summary>Upload to Drive</summary>'
+          + '<label for="up-pool-'+gi+'">Pool folder name (exactly as in “MCPS Visit Photos”, e.g. “Guzman - Weekly Full Service - 211 Saddle Mountain Dr - MCPS-00xx”)</label>'
+          + '<input type="text" id="up-pool-'+gi+'" value="'+esc(pool)+'" autocomplete="off">'
+          + '<label for="up-date-'+gi+'">Date folder</label>'
+          + '<input type="date" id="up-date-'+gi+'" value="'+esc(ymd(g.when))+'">'
+          + '<div class="row"><button id="up-btn-'+gi+'" onclick="uploadGroup('+gi+')">Upload '+g.photos.length+' to Drive</button></div>'
+          + '<div id="up-msg-'+gi+'"></div></details>'
+        : '<p class="muted">No photos stored here.</p>')
+      + '</div>';
+  }).join('');
+
+  $('inventory').innerHTML = '<table>' + inventory.map(r => '<tr><th>'+esc(r[0])+'</th><td>'+esc(r[1])+'</td></tr>').join('') + '</table>';
+}
+function zoomImg(src){ const z = $('zoom'); z.querySelector('img').src = src; z.style.display = 'flex'; }
+
+(async function main(){
+  $('origin').innerHTML = 'Browser storage belongs to one web address <em>and</em> one browser. This page is reading <code>'+esc(location.origin)+'</code>. It must be the same address and the same app (Safari / Chrome) you used for the service log.';
+  try { await scanIndexedDb(); } catch(e){ inventory.push(['IndexedDB','scan failed: '+e.message]); }
+  try { await scanLocalStorage(); } catch(e){ inventory.push(['localStorage','scan failed: '+e.message]); }
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate();
+      inventory.push(['Storage used by this site', fmtBytes(est.usage||0)+' of '+fmtBytes(est.quota||0)]);
+    }
+  } catch(_) {}
+  render();
+})();
+</script>
+</body>
+</html>
