@@ -72,6 +72,19 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 - **Harness extras (2nd chat):** `edit=text|html|preview` (+`part=body|block:PoolSchool|details`, `chipins=1`, `typo=1`, `editrev=`), `roundtrip=1` (dumps a `<pre id=rt>` JSON: Edit-text round trip for c_welcome, b_intro, b_followup full template; use `--dump-dom`), `sglnew=details|people|review`, `tagsel=1` (+`tagf=`), `att=1`, `setup=edit|before|off|scope`, `slow=1` (admin calls hang → loading states).
 - **Guards worth knowing:** `tests/email-engine-actions.test.js` fails if an engine admin action has no route in `api/email.js` (add it to `ADMIN_CAP` or relay it); every vm-loaded test needs `JSON.parse(JSON.stringify(x))` before deepEqual (cross-realm).
 
+### Go-live readiness (checked 2026-11-11, end of day)
+Built and verified: engine @44 cp9-1 (test mode, 258 tests, trigger precision 4/4 within 20 s, runbook + nightly backups), interactive tour + Request a change, Send due emails now on Activity, Start a batch explains itself + move people between batches, MCP Legacy emptied for Tony's import, Test/Live switch hides itself in production.
+Left before the switch, in order:
+1. **Mau signs off** the tour + Request a change walkthrough (CP9 gate).
+2. **Decision:** CP9 still says "all 7 B/C emails approved", but only Welcome is On at launch. Recommended: gate on Welcome only; the other 6 need approval before they're turned on, not before launch.
+3. **Merge `feat/email-engine` → `main`** (fast-forward, 131 commits; ships the page, `api/email.js`, the Sales Hub Import Leads change and the Quote Tool reopen fix). Production only gets the Lifecycle page from here.
+4. **Production env (Vercel):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, CRON_SECRET, and **fresh** EE_LINK_SECRET + EE_RELAY_SECRET (preview ones were in a screenshot). The engine's Script Properties must get the same two new secrets: one paste in Tony's Apps Script → Project Settings (only manual step; nothing can set Script Properties from outside).
+5. **Engine Config:** `track_base` → https://mcps-log.vercel.app, `link_quote` → https://mcps-log.vercel.app/service.
+6. **Install the scheduler** (`eeInstall`, as Tony): with the fresh relay secret known locally, `scripts/ee-task.mjs` can run it over the maintenance relay; if Google asks for trigger permission, Tony approves once.
+7. **Portal Apps Script:** `appscript/StartupRequests.js` without the plain approval email, deployed **from the full working branch** (clasp branch trap; this branch's appscript/ differs from main in 8 files), at the same moment as step 8, so a homeowner never gets two emails or none.
+8. **Switch `engine_mode` to production** (Mau + Tony). Only Welcome is On.
+9. First week: watch Activity daily; no unresolved Unconfirmed sends. Tony imports his MCP list whenever ready (MCP Legacy emails stay Off until turned on).
+
 ### Before go-live (CP9)
 - Engine Config `track_base` and `link_quote` point at the preview: set back to https://mcps-log.vercel.app and https://mcps-log.vercel.app/service.
 - Production env: EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, **fresh** EE_LINK_SECRET + EE_RELAY_SECRET (the preview ones appeared in a screenshot on 2026-11-09; update the engine's Script Properties to match), CRON_SECRET (heartbeat + daily portal sync).
