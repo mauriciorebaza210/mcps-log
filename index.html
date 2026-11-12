@@ -14,7 +14,7 @@
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <link rel="stylesheet" href="/style.css?v=jobs-ui-v2">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Open+Sans:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="/lifecycle.css?v=10">
+<link rel="stylesheet" href="/lifecycle.css?v=11">
 <!-- Restores the legacy service log styling over the v2 rules left in style.css.
      Must stay after style.css. Disabled by the ?svc=v2 loader below. -->
 <link rel="stylesheet" href="/service-log-legacy.css?v=1" id="svc-legacy-css">
@@ -2160,6 +2160,14 @@
           Columns: <strong>CLIENT NAME · ADDRESS · CITY · EMAIL · PHONE · POOL INFO · YEAR BUILT · Area</strong>
         </p>
         <div style="margin-bottom:.75rem">
+          <label for="import-leads-source" style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Where is this list from?</label>
+          <select class="si" id="import-leads-source">
+            <option value="mcp" selected>Mission Custom Pools (MCP) past customers</option>
+            <option value="other_list">Another list</option>
+          </select>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">MCP leads are added to the MCP Legacy emails automatically (Lifecycle Email → Needs review). Nobody is emailed until a batch starts them.</div>
+        </div>
+        <div style="margin-bottom:.75rem">
           <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.3rem">Upload CSV File</label>
           <input type="file" id="import-leads-file" accept=".csv" class="si" onchange="importLeadsFromFile(event)">
         </div>
@@ -2282,7 +2290,7 @@
 <script src="/js/features/admin.js"></script>
 <script src="/js/features/inventory.js"></script>
 <script src="/js/features/quotes.js"></script>
-<script src="/js/features/crm.js"></script>
+<script src="/js/features/crm.js?v=2"></script>
 <script src="/js/features/training.js"></script>
 <script src="/js/features/home.js"></script>
 <script src="/js/features/onboarding.js"></script>
@@ -2296,12 +2304,12 @@
 <script src="/js/features/comms.js"></script>
 <script src="/js/lib/contact-import.js?v=1"></script>
 <script src="/js/lib/batches.js?v=2"></script>
-<script src="/js/features/lifecycle.js?v=11"></script>
+<script src="/js/features/lifecycle.js?v=12"></script>
 <script src="/js/features/lifecycle-import.js?v=1"></script>
-<script src="/js/features/lifecycle-batches.js?v=5"></script>
+<script src="/js/features/lifecycle-batches.js?v=6"></script>
 <script src="/js/features/lifecycle-campaigns.js?v=5"></script>
 <script src="/js/features/lifecycle-templates.js?v=1"></script>
-<script src="/js/features/lifecycle-crm.js?v=1"></script>
+<script src="/js/features/lifecycle-crm.js?v=2"></script>
 <script src="/js/features/action-queue.js"></script>
 <script src="/js/features/scope-library.js"></script>
 <script src="/js/features/service-areas.js"></script>

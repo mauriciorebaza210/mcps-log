@@ -1555,8 +1555,12 @@ async function confirmImportLeads() {
   const valid = _importLeadsParsed.filter(r => r.client_name.trim());
   if (!valid.length) return;
   btn.disabled = true; btn.textContent = `Importing ${valid.length} leads...`;
+  // Where the list came from, stored as lead_source: MCP lists flow into the MCP
+  // Legacy emails automatically (api/_lib/email-crm.js → MCP_LEAD_SOURCES).
+  const srcEl = document.getElementById('import-leads-source');
+  const source = srcEl && srcEl.value === 'other_list' ? 'other_list' : 'mcp';
   try {
-    const res = await api({ action: 'import_leads', token: _s.token, leads: valid });
+    const res = await api({ action: 'import_leads', token: _s.token, leads: valid.map(l => ({ ...l, lead_source: source })) });
     if (res.ok) {
       // Confirm the count rather than closing silently: an import that reports
       // nothing is indistinguishable from one that dropped rows.

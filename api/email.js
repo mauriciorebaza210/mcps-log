@@ -25,7 +25,7 @@ import * as sheets from './_sheets.js';
 import { READ_TABS, OPTIONAL_TABS, toTables, capabilitiesFor, buildOverview, buildContacts, buildContact, buildStep, buildPlan, health } from './_lib/email-read.js';
 import { relayEvents, relayAdmin } from './_lib/email-relay.js';
 import { checkImport, importRecord } from './_lib/email-import.js';
-import { leadBreakdown, leadCandidates, customerEmails, startupContacts } from './_lib/email-crm.js';
+import { leadBreakdown, leadCandidates, customerEmails, startupContacts, DEFAULT_MCP_RULE } from './_lib/email-crm.js';
 import { sendEngineAlert } from './_lib/notify.js';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
@@ -308,7 +308,9 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   // ── The portal's own data (PLAN.md → "Connected to the portal's own data") ──
   const todayCT = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(deps.now()));
   const cfgOf = tables => { const c = {}; (tables.Config || []).forEach(r => { c[r.key] = r.value; }); return c; };
-  const ruleOf = cfg => { try { const r = typeof cfg.crm_lead_rule === 'object' ? cfg.crm_lead_rule : JSON.parse(cfg.crm_lead_rule || 'null'); return r && typeof r === 'object' ? r : null; } catch (_) { return null; } };
+  // MCP leads: the saved rule, else the default (every imported lead); added automatically unless turned off.
+  const ruleOf = cfg => { try { const r = typeof cfg.crm_lead_rule === 'object' ? cfg.crm_lead_rule : JSON.parse(cfg.crm_lead_rule || 'null'); return r && typeof r === 'object' ? r : DEFAULT_MCP_RULE; } catch (_) { return DEFAULT_MCP_RULE; } };
+  const autoOf = cfg => String(cfg.crm_lead_auto) !== 'false';
   async function crmSources() {
     const [crm, routes, settings] = await Promise.all([
       deps.readSheetRanges(['Quotes', 'Clients'], deps.crmSpreadsheetId()),
@@ -345,7 +347,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   async function crmSync(tables, actor) {
     const src = await crmSources(), cfg = cfgOf(tables), rule = ruleOf(cfg);
     const out = { startups: await syncStartups(src, actor) };
-    if (rule && String(cfg.crm_lead_auto) === 'true') { const { cands, verdict } = checkLeads(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
+    if (autoOf(cfg)) { const { cands, verdict } = checkLeads(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
     return out;
   }
 
@@ -360,7 +362,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     if (req.method === 'GET') {
       const st = startupContacts(src.quotes, src.visits, todayCT());
       let result = null; try { result = JSON.parse(cfg.crm_sync_result || 'null'); } catch (_) { /* none yet */ }
-      return reply(res, 200, { ok: true, breakdown: leadBreakdown(src.quotes, tables.Contacts || []), rule: ruleOf(cfg), auto: String(cfg.crm_lead_auto) === 'true',
+      return reply(res, 200, { ok: true, breakdown: leadBreakdown(src.quotes, tables.Contacts || []), rule: ruleOf(cfg), auto: autoOf(cfg), mcp_leads: checkLeads(src, tables, ruleOf(cfg)).verdict.summary,
         startups: { found: st.contacts.length, cancelled: st.removed.length, not_synced: st.skipped.length, last_sync: cfg.crm_sync_at || '', result } });
     }
     if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });
@@ -368,6 +370,13 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     const body = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch (_) { return {}; } })() : (req.body || {});
     const stage = String(body.stage || '');
     if (stage === 'sync_startups') return reply(res, 200, { ok: true, startups: await syncStartups(src, session.username) });
+    // Everything the portal feeds in: startups, and MCP leads when automatic adding is on.
+    if (stage === 'sync') return reply(res, 200, { ok: true, ...(await crmSync({ ...tables }, session.username)) });
+    if (stage === 'set_auto') {
+      const r = await deps.relayAdmin({ action: 'set_crm_rule', params: { rule: ruleOf(cfg), auto: !!body.auto }, actor: session.username });
+      rawVersion++;
+      return reply(res, r && r.ok ? 200 : 502, { ok: !!(r && r.ok), auto: !!body.auto, error: r && r.error });
+    }
     const rule = body.rule && typeof body.rule === 'object' ? body.rule : null;
     if (!rule) return reply(res, 400, { ok: false, error: 'Pick which leads first.' });
     const { cands, verdict } = checkLeads(src, tables, rule);

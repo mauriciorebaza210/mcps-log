@@ -552,3 +552,11 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-wiz-links .lc-link{margin-left:0}
 .lc-cmp-mini.four{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:600px){.lc-cmp-mini.four div:nth-child(n+4){display:none}.lc-pipe.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.lc-crm-auto{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--aqua-bg);border-radius:12px;padding:14px 16px}
+.lc-crm-auto .main{flex:1;min-width:220px}
+.lc-crm-auto b{display:block;font-family:var(--f-head);font-size:15px;color:var(--teal)}
+.lc-crm-auto small{display:block;font-size:12.5px;color:var(--ink-2)}
+.lc-crm-more{border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.lc-crm-more summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--teal)}
+.lc-crm-more[open] summary{margin-bottom:10px}
+.lc-crm-more > *:not(summary){margin-top:10px}

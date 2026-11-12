@@ -21,6 +21,13 @@ function nameOf(q) {
   return { first_name: first, last_name: last };
 }
 const sourceOf = q => low(q.lead_source).split(':')[0] || 'unknown';
+// Which Sales Hub leads are MCP's (Mau, 2026-11-11: "all imported leads"). Import
+// Leads was the only thing that made LEAD rows before lead_source existed
+// (2026-08-25), so a LEAD with no source is an old import. Since then imports say
+// 'import', and the import screen asks: 'mcp' or 'other_list'. Service requests and
+// one-time jobs always record their own source, so they never match.
+export const MCP_LEAD_SOURCES = ['mcp', 'import', 'unknown'];
+export const DEFAULT_MCP_RULE = { statuses: ['LEAD'], lead_sources: MCP_LEAD_SOURCES, year_built: 'any', areas: [], group: 'B' };
 const isLeadRow = q => norm(q.status).toUpperCase() === 'LEAD';
 
 // rule: { statuses: ['LEAD'], lead_sources: ['import'], year_built: 'any'|'with'|'without', areas: [] }

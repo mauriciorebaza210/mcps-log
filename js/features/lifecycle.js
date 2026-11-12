@@ -394,7 +394,7 @@ function lcContacts_() {
   const bar = '<div class="lc-bar"><label class="lc-search">' + LC_ICON.search + '<input type="search" placeholder="Search people" value="' + lcEsc_(LC.q) +
     '" data-lc-input="q" aria-label="Search people"></label><div class="lc-seg">' +
     [['', 'All'], ['B', 'MCP Legacy'], ['C', 'MCP Startup']].map(([k, l]) => '<button data-act="bucket" data-bucket="' + k + '" class="' + (LC.bucket === k ? 'on' : '') + '">' + l + '</button>').join('') +
-    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn" data-act="crm-leads">Sales Hub leads</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
+    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn" data-act="crm-leads">MCP leads</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
   if (!LC.contacts) return bar + '<div class="lc-sk" style="height:320px"></div>';
   const q = LC.q.trim().toLowerCase();
   const rows = LC.contacts.contacts.filter(c => (!LC.bucket || c.bucket === LC.bucket) && (!LC.review || c.review_status === LC.review) &&

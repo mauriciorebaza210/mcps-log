@@ -19,6 +19,10 @@ const Q = [
   { quote_id: 'Q-L4', status: 'LEAD', lead_source: 'import', first_name: 'Dee', email: 'not-an-email' },
   { quote_id: 'Q-L5', status: 'LEAD', lead_source: 'import', first_name: 'Ana again', email: 'ana@example.com', year_built: '2016' },
   { quote_id: 'Q-L6', status: 'LEAD', lead_source: 'import', first_name: 'Eve', email: 'eve@example.com', year_built: '2012' },
+  { quote_id: 'Q-L7', status: 'LEAD', lead_source: '', first_name: 'Old', last_name: 'Import', email: 'oldimport@example.com' },
+  { quote_id: 'Q-L8', status: 'LEAD', lead_source: 'mcp', first_name: 'New', last_name: 'Mcp', email: 'newmcp@example.com' },
+  { quote_id: 'Q-L9', status: 'LEAD', lead_source: 'other_list', first_name: 'Other', email: 'other@example.com' },
+  { quote_id: 'Q-L10', status: 'LEAD', lead_source: 'one_time_job', first_name: 'Job', email: 'job@example.com' },
   { quote_id: 'Q-C1', status: 'ACTIVE_CUSTOMER', service_key: 'weekly_full', first_name: 'Eve', email: 'eve@example.com' },
   // Startups
   { quote_id: 'Q-S1', status: 'ACTIVE_CUSTOMER', service_key: 'pool_startup', pool_id: 'MCPS-0101', first_name: 'Sam', last_name: 'Ruiz', email: 'sam@example.com', address: '9 Oak Ln', city: 'Boerne', startup_start_date: '2026-11-20', startup_pool_school: 'Yes' },
@@ -42,11 +46,11 @@ const V = [
 test('Lead breakdown: what the Sales Hub holds, so the rule is picked from real counts', async () => {
   const { leadBreakdown } = await mod();
   const b = leadBreakdown(Q, [{ email_norm: 'bo@example.com' }]);
-  assert.equal(b.leads, 6);
-  assert.equal(b.with_email, 5);
+  assert.equal(b.leads, 10);
+  assert.equal(b.with_email, 9);
   assert.equal(b.in_engine, 1);
-  assert.deepEqual(b.by_source, { import: 5, service_request: 1 });
-  assert.deepEqual(b.year_built, { with: 3, without: 3 });
+  assert.deepEqual(b.by_source, { import: 5, service_request: 1, unknown: 1, mcp: 1, other_list: 1, one_time_job: 1 });
+  assert.deepEqual(b.year_built, { with: 3, without: 7 });
   assert.equal(b.by_status.ACTIVE_CUSTOMER, 5);
 });
 
@@ -57,8 +61,13 @@ test('Lead candidates follow the saved rule; one per email; the Sales Hub link (
   assert.equal(c[0].email_norm, 'ana@example.com');
   assert.equal(c[0].pool_build_year, '2016');
   assert.equal(c[0].source, 'sales_hub:import');
-  assert.deepEqual(leadCandidates(Q, {}).map(x => x.quote_id), ['Q-L1', 'Q-L2', 'Q-L3', 'Q-L6'], 'default: every LEAD with an email');
+  assert.deepEqual(leadCandidates(Q, {}).map(x => x.quote_id), ['Q-L1', 'Q-L2', 'Q-L3', 'Q-L6', 'Q-L7', 'Q-L8', 'Q-L9', 'Q-L10'], 'no source filter: every LEAD with an email');
   assert.equal(leadCandidates(Q, {}).find(x => x.quote_id === 'Q-L2').first_name, 'Bo', 'client_name split when first/last are empty');
+});
+
+test('MCP leads by default: every imported lead (old imports with no source, "import", "mcp"); never other lists, service requests or jobs', async () => {
+  const { leadCandidates, DEFAULT_MCP_RULE } = await mod();
+  assert.deepEqual(leadCandidates(Q, DEFAULT_MCP_RULE).map(x => x.quote_id), ['Q-L1', 'Q-L2', 'Q-L6', 'Q-L7', 'Q-L8']);
 });
 
 test('Startups: live date from the schedule (reschedules), fallback to the quote; cancelled and old ones handled', async () => {
@@ -105,7 +114,10 @@ test('op=crm GET: breakdown + startups found, for anyone with access', async () 
   const { call } = await api({});
   const r = await call({ token: 'tok-viewer' });
   assert.equal(r.statusCode, 200);
-  assert.equal(r.body.breakdown.leads, 6);
+  assert.equal(r.body.breakdown.leads, 10);
+  assert.equal(r.body.auto, true, 'automatic unless turned off');
+  assert.deepEqual(r.body.rule.lead_sources, ['mcp', 'import', 'unknown']);
+  assert.equal(r.body.mcp_leads.new, 3, 'Ana, Old Import, New Mcp; Bo is in the engine, Eve opted out');
   assert.equal(r.body.startups.found, 2);
   assert.equal(r.body.startups.cancelled, 2);
 });
@@ -114,7 +126,7 @@ test('op=crm check/add: the import check runs (opted out, engine duplicate, cust
   const { call, relayed } = await api({});
   assert.equal((await call({ method: 'POST', token: 'tok-viewer', body: { stage: 'check', rule: {} } })).statusCode, 403, 'viewers can look, not add');
   const chk = await call({ method: 'POST', body: { stage: 'check', rule: {} } });
-  assert.deepEqual(chk.body.summary, { new: 1, existing: 1, customer: 1, opted_out: 1 }, 'Ana new; Bo in the engine; Cy a client; Eve opted out');
+  assert.deepEqual(chk.body.summary, { new: 5, existing: 1, customer: 1, opted_out: 1 }, 'Bo in the engine; Cy a client; Eve opted out');
   const add = await call({ method: 'POST', body: { stage: 'add', rule: { lead_sources: ['import'] }, keep_in_sync: true } });
   assert.equal(add.body.added, 1);
   const imp = relayed.find(r => r.action === 'import_contacts');
@@ -124,14 +136,15 @@ test('op=crm check/add: the import check runs (opted out, engine duplicate, cust
   assert.deepEqual(rule.params, { rule: { lead_sources: ['import'] }, auto: true });
 });
 
-test('Heartbeat syncs startups every morning, and leads only when Keep in sync is on', async () => {
-  const off = await api({});
+test('Heartbeat syncs startups every morning, and MCP leads unless automatic adding is off', async () => {
+  const off = await api({ config: [{ key: 'engine_mode', value: 'test' }, { key: 'crm_lead_auto', value: 'false' }] });
   await off.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
   assert.deepEqual(off.relayed.map(r => r.action), ['sync_startups']);
   assert.deepEqual(off.relayed[0].params.contacts.map(c => c.quote_id).sort(), ['Q-S1', 'Q-S2']);
-  const on = await api({ config: [{ key: 'engine_mode', value: 'test' }, { key: 'crm_lead_rule', value: JSON.stringify({ lead_sources: ['import'] }) }, { key: 'crm_lead_auto', value: 'true' }] });
+  const on = await api({});
   await on.call({ method: 'GET', op: 'heartbeat', token: 'cron' });
   assert.deepEqual(on.relayed.map(r => r.action), ['sync_startups', 'import_contacts']);
+  assert.deepEqual(on.relayed[1].params.contacts.map(c => c.quote_id).sort(), ['Q-L1', 'Q-L7', 'Q-L8'], 'default MCP rule; Bo, Eve skipped');
 });
 
 // ── Engine: sync_startups ──

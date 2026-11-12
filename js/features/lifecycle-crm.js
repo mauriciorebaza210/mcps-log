@@ -37,13 +37,17 @@ async function crmLoad_(after) {
 async function crmSyncStartups_(quiet) {
   if (CRM.busy) return;
   CRM.busy = true; if (LC.tab === 'campaigns') lcRenderBody_();
-  const r = await crmApi_('POST', { stage: 'sync_startups' }).catch(() => ({ ok: false, error: 'Network error' }));
+  // Startups, and MCP leads when automatic adding is on (api/email.js → stage 'sync').
+  const r = await crmApi_('POST', { stage: 'sync' }).catch(() => ({ ok: false, error: 'Network error' }));
   CRM.busy = false;
-  const s = r.startups || {};
+  const s = r.startups || {}, l = r.leads || {};
   if (!r.ok || s.ok === false) { if (!quiet) lcToast_(r.error || s.error || 'The sync didn’t work', true); }
   else {
-    const changed = (s.added || 0) + (s.updated || 0) + (s.removed || 0);
-    if (!quiet || changed) lcToast_(changed ? 'Startups synced: ' + [s.added && s.added + ' new', s.updated && s.updated + ' updated', s.removed && s.removed + ' removed'].filter(Boolean).join(', ') : 'Startups are up to date');
+    const changed = (s.added || 0) + (s.updated || 0) + (s.removed || 0) + (l.added || 0);
+    const parts = [s.added && s.added + ' new startup' + (s.added === 1 ? '' : 's'), s.updated && s.updated + ' startup' + (s.updated === 1 ? '' : 's') + ' updated',
+      s.removed && s.removed + ' removed', l.added && l.added + ' MCP lead' + (l.added === 1 ? '' : 's') + ' added'].filter(Boolean);
+    if (!quiet || changed) lcToast_(changed ? 'From the portal: ' + parts.join(', ') : 'Up to date with the portal');
+    if (l.failed && !quiet) lcToast_('Some MCP leads couldn’t be added: ' + l.failed, true);
     if (changed) lcRefresh_(true);
   }
   crmLoad_();
@@ -76,7 +80,12 @@ function crmOpenLeads_() {
   document.body.appendChild(layer);
   CRM.layer = layer; CRM.check = null;
   layer.addEventListener('click', crmOnClick_);
-  layer.addEventListener('change', e => { if (e.target.matches('[data-crm-keep]')) { CRM.keep = e.target.checked; } });
+  layer.addEventListener('change', async e => {
+    if (!e.target.matches('[data-crm-keep]')) return;
+    CRM.keep = e.target.checked; crmRenderLeads_();
+    const r = await crmApi_('POST', { stage: 'set_auto', auto: CRM.keep }).catch(() => ({ ok: false }));
+    lcToast_(r.ok ? (CRM.keep ? 'MCP leads are added automatically' : 'Automatic adding is off') : 'Couldn’t save that', !r.ok);
+  });
   document.addEventListener('keydown', crmKey_);
   crmRenderLeads_();
   crmLoad_(r => {
@@ -98,7 +107,7 @@ function crmClose_(changed) {
 function crmRenderLeads_() {
   if (!CRM.layer) return;
   const el = CRM.layer.querySelector('.lc-imp'), d = CRM.data, R = CRM.rule;
-  const head = '<header class="lc-imp-h"><div><h2>Sales Hub leads</h2><small class="lc-sub">Leads already in the portal, added to Needs review. Nobody is emailed until you start a batch.</small></div>' +
+  const head = '<header class="lc-imp-h"><div><h2>MCP leads</h2><small class="lc-sub">Every lead imported into the Sales Hub is an MCP lead. They go to Needs review; nobody is emailed until a batch starts them.</small></div>' +
     '<button class="lc-icon-btn" data-crm="close" aria-label="Close">' + LC_ICON.x + '</button></header>';
   if (!d || !R) { el.innerHTML = head + '<div class="lc-imp-body"><div class="lc-sk" style="height:90px"></div><div class="lc-sk" style="height:220px"></div></div>'; return; }
   const b = d.breakdown;
@@ -108,12 +117,13 @@ function crmRenderLeads_() {
     return '<div class="lc-fld"><span>' + label + '</span><div class="lc-chips">' + items.map(([v, n]) => '<button class="lc-chip' + (R[key].includes(v) ? ' on' : '') +
       '" data-crm="chip" data-key="' + key + '" data-val="' + lcEsc_(v) + '">' + lcEsc_(fmt ? fmt(v) : v) + ' <small>' + n + '</small></button>').join('') + '</div></div>';
   };
-  const SRC = { import: 'Imported lists', service_request: 'Service requests', one_time_job: 'One-time jobs', unknown: 'No source' };
+  const SRC = { mcp: 'MCP lists', import: 'Imported lists', unknown: 'Imported before Aug 25', other_list: 'Other lists', service_request: 'Service requests', one_time_job: 'One-time jobs' };
+  const M = d.mcp_leads || {};
   const seg = '<div class="lc-seg">' + [['any', 'Any', b.leads], ['with', 'Has year built', b.year_built.with], ['without', 'No year built', b.year_built.without]].map(([v, l, n]) =>
     '<button data-crm="year" data-val="' + v + '" class="' + (R.year_built === v ? 'on' : '') + '">' + l + ' <small>' + n + '</small></button>').join('') + '</div>';
   const C = CRM.check;
   const tile = (n, l) => '<div><b>' + (n || 0) + '</b><span>' + l + '</span></div>';
-  const result = !C ? '<p class="lc-note">Pick which leads are your MCP leads, then check them. Imports from the Sales Hub show as “Imported lists”; MCP’s lists usually carry the year the pool was built.</p>'
+  const result = !C ? '<p class="lc-note">Check who would be added before adding them, or let automatic adding take care of it.</p>'
     : C.error ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>Couldn’t check</b><small>' + lcEsc_(C.error) + '</small></div></div>'
     : '<div class="lc-imp-sum">' + tile(C.summary.new, 'New: will be added') + tile(C.summary.existing, 'Already here') + tile(C.summary.customer, 'Customers: skipped') +
       tile(C.summary.opted_out, 'Opted out: skipped') + tile(C.summary.same_person, 'Same person: skipped') + '</div>' +
@@ -121,13 +131,17 @@ function crmRenderLeads_() {
         '<tr><td class="lc-fit"><div class="lc-person"><span class="lc-avatar">' + lcEsc_(lcInitials_(r.first_name, r.last_name)) + '</span><div><b>' + lcEsc_([r.first_name, r.last_name].filter(Boolean).join(' ') || r.email_norm) +
         '</b><small>' + lcEsc_(r.email_norm) + '</small></div></div></td></tr>').join('') + '</tbody></table></div>' +
         (C.summary.new > 60 ? '<p class="lc-note">and ' + (C.summary.new - 60) + ' more</p>' : '') : '');
-  const n = C && !C.error ? (C.summary.new || 0) : 0;
+  const n = C && !C.error ? (C.summary.new || 0) : (M.new || 0);
   el.innerHTML = head + '<div class="lc-imp-body">' +
-    '<div class="lc-wiz-stat"><b>' + b.leads + '</b><span>leads in the Sales Hub · ' + b.with_email + ' with an email · ' + b.in_engine + ' already here</span></div>' +
+    '<div class="lc-crm-auto"><div class="main"><b>' + (M.new || 0) + ' MCP lead' + (M.new === 1 ? '' : 's') + ' not added yet</b><small>' + b.leads + ' leads in the Sales Hub · ' + (M.existing || 0) +
+      ' already here · ' + ((M.customer || 0) + (M.opted_out || 0) + (M.same_person || 0)) + ' skipped (customers, opted out, duplicates)</small></div>' +
+      '<label class="lc-check"><input type="checkbox" data-crm-keep' + (CRM.keep ? ' checked' : '') + '> Add new MCP leads automatically</label></div>' +
+    '<details class="lc-crm-more"' + (d.rule && JSON.stringify(d.rule.lead_sources) !== JSON.stringify(['mcp', 'import', 'unknown']) ? ' open' : '') + '><summary>Which leads count as MCP leads</summary>' +
     '<div class="lc-imp-row"><div class="lc-fld"><span>Campaign</span><div class="lc-seg"><button class="on">MCP Legacy</button></div></div><div class="lc-fld"><span>Year built</span>' + seg + '</div></div>' +
     chips('lead_sources', b.by_source, 'Where they came from', v => SRC[v] || v) + chips('areas', b.by_area, 'Area') +
-    '<div><button class="lc-btn" data-crm="check"' + (CRM.busy ? ' disabled' : '') + '>' + (CRM.busy && !n ? 'Checking…' : 'Check these leads') + '</button></div>' + result +
-    '<div class="lc-imp-f"><label class="lc-check"><input type="checkbox" data-crm-keep' + (CRM.keep ? ' checked' : '') + '> Keep in sync: add new matching leads every morning</label>' +
+    '</details>' +
+    '<div><button class="lc-btn" data-crm="check"' + (CRM.busy ? ' disabled' : '') + '>' + (CRM.busy && !C ? 'Checking…' : 'See who would be added') + '</button></div>' + result +
+    '<div class="lc-imp-f"><span class="lc-dim">' + (CRM.keep ? 'New MCP leads are added every morning and when this page opens.' : 'Automatic adding is off.') + '</span>' +
     '<button class="lc-btn primary" data-crm="add"' + (n && !CRM.busy ? '' : ' disabled') + '>' + (CRM.busy && n ? 'Adding…' : 'Add ' + n + ' to Needs review') + '</button></div></div>';
 }
 
@@ -145,7 +159,7 @@ async function crmOnClick_(e) {
     return crmRenderLeads_();
   }
   if (a === 'add') {
-    const n = CRM.check && CRM.check.summary ? CRM.check.summary.new : 0;
+    const n = CRM.check && CRM.check.summary ? CRM.check.summary.new : ((CRM.data && CRM.data.mcp_leads) || {}).new || 0;
     if (!await lcConfirm_({ title: 'Add ' + n + ' leads to Needs review?', ok: 'Add',
       body: 'They wait in Needs review for MCP Legacy. Nobody is emailed until you start a batch.' + (CRM.keep ? ' New matching leads are added every morning.' : '') })) return;
     CRM.busy = true; crmRenderLeads_();

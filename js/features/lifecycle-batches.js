@@ -120,7 +120,7 @@ function batWho_() {
   const waiting = MCPS_BATCHES.eligible(batAll_(), { group: BAT.group, filters: BAT.filters, exclude: [...batExcluded_()] }).length;
   const re = LC_RESTART_READY ? batRestartPool_().length : 0;
   return '<div class="lc-wiz-stat"><b>' + waiting + '</b><span>waiting in Needs review' + (Object.values(BAT.filters).some(l => l.length) ? ' match these filters' : '') + '</span>' +
-    '<span class="lc-wiz-links"><button class="lc-link" data-bat="crm">Add Sales Hub leads</button><button class="lc-link" data-bat="import">Import a file</button></span></div>' +
+    '<span class="lc-wiz-links"><button class="lc-link" data-bat="crm">MCP leads</button><button class="lc-link" data-bat="import">Import a file</button></span></div>' +
     '<div class="lc-imp-row"><div class="lc-fld"><span>Campaign</span>' + batSeg_('group', BAT.group, [['B', 'MCP Legacy']]) + '</div>' +
     '<label class="lc-fld"><span>People per batch</span><input class="lc-input" type="number" min="1" max="500" value="' + BAT.count + '" data-bat-num="count" style="width:110px"></label>' +
     '<div class="lc-fld"><span>Order</span>' + batSeg_('order', BAT.order, [['random', 'Random'], ['oldest', 'Oldest first']]) + '</div></div>' +
