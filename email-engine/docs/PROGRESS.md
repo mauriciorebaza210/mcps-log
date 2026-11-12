@@ -39,7 +39,7 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 
 ### Next: CP9 `bc-live` (go live first; CP8 after)
 - **Launch rule (Mau 2026-11-11):** at go-live only the MCP Startup **Welcome** is On; every other B/C email ships Off and is switched on later from Setup.
-- **Build first:** the in-portal tutorial for Tony + the "Request a change" button (screenshot, the element pointed at, page context, emailed to Mau from Mau's address). Mau walks through both before the handoff.
+- **Built 2026-11-11 (on the preview, awaiting Mau's walkthrough):** in-portal tour (Help in the header; 6 chapters, 18 steps over the real tabs; first-visit offer; chapters seen remembered per user on the device) + **Request a change** (corner button; note, Point at it, auto screenshot with the part outlined, up to 3 images/PDFs; saved privately in Blob `change-requests/<id>/`; emailed to Mau from the portal Gmail, which on the preview is skipped like alerts; Activity → Change requests with View + Mark done). Code: `js/features/lifecycle-help.js`, `api/_lib/change-requests.js` (op=request), tests `tests/email-engine-requests.test.js`. Harness: `tour=<chapter>&tstep=N`, `menu=1`, `rq=1|pick|pointing|sent`, `seen=1`.
 - Then the go-live list below (env, Config URLs, scheduler as Tony, portal GAS StartupRequests.js with the clasp branch trap check, production mode, merge to main), each step only with Mau's explicit go.
 - Open question for Mau at go-live: "all 7 B/C emails approved" is a CP9 gate, but only Welcome is On at launch. Off emails may not need approval to launch.
 - CP8 waits: Day Log is being redefined (Parking lot 2026-11-11).

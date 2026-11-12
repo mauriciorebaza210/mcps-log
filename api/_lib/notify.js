@@ -334,3 +334,9 @@ export async function sendEngineAlert(to, subject, text, key) {
   const html = '<pre style="font-family:Menlo,Consolas,monospace;font-size:13px;white-space:pre-wrap;">' + esc(text) + '</pre>';
   return send({ to, subject, html, text, replyTo: to, idempotencyKey: key || ('ee-heartbeat:' + new Date().toISOString().slice(0, 10) + ':' + subject) });
 }
+
+// A "Request a change" from the Lifecycle page (api/_lib/change-requests.js), to Mau from
+// the portal's Gmail. Replies go to the office address (Tony) by default.
+export async function sendChangeRequest(to, mail, key) {
+  return send({ to, subject: mail.subject, html: mail.html, text: mail.text, idempotencyKey: key });
+}

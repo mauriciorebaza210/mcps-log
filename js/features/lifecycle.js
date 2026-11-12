@@ -234,9 +234,10 @@ function lcRender_() {
   if (!LC.root) return;
   if (!LC.root.querySelector('.lc')) {
     LC.root.innerHTML = '<div class="lc"><div data-lc="head"></div><div data-lc="kpis"></div><div data-lc="banner"></div>' +
-      '<nav class="lc-tabs" data-lc="tabs" aria-label="Lifecycle sections"></nav><div data-lc="body"></div></div>';
+      '<div data-lc="hlp"></div><nav class="lc-tabs" data-lc="tabs" aria-label="Lifecycle sections"></nav><div data-lc="body"></div></div>';
   }
-  lcRenderHead_(); lcRenderKpis_(); lcRenderTabs_(); lcRenderBody_();
+  lcRenderHead_(); lcRenderKpis_(); if (typeof hlpRenderOffer_ === 'function') hlpRenderOffer_(); lcRenderTabs_(); lcRenderBody_();
+  if (typeof rqMount_ === 'function') rqMount_();
 }
 const lcSlot_ = name => LC.root && LC.root.querySelector('[data-lc="' + name + '"]');
 
@@ -260,7 +261,8 @@ function lcRenderHead_() {
     (LC.runPending ? LC_ICON.refresh + 'Running…' : LC_ICON.play + 'Run now') + '</button>' : '';
   el.innerHTML = '<header class="lc-head"><div class="lc-title"><h1>Lifecycle Email</h1>' + mode + '</div>' +
     '<div class="lc-status">' + test + off + health +
-    '<button class="lc-icon-btn' + (LC.loading ? ' spin' : '') + '" data-act="refresh" aria-label="Refresh" title="Refresh">' + LC_ICON.refresh + '</button>' + run + '</div></header>';
+    '<button class="lc-icon-btn' + (LC.loading ? ' spin' : '') + '" data-act="refresh" aria-label="Refresh" title="Refresh">' + LC_ICON.refresh + '</button>' +
+    (typeof hlpHeadBtn_ === 'function' ? hlpHeadBtn_() : '') + run + '</div></header>';
 }
 
 function lcRenderKpis_() {
@@ -293,6 +295,7 @@ function lcRenderBody_() {
   else if (LC.tab === 'contacts') el.innerHTML = lcContacts_();
   else if (LC.tab === 'campaigns') el.innerHTML = lcCampaigns_();
   else el.innerHTML = lcEmails_();
+  if (typeof hlpAfterRender_ === 'function') hlpAfterRender_();
 }
 function lcErrorView_(e) {
   const denied = e.status === 403, offline = e.status === 503;
@@ -369,7 +372,7 @@ function lcActivity_() {
     '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
     (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +
     '<div>' + lcTodayRuns_() + '<div class="lc-card"><div class="lc-card-h"><h3>Recent runs</h3><small>Times in ' + lcEsc_(lcZoneOn_()) + '</small></div>' + runs + '</div>' +
-    '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div>' + lcChecks_() + '</div></div>';
+    '<div class="lc-card"><div class="lc-card-h"><h3>Alerts</h3></div>' + alerts + '</div>' + (typeof rqListCard_ === 'function' ? rqListCard_() : '') + lcChecks_() + '</div></div>';
 }
 // Engine checks: the trigger-precision test (Schedule.js → trigger_test). Before the
 // scheduler is installed, this measures how close to the planned minute Apps Script's
@@ -828,6 +831,8 @@ function lcDispatch_(t) {
   if (act === 'sgl-new') return sglOpen_();
   if (act.startsWith('tag-') && typeof tagAct_ === 'function') return tagAct_(t);
   if (act.startsWith('att-') && typeof attAct_ === 'function') return attAct_(t);
+  if (act.startsWith('help') && typeof hlpAct_ === 'function') return hlpAct_(t);
+  if (act.startsWith('rq-') && typeof rqAct_ === 'function') return rqAct_(t);
   if (act === 'trig-test') return lcTrigTest_(false);
   if (act === 'trig-refresh') return lcTrigTest_(true);
   if (act === 'crm-sync') return crmSyncStartups_();

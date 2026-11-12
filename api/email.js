@@ -28,7 +28,9 @@ import { checkImport, importRecord } from './_lib/email-import.js';
 import { leadBreakdown, leadCandidates, customerEmails, startupContacts, DEFAULT_MCP_RULE } from './_lib/email-crm.js';
 import { cleanIncoming, flagDuplicates, scanEngine } from './_lib/email-clean.js';
 import { askNames } from './_lib/name-ai.js';
-import { sendEngineAlert } from './_lib/notify.js';
+import { sendEngineAlert, sendChangeRequest } from './_lib/notify.js';
+import { changeRequests, changeRequestEmail } from './_lib/change-requests.js';
+import { put as blobPut, get as blobGet, list as blobList } from '@vercel/blob';
 // UMD: a default import yields module.exports. Never createRequire here (memory: Vercel createRequire trap).
 import TRACKING from '../js/lib/email-tracking.js';
 
@@ -63,7 +65,9 @@ function reply(res, status, body) {
 }
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-const DEFAULT_DEPS = { ...sheets, relayEvents, relayAdmin, waitUntil, sendEngineAlert, askNames, now: () => Date.now(),
+const DEFAULT_DEPS = { ...sheets, relayEvents, relayAdmin, waitUntil, sendEngineAlert, sendChangeRequest, askNames, now: () => Date.now(),
+  blob: { put: blobPut, get: blobGet, list: blobList }, blobReady: () => !!process.env.BLOB_READ_WRITE_TOKEN,
+  changeRequestTo: () => String(process.env.EE_CHANGE_REQUEST_TO || 'mauricio@mcpoolsolutions.org').trim(),
   anthropicKey: () => String(process.env.ANTHROPIC_API_KEY || '').trim(),
   cronSecret: () => String(process.env.CRON_SECRET || '').trim(),
   linkSecret: () => String(process.env.EE_LINK_SECRET || '').trim(),
@@ -530,7 +534,38 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     return reply(res, 200, { ok: true, added: done.added, summary: verdict.summary, rule_saved: !!(saved && saved.ok) });
   }
 
-  const OPS = { clean: opClean, crm: opCrm, import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
+  // "Request a change" (api/_lib/change-requests.js): anyone with Lifecycle access can send and see them.
+  async function opRequest(req, res) {
+    const session = await deps.validatePortalSession(bearer(req));
+    if (!session) return reply(res, 401, { ok: false, error: 'Unauthorized' });
+    if (!deps.blobReady()) return reply(res, 503, { ok: false, error: 'File storage isn’t set up here.' });
+    let tables;
+    try { tables = await loadTables(false); }
+    catch (e) { if (e.status === 503) return reply(res, 503, { ok: false, error: 'The engine sheet is missing tabs.' }); throw e; }
+    const caps = capabilitiesFor(session.username, tables.Permissions);
+    if (!caps.has('view_aggregates')) return reply(res, 403, { ok: false, error: 'You don’t have access to Lifecycle Email.' });
+    const cfg = cfgOf(tables), portal = String(cfg.track_base || 'https://mcps-log.vercel.app');
+    const rq = changeRequests({ blob: deps.blob, now: deps.now,
+      notify: rec => deps.sendChangeRequest(deps.changeRequestTo(), changeRequestEmail(rec, portal), 'ee-change:' + rec.id) });
+    const q = req.query || {};
+    if (req.method === 'GET' && q.file) {
+      const f = await rq.file(String(q.file));
+      if (f.status !== 200) return reply(res, f.status, { ok: false, error: 'File not found' });
+      res.setHeader('content-type', f.type); res.setHeader('cache-control', 'private, max-age=300'); res.setHeader('x-content-type-options', 'nosniff');
+      return res.status(200).send(f.body);
+    }
+    if (req.method === 'GET') { const r = await rq.list(); return reply(res, r.status, r.body); }
+    if (req.method !== 'POST') return reply(res, 405, { ok: false, error: 'Method not allowed' });
+    const body = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch (_) { return {}; } })() : (req.body || {});
+    if (body.done) {
+      if (!caps.has('edit_config')) return reply(res, 403, { ok: false, error: 'You don’t have permission to do that.' });
+      const r = await rq.markDone(body.done, session); return reply(res, r.status, r.body);
+    }
+    const r = await rq.create(body, session);
+    return reply(res, r.status, r.body);
+  }
+
+  const OPS = { request: opRequest, clean: opClean, crm: opCrm, import: opImport, read: opRead, c: opClick, o: opOpen, beacon: opBeacon, u: opUnsubscribe, heartbeat: opHeartbeat, admin: opAdmin };
 
   return async function handler(req, res) {
     const op = String((req.query && req.query.op) || '').trim();
