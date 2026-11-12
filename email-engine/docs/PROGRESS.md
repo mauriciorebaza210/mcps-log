@@ -4,13 +4,13 @@ Plan: [PLAN.md](PLAN.md) · Branch: `feat/email-engine` · Worktree: `~/mcps-log
 Resume in any Claude Code session with `/email-engine`.
 
 ## Now
-_Updated 2026-11-11 (second session: editor, single emails, tags, attachments, runbook, matrix, trigger test). Handoff written for a new chat with `/email-engine`. Everything below is committed and pushed on `feat/email-engine`; the detailed history of CP7 is in **CP7 build log** further down._
+_Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, tags, attachments, runbook, matrix, trigger test, Welcome = approval email). Start a new chat with `/email-engine`; everything is committed and pushed (last commit: `git log -1`). Everything below is committed and pushed on `feat/email-engine`; the detailed history of CP7 is in **CP7 build log** further down._
 
 ### Where things stand
 - **Checkpoint:** CP7 `bc-scheduled` in progress (no `ee/cp7` tag yet). Last tag `ee/cp6-slice-demo`.
-- **Engine (Tony's Apps Script):** deployment **@38**, version **cp7-15**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
+- **Engine (Tony's Apps Script):** deployment **@40**, version **cp7-17**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
-- **Tests:** `npm run test:ee` → 245 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
+- **Tests:** `npm run test:ee` → 247 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
 - **Vercel env (Preview, branch feat/email-engine unless noted):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET (all *sensitive*: can't be pulled back), **ANTHROPIC_API_KEY** (Preview + Production, added by Mau 2026-11-11; same key the portal's Apps Script uses).
 
 ### What CP7 has built (all on the preview)
@@ -31,11 +31,15 @@ _Updated 2026-11-11 (second session: editor, single emails, tags, attachments, r
 13. **Runbook + backups** (fde5b17): `email-engine/RUNBOOK.md`; nightly backup with the midnight scheduler (Backup.js, 30 kept); `eeCatchUp` replays the Journal without sending.
 14. **Matrix** (edad595): every row 1–46 + 56–64 has a test; new: security audit (row 33), schema range + rollback floor (row 32), 409 on stale Setup save (row 30). `tests/email-engine-actions.test.js` guards the portal↔engine action list (a real bug: single-email actions were missing from ADMIN_CAP; fixed).
 15. **Trigger-precision test** (d874b43): Activity → **Engine checks → Test trigger timing** (4 one-off triggers, results + email). Deploy check now waits for the new version.
+16. **Welcome = the homeowner's approval email** (57c4bf4; PLAN.md → Plan changes 2026-11-11): the portal's plain "Startup is Confirmed" went to the **homeowner** (not the builder, as first thought). The branded Welcome replaces it: **immediate** (no send-time wait, any hour), approval → portal syncs → `sync_startups` queues a run → sent ≈1 min later; editable in Welcome Email → Templates → Edit. The plain email is removed in `appscript/StartupRequests.js` on this branch (**portal GAS, ships at go-live**). Mau published Welcome "When the startup is approved" from Setup (scope: new people only) on 2026-11-11.
+17. **Setup save dialog** now defaults to "Only people who join from now on" and says nobody gets an email twice (Mau found "Everyone in MCP Startup" confusing).
+18. **On the Way stays with HeadsUp** (7510f62): engine step dropped from CP8; Day Log + Startup Summary built in CP8 but **Off at launch**.
 
 ### CP7 still to do (exit criteria in PLAN.md → Checkpoints row 7)
 Everything buildable is built. What's left needs Mau (or Tony through Mau):
 - **Run the trigger timing test** (Activity → Engine checks → Test trigger timing; ~8 min). Record the result in SPIKES.md.
-- **Welcome at approval:** Emails → Welcome Email → Setup → Edit → "When the startup is approved" → Save → Everyone (publishes `bc-2`).
+- ~~Welcome at approval~~ done by Mau 2026-11-11 (new people only). Check on the preview: Welcome Setup should read "When the startup is approved · about a minute after approval".
+- **Startup Progress showed "Off"** in Mau's screenshot (2026-11-11 8:49 PM) right after the Welcome save. Nothing in that save touches Progress (publish_rules edits only the step sent); most likely toggled by hand. Ask Mau / check Progress → Setup; turn it back On if it wasn't intended. If it wasn't him, investigate (ChangeLog on Activity shows every publish_rules with its params).
 - **Startup Progress draft:** if one already exists, Discard it and "Use as draft" on the MCPS starter again (the old one still has the chemicals line).
 - **All 7 scheduled B/C emails approved:** B Intro ✅, C Welcome ✅; the 3 C starter drafts (Progress, Maintenance, Final) await approval; B Follow Up + Check-In wait for Tony's ChatGPT templates.
 - **Try the new parts once on the preview** (editor save → approve; a single email to a test contact; drop a PDF into Email Attachments → add → approve). They're unit-tested, but not yet exercised against the live engine.
@@ -44,7 +48,7 @@ Everything buildable is built. What's left needs Mau (or Tony through Mau):
 ### Waiting on Mau / Tony
 - **Mau:** the CP7 list above; also still open from before: try Clean up → Check with AI, Contacts → MCP leads counts, MCP Startup "Joining". Chemicals line removed and report-after-every-visit kept (Mau, 2026-11-11).
 - **Tony (Mau handles; don't ask Tony anything):** MCP Legacy list header row; Follow Up + Personal Check-In (and his Intro version) as ChatGPT templates dropped in MCPS Marketing → Email Templates → MCP Legacy → each email's folder.
-- ~~Open decision 0~~ **closed 2026-11-11:** builder keeps the plain confirmation at approval; homeowner Welcome defaults to at approval, changeable in Setup.
+- ~~Open decision 0~~ **closed 2026-11-11:** the plain approval email (to the homeowner) is replaced by the editable Welcome, sent ≈1 min after approval; the portal GAS removal ships at go-live.
 - **Planned for before CP9 (Mau 2026-11-11):** in-portal tutorial for Tony + "Request a change" button (PLAN.md → Plan changes).
 - Other open decisions (not blocking): 3-1 report layout (CP8); final Safety Guidelines + Startup Guide PDFs; "positive service milestone"; Referral timing.
 
@@ -63,12 +67,18 @@ Everything buildable is built. What's left needs Mau (or Tony through Mau):
 - **Screenshot harness:** `node email-engine/tools/ui-harness/fixture.mjs` then headless Chrome on `harness.html` (README there). Params: `tab=campaigns|emails|activity|contacts`, `cmp=B|C`, `view=calendar`, `day=YYYY-MM-DD`, `stage=…`, `wiz=who|when|people|review`, `restart=1`, `nb=3`, `wday=…`, `time=1`, `more=1`, `drawer=step:<id>`, `dtab=templates`, `tplopen=<file_id>`, `crm=1|check`, `cln=names|dupes`, `imp=1`.
 - **Vercel functions:** Hobby caps at 12 and the repo is at 12, so new API work goes into `api/email.js` ops (`read`, `admin`, `import`, `crm`, `clean`, tracking ops), never new files under `api/` top level. Never `createRequire` in `api/` (use static imports).
 - **Google Drive connector** session expired 2026-11-11 (Mau can re-authorize in claude.ai connector settings) — needed only to read live Sheets directly.
-- `clasp push` of the *portal* GAS is risky (branch trap; see memory) — not needed for anything in CP7.
+- `clasp push` of the *portal* GAS is risky (branch trap; see memory). This branch now changes `appscript/StartupRequests.js` (approval email removed) — deploy it **only at go-live**, together with the engine's production switch.
+- **Deploys get blocked when combined with edits:** run `npm run ee:deploy "…"` as its own command (sed/python edits first, separately). A deploy that sees the old version may auto-roll back; the script now waits up to 60 s for the new version.
+- **Harness extras (2nd chat):** `edit=text|html|preview` (+`part=body|block:PoolSchool|details`, `chipins=1`, `typo=1`, `editrev=`), `roundtrip=1` (dumps a `<pre id=rt>` JSON: Edit-text round trip for c_welcome, b_intro, b_followup full template; use `--dump-dom`), `sglnew=details|people|review`, `tagsel=1` (+`tagf=`), `att=1`, `setup=edit|before|off|scope`, `slow=1` (admin calls hang → loading states).
+- **Guards worth knowing:** `tests/email-engine-actions.test.js` fails if an engine admin action has no route in `api/email.js` (add it to `ADMIN_CAP` or relay it); every vm-loaded test needs `JSON.parse(JSON.stringify(x))` before deepEqual (cross-realm).
 
 ### Before go-live (CP9)
 - Engine Config `track_base` and `link_quote` point at the preview: set back to https://mcps-log.vercel.app and https://mcps-log.vercel.app/service.
 - Production env: EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, **fresh** EE_LINK_SECRET + EE_RELAY_SECRET (the preview ones appeared in a screenshot on 2026-11-09; update the engine's Script Properties to match), CRON_SECRET (heartbeat + daily portal sync).
-- Install the scheduler (`eeInstall`, as Tony) after the trigger-precision spike; switch `engine_mode` to production with Mau and Tony.
+- Install the scheduler (`eeInstall`, as Tony) after the trigger-precision spike; it also starts the nightly backups. Switch `engine_mode` to production with Mau and Tony.
+- **Portal GAS at the same time:** `appscript/StartupRequests.js` without the plain approval email (otherwise the homeowner gets two emails), plus whatever else CP9 lists. Check the clasp branch trap first.
+- Before handing over to Tony: in-portal tutorial + "Request a change" button (PLAN.md → Plan changes 2026-11-11).
+- RUNBOOK.md (email-engine/RUNBOOK.md) is the minimum runbook gate; re-read it at go-live.
 - Merge `feat/email-engine` to `main` only with Mau's go (it also carries the Sales Hub Import Leads change and the Quote Tool reopen fix 8acc00e).
 - Settled 2026-11-02: 3-1 report = 3-day startup summary; summary email contents come from its template; all emails send from Tony's address; PDFs via the Attachment Library; test emails may go to Mau.
 
