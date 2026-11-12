@@ -8,7 +8,7 @@ _Handoff written 2026-11-11 (end of a long chat, to continue in a new one with `
 
 ### Where things stand
 - **Checkpoint:** CP7 `bc-scheduled` in progress (no `ee/cp7` tag yet). Last tag `ee/cp6-slice-demo`.
-- **Engine (Tony's Apps Script):** live version **cp7-8** (deployment @30), test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
+- **Engine (Tony's Apps Script):** deployment **@31** (2026-11-11: adds `publish_rules`, off steps, startup deadlines; its version label still says cp7-8 because the label-only redeploy was blocked), test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
 - **Tests:** `npm run test:ee` → 213 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
 - **Vercel env (Preview, branch feat/email-engine unless noted):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET (all *sensitive*: can't be pulled back), **ANTHROPIC_API_KEY** (Preview + Production, added by Mau 2026-11-11; same key the portal's Apps Script uses).
@@ -22,7 +22,10 @@ _Handoff written 2026-11-11 (end of a long chat, to continue in a new one with `
 6. **Portal data connected:** **MCP leads** = every Sales Hub lead with `status = LEAD` and source `import`/`mcp`/blank (Mau: "all imported leads"), added to Needs review **automatically** (heartbeat, Sync now, page open; switch in Contacts → MCP leads). Sales Hub Import Leads now asks "Where is this list from?" (MCP / another list). **Startups** sync from Quotes (Pool Startup) with the live date from Routes › Scheduled_Visits; cancelled ones removed and stopped.
 7. **Contact cleanup + duplicates:** names tidied (capitals, couples, families, businesses, titles, placeholders), phones/places formatted, email typo/role warnings; AI (Claude Haiku 5.5, names only) for unclear names, automatic on imports and the lead sync, on demand in **Contacts → Clean up**; duplicates (same email, Gmail variants, same person, similar name, same household) with file-copy choices (imports: Skip / Merge / Use the new details / Keep both; Clean up: Keep both / Keep left / Keep right / Merge into left); the automatic sync flags **Possible duplicate** (never batched).
 
+8. **2026-11-11 (71d5a6f):** each email's **Setup is editable** (on/off, timing, stops → new rule revision `bc-N`, scope everyone / new only); **Welcome can send at approval** (portal syncs right after approval; deadline still startup −1); **no double actions** (one click guard + spinners, preview opens at once with a loading state, confirm sheets stay open while saving); **AI sparkle chip**; Startup Progress lost the chemicals line (Mau). Tests 219.
+
 ### CP7 still to do (exit criteria in PLAN.md → Checkpoints row 7)
+- **Mau, on the preview:** Emails → Welcome Email → Setup → Edit → "When the startup is approved" → Save (everyone) — this publishes `bc-2`. Then Templates: if a Startup Progress draft already exists, Discard it and "Use as draft" on the MCPS starter draft again (the old draft still has the chemicals line).
 - **Next action: the email editor** (click-to-edit text in the live preview + HTML mode, saving drafts that need approval; PLAN.md → Plan changes 2026-11-02 note on the editor). Then:
 - **Single-email campaigns** (`date` anchor; one template to a chosen audience on a date; PLAN.md → Plan changes "Single email sequence type").
 - **Contact tags** editing (drawer add/remove, bulk-tag, filter; tags already a column and a batch filter).
@@ -36,7 +39,8 @@ _Handoff written 2026-11-11 (end of a long chat, to continue in a new one with `
 ### Waiting on Mau / Tony
 - **Mau:** try on the preview (Clean up → Check with AI; Contacts → MCP leads counts; MCP Startup "Joining"); approve or edit the 3 C starter drafts (check two claims: "don't add chemicals yourself during the first month", "a report after every visit").
 - **Tony (Mau handles; don't ask Tony anything):** MCP Legacy list header row; Follow Up + Personal Check-In (and his Intro version) as ChatGPT templates dropped in MCPS Marketing → Email Templates → MCP Legacy → each email's folder.
-- **Decision before MCP Startup goes live (open decision 0):** approving a startup request already emails a plain "Your MCPS Pool Startup is Confirmed" (appscript/StartupRequests.js `handleStartupRequestApprove_`); the branded Welcome follows at startup −3. Keep both, drop the plain one, or send the Welcome at approval?
+- ~~Open decision 0~~ **closed 2026-11-11:** builder keeps the plain confirmation at approval; homeowner Welcome defaults to at approval, changeable in Setup.
+- **Planned for before CP9 (Mau 2026-11-11):** in-portal tutorial for Tony + "Request a change" button (PLAN.md → Plan changes).
 - Other open decisions (not blocking): 3-1 report layout (CP8); final Safety Guidelines + Startup Guide PDFs; "positive service milestone"; Referral timing.
 
 ### Rules from Mau (keep following)
