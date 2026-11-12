@@ -7,7 +7,7 @@ Resume in any Claude Code session with `/email-engine`.
 _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, tags, attachments, runbook, matrix, trigger test, Welcome = approval email). Start a new chat with `/email-engine`; everything is committed and pushed (last commit: `git log -1`). Everything below is committed and pushed on `feat/email-engine`; the detailed history of CP7 is in **CP7 build log** further down._
 
 ### Where things stand
-- **Checkpoint:** CP9 `bc-live` next (go live before CP8, Mau 2026-11-11). Last tag `ee/cp7-bc-scheduled` (2026-11-11).
+- **Checkpoint:** CP9 `bc-live`: **LIVE since 2026-11-11 ~11 PM** (Mau clicked Go live). Close CP9 after the first week (no unresolved Unconfirmed sends). Last tag `ee/cp7-bc-scheduled`.
 - **Engine (Tony's Apps Script):** deployment **@45**, version **cp9-2**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
 - **Tests:** `npm run test:ee` → 247 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
@@ -71,6 +71,13 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 - **Deploys get blocked when combined with edits:** run `npm run ee:deploy "…"` as its own command (sed/python edits first, separately). A deploy that sees the old version may auto-roll back; the script now waits up to 60 s for the new version.
 - **Harness extras (2nd chat):** `edit=text|html|preview` (+`part=body|block:PoolSchool|details`, `chipins=1`, `typo=1`, `editrev=`), `roundtrip=1` (dumps a `<pre id=rt>` JSON: Edit-text round trip for c_welcome, b_intro, b_followup full template; use `--dump-dom`), `sglnew=details|people|review`, `tagsel=1` (+`tagf=`), `att=1`, `setup=edit|before|off|scope`, `slow=1` (admin calls hang → loading states).
 - **Guards worth knowing:** `tests/email-engine-actions.test.js` fails if an engine admin action has no route in `api/email.js` (add it to `ADMIN_CAP` or relay it); every vm-loaded test needs `JSON.parse(JSON.stringify(x))` before deepEqual (cross-realm).
+
+### Went live 2026-11-11 (night)
+- `feat/email-engine` merged into `main` (761d751, with main's 8d1998d merged in first; editor fix ff1d103). Production env: EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, fresh EE_LINK_SECRET + EE_RELAY_SECRET, CRON_SECRET (generated locally, never printed). Preview has the same keys as *_NEXT (the old preview keys no longer match the engine: the preview can't talk to the engine anymore).
+- Mau turned MCP Legacy Intro Off and clicked Go live (engine cp9-4 @47): schedule on, earlier synced startups held, live links, production, new keys.
+- Portal Apps Script @283 (pinned deployment), pushed from `~/mcps-log` (feat/mcp-startup-reports): live code + the October update (8d1998d: staff notifications, contract expiration, faster lead saves) + the plain approval email removed. Checked: no live file missing, token check and the `{}` → Unauthorized gate intact. **The StartupRequests.js edit in ~/mcps-log is uncommitted** (identical to main's).
+- Staff contacts (bucket Z) for internal single emails; Tony's launch note set for 2026-11-12 8:00 AM by Mau (single email "Lifecycle Email launch").
+- Watch this week: Activity daily, the first real Welcome after an approval, the 8 AM single email, the security_property_changed alert (expected once, from the key swap).
 
 ### Go-live readiness (checked 2026-11-11, end of day)
 Built and verified: engine @44 cp9-1 (test mode, 258 tests, trigger precision 4/4 within 20 s, runbook + nightly backups), interactive tour + Request a change, Send due emails now on Activity, Start a batch explains itself + move people between batches, MCP Legacy emptied for Tony's import, Test/Live switch hides itself in production.
