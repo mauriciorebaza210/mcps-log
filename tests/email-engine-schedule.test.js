@@ -241,3 +241,19 @@ test('Trigger-precision spike: plans 4 one-off triggers, records how early/late 
   assert.deepEqual(t.slots.map(s => s.delta_s), [40, -15, 600, 5]);
   assert.deepEqual(t.summary, { earliest_s: -15, latest_s: 600, within_20_min: true });
 });
+
+test('Stored JSON comes back parsed from the real sheet: the run plan and the timing test still read it', () => {
+  const w = world('10:00');
+  const plan = { date: '2026-11-23', times: ['09:00', '14:15'], dropped: [] };
+  assert.deepEqual(JSON.parse(JSON.stringify(w.ctx_.EE_runPlan_({ run_plan: plan }))), plan, 'object (real sheet)');
+  assert.deepEqual(JSON.parse(JSON.stringify(w.ctx_.EE_runPlan_({ run_plan: JSON.stringify(plan) }))), plan, 'string (fake store)');
+  assert.equal(w.ctx_.EE_runPlan_({ run_plan: '' }), null);
+  // Timing test with Config values stored as objects, the way Env.js decodes them.
+  const realStore = w.env.store, upsert = realStore.upsert;
+  w.env.store = Object.assign({}, realStore, { upsert: (n, row) => upsert(n, n === 'Config' && typeof row.value === 'string' && row.value[0] === '{' ? Object.assign({}, row, { value: JSON.parse(row.value) }) : row) });
+  const made = [];
+  w.ctx_.EE_triggerTestPure_(w.env, 'start', { create: slots => slots.map((at, i) => { made.push(at); return 'u' + i; }) });
+  made.forEach((ms, i) => w.ctx_.EE_triggerTestFired_(w.env, 'u' + i, ms + 30000));
+  const t = JSON.parse(JSON.stringify(w.ctx_.EE_triggerTestPure_(w.env, 'result').test));
+  assert.equal(t.status, 'done'); assert.deepEqual(t.slots.map(s => s.delta_s), [30, 30, 30, 30]);
+});

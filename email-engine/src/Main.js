@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp7-17';
+var EE_VERSION = 'cp7-18';
 // Data schema (PLAN.md → Security boundary & rollback). Additive changes (new columns, new
 // tabs) keep the number; a semantic change goes expand → migrate → contract and raises it.
 // A run refuses data outside read_min..read_max; the deploy script refuses code that can't

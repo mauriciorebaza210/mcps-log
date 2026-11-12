@@ -87,7 +87,10 @@ function EE_slotFor_(plan, nowTime) {
   });
   return ahead ? { gate: ahead, planned_for: ahead } : { gate: nowTime, planned_for: behind };
 }
-function EE_runPlan_(cfg) { try { return JSON.parse(cfg.run_plan || 'null'); } catch (e) { return null; } }
+// Sheet values that look like JSON come back already parsed (Env.js → EE_decode_); the tests' fake
+// store keeps strings. Accept both.
+function EE_jsonOf_(v) { if (v == null || v === '') return null; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return null; } }
+function EE_runPlan_(cfg) { return EE_jsonOf_(cfg.run_plan); }
 
 // ── Apps Script triggers ──────────────────────────────────────────────────────
 function EE_triggerDeps_() {
@@ -112,7 +115,7 @@ function EE_timedRun() { return EE_run_('scheduled'); }
 var EE_TRIGGER_TEST_OFFSETS_MIN = [2, 4, 6, 8];
 function EE_triggerTestPure_(env, action, deps) {
   var raw = (env.store.get('Config', 'trigger_test') || {}).value, cur = null;
-  try { cur = raw ? JSON.parse(raw) : null; } catch (e) { cur = null; }
+  cur = EE_jsonOf_(raw);
   if (action === 'result') return { ok: true, test: cur };
   if (cur && cur.status === 'running' && env.now() - Date.parse(cur.started_at) < 30 * 60 * 1000) return { ok: false, error: 'a timing test is already running' };
   var now = env.now(), slots = EE_TRIGGER_TEST_OFFSETS_MIN.map(function (m) { return now + m * 60000; });
@@ -124,7 +127,7 @@ function EE_triggerTestPure_(env, action, deps) {
 // Records one firing (by trigger uid). Runs inside the trigger's own execution.
 function EE_triggerTestFired_(env, uid, firedMs) {
   return env.withLock(function () {
-    var raw = (env.store.get('Config', 'trigger_test') || {}).value, t = raw ? JSON.parse(raw) : null;
+    var t = EE_jsonOf_((env.store.get('Config', 'trigger_test') || {}).value);
     if (!t) return null;
     t.slots.forEach(function (s) { if (s.uid === uid && !s.fired) { s.fired = new Date(firedMs).toISOString(); s.delta_s = Math.round((firedMs - Date.parse(s.planned)) / 1000); } });
     if (t.slots.every(function (s) { return s.fired; })) {
