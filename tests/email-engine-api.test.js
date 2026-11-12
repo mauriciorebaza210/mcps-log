@@ -253,6 +253,12 @@ test('Admin: engine refusals pass through (e.g. Resend before quiescence); an un
   assert.equal(down.res.statusCode, 503);
 });
 
+test('Row 30: concurrent step edits: the engine refuses the stale save and the API answers 409', async () => {
+  const r = await admin({ action: 'publish_rules', params: { edits: [{ step_id: 'b_followup', offset: 6 }], scope: 'new', base_rev: 'bc-1' } },
+    { relay: () => ({ ok: false, conflict: true, error: 'Someone changed these settings a moment ago. Reload and try again.' }) });
+  assert.deepEqual([r.res.statusCode, r.res.body.ok], [409, false]);
+});
+
 test('Overview carries the viewer’s capabilities and the recent change log', async () => {
   const h = (await load())(world().deps);
   const o = (await call(h, { token: 'tok-mau' })).body.data;

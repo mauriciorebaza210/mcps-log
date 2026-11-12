@@ -105,3 +105,26 @@ test('Production mode leaves test contacts alone', () => {
   const plan = EE_planDay(snapshotOf(fakeWorld(), { engineMode: 'production', contacts: [contact('mau', 'B')] }));
   assert.equal(plan.enrollmentWrites.length, 0);
 });
+
+test('Row 13: rules published mid-run: this run keeps the rules it read at its start; the next run re-plans by scope', () => {
+  const w = fakeWorld();
+  w.tables.Contacts.push(contact('mau', 'B', { email_norm: 'mauricio@mcpoolsolutions.org' }));
+  runDays(w, 4);                                        // Intro sent on day 1; Follow Up due day 5
+  const bc2 = JSON.parse(JSON.stringify(BC)); bc2.rule_rev = 'bc-2';
+  bc2.steps.find(s => s.step_id === 'b_followup').offset = 6;
+  const rulesets = { 'bc-1': BC, 'bc-2': bc2 };
+  w.now = T0 + 4 * DAY;
+  let published = false;
+  // The run reads its snapshot once; the publish (scope: everyone) lands while it is sending.
+  const day5 = EE_runDay(w.core, w.env, () => snapshotOf(w, { rulesets, ruleRev: published ? 'bc-2' : 'bc-1' }));
+  w.hooks.beforeSend = null;
+  assert.equal(day5.sent, 1, 'the Follow Up planned under bc-1 goes out on day 5');
+  // Now the publish, and a contact whose Follow Up wasn't sent yet moves to bc-2: its Follow Up re-plans.
+  published = true;
+  w.tables.Contacts.push(contact('tia', 'B', { email_norm: 'tia@example.com' }));
+  w.now = T0 + 5 * DAY; EE_runDay(w.core, w.env, () => snapshotOf(w, { rulesets, ruleRev: 'bc-2' }));    // tia's Intro (day 6)
+  const en = w.tables.Enrollments.find(e => e.contact_id === 'tia');
+  assert.equal(en.rule_rev, 'bc-2', 'new enrollments follow the new rules');
+  const plan = EE_planDay(snapshotOf(w, { rulesets, ruleRev: 'bc-2', today: L.addDays(L.localDate(new Date(w.now), 'America/Chicago'), 4) }));
+  assert.equal(plan.due.filter(d => d.contact_id === 'tia' && d.step_id === 'b_followup').length, 0, 'bc-2: +6, not +4');
+});

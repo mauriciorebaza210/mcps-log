@@ -126,3 +126,15 @@ test('The core records which PDF versions went with a delivery and hands the fil
   assert.deepEqual(plain(d.attachment_versions), ['att_x_v2']);
   assert.ok(Object.values(w.drafts).some(x => (x.msg.attachments || []).length === 1) || Object.keys(w.drafts).length === 0, 'files went to createDraft');
 });
+
+test('Row 56: a new version approved mid-run: this run keeps the version it started with; the next run carries the new one', () => {
+  const w = world();
+  const a = w.admin('add_attachment', { file_id: 'p1', name: 'Safety Guidelines' });
+  w.admin('approve_attachment', { version_id: a.version_id });
+  const rev = { attachment_items: [a.item_id] }, run1 = {};
+  assert.equal(w.ctx_.EE_attachmentsFor_(w.env, rev, w.sendFiles, run1)[0].version_id, a.version_id);
+  const b = w.admin('add_attachment', { file_id: 'p2', item_id: a.item_id });
+  w.admin('approve_attachment', { version_id: b.version_id });
+  assert.equal(w.ctx_.EE_attachmentsFor_(w.env, rev, w.sendFiles, run1)[0].version_id, a.version_id, 'same run: still v1');
+  assert.equal(w.ctx_.EE_attachmentsFor_(w.env, rev, w.sendFiles, {})[0].version_id, b.version_id, 'next run: v2');
+});

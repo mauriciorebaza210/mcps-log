@@ -110,12 +110,17 @@ function EE_attachmentAction_(env, core, action, p, actor, deps) {
 // Items without a published version are skipped (an email can go live before its
 // PDFs; PLAN.md row 57); a retired item is skipped too. Anything wrong throws,
 // which fails the delivery with "attachment: …" and alerts (row 53).
-function EE_attachmentsFor_(env, rev, files) {
+// snap (row 56): the version each item had the first time this run used it, so a PDF
+// approved mid-run goes out from the next run on. One run is one Apps Script
+// execution, so Env.js passes a per-execution object.
+function EE_attachmentsFor_(env, rev, files, snap) {
   var out = [], total = 0;
+  snap = snap || {};
   (rev.attachment_items || []).forEach(function (itemId) {
     var item = env.store.get('Attachments', itemId);
     if (!item || item.status === 'retired') return;
-    var v = EE_attachPublished_(env, itemId);
+    if (!(itemId in snap)) snap[itemId] = EE_attachPublished_(env, itemId);
+    var v = snap[itemId];
     if (!v) return;
     var blob = files.read(v.file_id);
     if (files.sha256(blob) !== v.sha256) throw new Error('attachment: ' + item.name + ' v' + v.v + ' changed after approval');

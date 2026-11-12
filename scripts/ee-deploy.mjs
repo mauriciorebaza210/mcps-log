@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deployCheck, readLocalSchema } from './ee-schema.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENGINE = path.join(ROOT, 'email-engine');
@@ -62,6 +63,13 @@ async function main() {
   if (!new RegExp(OWNER.replace('.', '\\.'), 'i').test(who)) fail(`clasp user "${CLASP_USER}" is not ${OWNER}. Run: clasp --user ${CLASP_USER} login  (sign in as Tony)\n${who}`);
   const before = currentVersion();
   console.log('✔ project, deployment and Tony login checked (live version @' + before + ')');
+  // Schema range and rollback floor (row 32): never put code on data it can't read.
+  const liveBefore = await whoami();
+  const floor = Number(JSON.parse(fs.readFileSync(path.join(ENGINE, 'rollback-floor.json'), 'utf8')).floor || 0);
+  const why = deployCheck({ localSchema: readLocalSchema(fs.readFileSync(path.join(ENGINE, 'src', 'Main.js'), 'utf8')),
+    liveDataSchema: liveBefore && liveBefore.data_schema, rollbackTo: rollback, floor });
+  if (why) fail(why);
+  console.log('✔ schema range and rollback floor checked (live data schema ' + ((liveBefore && liveBefore.data_schema) || 'not recorded yet') + (floor ? ', floor @' + floor : '') + ')');
 
   if (!rollback) {
     run(process.execPath, ['scripts/ee-sync.mjs']);

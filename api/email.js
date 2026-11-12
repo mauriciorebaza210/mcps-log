@@ -251,7 +251,8 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     const r = await deps.relayAdmin({ action, params, actor: String(session.username || '') });
     rawVersion++;
     if (!r || r.error === 'relay not configured') return reply(res, 503, { ok: false, error: 'The engine can’t be reached right now.' });
-    return reply(res, 200, { ...r, ok: !!r.ok });
+    // Row 30: two people edited the same settings; the later save is refused, not merged.
+    return reply(res, r.conflict ? 409 : 200, { ...r, ok: !!r.ok });
   }
 
   // Import (PLAN.md → Plan changes 2026-11-10). The page parses the file

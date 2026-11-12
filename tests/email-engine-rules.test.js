@@ -108,7 +108,7 @@ test('5. Startup moved to Nov 4 before Welcome: everything re-plans from the new
     'c_progress#3 2026-11-25', 'c_maint 2026-11-26', 'c_progress#4 2026-12-02', 'c_final 2026-12-03']);
 });
 
-test('6. Startup moved after Welcome sent: no re-send, Progress re-plans, Activity flag', () => {
+test('6 (row 17). Startup moved after Welcome sent: no re-send, Progress re-plans, Activity flag', () => {
   const w = world([contact('c2', 'C', { startup_date: '2026-10-28' })],
     [enrollment('e2', 'c2', 'C', '2026-10-20', { anchor_snapshot: { startup_date: '2026-10-28' } })]);
   const sends = simulate(w, '2026-10-20', '2026-11-12', {
@@ -123,7 +123,7 @@ test('7. Startup Sep 28 collisions: one email a day, the later step waits a day'
     'c_progress#2 2026-10-12', 'c_progress#3 2026-10-19', 'c_maint 2026-10-20', 'c_progress#4 2026-10-26', 'c_final 2026-10-27']);
 });
 
-test('8. Comms emailed the contact today: lifecycle email held to tomorrow (best-effort)', () => {
+test('8 (row 24). Comms emailed the contact today: lifecycle email held to tomorrow (best-effort)', () => {
   const w = world([contact('c1', 'B')], [enrollment('e1', 'c1', 'B', '2026-10-26')]);
   const sends = simulate(w, '2026-10-26', '2026-10-28', { comms: { '2026-10-26': ['C1@Example.com '] } });
   assert.deepEqual(sends, ['b_intro 2026-10-27']);
@@ -147,7 +147,7 @@ test('11. Follow Up +4 -> +6: "active enrollments" moves it to Nov 1; "new only"
   assert.deepEqual(simulate(pinned, '2026-10-26', '2026-11-02').slice(0, 2), ['b_intro 2026-10-26', 'b_followup 2026-10-30']);
 });
 
-test('12. Re-entry: a returning B contact goes to Needs review, never a second Intro', () => {
+test('12 (row 16). Re-entry: a returning B contact goes to Needs review, never a second Intro', () => {
   const seq = BC.sequences.find(s => s.sequence_id === 'B');
   const c = contact('c1', 'B');
   const prior = [{ contact_id: 'c1', sequence_id: 'B', status: 'completed', enrolled_on: '2026-03-01' }];
@@ -160,7 +160,7 @@ test('12. Re-entry: a returning B contact goes to Needs review, never a second I
   assert.equal(L.decideEnrollment(c, after, [{ contact_id: 'c1', sequence_id: 'B', status: 'stopped', stopped_on: '2026-09-01' }], '2026-10-26').reason, 'reentry_too_soon');
 });
 
-test('13. Welcome held every day by Comms: expires at the hard deadline (startup - 1), flagged', () => {
+test('13 (row 25). Welcome held every day by Comms: expires at the hard deadline (startup - 1), flagged', () => {
   const w = world([contact('c2', 'C', { startup_date: '2026-10-28' })], [enrollment('e2', 'c2', 'C', '2026-10-20')]);
   const comms = { '2026-10-25': ['c2@example.com'], '2026-10-26': ['c2@example.com'], '2026-10-27': ['c2@example.com'] };
   const sends = simulate(w, '2026-10-20', '2026-10-28', { comms });
@@ -171,7 +171,7 @@ test('13. Welcome held every day by Comms: expires at the hard deadline (startup
   assert.ok(w.enrollments[0].flags.includes('expired_steps'));
 });
 
-test('13b. Without a deadline, the hold cap still ends it: nothing stays eligible forever', () => {
+test('13b (row 25). Without a deadline, the hold cap still ends it: nothing stays eligible forever', () => {
   const w = world([contact('c2', 'C', { startup_date: '2026-09-28' })], [enrollment('e2', 'c2', 'C', '2026-09-20')]);
   const comms = {}; for (let d = '2026-10-19'; d <= '2026-10-30'; d = L.addDays(d, 1)) comms[d] = ['c2@example.com'];
   simulate(w, '2026-09-20', '2026-10-27', { comms });
@@ -180,7 +180,7 @@ test('13b. Without a deadline, the hold cap still ends it: nothing stays eligibl
   assert.equal(maint.last_send_day, '2026-10-26'); // due Oct 19 + window 5 + max_hold 2
 });
 
-test('14. C marketing opt-out: Maintenance suppressed; every service email still sends', () => {
+test('14 (row 18). C marketing opt-out: Maintenance suppressed; every service email still sends', () => {
   const w = world([contact('c2', 'C', { startup_date: '2026-09-28' })], [enrollment('e2', 'c2', 'C', '2026-09-20')]);
   w.suppressions = [{ email_norm: 'c2@example.com', scope: 'marketing' }];
   const sends = simulate(w, '2026-09-20', '2026-11-10');
@@ -191,7 +191,7 @@ test('14. C marketing opt-out: Maintenance suppressed; every service email still
 });
 
 for (const [n, signal] of [['15', 'click'], ['16', 'form']]) {
-  test(n + '. ' + signal + ' on Maintenance stops the marketing branch only; Final Transition still sends', () => {
+  test(n + ' (row 19). ' + signal + ' on Maintenance stops the marketing branch only; Final Transition still sends', () => {
     const w = world([contact('c2', 'C', { startup_date: '2026-09-28' })], [enrollment('e2', 'c2', 'C', '2026-09-20')]);
     const sends = simulate(w, '2026-09-20', '2026-11-10', { before: (d, w) => {
       if (d === '2026-10-21') w.signals = [{ enrollment_id: 'e2', step_id: 'c_maint', signal, confidence: 'high' }]; } });

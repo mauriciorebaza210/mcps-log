@@ -441,7 +441,7 @@ test('Gmail refusing to create a draft stops the run cleanly; the next run recov
   assert.equal(w.outbox.length, 2);
 });
 
-test('Restore (RUNBOOK §4): catchUp replays the Journal into an older main sheet, with sending off and nothing sent', () => {
+test('Row 34 / RUNBOOK §4 restore: catchUp replays the Journal into an older main sheet, with sending off and nothing sent', () => {
   const w = fakeWorld(); enroll(w, 'e1');
   runPlan(w, [item('e1:b_intro:1')]);
   assert.equal(w.outbox.length, 1);
@@ -455,4 +455,73 @@ test('Restore (RUNBOOK §4): catchUp replays the Journal into an older main shee
   assert.equal(w.core.catchUp().applied_seq, head);
   assert.equal(w.delivery('e1:b_intro:1').state, 'sent', 'the sent delivery is back');
   assert.equal(w.outbox.length, 1, 'nothing sent again');
+});
+
+// ── Content binding and integrity (rows 12, 14) ──────────────────────────────
+
+test('Row 12: content published mid-run: this run sends the version it planned with; only a revoked one is refused', () => {
+  const w = fakeWorld(); enroll(w, 'e1'); enroll(w, 'e2');
+  const plan = [item('e1:b_intro:1', { revision_id: 'rev_b_intro_1' }),
+    item('e2:b_intro:1', { enrollment_id: 'e2', contact_id: 'c2', email_norm: 'james@example.com', revision_id: 'rev_b_intro_1' })];
+  // Version 2 is approved while the first email is going out.
+  w.hooks.beforeSend = () => { w.revisions.rev_b_intro_1 = 'superseded'; w.revisions.rev_b_intro_2 = 'published'; };
+  const s = runPlan(w, plan);
+  assert.equal(s.sent, 2);
+  assert.deepEqual([w.delivery('e1:b_intro:1').revision_id, w.delivery('e2:b_intro:1').revision_id], ['rev_b_intro_1', 'rev_b_intro_1']);
+  // A revoked version is different: it never goes out.
+  const w2 = fakeWorld(); enroll(w2, 'e1');
+  w2.revisions.rev_b_intro_1 = 'revoked';
+  assert.equal(runPlan(w2, [item('e1:b_intro:1', { revision_id: 'rev_b_intro_1' })]).sent, 0);
+  assert.equal(w2.outbox.length, 0);
+});
+
+test('Row 14: an approved file altered in Drive fails the delivery (no draft, no send) and alerts; it is not retried daily', () => {
+  const w = fakeWorld(); enroll(w, 'e1');
+  w.env.render = () => { throw new Error('integrity: file f1 changed after approval'); };
+  const s = runPlan(w, [item('e1:b_intro:1')]);
+  assert.equal(s.sent, 0);
+  const d = w.delivery('e1:b_intro:1');
+  assert.equal(d.state, 'failed'); assert.match(d.error, /^integrity:/);
+  assert.equal(Object.keys(w.drafts).length, 0); assert.equal(w.outbox.length, 0);
+  assert.ok(w.alerts.some(a => /^delivery_failed:e1:b_intro:1: integrity/.test(a)));
+  w.env.render = row => ({ to: row.email_norm, subject: 'Hello', html: '<p>Hi</p>', text: 'Hi' });
+  assert.equal(runPlan(w, [item('e1:b_intro:1')]).sent, 0, 'failed stays failed until a person acts');
+});
+
+// ── Security audit and schema compatibility (rows 33, 32) ────────────────────
+
+test('Row 33: a changed security property is logged to SecurityAudit (names only) and alerts; the first run is the quiet baseline', () => {
+  const w = fakeWorld(); enroll(w, 'e1');
+  w.props.EE_LINK_SECRET = 'secret-one'; w.props.EE_OWNER_EMAIL = 'antonio@mcpoolsolutions.org';
+  runPlan(w, []);
+  assert.equal(w.tables.SecurityAudit.length, 0); assert.ok(!w.alerts.some(a => /^security_property_changed/.test(a)));
+  runPlan(w, []);
+  assert.equal(w.tables.SecurityAudit.length, 0, 'nothing changed');
+  w.props.EE_LINK_SECRET = 'secret-two'; w.props.EE_REQUIRE_SECOND_APPROVER = 'true';
+  runPlan(w, []);
+  assert.equal(w.tables.SecurityAudit.length, 1);
+  assert.equal(w.tables.SecurityAudit[0].changed, 'EE_LINK_SECRET,EE_REQUIRE_SECOND_APPROVER');
+  assert.ok(w.alerts.some(a => a === 'security_property_changed:EE_LINK_SECRET, EE_REQUIRE_SECOND_APPROVER'));
+  assert.ok(!JSON.stringify(w.tables.SecurityAudit).includes('secret-two') && !JSON.stringify(w.meta).includes('secret-two'), 'values are never stored');
+  // Noticed even while sending is off.
+  w.enabled = false; w.props.EE_RELAY_SECRET = 'x';
+  assert.equal(runPlan(w, []).stopped_reason, 'kill_switch');
+  assert.equal(w.tables.SecurityAudit.length, 2);
+});
+
+test('Row 32: data from a newer schema stops the run (rollback below the floor can’t corrupt it); additive columns are fine', () => {
+  const w = fakeWorld(); enroll(w, 'e1');
+  w.env.schema = { read_min: 1, read_max: 1, writes: 1 };
+  // An additive migration rolled back: rows carry a column this code doesn't know. A full run passes.
+  w.tables.Enrollments[0].column_from_a_newer_release = 'x';
+  assert.equal(runPlan(w, [item('e1:b_intro:1')]).sent, 1);
+  assert.equal(w.meta.data_schema, 1, 'the run records the schema it writes');
+  // A semantic migration's contract step (schema 2) then a rollback to this code: it refuses to run.
+  w.meta.data_schema = 2; enroll(w, 'e2');
+  const s = runPlan(w, [item('e2:b_intro:1', { enrollment_id: 'e2', contact_id: 'c2', email_norm: 'james@example.com' })]);
+  assert.equal(s.stopped_reason, 'schema_incompatible'); assert.equal(w.outbox.length, 1, 'nothing more sent');
+  assert.ok(w.alerts.some(a => /^schema_incompatible:data schema 2, this code reads 1\.\.1/.test(a)));
+  // The expand release reads both forms: 1..2 runs on schema-2 data.
+  w.env.schema = { read_min: 1, read_max: 2, writes: 2 };
+  assert.equal(runPlan(w, [item('e2:b_intro:1', { enrollment_id: 'e2', contact_id: 'c2', email_norm: 'james@example.com' })]).sent, 1);
 });

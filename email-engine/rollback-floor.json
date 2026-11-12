@@ -1,0 +1,4 @@
+{
+  "_comment": "The lowest Apps Script version `npm run ee:deploy --rollback <v>` may go back to. Raise it to the deployed version (@N) of any release that contracts a semantic migration (PLAN.md → Security boundary & rollback). 0 = no floor yet.",
+  "floor": 0
+}

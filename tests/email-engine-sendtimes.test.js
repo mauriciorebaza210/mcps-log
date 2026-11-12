@@ -29,7 +29,7 @@ test('No time given (simulation): no gate, and every delivery carries the defaul
   assert.equal(intro(r).send_time, '09:00');
 });
 
-test('Campaign default gates the day: before it upcoming (later_today), at or after it due', () => {
+test('Row 59 (a later run that day): campaign default gates the day: before it upcoming (later_today), at or after it due', () => {
   const before = L.decide(world(null, { time: '08:59', sendTimes: { B: '09:00' } }));
   assert.equal(intro(before).outcome, 'upcoming');
   assert.equal(intro(before).reason, 'later_today');
@@ -45,7 +45,7 @@ test('The enrollment\'s own time (from its batch) wins over the campaign default
   assert.equal(intro(L.decide(world({ send_time: '10:30' }, Object.assign(w, { time: '10:45' })))).outcome, 'due');
 });
 
-test('A missed day waits for its time the next day; windows and dates are unchanged', () => {
+test('Row 59 (no run that day): a missed day waits for its time the next day; windows and dates are unchanged', () => {
   const r = L.decide(world({ send_time: '14:00' }, { today: '2026-11-24', time: '09:00' }));
   assert.equal(intro(r).due, '2026-11-23');
   assert.equal(intro(r).outcome, 'upcoming');

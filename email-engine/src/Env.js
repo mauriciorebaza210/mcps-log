@@ -60,6 +60,8 @@ var EE_TABLES = {
   // A person's change to one planned send (Admin.js → send_override; PLAN.md → Per-send overrides).
   Overrides: ['key', 'kind', 'date', 'enrollment_id', 'step_id', 'by', 'at'],
   // The Attachment Library (Attachments.js): items and their immutable versions.
+  // Security property changes seen by a run (EngineCore.js → securityAudit): names only, never values.
+  SecurityAudit: ['id', 'at', 'changed', 'effective_user'],
   Attachments: ['item_id', 'name', 'status', 'created_by', 'created_at', 'retired_by', 'retired_at'],
   AttachmentVersions: ['version_id', 'item_id', 'v', 'file_id', 'sha256', 'size', 'source_file_id', 'source_name', 'status',
     'uploaded_by', 'uploaded_at', 'approver', 'approved_at', 'restored_from']
@@ -71,7 +73,7 @@ var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id'
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
   Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Batches: 'batch_id', Overrides: 'key',
-  Attachments: 'item_id', AttachmentVersions: 'version_id' };
+  Attachments: 'item_id', AttachmentVersions: 'version_id', SecurityAudit: 'id' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
   opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1,
   auto_replies: 1, soft_bounces: 1, message_count: 1, count: 1, started_count: 1 };
@@ -234,6 +236,8 @@ function EE_events_(ss) {
     }
   };
 }
+// Attachment versions this execution (= this run) has bound (Attachments.js, row 56).
+var EE_ATTACH_RUN_SNAP_ = {};
 function EE_readVerified_(fileId, sha) {
   var text = DriveApp.getFileById(fileId).getBlob().getDataAsString('UTF-8');
   if (EE_sha256Hex_(text) !== sha) throw new Error('integrity: file ' + fileId + ' changed after approval');
@@ -342,7 +346,9 @@ function EE_env(opts) {
           .map(function (d) { return d.getId(); });
       }
     },
-    render: function (row) { return EE_renderDelivery_(store, row); }
+    render: function (row) { return EE_renderDelivery_(store, row); },
+    // The data schemas this code reads and writes (Main.js → EE_SCHEMA; row 32).
+    schema: typeof EE_SCHEMA !== 'undefined' ? EE_SCHEMA : null
   };
   return env;
 }
@@ -389,7 +395,7 @@ function EE_renderDelivery_(store, row) {
       links: { quote: c.link_quote }, testBanner: null }
   });
   if (!out.ok) throw new Error(out.errors.join('; '));
-  var att = EE_attachmentsFor_({ store: store }, rev, EE_attachSendFiles_());
+  var att = EE_attachmentsFor_({ store: store }, rev, EE_attachSendFiles_(), EE_ATTACH_RUN_SNAP_);
   return { to: contact.email_norm, subject: out.subject, html: out.html, text: out.text,
     attachments: att.map(function (a) { return a.blob.setName(a.name); }), attachment_versions: att.map(function (a) { return a.version_id; }) };
 }

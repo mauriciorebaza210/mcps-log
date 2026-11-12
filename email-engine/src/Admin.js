@@ -565,7 +565,7 @@ function EE_publishRules_(env, core, p, actor) {
   var cfgRow = env.store.get('Config', 'rule_rev'), curRev = cfgRow && cfgRow.value;
   var cur = curRev && env.store.get('Rulesets', curRev);
   if (!cur) return { ok: false, error: 'current rules not found' };
-  if (p.base_rev && p.base_rev !== curRev) return { ok: false, error: 'Someone changed these settings a moment ago. Reload and try again.' };
+  if (p.base_rev && p.base_rev !== curRev) return { ok: false, conflict: true, error: 'Someone changed these settings a moment ago. Reload and try again.' };
   var curJson = typeof cur.json === 'string' ? JSON.parse(cur.json) : cur.json;
   var r = EE_applyRuleEdits_(curJson, edits);
   if (r.error) return { ok: false, error: r.error };

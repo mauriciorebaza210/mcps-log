@@ -68,6 +68,7 @@ test('Rules are never changed in place: each save is a new revision, Config poin
   const stale = w.admin('publish_rules', { edits: [{ step_id: 'b_followup', offset: 3 }], scope: 'new', base_rev: 'bc-1' });
   assert.equal(stale.ok, false);
   assert.match(stale.error, /Reload/);
+  assert.equal(stale.conflict, true, 'row 30: flagged so the API answers 409');
   // Saving the same thing again makes no revision.
   assert.equal(w.admin('publish_rules', { edits: [{ step_id: 'b_followup', offset: 6 }], scope: 'new' }).unchanged, true);
   assert.equal(w.tables.Rulesets.length, 2);

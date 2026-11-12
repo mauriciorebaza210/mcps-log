@@ -386,6 +386,37 @@ function EE_createCore(env) {
     return { result: s.state };
   }
 
+  // ── Security audit (row 33; PLAN.md → Security boundary & rollback) ──
+  // Each run hashes the security properties; a change since the last run is
+  // logged to SecurityAudit (names only, never values) and alerts. The first run
+  // records the baseline quietly.
+  var SECURITY_PROPS = ['EE_OWNER_EMAIL', 'EE_LINK_SECRET', 'EE_RELAY_SECRET', 'EE_REQUIRE_SECOND_APPROVER', 'EE_MAIN_SS_ID',
+    'EE_JOURNAL_SS_ID', 'EE_SETTINGS_SS_ID', 'EE_WEBAPP_URL', 'EE_TRIGGER_OWNER'];
+  function securityAudit() {
+    var now = {}, changed = [];
+    SECURITY_PROPS.forEach(function (k) { var v = env.props.get(k); now[k] = v == null || v === '' ? '' : env.sha256('ee-sec|' + k + '|' + v); });
+    env.withLock(function () {
+      var raw = env.meta.get('security_hashes'), before = null;
+      try { before = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null; } catch (e) { before = null; }
+      if (before) SECURITY_PROPS.forEach(function (k) { if ((before[k] || '') !== now[k]) changed.push(k); });
+      if (!before || changed.length) env.meta.set('security_hashes', JSON.stringify(now));
+      if (changed.length) env.store.upsert('SecurityAudit', { id: 'sec_' + env.uuid(), at: iso(env.now()), changed: changed.join(','), effective_user: env.user() });
+    });
+    if (changed.length) { try { env.alert('security_property_changed', changed.join(', ')); } catch (e) { /* recorded above */ } }
+    return changed;
+  }
+  // ── Schema compatibility (row 32): the data's schema must be one this code reads ──
+  function schemaCheck() {
+    if (!env.schema) return '';
+    var ds = Number(env.meta.get('data_schema') || 0);
+    if (ds && (ds > env.schema.read_max || ds < env.schema.read_min)) {
+      try { env.alert('schema_incompatible', 'data schema ' + ds + ', this code reads ' + env.schema.read_min + '..' + env.schema.read_max); } catch (e) { /* stop anyway */ }
+      return 'schema_incompatible';
+    }
+    if (ds < env.schema.writes) env.withLock(function () { env.meta.set('data_schema', env.schema.writes); });
+    return '';
+  }
+
   // ── The run ──
   // opts: { trigger, plan: function (lease) -> [due items in send order], dailyCap, budgetMs, sentToday }
   function run(opts) {
@@ -394,7 +425,11 @@ function EE_createCore(env) {
     var summary = { run_id: 'run_' + env.uuid(), trigger: opts.trigger || 'daily', started_at: iso(started),
       sent: 0, skipped: 0, cancelled: 0, reconcile: 0, adopted: 0, stopped_reason: 'done' };
     function stop(reason) { summary.stopped_reason = reason; summary.finished_at = iso(env.now()); return summary; }
+    // Before anything else, so a changed property is noticed even while sending is off.
+    try { securityAudit(); } catch (e) { /* never blocks a run; the next run retries */ }
     if (env.props.get('EE_SAFETY_PAUSE')) return stop('safety_pause');
+    var schemaStop = schemaCheck();
+    if (schemaStop) return stop(schemaStop);
     if (env.config.engineEnabled() === false) return stop('kill_switch');
     if (norm(env.user()) !== norm(env.config.ownerEmail())) return stop('owner_guard');
     var lease = acquireLease(summary.run_id);
