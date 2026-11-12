@@ -174,7 +174,7 @@ function impStepCheck_() {
   const fileIssues = (local.skipped.length || local.duplicates.length) ? '<details class="lc-verdict"><summary>' + lcTag_('Not in the check', '') + '<b class="num">' + (local.skipped.length + local.duplicates.length) + '</b></summary><ul>' +
     local.skipped.map(x => '<li><span>Row ' + x.row + '</span><small>' + (x.reason === 'no_email' ? 'no email' : 'email not valid: ' + lcEsc_(x.detail)) + '</small></li>').join('') +
     local.duplicates.map(x => '<li><span>Row ' + x.row + '</span><small>same email as row ' + x.first_row + ' (' + lcEsc_(x.email) + ')</small></li>').join('') + '</ul></details>' : '';
-  return (c.tidied ? '<div class="lc-hint">' + LC_ICON.check + c.tidied + ' name' + (c.tidied === 1 ? '' : 's') + ' tidied (capitals, couples, families, phone numbers). The original is kept.</div>' : '') +
+  return (c.tidied ? '<div class="lc-hint">' + LC_ICON.check + c.tidied + ' name' + (c.tidied === 1 ? '' : 's') + ' tidied (capitals, couples, families, phone numbers)' + (c.ai ? ', ' + c.ai + ' sorted by the AI check' : '') + '. The original is kept.</div>' : '') +
     ['new', 'possible_duplicate', 'same_person', 'existing', 'customer', 'opted_out', 'do_not_contact'].map(group).join('') + fileIssues +
     '<p class="lc-note">They go to <b>Needs review</b>. Nobody is emailed by an import; you start them in batches.' + (s.do_not_contact ? ' People marked do-not-contact are added to the opt-out list.' : '') + '</p>' +
     '<label class="lc-check"><input type="checkbox" data-imp-remember' + (IMP.remember !== false ? ' checked' : '') + '> Remember these columns for files like this</label>' +
@@ -199,7 +199,7 @@ async function impCheck_() {
   const r = await impPost_({ stage: 'check', group: IMP.group, contacts: local.contacts }).catch(() => ({ ok: false, error: 'Network error' }));
   IMP.busy = false;
   if (!r.ok) { impRender_(); return lcToast_(r.error || 'The check didn’t work', true); }
-  IMP.check = { rows: r.rows, summary: r.summary, tidied: r.tidied || 0, local };
+  IMP.check = { rows: r.rows, summary: r.summary, tidied: r.tidied || 0, ai: r.ai || 0, local };
   IMP.include = new Set(); IMP.choice = {}; IMP.step = 3; impRender_();
 }
 async function impImport_() {

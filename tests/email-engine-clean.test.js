@@ -155,3 +155,26 @@ test('Engine: apply_incoming merge fills blanks only; replace makes the new emai
   assert.equal(w.admin('import_contacts', { group: 'B', contacts: [{ email_norm: 'dup@z.com', first_name: 'D', duplicate_of: 'a' }] }).added, 1);
   assert.equal(w.tables.Contacts.find(c => c.email_norm === 'dup@z.com').review_status, 'possible_duplicate', 'flagged imports wait for review');
 });
+
+test('Imports run the AI on unclear names automatically (when a key is set), once per name; without a key the rules stand', async () => {
+  process.env.EE_ENGINE_SS_ID = 'engine-sheet';
+  const { createEmailHandler } = await import(path.join(ROOT, 'api', 'email.js'));
+  const sheet = rows => { const h = [...new Set(rows.flatMap(Object.keys))]; return [h, ...rows.map(r => h.map(k => r[k] == null ? '' : String(r[k])))]; };
+  const data = { Permissions: sheet([{ username: 'mau', roles: 'editor,operator', active: 'Y' }]), Config: sheet([{ key: 'engine_mode', value: 'test' }]),
+    Contacts: sheet([{ contact_id: 'x', email_norm: 'x@x.com' }]), Comms_Optouts: sheet([{ email: 'none@x.com' }]), Clients: sheet([{ email: 'none@x.com' }]) };
+  let asked = 0;
+  const run = async key => {
+    const h = createEmailHandler({ validatePortalSession: async () => ({ username: 'mau' }), getCached: async (k, t, f) => f(), crmSpreadsheetId: () => 'crm',
+      readSheetRanges: async tabs => { const o = {}; tabs.forEach(t => { if (data[t]) o[t] = data[t]; }); return o; },
+      anthropicKey: () => key, askNames: async names => { asked++; return names.map(n => ({ i: n.i, first_name: 'Mary Ann', last_name: 'Smith', kind: 'person', greeting: 'Mary Ann' })); } });
+    const res = { statusCode: 0, setHeader() {}, status(c) { this.statusCode = c; return this; }, send(b) { this.body = JSON.parse(b); return this; } };
+    await h({ method: 'POST', query: { op: 'import' }, headers: { authorization: 'Bearer t' }, body: { stage: 'check', group: 'B', contacts: [{ row: 1, email_norm: 'mas@x.com', first_name: 'MARY ANN SMITH' }] } }, res);
+    return res.body;
+  };
+  const off = await run('');
+  assert.deepEqual([off.rows[0].first_name, off.rows[0].last_name, asked], ['Mary', 'Ann Smith', 0], 'no key: the rules\' split');
+  const on = await run('k');
+  assert.deepEqual([on.rows[0].first_name, on.rows[0].last_name, on.ai], ['Mary Ann', 'Smith', 1]);
+  await run('k');
+  assert.equal(asked, 1, 'the same name isn\'t asked twice');
+});

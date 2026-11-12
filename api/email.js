@@ -39,7 +39,8 @@ const IMPORT_CHECK_MAX = 5000, IMPORT_SAVE_MAX = 100;
 const ADMIN_CAP = { list_templates: 'view_aggregates', open_template: 'view_aggregates', open_draft: 'view_aggregates', import_template: 'edit_drafts', approve_draft: 'approve_publish', discard_draft: 'edit_drafts',
   set_send_time: 'edit_config', move_batch: 'edit_contacts', send_override: 'edit_contacts', create_batch: 'edit_contacts', cancel_batch: 'edit_contacts', maintenance: 'edit_config', ping: 'view_aggregates', run_now: 'run_now', set_enabled: 'pause', set_bucket_paused: 'pause', mark_sent: 'resolve_unknown',
   abandon: 'resolve_unknown', resend: 'resolve_unknown' };
-let rawVersion = 0;          // bumped after a write, so this instance never serves the pre-write cache
+let rawVersion = 0;
+const AI_NAMES = new Map();   // name → AI answer (or null = unclear), per function instance (api/_lib/name-ai.js)          // bumped after a write, so this instance never serves the pre-write cache
 
 function engineSpreadsheetId() {
   return String(process.env.EE_ENGINE_SS_ID || '').trim();
@@ -292,7 +293,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     ]);
     const sources = { engineContacts: tables.Contacts || [], optouts: sheets.rowsToObjects(settings.Comms_Optouts || []),
       clients: sheets.rowsToObjects(crm.Clients || []) };
-    const verdict = checkCleaned(contacts, sources, group, tables);
+    const verdict = await checkCleanedAI(contacts, sources, group, tables);
     if (stage === 'check') return reply(res, 200, { ok: true, ...verdict });
 
     // Save: rows the server calls new, plus each possible duplicate / repeat the person decided on
@@ -337,6 +338,12 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     const verdict = checkCleaned(cands, { engineContacts: tables.Contacts || [], optouts: src.optouts, clients: customerEmails(src.quotes, src.clients) }, rule.group || 'B', tables);
     return { cands: verdict.cleaned, verdict };
   }
+  // The same, with the AI pass: used when leads are actually added (sync, Add), not for counts.
+  async function checkLeadsAI(src, tables, rule) {
+    const cands = leadCandidates(src.quotes, rule);
+    const verdict = await checkCleanedAI(cands, { engineContacts: tables.Contacts || [], optouts: src.optouts, clients: customerEmails(src.quotes, src.clients) }, rule.group || 'B', tables);
+    return { cands: verdict.cleaned, verdict };
+  }
   // New leads are added; possible duplicates are added too but flagged (duplicate_of), so they
   // wait in Clean up instead of being batched. The sync can't ask, so nobody is merged automatically.
   async function addLeads(cands, verdict, rule, actor, include) {
@@ -362,13 +369,41 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
   async function crmSync(tables, actor) {
     const src = await crmSources(), cfg = cfgOf(tables), rule = ruleOf(cfg);
     const out = { startups: await syncStartups(src, actor) };
-    if (autoOf(cfg)) { const { cands, verdict } = checkLeads(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
+    if (autoOf(cfg)) { const { cands, verdict } = await checkLeadsAI(src, tables, rule); out.leads = await addLeads(cands, verdict, rule, actor, new Set()); }
     return out;
   }
 
   // Clean the rows, run the import check, then flag possible duplicates (api/_lib/email-clean.js).
-  function checkCleaned(contacts, sources, group, tables) {
+  // AI for names the rules can't settle, on imports and the MCP lead sync (not on page loads).
+  // Answers are kept per name for this instance, so a re-check (or the save after a check) costs nothing.
+  async function aiPolish(cleaned) {
+    const todo = cleaned.filter(c => c._clean && c._clean.needs_ai);
+    if (!todo.length || !deps.anthropicKey()) return 0;
+    const ask = [...new Set(todo.map(c => c.name_original || [c.first_name, c.last_name].join(' ')).filter(n => !AI_NAMES.has(n)))];
+    if (ask.length) {
+      const r = await deps.askNames(ask.slice(0, 200).map((name, i) => ({ i, name })), { apiKey: deps.anthropicKey() }).catch(() => ({ error: 'ai_failed' }));
+      const got = Array.isArray(r) ? r : (r && r.partial) || [];
+      got.forEach(g => AI_NAMES.set(ask[g.i], g));
+      ask.forEach(n => { if (!AI_NAMES.has(n) && Array.isArray(r)) AI_NAMES.set(n, null); });   // answered "unclear": keep the rules' version
+    }
+    let n = 0;
+    todo.forEach(c => {
+      const g = AI_NAMES.get(c.name_original || [c.first_name, c.last_name].join(' '));
+      if (!g) return;
+      if (!c.name_original) c.name_original = [c.first_name, c.last_name].filter(Boolean).join(' ');
+      c.first_name = g.first_name; c.last_name = g.last_name; c.name_kind = g.kind === 'person' ? '' : g.kind;
+      c._clean = { ...c._clean, kind: g.kind, ai: true, changed: [...new Set(c._clean.changed.concat(['first_name', 'last_name']))] };
+      n++;
+    });
+    return n;
+  }
+  async function checkCleanedAI(contacts, sources, group, tables) {
     const cleaned = cleanIncoming(contacts);
+    const ai = await aiPolish(cleaned);
+    return { ...checkCleaned(contacts, sources, group, tables, cleaned), ai };
+  }
+  function checkCleaned(contacts, sources, group, tables, pre) {
+    const cleaned = pre || cleanIncoming(contacts);
     const v = checkImport(cleaned, sources, { group });
     const rows = flagDuplicates(v.rows, cleaned, tables.Contacts || []);
     const summary = {}; rows.forEach(r => { summary[r.status] = (summary[r.status] || 0) + 1; });
@@ -439,7 +474,7 @@ export function createEmailHandler(deps = DEFAULT_DEPS) {
     }
     const rule = body.rule && typeof body.rule === 'object' ? body.rule : null;
     if (!rule) return reply(res, 400, { ok: false, error: 'Pick which leads first.' });
-    const { cands, verdict } = checkLeads(src, tables, rule);
+    const { cands, verdict } = stage === 'add' ? await checkLeadsAI(src, tables, rule) : checkLeads(src, tables, rule);
     if (stage === 'check') return reply(res, 200, { ok: true, total: cands.length, summary: verdict.summary, rows: verdict.rows.slice(0, 400) });
     if (stage !== 'add') return reply(res, 400, { ok: false, error: 'Unknown stage' });
     const done = await addLeads(cands, verdict, rule, session.username, new Set((body.include_rows || []).map(Number)));
