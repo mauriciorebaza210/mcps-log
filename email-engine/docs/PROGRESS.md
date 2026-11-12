@@ -8,7 +8,7 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 
 ### Where things stand
 - **Checkpoint:** CP9 `bc-live` next (go live before CP8, Mau 2026-11-11). Last tag `ee/cp7-bc-scheduled` (2026-11-11).
-- **Engine (Tony's Apps Script):** deployment **@44**, version **cp9-1**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
+- **Engine (Tony's Apps Script):** deployment **@45**, version **cp9-2**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
 - **Tests:** `npm run test:ee` → 247 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
 - **Vercel env (Preview, branch feat/email-engine unless noted):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET (all *sensitive*: can't be pulled back), **ANTHROPIC_API_KEY** (Preview + Production, added by Mau 2026-11-11; same key the portal's Apps Script uses).

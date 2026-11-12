@@ -237,6 +237,17 @@ function EE_exampleFullTemplate_() {
     .replace(/https:\/\/zzunsubzz\.invalid\//g, '{{UnsubscribeLink}}').replace(quote, '{{QuoteLink}}');
 }
 
+// The ChatGPT instructions in Drive follow this file: when the text changes, bump the version and the next
+// Templates list (Templates.js) rewrites the Drive copy. No maintenance run needed.
+var EE_CHATGPT_GUIDE_VERSION = '2026-11-11b';
+function EE_refreshGuide_(props) {
+  if (typeof DriveApp === 'undefined' || props.getProperty('EE_GUIDE_VERSION') === EE_CHATGPT_GUIDE_VERSION) return false;
+  var rootId = props.getProperty('EE_FOLDER_MARKETING'); if (!rootId) return false;
+  var root = DriveApp.getFolderById(rootId), name = 'START HERE - ChatGPT instructions.txt', it = root.getFilesByName(name);
+  if (it.hasNext()) it.next().setContent(EE_CHATGPT_GUIDE); else root.createFile(name, EE_CHATGPT_GUIDE, MimeType.PLAIN_TEXT);
+  props.setProperty('EE_GUIDE_VERSION', EE_CHATGPT_GUIDE_VERSION);
+  return true;
+}
 var EE_CHATGPT_GUIDE = [
   'MCPS EMAIL TEMPLATES WITH CHATGPT',
   '',
@@ -265,7 +276,7 @@ var EE_CHATGPT_GUIDE = [
   '- The company name: Mission Custom Pool Solutions.',
   '',
   'PERSONAL DETAILS: use these placeholders exactly, never real names',
-  '- {{FirstName}}  {{LastName}}  {{Address}}  {{StartupDate}}',
+  '- {{FirstName}}  {{LastName}}  {{Address}}  {{StartupDate}}  {{SenderName}} (who signs the email)',
   '- Example greeting: Hi {{FirstName}},',
   '',
   'DESIGN RULES (email apps are strict)',
@@ -275,13 +286,16 @@ var EE_CHATGPT_GUIDE = [
   '  Charcoal #222222 (text). Fonts: Montserrat for headings, Open Sans for text, with Arial as fallback.',
   '- Images: only https:// links, each with alt text. Logo: https://mcps-email-assets.vercel.app/mcps-lockup-badge.png',
   '  (214 x 59). Never put important words inside an image.',
-  '- One main button per email. Its link will be filled in by the system: use href="{{QuoteLink}}" for the free quote page.',
+  '- One main button per email, asking them to request service / get a free quote. Its link is always href="{{QuoteLink}}".',
+  '  {{QuoteLink}} opens the MCPS service request form. The system tracks the click AND the form: once someone requests',
+  '  service, they get no more of these emails. Never type a website address for this button; only {{QuoteLink}} is tracked',
+  '  that way. Other links are fine (they are click-tracked too) but keep them few.',
   '- Mobile friendly: text at least 15px, buttons at least 44px tall.',
   '',
   'VOICE',
   '- Professional, clear, reliable, direct, caring. Short paragraphs. No pressure tactics, no ALL CAPS, no emojis.',
   '- Never list service tasks. Say the technician will complete the service following our standard procedures.',
-  '- Sign off as Tony, Mission Custom Pool Solutions. The tagline is "Every pool matters."',
+  '- Sign off as {{SenderName}}, Mission Custom Pool Solutions (the name is filled in by the system). The tagline is "Every pool matters."',
   '',
   'AUDIENCE',
   '- MCP Legacy: past customers of Mission Custom Pools (the builder) being introduced to MCPS, the service side of',

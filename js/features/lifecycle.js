@@ -73,7 +73,7 @@ function lcConfirm_(o) {
     const layer = document.createElement('div');
     layer.className = 'lc-layer';
     layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet" role="alertdialog" aria-modal="true">' +
-      '<h3>' + lcEsc_(o.title) + '</h3><p>' + lcEsc_(o.body || '') + '</p><p class="lc-note" data-err hidden style="color:var(--red)"></p><div class="row"><button class="lc-btn" data-x="0">Cancel</button>' +
+      '<h3>' + lcEsc_(o.title) + '</h3>' + (o.html || '<p>' + lcEsc_(o.body || '') + '</p>') + '<p class="lc-note" data-err hidden style="color:var(--red)"></p><div class="row"><button class="lc-btn" data-x="0">Cancel</button>' +
       '<button class="lc-btn ' + (o.danger ? 'danger solid' : 'primary') + '" data-x="1">' + lcEsc_(o.ok || 'Confirm') + '</button></div></div>';
     let running = false;
     const done = v => { layer.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
@@ -82,7 +82,7 @@ function lcConfirm_(o) {
       const t = e.target.closest('[data-x]'); if (!t || running) return;
       if (t.dataset.x !== '1' || !o.run) return done(t.dataset.x === '1');
       running = true; lcBusyBtn_(t, true); layer.querySelector('[data-x="0"].lc-btn').disabled = true;
-      const r = await Promise.resolve().then(o.run).catch(() => ({ ok: false, error: 'Network error' }));
+      const r = await Promise.resolve().then(() => o.run(layer)).catch(() => ({ ok: false, error: 'Network error' }));
       running = false; lcBusyBtn_(t, false); layer.querySelector('[data-x="0"].lc-btn').disabled = false;
       if (r && r.ok) return done(r);
       const err = layer.querySelector('[data-err]'); err.hidden = false; err.textContent = (r && (r.error || r.reason)) || 'That didn’t work';
@@ -319,7 +319,10 @@ function lcEmails_() {
   const singleSec = singles.length ? '<section class="lc-seq"><div class="lc-seq-h"><span class="lc-bkt lc-sgl-ic">' + CMP_ICON.mail + '</span><div class="grow"><h2>Single emails</h2>' +
     '<small>' + singles.length + ' made · one day each</small></div></div>' +
     '<div class="lc-cols"><span>Email</span><span>Status</span><span class="r">Sent</span><span class="r">Opened</span><span class="r">Clicked</span><span class="r">Replied</span><span></span></div>' + singleRows + '</section>' : '';
-  const bar = typeof attOpen_ === 'function' ? '<div class="lc-emails-bar"><button class="lc-btn" data-act="att-open">' + LC_ICON.clip + 'Attachments</button></div>' : '';
+  // Who the emails come from: the inbox name and the sign-off, editable by whoever edits emails.
+  const eng = LC.ov.engine, fromName = eng.sender_display_name || ((eng.sender_name || 'Tony') + ' | Mission Custom Pool Solutions');
+  const from = '<div class="lc-from"><span>From</span><b>' + lcEsc_(fromName) + '</b>' + (lcCan_('edit_drafts') ? '<button class="lc-link" data-act="sender">Change</button>' : '') + '</div>';
+  const bar = '<div class="lc-emails-bar">' + from + (typeof attOpen_ === 'function' ? '<button class="lc-btn" data-act="att-open">' + LC_ICON.clip + 'Attachments</button>' : '') + '</div>';
   return bar + ['B', 'C'].map(b => {
     const steps = ov.steps.filter(s => s.bucket === b).sort((x, y) => x.order - y.order);
     if (!steps.length) return '';
@@ -717,6 +720,23 @@ function lcSetupScope_(s, edit) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 // Each one: confirm if it matters, call the engine, say what happened, then refresh.
+// The name people see in their inbox, and the name emails are signed with.
+async function lcEditSender_() {
+  const e = LC.ov.engine, disp = e.sender_display_name || ((e.sender_name || 'Tony') + ' | Mission Custom Pool Solutions'), sign = e.sender_name || 'Tony';
+  const html = '<p>How your emails show up for customers.</p>' +
+    '<label class="lc-fld"><span>Name in their inbox</span><input class="lc-input" data-snd="display" maxlength="60" value="' + lcEsc_(disp) + '"><small class="lc-fld-help">Shown in the From column. Gmail cuts long names around 20 characters, e.g. “Tony at MCPS” shows in full.</small></label>' +
+    '<label class="lc-fld" style="margin-top:12px"><span>Signs emails as</span><input class="lc-input" data-snd="sign" maxlength="40" value="' + lcEsc_(sign) + '"><small class="lc-fld-help">The name at the bottom of emails made in the portal, and {{SenderName}} in templates.</small></label>' +
+    '<div class="lc-from-prev"><span>Preview</span><b data-snd-prev>' + lcEsc_(disp) + '</b><em>Welcome to Mission Custom Pool Solutions</em></div>';
+  const done = lcConfirm_({ title: 'Who your emails are from', html, ok: 'Save',
+    run: layer => lcAdmin_('set_sender', { display_name: layer.querySelector('[data-snd="display"]').value, sign_name: layer.querySelector('[data-snd="sign"]').value }) });
+  setTimeout(() => { const l = [...document.querySelectorAll('.lc-layer')].pop(), i = l && l.querySelector('[data-snd="display"]'), pv = l && l.querySelector('[data-snd-prev]');
+    if (i && pv) i.addEventListener('input', () => { pv.textContent = i.value; }); }, 0);
+  const r = await done;
+  if (!r || !r.ok) return;
+  Object.assign(LC.ov.engine, { sender_display_name: r.display_name, sender_name: r.sign_name });
+  lcToast_('Saved. New emails come from “' + r.display_name + '”.');
+  lcRenderBody_();
+}
 const lcRenderRun_ = () => { lcRenderHead_(); if (LC.tab === 'activity') lcRenderBody_(); };
 async function lcRunNow_() {
   const live = LC.ov && LC.ov.engine.mode === 'production';
@@ -843,6 +863,7 @@ function lcDispatch_(t) {
   if (act === 'trig-refresh') return lcTrigTest_(true);
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
+  if (act === 'sender') return lcEditSender_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);
   if (act === 'enabled') return lcSetEnabled_(!LC.ov.engine.enabled);
   if (act === 'pause') return lcSetPaused_(t.dataset.bucket, !LC.ov.engine.paused_buckets.includes(t.dataset.bucket));

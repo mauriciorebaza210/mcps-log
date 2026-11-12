@@ -115,6 +115,7 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
   var folders = EE_templateFolders_(env.props);
   var revisions = env.store.rows('Revisions');
   if (action === 'list_templates') {
+    try { if (typeof EE_refreshGuide_ === 'function') EE_refreshGuide_(env.props); } catch (e) { /* the guide refreshes next time */ }
     var out = {};
     EE_SEED.ruleset.steps.map(function (st) { return st.step_id; }).forEach(function (stepId) {
       if (p.step_id && p.step_id !== stepId) return;

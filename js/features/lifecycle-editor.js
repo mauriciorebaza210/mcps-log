@@ -87,7 +87,9 @@ function edRender_() {
   const seg = [['text', 'Edit text'], ['html', 'Edit HTML'], ['preview', 'Preview']].map(([k, l]) =>
     '<button data-ed="mode" data-v="' + k + '" class="' + (ED.mode === k ? 'on' : '') + '">' + l + '</button>').join('');
   const fieldOpts = '<option value="">Insert field…</option>' + ED.fields.map(f => '<option value="' + lcEsc_(f.field) + '">' + lcEsc_(edFieldLabel_(f.field)) +
-    (f.fallback ? ' (if empty: “' + lcEsc_(f.fallback) + '”)' : f.required ? ' (required)' : '') + '</option>').join('');
+    (f.fallback ? ' (if empty: “' + lcEsc_(f.fallback) + '”)' : f.required ? ' (required)' : '') + '</option>').join('') +
+    // Links go in an href (HTML mode). {{QuoteLink}} is the tracked service request form: a request stops the emails.
+    (ED.mode === 'html' && full ? '<optgroup label="Links (put inside href=&quot;…&quot;)"><option value="QuoteLink">Service request form (tracked)</option><option value="UnsubscribeLink">Unsubscribe</option></optgroup>' : '');
   const samples = edSamples_();
   const asOpts = Object.entries(samples).map(([k, v]) => '<option value="' + k + '"' + (ED.sample === k ? ' selected' : '') + '>' + lcEsc_(v.label) + '</option>').join('');
   L.querySelector('.lc-ed').innerHTML =
@@ -100,7 +102,7 @@ function edRender_() {
     '<div class="lc-ed-bar"><div class="lc-seg">' + seg + '</div>' +
       (ED.mode !== 'preview' ? '<select class="lc-input sm" data-ed-field aria-label="Insert a field">' + fieldOpts + '</select>' : '') +
       (ED.mode !== 'text' ? '<label class="lc-ed-as"><span>Preview as</span><select class="lc-input sm" data-ed-sample>' + asOpts + '</select></label>' : '') +
-      '<span class="lc-ed-hint">' + lcEsc_(ED.mode === 'text' ? 'Click any text to change it. Fields show as chips.' : ED.mode === 'html' ? 'For layout changes. The checks run as you type.' : 'Exactly as it sends, with sample details.') + '</span>' +
+      '<span class="lc-ed-hint">' + lcEsc_(ED.mode === 'text' ? 'Click any text to change it. Fields show as chips.' : ED.mode === 'html' ? (full ? 'Buttons asking for service link to href="{{QuoteLink}}": the click and the request are tracked, and a request stops the emails.' : 'For layout changes. The button already links to the service request form, tracked.') : 'Exactly as it sends, with sample details.') + '</span>' +
     '</div>' +
     '<div class="lc-ed-main ' + ED.mode + '">' + edMain_() + '</div>' +
     '<footer class="lc-ed-f"><div class="lc-ed-status" data-ed-status></div><div class="lc-ed-acts"><button class="lc-btn" data-ed="close">Cancel</button>' +

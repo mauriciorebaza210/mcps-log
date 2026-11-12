@@ -37,7 +37,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -97,6 +97,18 @@ function EE_adminRun_(env, core, req, deps) {
   else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
   else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);
   else if (action === 'reset_mcp_legacy') out = EE_resetMcpLegacy_(env, core, actor);
+  else if (action === 'set_sender') {
+    // The name in the inbox ("From") and the name emails are signed with ({{SenderName}}). Plain text only.
+    var clean = function (v) { return String(v == null ? '' : v).replace(/[<>"\r\n\u0000-\u001F]/g, '').replace(/\s+/g, ' ').trim(); };
+    var disp = clean(p.display_name), sign = clean(p.sign_name);
+    if (!disp || disp.length > 60) out = { ok: false, error: 'The inbox name needs 1 to 60 characters.' };
+    else if (!sign || sign.length > 40) out = { ok: false, error: 'The sign-off name needs 1 to 40 characters.' };
+    else {
+      env.store.upsert('Config', { key: 'sender_display_name', value: disp });
+      env.store.upsert('Config', { key: 'sender_name', value: sign });
+      out = { ok: true, display_name: disp, sign_name: sign };
+    }
+  }
   else if (action === 'set_crm_rule') {
     var rule = p.rule && typeof p.rule === 'object' ? p.rule : null;
     if (!rule) out = { ok: false, error: 'rule required' };

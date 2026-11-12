@@ -845,3 +845,15 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-wiz-empty p{margin:6px 0 14px;color:var(--ink-2);max-width:560px}
 .lc-bat-acts{white-space:nowrap}
 .lc-bat-acts .lc-bat-move{width:auto;height:30px;margin-right:6px;font-size:12.5px}
+
+/* Emails tab: who the emails are from */
+.lc-emails-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lc-from{display:flex;align-items:baseline;gap:8px;font-size:13.5px;min-width:0}
+.lc-from span{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.lc-from b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-from-prev{margin-top:16px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;gap:12px;align-items:baseline;font-size:13px;overflow:hidden}
+.lc-from-prev span{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);flex:none}
+.lc-from-prev b{flex:none;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-from-prev em{font-style:normal;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-sheet .lc-fld-help{max-width:none}
+.lc-sheet .lc-fld{margin-top:10px}

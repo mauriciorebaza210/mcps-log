@@ -208,7 +208,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
     engine: {
       enabled: String(cfg.engine_enabled) !== 'false', mode: cfg.engine_mode || 'test',
       paused_buckets: String(cfg.paused_buckets || '').split(',').map(x => x.trim()).filter(Boolean),
-      daily_cap: Number(cfg.daily_cap || 0), run_hour: Number(cfg.run_hour || 0), sender_name: cfg.sender_name || '',
+      daily_cap: Number(cfg.daily_cap || 0), run_hour: Number(cfg.run_hour || 0), sender_name: cfg.sender_name || '', sender_display_name: cfg.sender_display_name || '',
       rule_rev: cfg.rule_rev || '', last_run: runs[0] || null, tz: 'America/Chicago',
       // Send times (PLAN.md → Scheduling semantics): campaign defaults and today's planned runs.
       send_times: { B: sendTime(cfg.send_time_B), C: sendTime(cfg.send_time_C) }, run_plan: runPlan(cfg)

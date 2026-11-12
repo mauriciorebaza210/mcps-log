@@ -279,3 +279,15 @@ test('Alerts: the engine only records them (it runs as Tony); alerts_forwarded m
   const env = require('fs').readFileSync(require('path').join(__dirname, '..', 'email-engine/src/Env.js'), 'utf8');
   assert.doesNotMatch(env.match(/alert: function[\s\S]*?\n    \},/)[0], /MailApp|GmailApp/, 'no alert email from the engine account');
 });
+
+test('set_sender: the inbox name and sign-off are plain text with length limits; ChatGPT guide explains the tracked {{QuoteLink}}', () => {
+  const w = world('10:00');
+  const run = p => JSON.parse(JSON.stringify(w.ctx_.EE_adminRun_(w.env, w.core, { action: 'set_sender', params: p, actor: 'tony' }, {})));
+  assert.deepEqual(run({ display_name: '  Tony <at> "MCPS"\n', sign_name: 'Tony' }), { ok: true, display_name: 'Tony at MCPS', sign_name: 'Tony' });
+  assert.equal(w.env.store.get('Config', 'sender_display_name').value, 'Tony at MCPS');
+  assert.equal(run({ display_name: '', sign_name: 'Tony' }).ok, false);
+  assert.equal(run({ display_name: 'x'.repeat(61), sign_name: 'Tony' }).ok, false);
+  const setup = require('fs').readFileSync(require('path').join(__dirname, '..', 'email-engine/src/Setup.js'), 'utf8');
+  assert.match(setup, /\{\{QuoteLink\}\} opens the MCPS service request form/);
+  assert.match(setup, /Sign off as \{\{SenderName\}\}/);
+});
