@@ -75,8 +75,8 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 ### Go-live readiness (checked 2026-11-11, end of day)
 Built and verified: engine @44 cp9-1 (test mode, 258 tests, trigger precision 4/4 within 20 s, runbook + nightly backups), interactive tour + Request a change, Send due emails now on Activity, Start a batch explains itself + move people between batches, MCP Legacy emptied for Tony's import, Test/Live switch hides itself in production.
 Left before the switch, in order:
-1. **Mau signs off** the tour + Request a change walkthrough (CP9 gate).
-2. **Decision:** CP9 still says "all 7 B/C emails approved", but only Welcome is On at launch. Recommended: gate on Welcome only; the other 6 need approval before they're turned on, not before launch.
+1. ~~Mau signs off the tour + Request a change~~ **done 2026-11-11.**
+2. ~~Gate decision~~ **Welcome only** (Mau 2026-11-11); the other 6 are approved before each is turned on.
 3. **Merge `feat/email-engine` → `main`** (fast-forward, 131 commits; ships the page, `api/email.js`, the Sales Hub Import Leads change and the Quote Tool reopen fix). Production only gets the Lifecycle page from here.
 4. **Production env (Vercel):** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, CRON_SECRET, and **fresh** EE_LINK_SECRET + EE_RELAY_SECRET (preview ones were in a screenshot). The engine's Script Properties must get the same two new secrets: one paste in Tony's Apps Script → Project Settings (only manual step; nothing can set Script Properties from outside).
 5. **Engine Config:** `track_base` → https://mcps-log.vercel.app, `link_quote` → https://mcps-log.vercel.app/service.
