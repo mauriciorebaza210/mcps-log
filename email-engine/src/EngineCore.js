@@ -255,7 +255,7 @@ function EE_createCore(env) {
     }
     var draftId;
     try {
-      draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token });
+      draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token, attachments: msg.attachments || [] });
     } catch (e) {
       if (e && e.killed) throw e;
       // Gmail refused (permissions, quota, outage). The delivery stays `claimed`:
@@ -264,7 +264,9 @@ function EE_createCore(env) {
       err.gmailError = true;
       throw err;
     }
-    return fenced(lease, function () { return commitDelivery(row, { state: 'drafted', draft_id: draftId }); });
+    var drafted = { state: 'drafted', draft_id: draftId };
+    if (msg.attachment_versions && msg.attachment_versions.length) drafted.attachment_versions = msg.attachment_versions;
+    return fenced(lease, function () { return commitDelivery(row, drafted); });
   }
   // The authorization cutoff: drafted → sending, the last check before Gmail.
   function authorize(lease, row) {

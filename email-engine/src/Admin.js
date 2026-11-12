@@ -23,6 +23,8 @@
 //   send_override      one planned send: skip | move (inside its window) | next_run | clear (Overrides tab)
 //   set_send_time      a campaign's default send time (Config send_time_<bucket>), then re-plan today's runs
 //                       (create_batch also takes send_time: the batch's people keep it; Schedule.js)
+//   list_attachments | add_attachment | approve_attachment | discard_attachment | rollback_attachment | retire_attachment
+//                       the Attachment Library (Attachments.js)
 //   create_single | update_single | cancel_single   single emails: one email, one day, a chosen list (Singles.js)
 //   publish_rules      an email's Setup edits (timing, stops, on/off) as a new immutable ruleset revision;
 //                       scope 'all' moves running enrollments onto it, 'new' leaves them on theirs (EE_publishRules_)
@@ -34,7 +36,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -44,6 +46,7 @@ function EE_adminRun_(env, core, req, deps) {
   if (action === 'ping') return { ok: true, at: new Date(env.now()).toISOString() };
   // Looking at templates changes nothing, so it isn't logged (Templates.js).
   if ((action === 'list_templates' || action === 'open_template' || action === 'open_draft' || action === 'open_editor') && actor) return EE_templateAction_(env, core, action, p, actor, deps);
+  if (action === 'list_attachments' && actor) return EE_attachmentAction_(env, core, action, p, actor, deps);
   if (!EE_ADMIN_ACTIONS[action]) out = { ok: false, error: 'unknown action' };
   else if (!actor) out = { ok: false, error: 'no actor' };
   else if (action === 'run_now') out = { ok: true, status: deps.scheduleRun() };
@@ -67,6 +70,7 @@ function EE_adminRun_(env, core, req, deps) {
     }
   }
   else if (action === 'send_override') out = EE_sendOverride_(env, p, actor);
+  else if (typeof EE_ATTACH_ACTIONS !== 'undefined' && EE_ATTACH_ACTIONS[action]) out = EE_attachmentAction_(env, core, action, p, actor, deps);
   else if (action === 'create_single' || action === 'update_single' || action === 'cancel_single') {
     out = EE_singleAction_(env, core, action, p, actor);
     if (out.ok && deps.planRuns) { try { deps.planRuns(); } catch (e) { /* the scheduler retries tonight */ } }
@@ -266,7 +270,7 @@ function EE_startDueBatches_(env, core) {
 // Apps Script entry for the relay.
 function EE_admin_(req) {
   var x = EE_core_();
-  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, drive: EE_driveDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
+  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, drive: EE_driveDeps_(), files: EE_attachFilesDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
     runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; } });
 }
 // One pending run at a time; the trigger removes itself when it fires.

@@ -21,7 +21,9 @@ var EE_TABLES = {
     'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq', 'send_time'],
   Deliveries: ['delivery_id', 'key', 'enrollment_id', 'contact_id', 'step_id', 'occurrence', 'mode', 'email_norm', 'bucket',
     'category', 'revision_id', 'state', 'attempt', 'token', 'run_id', 'gen', 'claimed_at', 'draft_id', 'send_invoked_at',
-    'message_id', 'thread_id', 'sent_at', 'error', 'resolved_by', 'adopted_from_gen', 'resend_requested_by', 'last_seq'],
+    'message_id', 'thread_id', 'sent_at', 'error', 'resolved_by', 'adopted_from_gen', 'resend_requested_by', 'last_seq',
+    // Which PDF versions went with it (Attachments.js).
+    'attachment_versions'],
   Inbox: ['inbox_id', 'type', 'mode', 'email_norm', 'scope', 'contact_id', 'enrollment_id', 'step_id', 'signal', 'confidence',
     'received_at', 'secondary', 'last_seq'],
   Secondaries: ['op_ref', 'kind', 'email_norm', 'scope', 'status', 'last_seq'],
@@ -30,7 +32,9 @@ var EE_TABLES = {
   Revisions: ['revision_id', 'step_id', 'rev_no', 'subject', 'preheader', 'details_box', 'body_file_id', 'body_sha256',
     'blocks_json', 'fields_json', 'status', 'editor', 'approver', 'approved_at', 'content_hash', 'parent_revision_id', 'last_seq',
     // Template Library: 'body' (MCPS frame) or 'full' (complete file), and where it came from (Templates.js).
-    'format', 'source_file_id', 'source_name', 'source_modified', 'created_at', 'published_as'],
+    'format', 'source_file_id', 'source_name', 'source_modified', 'created_at', 'published_as',
+    // Attachment Library items the email carries (Attachments.js), and the editor's replaced drafts.
+    'attachment_items', 'replaced_by'],
   Rulesets: ['rule_rev', 'json', 'published_at', 'published_by'],
   Fields: ['field', 'source', 'key', 'fallback', 'required', 'format'],
   Config: ['key', 'value'],
@@ -54,7 +58,11 @@ var EE_TABLES = {
   Batches: ['batch_id', 'name', 'group', 'filters_json', 'count', 'order', 'pick', 'start_on', 'contact_ids', 'status',
     'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at', 'send_time', 'restart_ids'],
   // A person's change to one planned send (Admin.js → send_override; PLAN.md → Per-send overrides).
-  Overrides: ['key', 'kind', 'date', 'enrollment_id', 'step_id', 'by', 'at']
+  Overrides: ['key', 'kind', 'date', 'enrollment_id', 'step_id', 'by', 'at'],
+  // The Attachment Library (Attachments.js): items and their immutable versions.
+  Attachments: ['item_id', 'name', 'status', 'created_by', 'created_at', 'retired_by', 'retired_at'],
+  AttachmentVersions: ['version_id', 'item_id', 'v', 'file_id', 'sha256', 'size', 'source_file_id', 'source_name', 'status',
+    'uploaded_by', 'uploaded_at', 'approver', 'approved_at', 'restored_from']
 };
 // Raw tracking observations, one tab per month (Events_YYYY_MM) so reads stay bounded.
 var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id', 'mode', 'type', 'link_id', 'received_at',
@@ -62,7 +70,8 @@ var EE_EVENT_HEADERS = ['event_id', 'delivery_id', 'enrollment_id', 'contact_id'
   'reasons', 'classifier_version', 'source', 'gmail_message_id', 'snippet'];
 var EE_ID_FIELD = { Contacts: 'contact_id', Enrollments: 'enrollment_id', Deliveries: 'delivery_id', Inbox: 'inbox_id',
   Secondaries: 'op_ref', Suppressions_Test: 'email_norm', Holds: 'key', Revisions: 'revision_id', Rulesets: 'rule_rev',
-  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Batches: 'batch_id', Overrides: 'key' };
+  Fields: 'field', Config: 'key', Meta: 'key', Runs: 'run_id', Permissions: 'username', Engagement: 'delivery_id', Threads: 'thread_id', ChangeLog: 'id', Batches: 'batch_id', Overrides: 'key',
+  Attachments: 'item_id', AttachmentVersions: 'version_id' };
 var EE_NUMERIC = { occurrence: 1, attempt: 1, gen: 1, last_seq: 1, held_days: 1, rev_no: 1, adopted_from_gen: 1, seq: 1,
   opens_total: 1, opens_low: 1, opens_medium: 1, clicks_total: 1, clicks_low: 1, clicks_medium: 1, clicks_high: 1,
   auto_replies: 1, soft_bounces: 1, message_count: 1, count: 1, started_count: 1 };
@@ -296,8 +305,9 @@ function EE_env(opts) {
     gmail: {
       createDraft: function (msg) {
         var c = EE_config_(store);
-        return GmailApp.createDraft(msg.to, msg.subject, msg.text, { htmlBody: msg.html,
-          name: c.sender_display_name || 'Tony | Mission Custom Pool Solutions' }).getId();
+        var opts = { htmlBody: msg.html, name: c.sender_display_name || 'Tony | Mission Custom Pool Solutions' };
+        if (msg.attachments && msg.attachments.length) opts.attachments = msg.attachments;
+        return GmailApp.createDraft(msg.to, msg.subject, msg.text, opts).getId();
       },
       draftExists: function (id) { try { GmailApp.getDraft(id); return true; } catch (e) { return false; } },
       deleteDraft: function (id) { try { GmailApp.getDraft(id).deleteDraft(); } catch (e) { /* already gone */ } },
@@ -379,5 +389,7 @@ function EE_renderDelivery_(store, row) {
       links: { quote: c.link_quote }, testBanner: null }
   });
   if (!out.ok) throw new Error(out.errors.join('; '));
-  return { to: contact.email_norm, subject: out.subject, html: out.html, text: out.text };
+  var att = EE_attachmentsFor_({ store: store }, rev, EE_attachSendFiles_());
+  return { to: contact.email_norm, subject: out.subject, html: out.html, text: out.text,
+    attachments: att.map(function (a) { return a.blob.setName(a.name); }), attachment_versions: att.map(function (a) { return a.version_id; }) };
 }

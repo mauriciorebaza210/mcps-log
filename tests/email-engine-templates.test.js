@@ -21,7 +21,7 @@ function world() {
   vm.createContext(ctx);
   vm.runInContext(['js/lib/lifecycle-rules.js', 'js/lib/batches.js', 'js/lib/email-render.js'].map(read).join('\n') +
     '\nvar EE_TZ = "America/Chicago";\nfunction EE_config_(store) { var c = {}; store.rows("Config").forEach(function (r) { c[r.key] = r.value; }); return c; }\n' +
-    read('email-engine/src/Seed.js') + '\n' + read('email-engine/src/Admin.js') + '\n' + read('email-engine/src/Schedule.js') + '\n' + read('email-engine/src/Templates.js'), ctx);
+    read('email-engine/src/Seed.js') + '\n' + read('email-engine/src/Admin.js') + '\n' + read('email-engine/src/Schedule.js') + '\n' + read('email-engine/src/Templates.js') + '\n' + read('email-engine/src/Attachments.js'), ctx);
   w.env.config.pausedBuckets = () => [];
   w.tables.Fields = JSON.parse(read('email-engine/seed/fields.json')).fields;
   w.tables.Config.push({ key: 'business_address', value: ADDR }, { key: 'business_name', value: 'Mission Custom Pool Solutions' },

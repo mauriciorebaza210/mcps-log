@@ -91,16 +91,16 @@ function EE_editorSource_(env, stepId, revisionId, revisions, deps) {
     if (rev.body_sha256 && env.sha256(html) !== rev.body_sha256) return { error: 'that version’s file changed after it was saved' };
     return { from: rev.status === 'draft' ? 'draft' : 'live', revision_id: rev.revision_id, rev_no: rev.rev_no || 0, subject: rev.subject || '', preheader: rev.preheader || '',
       details_box: rev.details_box || '', format: MCPS_EMAIL_RENDER.isFull({ body_html: html, format: rev.format }) ? 'full' : 'body',
-      body_html: html, blocks: EE_revisionBlocks_(rev, deps, env) };
+      body_html: html, blocks: EE_revisionBlocks_(rev, deps, env), attachment_items: rev.attachment_items || [] };
   }
   var c = EE_SEED.content.steps[stepId];
   if (c && EE_SEED.templates[c.body]) {
-    return { from: 'starter', revision_id: '', subject: c.subject || '', preheader: c.preheader || '', details_box: c.details_box || '', format: 'body',
+    return { from: 'starter', revision_id: '', attachment_items: [], subject: c.subject || '', preheader: c.preheader || '', details_box: c.details_box || '', format: 'body',
       body_html: EE_SEED.templates[c.body], blocks: (c.blocks || []).map(function (name) {
         var spec = EE_SEED.content.blocks[name]; return { name: name, flag: spec.flag, html: EE_SEED.templates[spec.html] || '' };
       }) };
   }
-  return { from: 'blank', revision_id: '', subject: '', preheader: '', details_box: '', format: 'body', blocks: [],
+  return { from: 'blank', revision_id: '', attachment_items: [], subject: '', preheader: '', details_box: '', format: 'body', blocks: [],
     body_html: '<h1>Your headline</h1>\n<p>Hi {{FirstName}},</p>\n<p>Write your email here.</p>\n' };
 }
 
@@ -160,7 +160,11 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
     var src = EE_editorSource_(env, es, String(p.revision_id || ''), revisions, deps);
     if (src.error) return { ok: false, error: src.error };
     var ecfg = EE_config_(env.store), reg = EE_blockRegistry_();
-    return { ok: true, step_id: es, source: src, fields: env.store.rows('Fields'),
+    // PDFs it can carry: active items in the Attachment Library (Attachments.js), with their published version.
+    var attLib = env.store.rows('Attachments').filter(function (it) { return it.status !== 'retired'; }).map(function (it) {
+      var pv = EE_attachPublished_(env, it.item_id); return { item_id: it.item_id, name: it.name, published_v: pv ? Number(pv.v) : 0 };
+    });
+    return { ok: true, step_id: es, source: src, fields: env.store.rows('Fields'), attachment_library: attLib,
       block_library: Object.keys(reg).map(function (name) { return { name: name, flag: reg[name], html: EE_SEED.templates[EE_SEED.content.blocks[name].html] || '' }; }),
       context: { sender_name: ecfg.sender_name || '', links: { quote: ecfg.link_quote || '' },
         business: { name: ecfg.business_name || '', address: ecfg.business_address || '', phone: ecfg.business_phone || '', website: ecfg.business_website || '' } } };
@@ -183,6 +187,9 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
     var total = sbody.length + sblocks.reduce(function (n, b) { return n + b.html.length; }, 0);
     if (total > EE_TEMPLATE_MAX_BYTES) return { ok: false, error: 'the email is too large (over 200 KB)' };
     var sdetails = String(p.details_box || '').slice(0, 500), spre = String(p.preheader || '').trim().slice(0, 200);
+    var activeItems = {}; env.store.rows('Attachments').forEach(function (it) { if (it.status !== 'retired') activeItems[it.item_id] = true; });
+    var satt = []; (Array.isArray(p.attachment_items) ? p.attachment_items : []).map(String).forEach(function (id) { if (satt.indexOf(id) === -1) satt.push(id); });
+    if (satt.some(function (id) { return !activeItems[id]; })) return { ok: false, error: 'an attachment it lists isn’t in the library (or was retired)' };
     var scheck = EE_templateCheck_(env, { html: sbody, subject: ssubj, preheader: spre, details_box: sdetails, format: sformat, blocks: sblocks });
     if (!scheck.ok) return { ok: false, error: 'This email has problems: ' + scheck.errors.join('; '), errors: scheck.errors };
     var based = p.based_on ? env.store.get('Revisions', String(p.based_on)) : null;
@@ -191,7 +198,7 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
     var sfile = deps.drive.saveDraft(sid + '__body.html', sbody);
     var bjson = sblocks.map(function (b) { return { name: b.name, flag: b.flag, file_id: deps.drive.saveDraft(sid + '__' + b.name + '.html', b.html), sha256: env.sha256(b.html) }; });
     core.commitEntity('revision', { revision_id: sid, step_id: ss, rev_no: 0, subject: ssubj.slice(0, 150), preheader: spre, details_box: sdetails,
-      body_file_id: sfile, body_sha256: env.sha256(sbody), blocks_json: bjson, status: 'draft', format: sformat,
+      body_file_id: sfile, body_sha256: env.sha256(sbody), blocks_json: bjson, attachment_items: satt, status: 'draft', format: sformat,
       source_file_id: based ? (based.source_file_id || '') : '', source_name: 'the editor', source_modified: '',
       parent_revision_id: based ? based.revision_id : '', editor: actor, created_at: new Date(env.now()).toISOString() }, 'revision:' + sid + ':draft');
     // Editing a draft replaces it, so the list never shows two versions of one edit.
@@ -229,12 +236,12 @@ function EE_templateAction_(env, core, action, p, actor, deps) {
     var fblocks = dblocks.map(function (b) { return { name: b.name, flag: b.flag, file_id: deps.drive.freeze(revisionId + '__' + b.name + '.html', b.html), sha256: env.sha256(b.html) }; });
     var fields = env.store.rows('Fields');
     var rec = { revision_id: revisionId, step_id: d.step_id, rev_no: revNo, subject: d.subject, preheader: d.preheader || '', details_box: d.details_box || '',
-      body_file_id: frozen, body_sha256: d.body_sha256, blocks_json: fblocks, fields_json: fields, status: 'published', format: d.format,
+      body_file_id: frozen, body_sha256: d.body_sha256, blocks_json: fblocks, attachment_items: d.attachment_items || [], fields_json: fields, status: 'published', format: d.format,
       source_file_id: d.source_file_id, source_name: d.source_name, source_modified: d.source_modified,
       editor: d.editor, approver: actor, approved_at: new Date(env.now()).toISOString(),
       parent_revision_id: prior.length ? prior[prior.length - 1].revision_id : '' };
     rec.content_hash = env.sha256(JSON.stringify([rec.subject, rec.preheader, rec.details_box, rec.body_sha256,
-      fblocks.map(function (b) { return b.name + ':' + b.sha256; }), fields, rec.format]));
+      fblocks.map(function (b) { return b.name + ':' + b.sha256; }), fields, rec.format].concat(rec.attachment_items.length ? [rec.attachment_items] : [])));
     prior.filter(function (r) { return r.status === 'published'; }).forEach(function (r) {
       core.commitEntity('revision', { revision_id: r.revision_id, status: 'superseded' }, 'revision:' + r.revision_id + ':superseded');
     });

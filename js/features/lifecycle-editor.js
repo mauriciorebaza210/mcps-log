@@ -57,13 +57,14 @@ async function edOpen_(revisionId) {
   const s = r.source;
   Object.assign(ED, { loading: false, src: s, fields: r.fields || [], ctx: Object.assign({ unsubscribeUrl: 'https://example.invalid/unsubscribe' }, r.context || {}),
     library: r.block_library || [], subject: s.subject, preheader: s.preheader, details: s.details_box || '', format: s.format, body: s.body_html,
-    blocks: Object.fromEntries((s.blocks || []).map(b => [b.name, b.html])), mode: 'text' });
+    blocks: Object.fromEntries((s.blocks || []).map(b => [b.name, b.html])), mode: 'text',
+    attLib: r.attachment_library || [], att: new Set(s.attachment_items || []) });
   // The starter isn't a draft yet, so saving it unchanged is still a real step.
   ED.initial = edSnapshot_();
   ED.saved = s.from === 'starter' ? '' : edSnapshot_();
   edRender_();
 }
-function edSnapshot_() { return JSON.stringify([ED.subject, ED.preheader, ED.details, ED.body, ED.blocks]); }
+function edSnapshot_() { return JSON.stringify([ED.subject, ED.preheader, ED.details, ED.body, ED.blocks, [...(ED.att || [])].sort()]); }
 async function edClose_(force) {
   if (!ED.layer) return;
   if (!force && ED.saving) return;
@@ -95,7 +96,7 @@ function edRender_() {
     '<div class="lc-ed-meta">' +
       '<label class="lc-fld grow"><span>Subject line</span><input class="lc-input" data-ed-in="subject" maxlength="150" value="' + lcEsc_(ED.subject) + '" placeholder="Under 50 characters reads best"></label>' +
       '<label class="lc-fld grow"><span>Preview text <small>(after the subject in the inbox)</small></span><input class="lc-input" data-ed-in="preheader" maxlength="200" value="' + lcEsc_(ED.preheader) + '"></label>' +
-    '</div>' +
+    '</div>' + edAttRow_() +
     '<div class="lc-ed-bar"><div class="lc-seg">' + seg + '</div>' +
       (ED.mode !== 'preview' ? '<select class="lc-input sm" data-ed-field aria-label="Insert a field">' + fieldOpts + '</select>' : '') +
       (ED.mode !== 'text' ? '<label class="lc-ed-as"><span>Preview as</span><select class="lc-input sm" data-ed-sample>' + asOpts + '</select></label>' : '') +
@@ -106,6 +107,13 @@ function edRender_() {
       '<button class="lc-btn primary" data-ed="save">Save as draft</button></div></footer>';
   edMount_();
   edCheck_();
+}
+// Attachments it carries (the Attachment Library); a PDF goes out only once its own version is approved.
+function edAttRow_() {
+  const lib = ED.attLib || [];
+  if (!lib.length && !(ED.att && ED.att.size)) return '<div class="lc-ed-att"><span class="lc-ed-attl">' + LC_ICON.clip + 'Attachments</span><span class="lc-dim">None in the library yet (Emails → Attachments).</span></div>';
+  return '<div class="lc-ed-att"><span class="lc-ed-attl">' + LC_ICON.clip + 'Attachments</span>' + lib.map(a => '<button class="lc-chip' + (ED.att.has(a.item_id) ? ' on' : '') + '" data-ed="att" data-v="' + lcEsc_(a.item_id) + '" aria-pressed="' + ED.att.has(a.item_id) + '">' +
+    lcEsc_(a.name) + (a.published_v ? '' : ' <small>not approved yet</small>') + '</button>').join('') + '</div>';
 }
 function edMain_() {
   if (ED.mode === 'html') {
@@ -409,6 +417,11 @@ async function edOnClick_(e) {
   if (a === 'close') return edClose_();
   if (a === 'mode') { if (ED.mode === 'text' && ED.doc) edReadBack_(ED.doc); ED.mode = t.dataset.v; ED.doc = null; ED.lastFocus = null; return edRender_(); }
   if (a === 'part') { ED.htmlPart = t.dataset.v; ED.lastFocus = null; return edRender_(); }
+  if (a === 'att') {
+    if (ED.att.has(t.dataset.v)) ED.att.delete(t.dataset.v); else ED.att.add(t.dataset.v);
+    t.classList.toggle('on', ED.att.has(t.dataset.v)); t.setAttribute('aria-pressed', ED.att.has(t.dataset.v));
+    return edCheck_();
+  }
   if (a === 'save') return edSave_(t);
 }
 // Selecting text in the frame means "insert there", not into the subject box.
@@ -421,7 +434,7 @@ async function edSave_(btn) {
   ED.saving = true; lcBusyBtn_(btn, true);
   const s = ED.src;
   const r = await lcAdmin_('save_draft', { step_id: ED.stepId, subject: ED.subject.trim(), preheader: ED.preheader.trim(), details_box: ED.format === 'full' ? '' : ED.details,
-    body_html: ED.body, blocks: ED.format === 'full' ? [] : edUsedBlocks_().map(([name, html]) => ({ name, html })), based_on: s.revision_id || '' })
+    body_html: ED.body, blocks: ED.format === 'full' ? [] : edUsedBlocks_().map(([name, html]) => ({ name, html })), attachment_items: [...ED.att], based_on: s.revision_id || '' })
     .catch(() => ({ ok: false, error: 'Network error' }));
   ED.saving = false; lcBusyBtn_(btn, false);
   if (!r.ok) { lcToast_(r.error === 'unknown action' ? 'The engine needs an update before edits can be saved.' : (r.error || 'That didn’t work'), true); return edCheck_(); }

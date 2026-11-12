@@ -79,9 +79,9 @@ const FIELDS = JSON.parse(await rd('email-engine/seed/fields.json')).fields, POO
 const edCtx = { sender_name: 'Tony Rebaza', links: { quote: 'https://mcps-log.vercel.app/service' },
   business: { name: 'Mission Custom Pool Solutions', address: '4640 South Flores Road, Elmendorf, TX 78112', phone: '(210) 559-2073', website: 'https://mcpoolsolutions.org' } };
 out.editor = {
-  c_welcome: { ok: true, step_id: 'c_welcome', fields: FIELDS, context: edCtx, block_library: [{ name: 'PoolSchool', flag: 'pool_school', html: POOL }],
+  c_welcome: { ok: true, step_id: 'c_welcome', fields: FIELDS, context: edCtx, attachment_library: [{ item_id: 'att_1', name: 'Safety Guidelines', published_v: 1 }, { item_id: 'att_2', name: 'Startup Guide', published_v: 0 }], block_library: [{ name: 'PoolSchool', flag: 'pool_school', html: POOL }],
     source: { from: 'live', revision_id: 'rev_c_welcome_1', rev_no: 1, subject: 'Welcome to Mission Custom Pool Solutions', preheader: 'Your startup date and what happens next.',
-      details_box: 'Startup begins: {{StartupDate}}|Pool address: {{Address}}', format: 'body', body_html: await rd('email-engine/templates/C/c_welcome.html'), blocks: [{ name: 'PoolSchool', flag: 'pool_school', html: POOL }] } },
+      details_box: 'Startup begins: {{StartupDate}}|Pool address: {{Address}}', format: 'body', attachment_items: ['att_1'], body_html: await rd('email-engine/templates/C/c_welcome.html'), blocks: [{ name: 'PoolSchool', flag: 'pool_school', html: POOL }] } },
   b_followup: { ok: true, step_id: 'b_followup', fields: FIELDS, context: edCtx, block_library: [],
     source: { from: 'draft', revision_id: 'draft_b_followup_x', subject: 'Following up on your pool', preheader: '', details_box: '', format: 'full', blocks: [],
       body_html: '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><title>Following up</title><style>.btn{background:#0D3D3E}</style></head>' +
