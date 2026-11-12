@@ -169,7 +169,7 @@ const LC_STATE = { sent: ['Sent', 'live'], unknown: ['Unconfirmed', 'bad'], reco
   released: ['Retrying', ''], abandoned: ['Abandoned', ''] };
 const LC_ISSUE = { no_recent_run: 'No scheduled run in over a day', last_run_crashed: 'The last run crashed', unresolved_unknown: 'A send is unconfirmed',
   unresolved_reconcile: 'A send is still confirming', delivery_failed: 'An email failed', engine_unreadable: 'The engine can’t be reached' };
-const LC_ALERT = { delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped', run_crashed: 'Run crashed',
+const LC_ALERT = { backup_failed: 'Nightly backup failed', too_many_send_times: 'Too many send times', delivery_failed: 'Email failed', delivery_unknown: 'Send unconfirmed', run_stopped: 'Run stopped', run_crashed: 'Run crashed',
   journal_integrity: 'Safety pause', reply_scan_failed: 'Reply scan failed' };
 const LC_STOP = { clicked: 'clicked', replied: 'replied', form_submitted: 'requested service', suppressed_all: 'unsubscribed',
   prerequisite_expired: 'expired', bucket_changed: 'moved group', manual: 'stopped by hand' };

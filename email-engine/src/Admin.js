@@ -34,7 +34,7 @@
 //                       Only works for tasks whose Google permissions Tony has already granted.
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics' };
+var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
 var EE_ADMIN_ACTIONS = { list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 

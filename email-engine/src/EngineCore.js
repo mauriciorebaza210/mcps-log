@@ -536,10 +536,12 @@ function EE_createCore(env) {
 
   return {
     run: run, ingest: ingest, resend: resend, markSent: markSent, abandon: abandon, commitEntity: commitEntity,
+    // Replay the Journal into the main sheet now, even with sending off (RUNBOOK.md → Restore).
+    catchUp: function () { return env.withLock(function () { ensureCaughtUp(); return { applied_seq: Number(env.meta.get('applied_seq') || 0) }; }); },
     // Exposed for tests and for the stage-by-stage concurrency checks.
     acquireLease: acquireLease, renewLease: renewLease, releaseLease: releaseLease,
     claim: claim, prepare: prepare, authorize: authorize, sendAuthorized: sendAuthorized,
-    reconcileAll: reconcileAll, catchUp: function () { return env.withLock(ensureCaughtUp); },
+    reconcileAll: reconcileAll,
     StaleLease: StaleLease, IntegrityError: IntegrityError
   };
 }

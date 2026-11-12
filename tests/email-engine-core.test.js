@@ -440,3 +440,19 @@ test('Gmail refusing to create a draft stops the run cleanly; the next run recov
   assert.equal(w.delivery('e1:b_intro:1').attempt, 2, 'recovered like the real sandbox run');
   assert.equal(w.outbox.length, 2);
 });
+
+test('Restore (RUNBOOK §4): catchUp replays the Journal into an older main sheet, with sending off and nothing sent', () => {
+  const w = fakeWorld(); enroll(w, 'e1');
+  runPlan(w, [item('e1:b_intro:1')]);
+  assert.equal(w.outbox.length, 1);
+  const head = w.journal[w.journal.length - 1].seq;
+  // The "backup": before the send was recorded.
+  w.tables.Deliveries = []; w.meta.applied_seq = 0;
+  w.tables.Config.push({ key: 'engine_enabled', value: 'false' });
+  w.env.config.engineEnabled = () => false;
+  assert.equal(runPlan(w, []).stopped_reason, 'kill_switch', 'Run now with sending off touches nothing');
+  assert.equal(w.tables.Deliveries.length, 0);
+  assert.equal(w.core.catchUp().applied_seq, head);
+  assert.equal(w.delivery('e1:b_intro:1').state, 'sent', 'the sent delivery is back');
+  assert.equal(w.outbox.length, 1, 'nothing sent again');
+});

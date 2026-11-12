@@ -9,7 +9,7 @@
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp7-12';
+var EE_VERSION = 'cp7-13';
 
 function EE_core_() { var env = EE_env(); return { env: env, core: EE_createCore(env) }; }
 
@@ -109,6 +109,8 @@ function EE_run_(trigger) {
   return summary;
 }
 function eeRunNow() { return EE_run_('manual'); }
+// After a restore (RUNBOOK.md §4): replay the Journal into the main sheet without sending anything.
+function eeCatchUp() { var r = EE_core_().core.catchUp(); Logger.log(JSON.stringify(r)); return r; }
 
 // What the engine sees right now: identity, Gmail quota, settings, row counts.
 function eeDiagnostics() {
