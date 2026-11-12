@@ -404,7 +404,20 @@ function edOnInput_(e) {
   else if (k === 'code') {
     if (ED.htmlPart === 'details') ED.details = t.value.replace(/\n+/g, '|');
     else if (ED.htmlPart.startsWith('block:')) ED.blocks[ED.htmlPart.slice(6)] = t.value;
-    else { ED.body = t.value; edSyncBlocks_(); }
+    else {
+      ED.body = t.value;
+      // A whole HTML document pasted in is a full template (its own layout, footer and unsubscribe link),
+      // the same rule the engine uses when the draft is saved (Templates.js save_draft).
+      const fmt = MCPS_EMAIL_RENDER.isFull({ body_html: ED.body }) ? 'full' : 'body';
+      if (fmt !== ED.format) {
+        ED.format = fmt; if (fmt === 'full') { ED.details = ''; ED.htmlPart = 'body'; }
+        const pos = t.selectionStart; edRender_();
+        const ta = ED.layer && ED.layer.querySelector('[data-ed-in="code"]'); if (ta) { ta.focus(); try { ta.setSelectionRange(pos, pos); } catch (_) { /* fine */ } }
+        lcToast_(fmt === 'full' ? 'Full template: it uses its own layout and footer' : 'MCPS frame');
+        edChanged_(); return;
+      }
+      edSyncBlocks_();
+    }
   }
   edChanged_();
 }
