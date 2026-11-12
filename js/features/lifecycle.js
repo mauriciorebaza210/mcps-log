@@ -677,9 +677,9 @@ function lcSetupScope_(s, edit) {
     const layer = document.createElement('div');
     layer.className = 'lc-layer';
     layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet" role="dialog" aria-modal="true">' +
-      '<h3>Save the new setup for “' + lcEsc_(s.name) + '”?</h3><p>Emails already sent don’t change.</p>' +
-      '<label class="lc-radio"><input type="radio" name="lc-scope" value="all" checked><span><b>Everyone in ' + lcEsc_(seq) + '</b><small>The ' + n + ' ' + (n === 1 ? 'person' : 'people') + ' in it now, and everyone who joins later.</small></span></label>' +
-      '<label class="lc-radio"><input type="radio" name="lc-scope" value="new"><span><b>Only people who join from now on</b><small>People already in it keep the old setup.</small></span></label>' +
+      '<h3>Save the new setup for “' + lcEsc_(s.name) + '”?</h3><p>Nobody ever gets an email twice: anyone who already got it is never sent it again.</p>' +
+      '<label class="lc-radio"><input type="radio" name="lc-scope" value="new" checked><span><b>Only people who join from now on</b><small>Recommended. The ' + n + ' ' + (n === 1 ? 'person' : 'people') + ' already in ' + lcEsc_(seq) + ' keep the old setup; nothing changes for them.</small></span></label>' +
+      '<label class="lc-radio"><input type="radio" name="lc-scope" value="all"><span><b>Also the ' + n + ' ' + (n === 1 ? 'person' : 'people') + ' already in it</b><small>Anyone who hasn’t had this email yet follows the new setup. If their new day has already passed, it goes out at the next run or is skipped as too late.</small></span></label>' +
       '<p class="lc-note" data-err hidden style="color:var(--red)"></p>' +
       '<div class="row"><button class="lc-btn" data-x="0">Cancel</button><button class="lc-btn primary" data-x="1">Save</button></div></div>';
     let saving = false;
