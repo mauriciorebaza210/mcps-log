@@ -7,7 +7,7 @@ Resume in any Claude Code session with `/email-engine`.
 _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, tags, attachments, runbook, matrix, trigger test, Welcome = approval email). Start a new chat with `/email-engine`; everything is committed and pushed (last commit: `git log -1`). Everything below is committed and pushed on `feat/email-engine`; the detailed history of CP7 is in **CP7 build log** further down._
 
 ### Where things stand
-- **Checkpoint:** CP8 `startup-events` starting. Last tag `ee/cp7-bc-scheduled` (2026-11-11).
+- **Checkpoint:** CP9 `bc-live` next (go live before CP8, Mau 2026-11-11). Last tag `ee/cp7-bc-scheduled` (2026-11-11).
 - **Engine (Tony's Apps Script):** deployment **@43**, version **cp7-20**, test mode, `engine_enabled` true, **no triggers installed** (nothing runs on its own; only Run now). Test allowlist = Mau's addresses only. Real contacts (`is_test` N) are never enrolled in test mode.
 - **Portal preview (bookmark):** https://mcps-log-git-feat-ema-65ac9a-mauricio-rebaza-figueroas-projects.vercel.app (Vercel SSO, then portal login) → sidebar Sales Hub → **Lifecycle Email**. Last pushed commit: see `git log -1`. Nothing is on `main`; nothing in production.
 - **Tests:** `npm run test:ee` → 247 pass. Pre-existing failures outside the email engine (also on 1e5a55e, before this work): tests/agreement-preview, calendar-overrides, quote-driver (1 each).
@@ -37,11 +37,12 @@ _Full handoff, updated end of 2026-11-11 (second chat: editor, single emails, ta
 
 - **2026-11-11 (Mau): Tony imports his own MCP list.** Sales Hub leads are no longer added automatically (`crm_lead_auto` off by default); past synced leads that never started a sequence were removed once (`retire_synced_leads` on the first sync after @43; kept in the engine, hidden). On import, someone already in the list gets the new details by default (`replace`, file source wins; a removed contact comes back for review); repeats inside one file are skipped. Manual "Add MCP leads" still exists.
 
-### CP8 next (exit criteria in PLAN.md → Checkpoints row 8)
-- **Launch rule (Mau 2026-11-11):** at go-live only the MCP Startup **Welcome** is On. Everything CP8 builds (Day Log, Summary) and every other B/C email ships **Off** and is switched on later from Setup.
-- Scope: signed `ee_event` ingest (`startup_visit_completed`, `startup_completed`, `pool_school_scheduled`), immediate one-shot delivery, visit-keyed delivery keys, hard deadlines, dynamic attachments (allowlisted Drive folders, size caps, hashes); customer Startup Log PDF, Startup Summary report, pool school booking page; event matrix rows 51, 53–55 (47–50, 52 dropped with OTW).
-- **First action:** write the CP8 build plan (tasks/todo-style list in this file) and get Mau's go-ahead; flag that the Startup Log / Summary PDFs come from portal GAS data (`StartupChecklists.js`) and any portal GAS change ships only at go-live (clasp branch trap).
-- Carried to go-live (CP9): all 7 B/C emails approved (3 C drafts held until launch; B Follow Up + Check-In wait for Tony); preview alert emails skipped (no `SERVICE_REQUEST_NOTIFY_SECRET` on Preview; works in production).
+### Next: CP9 `bc-live` (go live first; CP8 after)
+- **Launch rule (Mau 2026-11-11):** at go-live only the MCP Startup **Welcome** is On; every other B/C email ships Off and is switched on later from Setup.
+- **Build first:** the in-portal tutorial for Tony + the "Request a change" button (screenshot, the element pointed at, page context, emailed to Mau from Mau's address). Mau walks through both before the handoff.
+- Then the go-live list below (env, Config URLs, scheduler as Tony, portal GAS StartupRequests.js with the clasp branch trap check, production mode, merge to main), each step only with Mau's explicit go.
+- Open question for Mau at go-live: "all 7 B/C emails approved" is a CP9 gate, but only Welcome is On at launch. Off emails may not need approval to launch.
+- CP8 waits: Day Log is being redefined (Parking lot 2026-11-11).
 
 ### Waiting on Mau / Tony
 - **Mau:** the CP7 list above; also still open from before: try Clean up → Check with AI, Contacts → MCP leads counts, MCP Startup "Joining". Chemicals line removed and report-after-every-visit kept (Mau, 2026-11-11).
@@ -132,6 +133,7 @@ Sidetracks and tweaks to come back to. Add with `/email-engine park "<note>"`.
   3. The 400 above shows as "Network error saving changes." (misleading; it's a validation error).
   4. The Quote Tool's "Save Changes" (`qSaveEdit`) returns silently when `_qS._calc.pricing_ready` is false, so a click can do nothing with no message. Seen on the preview: no `/api/quotes/update` request after a reopen + save at 15:16.
 
+- **2026-11-11 (Mau), work in progress:** a different kind of startup report, probably from the service log itself, with more startup-specific options when a tech logs a startup visit. Replaces CP8's engine Day Log (the portal's checklist PDF email to homeowner + builder stays). Design it before CP8.
 ## Session notes
 - **2026-11-11 handoff (long chat; continue with `/email-engine`):** built and deployed in this chat: Campaigns tab (mockup → approved → wired), send times, planned sends from `decide()`, Template Library + full templates + 3 C starter drafts, portal data (MCP leads automatic, startups from the live schedule), contact cleanup + AI names + duplicates. Engine cp7-4 → cp7-8 (deployments @26 → @30), all as Tony, nothing sent, no triggers. Review notes from the chat: build mockups separately from the real page next time (the preview showed unwired buttons for a while); never offer a UI option the engine doesn't support yet (restart option was hidden until wired); keep one implementation of scheduling (the page's own date estimate was replaced by `view=plan`). Mau's choices recorded: Campaigns tab good; "all imported leads" are MCP leads; automatic adding on; Haiku 5.5 for the cheap AI check; leave old test threads in Tony's mailbox.
 - **2026-11-09 → 11-10 handoff (written because the chat's context was full; everything needed to continue is here, in PLAN.md → Plan changes, and in memory):**
