@@ -25,7 +25,7 @@ _Handoff written 2026-11-12 ~12 AM for a fresh chat (`/email-engine`). Everythin
 - Note: bounces for mail sent from info@ go to the info@ inbox, not Tony's, so the engine won't see Intro bounces unless info@ forwards bounce mail to Tony. Decide when linking.
 
 ### In progress (2026-11-12): Tony's MCP Legacy list
-- Built + tested (275), committed, **not deployed yet**: import columns Planned start / Intro already sent on / Hold for review, `start_step` in the rules, `approve_waiting`, `plan_import_batches`, `clear_flag`, first-email gate on batches, Waiting card on Activity + Contacts (`js/features/lifecycle-waiting.js`), "Waits for <Intro>" on planned batches. Plan changes 2026-11-12.
+- **LIVE 2026-11-12** (engine @50, portal e83b823): import columns Planned start / Intro already sent on / Hold for review, `start_step` in the rules, `approve_waiting`, `plan_import_batches`, `clear_flag`, first-email gate on batches, Waiting card on Activity + Contacts (`js/features/lifecycle-waiting.js`), "Waits for <Intro>" on planned batches. Plan changes 2026-11-12.
 - Clean file (local only, PII): `~/Downloads/MCP_Legacy_CRM_CSV_Exports/MCP Legacy - import into portal.csv` (171 rows → 165 after shared emails: 25 waiting, 11 flagged, 129 planned; Nov 9 = 15 overdue; 9 batches Nov 16–Jan 11). 12 with no usable email: `MCP Legacy - missing email (fix in Tony CRM).csv`.
 - Mau's rules: the 25 get nothing until approved (overdue alert only); batch dates as in Tony's file; each batch starts once the Intro is on; flagged visible with reason.
 - Still to read: the engine-sheet tab Mau linked (gid 202611100, "more info of last batch"); the Drive connector in this session expired.
