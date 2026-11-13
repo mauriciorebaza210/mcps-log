@@ -187,7 +187,15 @@ function impStepImport_() {
     const d = IMP.done;
     return '<div class="lc-ok big"><span class="dot">' + LC_ICON.check + '</span><div><b>' + d.added + ' added to Needs review</b><small>' +
       [d.merged ? d.merged + ' existing contact' + (d.merged === 1 ? '' : 's') + ' updated' : '', d.skipped ? d.skipped + ' already there' : '', d.dnc ? d.dnc + ' added to the opt-out list' : '', d.failed ? d.failed + ' couldn’t be saved, try again' : ''].filter(Boolean).join(' · ') +
-      '</small></div></div><div class="lc-imp-f"><span></span><button class="lc-btn primary" data-imp="close">Done</button></div>';
+      '</small></div></div>' +
+      (d.waiting || d.flagged || d.batches ? '<ul class="lc-imp-after">' +
+        (d.waiting ? '<li><b>' + d.waiting + '</b> already got the Intro: they wait for your approval and start at the Follow Up.</li>' : '') +
+        (d.flagged ? '<li><b>' + d.flagged + '</b> held for review with the reason from the file. Batches skip them.</li>' : '') +
+        (d.batches && d.batches.length ? '<li><b>' + d.batches.length + ' planned batch' + (d.batches.length === 1 ? '' : 'es') + '</b> on the file’s dates (' +
+          d.batches.map(b => lcEsc_(new Date(b.start_on + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) + ' · ' + b.count).join(', ') +
+          '). Each starts on its date once the first email is turned on.</li>' : '') +
+        (d.batches === null ? '<li>The planned batches couldn’t be made. Open Campaigns and try again.</li>' : '') + '</ul>' : '') +
+      '<div class="lc-imp-f"><span></span><button class="lc-btn primary" data-imp="close">Done</button></div>';
   }
   const p = IMP.progress || { sent: 0, total: 1 };
   return '<div class="lc-prog"><div class="lc-prog-bar"><i style="width:' + Math.round(100 * p.sent / Math.max(1, p.total)) + '%"></i></div><small>Saving ' + p.sent + ' of ' + p.total + '…</small></div>';
@@ -221,6 +229,14 @@ async function impImport_() {
   }
   if (IMP.remember !== false) {
     impPost_({ stage: 'save_mapping', key: MCPS_CONTACT_IMPORT.mappingKey(IMP.rows[IMP.header] || []), mapping: IMP.map, source: IMP.source }).catch(() => {});
+  }
+  // Planned start dates in the file: one batch per future date (engine plan_import_batches).
+  // Past dates get none; those people show as overdue on Activity and Contacts.
+  done.waiting = rows.filter(c => c.intro_sent_on && !c.flag_reason).length;
+  done.flagged = rows.filter(c => c.flag_reason).length;
+  if (rows.some(c => c.planned_start) && done.added) {
+    const pb = await lcAdmin_('plan_import_batches', { group: IMP.group, name_prefix: IMP.source || 'Planned' }).catch(() => ({ ok: false }));
+    done.batches = pb && pb.ok ? (pb.batches || []).filter(b => b.ok) : null;
   }
   IMP.busy = false; IMP.done = done; impRender_();
 }

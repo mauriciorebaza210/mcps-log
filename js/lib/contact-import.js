@@ -28,7 +28,10 @@
     { key: 'city', label: 'City' }, { key: 'state', label: 'State' }, { key: 'zip', label: 'ZIP' },
     { key: 'area', label: 'Area' }, { key: 'pool_build_year', label: 'Pool build year' }, { key: 'tags', label: 'Tags' },
     { key: 'notes', label: 'Notes' }, { key: 'do_not_contact', label: 'Do not contact (yes/no)' },
-    { key: 'current_customer', label: 'Already an MCPS customer (yes/no)' }, { key: '', label: 'Ignore this column' }
+    { key: 'current_customer', label: 'Already an MCPS customer (yes/no)' },
+    // A campaign already under way (Plan changes 2026-11-12).
+    { key: 'planned_start', label: 'Planned start date' }, { key: 'intro_sent_on', label: 'Intro already sent on (date)' },
+    { key: 'flag_reason', label: 'Hold for review (reason)' }, { key: '', label: 'Ignore this column' }
   ];
   // Header words → field. Checked against the header with punctuation and case removed.
   var SYNONYMS = [
@@ -46,7 +49,10 @@
     ['tags', /^(tags?|labels?|categories|category|segment|groups?)$/],
     ['notes', /^(notes?|comments?|remarks|memo)$/],
     ['do_not_contact', /(do not (contact|email|mail)|dnc|unsubscribed|opt ?out|no email|no contact)/],
-    ['current_customer', /(current|existing|active).*(mcps|customer|client)|^(mcps customer|is customer|customer\?)$/]
+    ['current_customer', /(current|existing|active).*(mcps|customer|client)|^(mcps customer|is customer|customer\?)$/],
+    ['planned_start', /^(planned start|planned start date|start date|batch start|batch date|day 1 planned)$/],
+    ['intro_sent_on', /^(intro sent|intro sent on|intro already sent on|introduction sent|day 1 sent)$/],
+    ['flag_reason', /^(flag|flag reason|hold for review|review flag|hold reason)$/]
   ];
   var EMAIL_RE = /[A-Za-z0-9._%+'\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
   var EMAIL_ONE = /^[A-Za-z0-9._%+'\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/;
@@ -180,10 +186,25 @@
         pool_build_year: year(get(r, 'pool_build_year')),
         tags: get(r, 'tags').split(/[,;|]+/).map(clean).filter(Boolean).map(function (t) { return t.toLowerCase(); }),
         notes: get(r, 'notes').slice(0, 500), do_not_contact: yes(get(r, 'do_not_contact')), current_customer: yes(get(r, 'current_customer')),
+        planned_start: isoDate(get(r, 'planned_start')), intro_sent_on: isoDate(get(r, 'intro_sent_on')), flag_reason: get(r, 'flag_reason').slice(0, 200),
         source: clean(opts.source || '')
       });
     }
     return out;
+  }
+
+  // 2026-11-02, 11/02/26, 11/2/2026 or a spreadsheet day number → 2026-11-02; anything else → ''.
+  function isoDate(v) {
+    v = clean(v); var m;
+    if ((m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return pad(m[1], m[2], m[3]);
+    if ((m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/))) return pad(m[3].length === 2 ? '20' + m[3] : m[3], m[1], m[2]);
+    if (/^\d{5}(\.\d+)?$/.test(v)) { var d = new Date(Date.UTC(1899, 11, 30) + Math.floor(Number(v)) * 86400000); return d.toISOString().slice(0, 10); }
+    return '';
+  }
+  function pad(y, mo, d) {
+    mo = Number(mo); d = Number(d);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+    return y + '-' + (mo < 10 ? '0' : '') + mo + '-' + (d < 10 ? '0' : '') + d;
   }
 
   // The same set of headers maps the same way next time.
@@ -191,6 +212,6 @@
     return (headers || []).map(headerWords).filter(Boolean).sort().join('|').slice(0, 300);
   }
 
-  return { FIELDS: FIELDS, parseDelimited: parseDelimited, findHeaderRow: findHeaderRow, suggestMapping: suggestMapping,
+  return { FIELDS: FIELDS, isoDate: isoDate, parseDelimited: parseDelimited, findHeaderRow: findHeaderRow, suggestMapping: suggestMapping,
     toContacts: toContacts, mappingKey: mappingKey, splitName: splitName, firstEmail: firstEmail, phone: phone };
 }));

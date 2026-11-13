@@ -173,7 +173,10 @@ function cmpBatches_(b) {
   const list = ((LC.contacts && LC.contacts.batches) || []).filter(x => x.group === b && x.status !== 'cancelled')
     .sort((x, y) => (x.status === 'planned') === (y.status === 'planned') ? String(x.status === 'planned' ? x.start_on : y.start_on).localeCompare(x.status === 'planned' ? y.start_on : x.start_on) : x.status === 'planned' ? -1 : 1);
   if (!list.length) return '<div class="lc-empty">No batches yet.' + (lcCan_('edit_contacts') ? ' <button class="lc-link" data-act="cmp-batch" data-id="' + b + '">Start one</button>' : '') + '</div>';
-  return '<ol class="lc-btl">' + list.slice(0, 8).map(x => {
+  // A batch never starts people while the sequence's first email is off (engine EE_startBatch_).
+  const first = ((LC.ov && LC.ov.steps) || []).filter(s => s.bucket === b).sort((x, y) => x.order - y.order)[0];
+  const firstOff = first && first.status === 'off' ? first.name : '';
+  return '<ol class="lc-btl">' + list.slice(0, 14).map(x => {
     const f = x.filters || {}, what = [].concat(f.area || [], f.tags || [], f.source || []).join(', ');
     const planned = x.status === 'planned', d = planned ? x.start_on : cmpLocal_(x.started_at);
     const dt = new Date(d + 'T12:00:00');
@@ -181,7 +184,8 @@ function cmpBatches_(b) {
       '<div class="main"><b>' + (planned ? x.count : (x.started_count || x.count)) + ' people' + (what ? ' · ' + lcEsc_(what) : '') + '</b><small>' +
       (planned ? 'Sends ' + lcEsc_(cmpAt_(x.start_on, x.send_time || lcSendTime_(b))) + ' · ' + (x.pick === 'at_start' ? 'picked that morning' : 'people chosen') + ' · ' + (x.order === 'oldest' ? 'oldest first' : 'random')
         : 'Started ' + lcEsc_(lcStamp_(x.started_at))) + '</small></div>' +
-      (planned ? lcTag_('Planned', 'warn') + (lcCan_('edit_contacts') ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') : lcTag_('Started', 'live')) + '</li>';
+      (planned && firstOff ? '<span title="' + lcEsc_('Starts on its date once ' + firstOff + ' is turned on') + '">' + lcTag_('Waits for ' + firstOff, 'warn') + '</span>' + (lcCan_('edit_contacts') ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') : '') +
+      (planned && !firstOff ? lcTag_('Planned', 'warn') + (lcCan_('edit_contacts') ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') : '') + (planned ? '' : lcTag_('Started', 'live')) + '</li>';
   }).join('') + '</ol>';
 }
 

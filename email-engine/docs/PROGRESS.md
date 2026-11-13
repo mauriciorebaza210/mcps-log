@@ -24,7 +24,13 @@ _Handoff written 2026-11-12 ~12 AM for a fresh chat (`/email-engine`). Everythin
 - **Next:** Tony runs the guide (Emails → MCP x MCPS Intro → Setup → From → Change → Another address → How to link it, step by step). Check the link saves info@ as the Intro's sender. Then Send a test (goes to Mau), check From + Reply-To on phone; turning the Intro on is Mau's call.
 - Note: bounces for mail sent from info@ go to the info@ inbox, not Tony's, so the engine won't see Intro bounces unless info@ forwards bounce mail to Tony. Decide when linking.
 
-### First thing in the new chat
+### In progress (2026-11-12): Tony's MCP Legacy list
+- Built + tested (275), committed, **not deployed yet**: import columns Planned start / Intro already sent on / Hold for review, `start_step` in the rules, `approve_waiting`, `plan_import_batches`, `clear_flag`, first-email gate on batches, Waiting card on Activity + Contacts (`js/features/lifecycle-waiting.js`), "Waits for <Intro>" on planned batches. Plan changes 2026-11-12.
+- Clean file (local only, PII): `~/Downloads/MCP_Legacy_CRM_CSV_Exports/MCP Legacy - import into portal.csv` (171 rows → 165 after shared emails: 25 waiting, 11 flagged, 129 planned; Nov 9 = 15 overdue; 9 batches Nov 16–Jan 11). 12 with no usable email: `MCP Legacy - missing email (fix in Tony CRM).csv`.
+- Mau's rules: the 25 get nothing until approved (overdue alert only); batch dates as in Tony's file; each batch starts once the Intro is on; flagged visible with reason.
+- Still to read: the engine-sheet tab Mau linked (gid 202611100, "more info of last batch"); the Drive connector in this session expired.
+
+
 1. **Tony's launch note** (single email "Lifecycle Email launch", Staff contact Tony, Thu Nov 12 8:00 AM, signed Mauricio Rebaza Figueroa / Financial Administrator, says it was sent by the engine). Mau was finishing: paste `email-engine/templates/internal/tony-launch-note.html` in Edit HTML → Save as draft → Approve. Check with Mau that it went out at 8 AM (Activity → Today's runs / the card shows 1 sent).
 2. Week one: Activity daily; first real Welcome after an approval; one expected `security_property_changed` alert (key swap); no Unconfirmed sends left. Then `/email-engine checkpoint` for CP9 (exit criteria: PLAN.md Checkpoints row 9).
 

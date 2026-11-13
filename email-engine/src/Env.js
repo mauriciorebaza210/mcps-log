@@ -16,7 +16,9 @@ var EE_TABLES = {
     'pool_school_date', 'source', 'quote_id', 'pool_id', 'startup_date', 'startup_source', 'notes', 'imported_by', 'created_at',
     'updated_at', 'last_seq', 'send_time', 'restart_ok',
     // Cleanup and duplicates (Admin.js → update_contacts / merge_contacts / resolve_duplicates).
-    'name_original', 'name_kind', 'duplicate_of', 'merged_into', 'not_duplicate_of'],
+    'name_original', 'name_kind', 'duplicate_of', 'merged_into', 'not_duplicate_of',
+    // Imported from a campaign already under way (Admin.js → import, approve_waiting, plan_import_batches).
+    'planned_start', 'intro_sent_on', 'flag_reason', 'start_step'],
   Enrollments: ['enrollment_id', 'contact_id', 'sequence_id', 'rule_rev', 'mode', 'status', 'enrolled_on', 'anchor_snapshot',
     'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq', 'send_time'],
   Deliveries: ['delivery_id', 'key', 'enrollment_id', 'contact_id', 'step_id', 'occurrence', 'mode', 'email_norm', 'bucket',
@@ -56,7 +58,8 @@ var EE_TABLES = {
   ChangeLog: ['id', 'at', 'actor', 'action', 'detail', 'result'],
   // Batches that start contacts from Needs review on a date (Admin.js → create_batch).
   Batches: ['batch_id', 'name', 'group', 'filters_json', 'count', 'order', 'pick', 'start_on', 'contact_ids', 'status',
-    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at', 'send_time', 'restart_ids'],
+    'created_by', 'created_at', 'started_at', 'started_count', 'skipped_json', 'cancelled_by', 'cancelled_at', 'send_time', 'restart_ids',
+    'waiting'],
   // A person's change to one planned send (Admin.js → send_override; PLAN.md → Per-send overrides).
   Overrides: ['key', 'kind', 'date', 'enrollment_id', 'step_id', 'by', 'at'],
   // The Attachment Library (Attachments.js): items and their immutable versions.

@@ -39,7 +39,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -114,6 +114,9 @@ function EE_adminRun_(env, core, req, deps) {
       out = { ok: true, display_name: disp, sign_name: sign };
     }
   }
+  else if (action === 'approve_waiting') out = EE_approveWaiting_(env, core, p, actor);
+  else if (action === 'plan_import_batches') out = EE_planImportBatches_(env, core, p, actor);
+  else if (action === 'clear_flag') out = EE_clearFlag_(env, core, p, actor);
   else if (action === 'list_senders') out = EE_listSenders_(env);
   else if (action === 'set_step_sender') out = EE_setStepSender_(env, p);
   else if (action === 'test_sender') out = EE_testSender_(env, p, actor);
@@ -207,12 +210,19 @@ function EE_importContacts_(env, core, p, actor) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { skipped.push({ email_norm: email, reason: 'bad_email' }); return; }
     if (existing[email]) { skipped.push({ email_norm: email, reason: 'existing', contact_id: existing[email] }); return; }
     var id = 'ct_' + env.sha256(email).slice(0, 16), rec = {};
-    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id', 'name_original', 'name_kind', 'duplicate_of']
+    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id', 'name_original', 'name_kind', 'duplicate_of', 'planned_start', 'intro_sent_on', 'flag_reason']
       .forEach(function (k) { rec[k] = String(c[k] == null ? '' : c[k]); });
     if (!rec.source) rec.source = String(p.source || '').slice(0, 80);       // the import's source, when rows don't carry one
     rec.contact_id = id; rec.email_norm = email; rec.bucket = group; rec.sub_bucket = group === 'B' ? 'B1' : '';
     // A possible duplicate (automatic MCP lead sync can't ask) waits for a person; batches never pick it.
     rec.review_status = rec.duplicate_of ? 'possible_duplicate' : 'needs_review'; rec.review_reason = rec.duplicate_of ? 'possible duplicate' : 'imported'; rec.is_test = 'N';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.planned_start)) rec.planned_start = '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.intro_sent_on) || group !== 'B') rec.intro_sent_on = '';
+    rec.flag_reason = rec.flag_reason.slice(0, 200);
+    // Flagged in the file (possible business, duplicate, bounced, excluded…): waits for a person; batches never pick it.
+    if (rec.flag_reason) { rec.review_status = 'flagged'; rec.review_reason = rec.flag_reason; }
+    // Got the Intro by hand before the engine: never gets it again; held until a person approves the Follow Up.
+    else if (rec.intro_sent_on) { rec.review_status = 'awaiting_approval'; rec.review_reason = 'Intro sent by hand on ' + rec.intro_sent_on; rec.sub_bucket = 'B2'; rec.start_step = 'b_followup'; }
     rec.created_at = now; rec.imported_by = actor;
     core.commitEntity('contact', rec, 'contact:' + id + ':import');
     existing[email] = id; added.push(id);
@@ -257,6 +267,14 @@ function EE_createBatch_(env, core, p, actor) {
 // Confirms the batch's people, so the next run starts their sequence. Someone who
 // is no longer waiting in Needs review (enrolled, edited, removed) is skipped.
 function EE_startBatch_(env, core, b, actor) {
+  // A sequence whose first email is off doesn't start new people: they'd get the
+  // second email with no first one. The batch stays planned and starts at the first
+  // run after that email is turned on (Plan changes 2026-11-12).
+  var gate = EE_firstStepOff_(env, b.group);
+  if (gate) {
+    env.store.upsert('Batches', EE_merge_(env.store.get('Batches', b.batch_id) || b, { waiting: 'first_email_off:' + gate }));
+    return { started: 0, skipped: 0, waiting: gate };
+  }
   var enrolled = {}, going = {};
   env.store.rows('Enrollments').forEach(function (e) {
     enrolled[e.contact_id] = true;
@@ -748,4 +766,77 @@ function EE_testSender_(env, p, actor) {
     subject: 'Test from ' + (name || email),
     text: 'This is a test from the Lifecycle Email engine, sent from ' + email + ' through Tony\'s Gmail. Replies go to ' + owner + '. Requested by ' + actor + '.' });
   return { ok: true, to: to };
+}
+
+// ── Imported part-way, flagged, and planned from the file (Plan changes 2026-11-12) ──
+// The first email of a sequence, if it's turned off (or not live): its name, else ''.
+function EE_firstStepOff_(env, group) {
+  var rs = EE_currentRuleset_(env), steps = rs && rs.json && rs.json.steps;
+  if (!steps) return '';
+  var first = steps.filter(function (s) { return s.sequence_id === group && s.status !== 'draft'; })
+    .sort(function (a, b) { return a.order - b.order; })[0];
+  return first && first.status !== 'active' ? (first.name || first.step_id) : '';
+}
+// One email, if it's turned off (or not live): its name, else ''.
+function EE_stepOff_(env, stepId) {
+  var rs = EE_currentRuleset_(env), steps = rs && rs.json && rs.json.steps;
+  var st = (steps || []).filter(function (s) { return s.step_id === stepId; })[0];
+  return st && st.status !== 'active' ? (st.name || st.step_id) : '';
+}
+// People held for a person's yes: imported after getting the Intro by hand
+// (awaiting_approval, they start at the Follow Up), or whose planned start date has
+// passed. p = { contact_ids }. Approving confirms them; the next run enrolls them
+// today and their first email is due today.
+function EE_approveWaiting_(env, core, p, actor) {
+  var ids = (p.contact_ids || []).map(String).filter(Boolean);
+  if (!ids.length || ids.length > EE_BATCH_MAX) return { ok: false, error: 'pick 1 to ' + EE_BATCH_MAX + ' people' };
+  var today = EE_today_(env), approved = 0, skipped = [], gateFor = {};
+  ids.forEach(function (cid) {
+    var c = env.store.get('Contacts', cid);
+    if (!c) { skipped.push({ contact_id: cid, reason: 'not found' }); return; }
+    var late = c.review_status === 'needs_review' && c.planned_start && String(c.planned_start) < today;
+    if (c.review_status !== 'awaiting_approval' && !late) { skipped.push({ contact_id: cid, reason: 'not waiting' }); return; }
+    // The email they start at must be on, or the next one would go out with nothing before it.
+    var gk = c.start_step || ('first:' + c.bucket);
+    if (!(gk in gateFor)) gateFor[gk] = c.start_step ? EE_stepOff_(env, c.start_step) : EE_firstStepOff_(env, c.bucket);
+    if (gateFor[gk]) { skipped.push({ contact_id: cid, reason: 'Turn on ' + gateFor[gk] + ' first' }); return; }
+    core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'approved by ' + actor + ' on ' + today },
+      'contact:' + cid + ':approve:' + today);
+    approved++;
+  });
+  if (!approved && skipped.length) return { ok: false, error: skipped[0].reason, skipped: skipped };
+  return { ok: true, approved: approved, skipped: skipped };
+}
+// After an import with planned start dates: one batch per future date, with the
+// people waiting in Needs review for that date. Past dates get no batch: those
+// people show as overdue and wait for approve_waiting. Re-running adds nothing twice.
+function EE_planImportBatches_(env, core, p, actor) {
+  var group = String(p.group || 'B'), today = EE_today_(env);
+  if (!/^[A-F]$/.test(group)) return { ok: false, error: 'group A-F required' };
+  var inBatch = {};
+  env.store.rows('Batches').forEach(function (b) { if (b.status === 'planned') (b.contact_ids || []).forEach(function (id) { inBatch[id] = true; }); });
+  var byDate = {};
+  env.store.rows('Contacts').forEach(function (c) {
+    if (c.bucket !== group || c.review_status !== 'needs_review' || !c.planned_start || c.planned_start < today || inBatch[c.contact_id]) return;
+    (byDate[c.planned_start] = byDate[c.planned_start] || []).push(c.contact_id);
+  });
+  var made = [];
+  Object.keys(byDate).sort().forEach(function (d) {
+    var r = EE_createBatch_(env, core, { group: group, pick: 'now', contact_ids: byDate[d], start_on: d,
+      name: String(p.name_prefix || 'Planned') + ' ' + d }, actor);
+    made.push({ start_on: d, count: byDate[d].length, ok: !!r.ok, batch_id: r.batch_id || '', error: r.error || '' });
+  });
+  return { ok: true, batches: made };
+}
+// A person cleared a file flag: the contact waits in Needs review like any other.
+function EE_clearFlag_(env, core, p, actor) {
+  var ids = (p.contact_ids || []).map(String).filter(Boolean), n = 0;
+  ids.slice(0, EE_BATCH_MAX).forEach(function (cid) {
+    var c = env.store.get('Contacts', cid);
+    if (!c || c.review_status !== 'flagged') return;
+    core.commitEntity('contact', { contact_id: cid, review_status: c.intro_sent_on ? 'awaiting_approval' : 'needs_review',
+      review_reason: 'flag cleared by ' + actor + ' (was: ' + String(c.flag_reason || '').slice(0, 120) + ')', flag_reason: '' }, 'contact:' + cid + ':unflag:' + env.now());
+    n++;
+  });
+  return { ok: n > 0, cleared: n, error: n ? '' : 'nobody flagged in that list' };
 }

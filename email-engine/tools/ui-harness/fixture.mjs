@@ -59,6 +59,16 @@ rows('Holds', [{ key: 'none', held_days: 0 }]);
 // Some confirmed people are test contacts, so a single email can pick them in test mode.
 C.filter(c => c.review_status === 'confirmed').forEach((c, i) => { if (i % 2 === 0) c.is_test = 'Y'; });
 C.filter(c => c.review_status === 'confirmed').slice(0, 9).forEach(c => E.push({ enrollment_id: 'en_' + c.contact_id + '_S1A2B3C_1', contact_id: c.contact_id, sequence_id: 'S1A2B3C', rule_rev: 'bc-1', mode: 'test', status: 'active', enrolled_on: dayAt(-1), send_time: '10:00' }));
+// Imported part-way (Plan changes 2026-11-12): hand-introduced, late planned start, flagged, planned.
+const plusDays = n => { const x = new Date(todayCT + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+[['Linda', 'Garza', 'awaiting_approval', { intro_sent_on: plusDays(-17), sub_bucket: 'B2', start_step: 'b_followup', review_reason: 'Intro sent by hand' }],
+ ['Robert', 'Vela', 'awaiting_approval', { intro_sent_on: plusDays(-10), sub_bucket: 'B2', start_step: 'b_followup', review_reason: 'Intro sent by hand' }],
+ ['Teresa', 'Moreno', 'needs_review', { planned_start: plusDays(-4) }],
+ ['Pool Pros', 'LLC', 'flagged', { flag_reason: 'Possible non-residential (vendor/builder)', review_reason: 'Possible non-residential (vendor/builder)' }],
+ ['James', 'Ortiz', 'flagged', { flag_reason: 'Intro bounced', review_reason: 'Intro bounced' }],
+ ['Sofia', 'Ramos', 'needs_review', { planned_start: plusDays(3) }]].forEach(([f, l, st, extra], i) => C.push(Object.assign({
+  contact_id: 'ct_w' + i, email_norm: f.toLowerCase() + '.' + l.toLowerCase() + '@example.com', first_name: f, last_name: l, bucket: 'B', sub_bucket: 'B1',
+  review_status: st, is_test: 'N', created_at: new Date().toISOString(), tags: 'mcp week ' + (i + 1) }, extra)));
 rows('Contacts', C); rows('Enrollments', E); rows('Deliveries', D); rows('Engagement', G);
 const atCT = t => new Date(todayCT + 'T' + t + ':00-06:00').toISOString();
 rows('Runs', [{ run_id: 's1', trigger: 'scheduled', planned_for: '08:30', started_at: atCT('08:31'), finished_at: atCT('08:32'), sent: 4, skipped: 0, stopped_reason: 'done' },

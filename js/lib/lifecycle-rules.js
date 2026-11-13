@@ -167,11 +167,25 @@
     var sendTime = normTime(en.send_time) || normTime((ctx.sendTimes || {})[en.sequence_id]) || DEFAULT_SEND_TIME;
     var stepResult = {};        // step_id -> { sent, due, outcome } for occurrence 1
     var startupSent = false;
+    // Imported part-way (Admin.js → import: the Intro was sent by hand before the engine):
+    // contact.start_step is where they begin. Earlier steps never send; the start step is
+    // due the day they're enrolled (= the day a person approved them).
+    var startOrder = 0;
+    if (contact.start_step && stepsById[contact.start_step]) startOrder = stepsById[contact.start_step].order;
 
     steps.forEach(function (step) {
       var count = Math.max(1, step.repeat_count || 1);
       var base = null, projected = false, prereqExpired = false;
-      if (step.anchor === 'enrollment') base = en.enrolled_on;
+      if (startOrder && step.order < startOrder) {
+        out.push({ key: deliveryKey(en.enrollment_id, step.step_id, 1), enrollment_id: en.enrollment_id, contact_id: en.contact_id, mode: state.mode,
+          step_id: step.step_id, occurrence: 1, order: step.order, category: step.category, due: null, send_time: sendTime, last_send_day: null,
+          outcome: 'excluded', reason: 'sent_before_import', held_days: 0 });
+        stepResult[step.step_id] = { sent: null, due: null, outcome: 'excluded' };
+        return;
+      }
+      var stepOffset = startOrder && step.order === startOrder ? 0 : step.offset;
+      if (startOrder && step.order === startOrder) base = en.enrolled_on;
+      else if (step.anchor === 'enrollment') base = en.enrolled_on;
       // A single email (PLAN.md → "Single email" sequence type): one fixed calendar day.
       else if (step.anchor === 'date') base = /^\d{4}-\d{2}-\d{2}$/.test(String(step.date || '')) ? step.date : null;
       else if (step.anchor === 'startup') base = contact.startup_date || null;
@@ -192,8 +206,8 @@
           step_id: step.step_id, occurrence: occ, order: step.order, category: step.category,
           due: null, send_time: sendTime, last_send_day: null, outcome: '', reason: '', held_days: ctx.holds[key] || 0 };
         if (base && !unsupported) {
-          d.due = addDays(base, step.offset + k * (step.repeat_every || 0));
-          var nextDue = k + 1 < count ? addDays(base, step.offset + (k + 1) * (step.repeat_every || 0)) : null;
+          d.due = addDays(base, stepOffset + k * (step.repeat_every || 0));
+          var nextDue = k + 1 < count ? addDays(base, stepOffset + (k + 1) * (step.repeat_every || 0)) : null;
           var deadline = hardDeadline(step, base, nextDue, contact.startup_date || null);
           var byWindow = addDays(d.due, (step.window_days || 0) + Math.min(d.held_days, step.max_hold_days || 0));
           d.last_send_day = earlier(byWindow, deadline);

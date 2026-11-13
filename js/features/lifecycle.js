@@ -376,7 +376,7 @@ function lcActivity_() {
   const alerts = ov.alerts.length ? '<ul class="lc-list">' + ov.alerts.slice(0, 8).map(a => '<li><div class="main"><b>' + lcEsc_(LC_ALERT[a.kind] || a.kind) +
       '</b>' + (a.detail ? '<small>' + lcEsc_(lcHumanize_(a.detail)) + '</small>' : '') + '</div>' + lcAgoT_(a.at) + '</li>').join('') + '</ul>'
     : '<div class="lc-empty">No alerts.</div>';
-  return '<div class="lc-grid"><div><div class="lc-card"><div class="lc-card-h"><h3>Health</h3></div>' + issues + ctrls + '</div>' +
+  return (typeof wtBanner_ === 'function' ? wtBanner_() : '') + '<div class="lc-grid"><div><div class="lc-card"><div class="lc-card-h"><h3>Health</h3></div>' + issues + ctrls + '</div>' +
     '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
     (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +
     '<div>' + lcTodayRuns_() + '<div class="lc-card"><div class="lc-card-h"><h3>Recent runs</h3><small>Times in ' + lcEsc_(lcZoneOn_()) + '</small></div>' + runs + '</div>' +
@@ -507,23 +507,25 @@ function lcContacts_() {
   const bar = '<div class="lc-bar"><label class="lc-search">' + LC_ICON.search + '<input type="search" placeholder="Search people" value="' + lcEsc_(LC.q) +
     '" data-lc-input="q" aria-label="Search people"></label><div class="lc-seg">' +
     [['', 'All'], ['B', 'MCP Legacy'], ['C', 'MCP Startup']].map(([k, l]) => '<button data-act="bucket" data-bucket="' + k + '" class="' + (LC.bucket === k ? 'on' : '') + '">' + l + '</button>').join('') +
-    '</div>' + (LC.contacts ? lcReviewChip_() : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn" data-act="crm-leads">MCP leads</button><button class="lc-btn" data-act="cleanup">Clean up</button><button class="lc-btn" data-act="staff">Add staff</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
+    '</div>' + (LC.contacts ? lcReviewChip_() + (typeof wtChips_ === 'function' ? wtChips_() : '') : '') + (lcCan_('edit_contacts') ? '<button class="lc-btn" data-act="batch">Start a batch</button><button class="lc-btn" data-act="crm-leads">MCP leads</button><button class="lc-btn" data-act="cleanup">Clean up</button><button class="lc-btn" data-act="staff">Add staff</button><button class="lc-btn primary" data-act="import">Import</button>' : '') + '</div>';
   if (!LC.contacts) return bar + '<div class="lc-sk" style="height:320px"></div>';
   const q = LC.q.trim().toLowerCase();
   // Merged and removed contacts stay in the engine (history, pointers) but not in the list.
   const tags = typeof tagMatches_ === 'function';
-  const rows = LC.contacts.contacts.filter(c => !/^(merged|removed)$/.test(c.review_status || '') && (!LC.bucket || c.bucket === LC.bucket) && (!LC.review || c.review_status === LC.review) &&
+  const rows = LC.contacts.contacts.filter(c => !/^(merged|removed)$/.test(c.review_status || '') && (!LC.bucket || c.bucket === LC.bucket) && (typeof wtReviewMatch_ === 'function' ? wtReviewMatch_(c) : (!LC.review || c.review_status === LC.review)) &&
     (!tags || tagMatches_(c)) && (!q || [c.first_name, c.last_name, c.email].concat(c.tags || []).some(v => String(v || '').toLowerCase().includes(q))));
   const sel = tags && lcCan_('edit_contacts');
   const filters = tags ? tagFilterBar_() : '', bulk = tags ? tagBulkBar_(rows) : '';
   const batches = typeof lcBatchesCard_ === 'function' ? lcBatchesCard_() : '';
-  if (!rows.length) return bar + filters + batches + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
+  const waitTop = (typeof wtBanner_ === 'function' && !LC.review ? wtBanner_() : '') + (typeof wtActionBar_ === 'function' ? wtActionBar_(rows) : '');
+  if (!rows.length) return bar + filters + waitTop + batches + '<div class="lc-card"><div class="lc-empty">No one matches.</div></div>';
   const shownIds = rows.slice(0, 2000).map(c => c.contact_id), allOn = sel && shownIds.length && shownIds.every(id => TAGS.sel.has(id));
-  return bar + filters + bulk + batches + '<div class="lc-card"><table class="lc-table"><thead><tr>' +
+  return bar + filters + bulk + waitTop + batches + '<div class="lc-card"><table class="lc-table"><thead><tr>' +
     (sel ? '<th class="lc-selcol"><input type="checkbox" data-act="tag-selall" data-ids="' + lcEsc_(JSON.stringify(shownIds)) + '"' + (allOn ? ' checked' : '') + ' aria-label="Select everyone shown"></th>' : '') + '<th>Person</th><th class="hide-xs">Sequence</th><th>Status</th><th class="hide-sm">Last email</th></tr></thead><tbody>' +
     rows.map(c => {
       const seq = c.sequence, last = c.last_email;
-      const status = !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : c.review_status === 'possible_duplicate' ? lcTag_('Possible duplicate', 'warn') : c.review_status === 'held' ? lcTag_('Before go-live', '') : c.review_status === 'removed' ? lcTag_('Removed', '')
+      const wt = !seq && typeof wtStatusTag_ === 'function' ? wtStatusTag_(c) : '';
+      const status = wt ? wt : !seq ? (c.review_status === 'needs_review' ? lcTag_('Needs review', 'warn') : c.review_status === 'possible_duplicate' ? lcTag_('Possible duplicate', 'warn') : c.review_status === 'held' ? lcTag_('Before go-live', '') : c.review_status === 'removed' ? lcTag_('Removed', '')
         : c.review_status === 'confirmed' ? lcTag_(c.bucket === 'C' ? 'From the portal' : 'Starting', 'live') : lcTag_('Not enrolled', '')) : seq.status === 'active' ? lcTag_('Active', 'live') :
         seq.status === 'stopped' ? lcTag_('Stopped · ' + lcStopWord_(seq.stop_reason), 'warn') : lcTag_(seq.status, '');
       return '<tr class="click' + (sel && TAGS.sel.has(c.contact_id) ? ' sel' : '') + '" data-act="contact" data-id="' + lcEsc_(c.contact_id) + '" tabindex="0">' +
@@ -540,8 +542,8 @@ function lcContacts_() {
 // Imported people wait in Needs review until a batch starts them.
 function lcReviewChip_() {
   const n = LC.contacts.contacts.filter(c => c.review_status === 'needs_review').length;
-  if (!n && !LC.review) return '';
-  return '<button class="lc-btn sm' + (LC.review ? ' primary' : '') + '" data-act="review">Needs review · ' + n + '</button>';
+  if (!n && LC.review !== 'needs_review') return '';
+  return '<button class="lc-btn sm' + (LC.review === 'needs_review' ? ' primary' : '') + '" data-act="review">Needs review · ' + n + '</button>';
 }
 
 // ── Drawers ───────────────────────────────────────────────────────────────────
@@ -1049,6 +1051,7 @@ function lcBusyBtn_(b, on) {
 function lcDispatch_(t) {
   const act = t.dataset.act;
   if (act.startsWith('cmp-')) return cmpOnClick_(t);
+  if (act.startsWith('wt-') && typeof wtAct_ === 'function') return wtAct_(act, t);
   if (act.startsWith('tpl-')) return lcTplAct_(act, t.dataset.id, t.dataset.name);
   if (act === 'setup-edit') return lcSetupAct_(t);
   if (act === 'sgl-setup') return sglSetupAct_(t);
@@ -1081,7 +1084,7 @@ function lcDispatch_(t) {
   else if (act === 'bucket') { LC.bucket = t.dataset.bucket; lcRenderBody_(); }
   else if (act === 'import') lcOpenImport_();
   else if (act === 'batch') lcOpenBatch_();
-  else if (act === 'review') { LC.review = LC.review ? '' : 'needs_review'; lcRenderBody_(); }
+  else if (act === 'review') { LC.review = LC.review === 'needs_review' ? '' : 'needs_review'; lcRenderBody_(); }
 }
 function lcOnInput_(e) {
   if (e.target.dataset.lcInput !== 'q') return;

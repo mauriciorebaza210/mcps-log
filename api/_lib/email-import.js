@@ -63,6 +63,10 @@ export function importRecord(c, opts = {}) {
     quote_id: String(c.quote_id || '').slice(0, 20),
     // Cleanup (api/_lib/email-clean.js): the name as typed, couple/family/business, and the contact it may duplicate.
     name_original: String(c.name_original || '').slice(0, 120), name_kind: String(c.name_kind || '').slice(0, 20),
-    duplicate_of: String(c.duplicate_of || '').slice(0, 40)
+    duplicate_of: String(c.duplicate_of || '').slice(0, 40),
+    // A campaign already under way (Plan changes 2026-11-12); the engine re-checks the dates.
+    planned_start: /^\d{4}-\d{2}-\d{2}$/.test(String(c.planned_start || '')) ? c.planned_start : '',
+    intro_sent_on: /^\d{4}-\d{2}-\d{2}$/.test(String(c.intro_sent_on || '')) ? c.intro_sent_on : '',
+    flag_reason: String(c.flag_reason || '').slice(0, 200)
   };
 }

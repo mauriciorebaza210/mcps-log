@@ -887,4 +887,10 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-gd-stop{font-size:12.5px;color:var(--muted)}
 .lc-gd kbd{font:600 11.5px var(--f-body,inherit);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px}
 @media (max-width:600px){.lc-gd-b{padding-left:0}}
+/* Waiting for approval (lifecycle-waiting.js) */
+.wt-banner{border-color:var(--gold,#c8a84b)}
+.wt-banner .lc-list li{align-items:center}
+.wt-sub{display:block;color:var(--muted);font-size:12px;margin-top:3px;max-width:260px}
+.wt-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:0 0 12px;font-size:13.5px;color:var(--ink-2)}
+.lc-imp-after{margin:14px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;color:var(--ink-2)}
 

@@ -91,7 +91,10 @@ function contactView(c, caps) {
     address: pii ? (c.address || '') : (c.address ? 'hidden' : ''),
     phone: pii ? (c.phone || '') : (c.phone ? 'hidden' : ''),
     startup_date: c.startup_date || '', send_time: c.send_time || '', source: c.source || '', created_at: c.created_at || '',
-    area: c.area || c.city || '', city: c.city || '', tags: String(c.tags || '').split(',').map(t => t.trim()).filter(Boolean)
+    area: c.area || c.city || '', city: c.city || '', tags: String(c.tags || '').split(',').map(t => t.trim()).filter(Boolean),
+    // Imported part-way or flagged (Admin.js → import; Plan changes 2026-11-12).
+    review_reason: c.review_reason || '', planned_start: c.planned_start || '', intro_sent_on: c.intro_sent_on || '',
+    flag_reason: c.flag_reason || '', start_step: c.start_step || ''
   };
 }
 // Per-delivery tracking, by evidence level (PLAN.md → Tracking). Opens are
@@ -156,6 +159,19 @@ function runPlan(cfg) {
 }
 
 // mode: 'test' | 'production' (default: the engine's current mode).
+function waitingView(tables, now) {
+  const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  const plus = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const live = (tables.Contacts || []).filter(c => c.is_test !== 'Y');
+  const intro = live.filter(c => c.review_status === 'awaiting_approval');
+  const due = intro.map(c => c.intro_sent_on ? plus(c.intro_sent_on, 4) : '').filter(Boolean).sort();
+  const late = {};
+  live.filter(c => c.review_status === 'needs_review' && c.planned_start && c.planned_start < today)
+    .forEach(c => { late[c.planned_start] = (late[c.planned_start] || 0) + 1; });
+  return { intro_done: intro.length, followup_due_since: due[0] || '',
+    late_starts: Object.keys(late).sort().map(d => ({ date: d, count: late[d] })),
+    flagged: live.filter(c => c.review_status === 'flagged').length };
+}
 export function buildOverview(tables, caps, now, opts = {}) {
   const cfg = config(tables);
   const mode = opts.mode === 'test' || opts.mode === 'production' ? opts.mode : (cfg.engine_mode === 'production' ? 'production' : 'test');
@@ -217,6 +233,9 @@ export function buildOverview(tables, caps, now, opts = {}) {
       send_times: { B: sendTime(cfg.send_time_B), C: sendTime(cfg.send_time_C) }, run_plan: runPlan(cfg)
     },
     steps,
+    // People waiting on a person's yes (Plan changes 2026-11-12): imported after a hand-sent
+    // Intro (their Follow Up is overdue), planned starts whose date passed, and file flags.
+    waiting: waitingView(tables, now),
     // A single email's send time sits on its people's enrollments (Singles.js); one is enough.
     single_times: Object.fromEntries((tables.Enrollments || []).filter(e => /^S[0-9A-F]{6}$/.test(e.sequence_id || '') && e.send_time)
       .map(e => [e.sequence_id, e.send_time])),
@@ -279,7 +298,7 @@ export function buildContacts(tables, caps, opts = {}) {
   (tables.Deliveries || []).forEach(d => { if (d.state === 'sent' && ms(d.sent_at) > ms(last[d.contact_id] && last[d.contact_id].sent_at)) last[d.contact_id] = d; });
   const batches = (tables.Batches || []).slice().sort(byDesc('created_at')).slice(0, 30).map(b => ({
     batch_id: b.batch_id, name: b.name || '', group: b.group, count: b.count, order: b.order, pick: b.pick, start_on: b.start_on, send_time: b.send_time || '',
-    status: b.status, started_count: b.started_count, filters: typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {},
+    status: b.status, started_count: b.started_count, waiting: b.status === 'planned' ? String(b.waiting || '') : '', filters: typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {},
     created_by: b.created_by, created_at: b.created_at, started_at: b.started_at || '',
     // Who a planned batch already holds, so a new batch doesn't pick them again.
     contact_ids: b.status === 'planned' && Array.isArray(b.contact_ids) ? b.contact_ids : [] }));
