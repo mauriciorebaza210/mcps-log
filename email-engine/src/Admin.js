@@ -30,6 +30,8 @@
 //   publish_rules      an email's Setup edits (timing, stops, on/off) as a new immutable ruleset revision;
 //                       scope 'all' moves running enrollments onto it, 'new' leaves them on theirs (EE_publishRules_)
 //   save_import_mapping remember a spreadsheet's column mapping for the next file of the same shape
+//   list_senders | set_step_sender | test_sender   who one email comes from: Tony (default) or an address
+//                       linked in Tony's Gmail ("Send mail as"). Config step_senders; replies go to Tony.
 //   maintenance        run one allow-listed setup task as Tony (eeSetup, eeSetupMarketingKit,
 //                       eeDiagnostics), so nobody has to click Run in the Apps Script editor.
 //                       Only works for tasks whose Google permissions Tony has already granted.
@@ -37,7 +39,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -111,6 +113,9 @@ function EE_adminRun_(env, core, req, deps) {
       out = { ok: true, display_name: disp, sign_name: sign };
     }
   }
+  else if (action === 'list_senders') out = EE_listSenders_(env);
+  else if (action === 'set_step_sender') out = EE_setStepSender_(env, p);
+  else if (action === 'test_sender') out = EE_testSender_(env, p, actor);
   else if (action === 'set_crm_rule') {
     var rule = p.rule && typeof p.rule === 'object' ? p.rule : null;
     if (!rule) out = { ok: false, error: 'rule required' };
@@ -655,6 +660,10 @@ function EE_applyRuleEdits_(ruleset, edits) {
   return { ruleset: rs };
 }
 function EE_publishRules_(env, core, p, actor) {
+  // An email can't be turned on while the address it sends from isn't linked in Gmail.
+  var badOn = (Array.isArray(p.edits) ? p.edits : []).filter(function (e) { return e && e.status === 'active'; })
+    .map(function (e) { var snd = EE_senderFor_(env.store, e.step_id); return snd && !EE_senderLinked_(env, snd.email) ? snd.email : ''; }).filter(String)[0];
+  if (badOn) return { ok: false, error: badOn + ' isn’t linked in Tony’s Gmail yet. Link it (Send mail as), then turn this email on.' };
   var edits = Array.isArray(p.edits) ? p.edits : [];
   if (!edits.length || edits.length > 20) return { ok: false, error: 'edits required' };
   if (p.scope !== 'all' && p.scope !== 'new') return { ok: false, error: 'scope must be all or new' };
@@ -678,4 +687,60 @@ function EE_publishRules_(env, core, p, actor) {
     });
   }
   return { ok: true, rule_rev: rev, previous: curRev, moved: moved };
+}
+
+// ── Who an email comes from (Config step_senders) ─────────────────────────────
+// { <step_id>: { email, name } }. No entry = Tony's own address and the inbox
+// name from set_sender. Another address must be linked in Tony's Gmail
+// (Settings → Accounts → Send mail as); Gmail only lists it once it's verified.
+// The send path re-checks at render time and fails the delivery (with an alert)
+// rather than sending from Tony instead.
+var EE_SENDER_EMAIL_RE = /^[^@\s<>"(),;:]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+function EE_stepSenders_(store) {
+  var row = store.get('Config', 'step_senders'), m = {};
+  try { m = row && row.value ? (typeof row.value === 'string' ? JSON.parse(row.value) : row.value) : {}; } catch (e) { m = {}; }
+  return m && typeof m === 'object' ? m : {};
+}
+function EE_senderFor_(store, stepId) {
+  var s = EE_stepSenders_(store)[String(stepId || '')];
+  return s && s.email ? { email: String(s.email).toLowerCase(), name: String(s.name || '') } : null;
+}
+function EE_linkedAliases_(env) {
+  try { return (env.gmail.aliases() || []).map(function (a) { return String(a).toLowerCase(); }); } catch (e) { return []; }
+}
+function EE_senderLinked_(env, email) { return EE_linkedAliases_(env).indexOf(String(email || '').toLowerCase()) !== -1; }
+function EE_listSenders_(env) {
+  var linked = EE_linkedAliases_(env), map = EE_stepSenders_(env.store), steps = {};
+  Object.keys(map).forEach(function (k) { if (map[k] && map[k].email) steps[k] = { email: String(map[k].email).toLowerCase(), name: map[k].name || '', linked: linked.indexOf(String(map[k].email).toLowerCase()) !== -1 }; });
+  return { ok: true, owner: String(env.config.ownerEmail() || '').toLowerCase(), linked: linked, steps: steps };
+}
+function EE_setStepSender_(env, p) {
+  var stepId = String(p.step_id || ''), email = String(p.email || '').trim().toLowerCase();
+  var name = String(p.name == null ? '' : p.name).replace(/[<>"\r\n\u0000-\u001F]/g, '').replace(/\s+/g, ' ').trim();
+  if (!/^[a-z0-9_]{1,40}$/i.test(stepId)) return { ok: false, error: 'step_id required' };
+  var owner = String(env.config.ownerEmail() || '').toLowerCase();
+  var map = EE_stepSenders_(env.store);
+  if (!email || email === owner) delete map[stepId];
+  else {
+    if (!EE_SENDER_EMAIL_RE.test(email)) return { ok: false, error: 'That isn’t an email address.' };
+    if (!name || name.length > 60) return { ok: false, error: 'The inbox name needs 1 to 60 characters.' };
+    map[stepId] = { email: email, name: name };
+  }
+  env.store.upsert('Config', { key: 'step_senders', value: JSON.stringify(map) });
+  var cur = map[stepId];
+  return { ok: true, step_id: stepId, sender: cur ? { email: cur.email, name: cur.name, linked: EE_senderLinked_(env, cur.email) } : null };
+}
+// A short test from the address, to the first test recipient (Mau). Proves the
+// Gmail link works before any customer email depends on it.
+function EE_testSender_(env, p, actor) {
+  var email = String(p.email || '').trim().toLowerCase(), name = String(p.name || '').replace(/[<>"\r\n]/g, '').trim();
+  if (!EE_senderLinked_(env, email)) return { ok: false, error: email + ' isn’t linked in Tony’s Gmail yet.' };
+  var cfgRow = env.store.get('Config', 'test_recipients');
+  var to = String(cfgRow && cfgRow.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean)[0];
+  if (!to) return { ok: false, error: 'No test recipient is set (Config test_recipients).' };
+  var owner = String(env.config.ownerEmail() || '').toLowerCase();
+  env.gmail.sendTest({ to: to, from: email, name: name || email, reply_to: owner,
+    subject: 'Test from ' + (name || email),
+    text: 'This is a test from the Lifecycle Email engine, sent from ' + email + ' through Tony\'s Gmail. Replies go to ' + owner + '. Requested by ' + actor + '.' });
+  return { ok: true, to: to };
 }

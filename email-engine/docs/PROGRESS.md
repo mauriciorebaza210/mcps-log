@@ -15,6 +15,13 @@ _Handoff written 2026-11-12 ~12 AM for a fresh chat (`/email-engine`). Everythin
 - **Tests:** `npm run test:ee` → 261 pass.
 - **Vercel env, Production:** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET, CRON_SECRET (fresh, generated locally, never printed), ANTHROPIC_API_KEY, SERVICE_REQUEST_NOTIFY_SECRET (alerts + Request a change emails go from Mau's Gmail). Preview (feat/email-engine): old EE_* keys (now stale) + EE_LINK_SECRET_NEXT / EE_RELAY_SECRET_NEXT (= production keys).
 
+### In progress (2026-11-12): MCP Intro from info@missioncustompools.com
+- **Built, tested (267 pass), committed on `feat/email-engine`; NOT deployed** (engine still @47, portal unchanged in prod). Plan changes 2026-11-12.
+- Email Setup tab → From → Change: Tony's address or another address (+ inbox name), shows Linked / Not linked yet, Send a test to me (goes to the first test recipient). Emails list shows "· from …".
+- **Waiting on Mau:** access to the info@missioncustompools.com inbox (Google Workspace, MX confirmed). Then, logged in as Tony (antonio@): Gmail → Settings → Accounts → Send mail as → Add another email address → name "Mission Custom Pools", address info@…, **uncheck "Treat as an alias"** → SMTP smtp.gmail.com, port 587, user info@missioncustompools.com, password = an app password for that account (needs 2-Step on it) → TLS → Gmail emails a code to info@ → enter it.
+- **Then:** deploy engine (`npm run ee:deploy "per-email sender"`), ship portal (Mau's go), set B Intro → info@ in the portal, Send a test, check From/Reply-To on phone. Intro stays Off until Mau approves turning it on.
+- Note: bounces for mail sent from info@ go to the info@ inbox, not Tony's, so the engine won't see Intro bounces unless info@ forwards bounce mail to Tony. Decide when linking.
+
 ### First thing in the new chat
 1. **Tony's launch note** (single email "Lifecycle Email launch", Staff contact Tony, Thu Nov 12 8:00 AM, signed Mauricio Rebaza Figueroa / Financial Administrator, says it was sent by the engine). Mau was finishing: paste `email-engine/templates/internal/tony-launch-note.html` in Edit HTML → Save as draft → Approve. Check with Mau that it went out at 8 AM (Activity → Today's runs / the card shows 1 sent).
 2. Week one: Activity daily; first real Welcome after an approval; one expected `security_property_changed` alert (key swap); no Unconfirmed sends left. Then `/email-engine checkpoint` for CP9 (exit criteria: PLAN.md Checkpoints row 9).

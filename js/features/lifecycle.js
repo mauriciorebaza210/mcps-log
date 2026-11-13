@@ -334,7 +334,7 @@ function lcEmails_() {
       const status = s.status === 'off' ? lcTag_('Off', '') : !s.published ? lcTag_('Not approved', '') : (ov.engine.paused_buckets.includes(b) ? lcTag_('Paused', 'warn') : lcTag_('Live', 'live'));
       return '<button class="lc-row" data-act="step" data-id="' + lcEsc_(s.step_id) + '">' +
         '<div class="lc-name"><span class="lc-step">' + s.order + '</span><div style="min-width:0"><b>' + lcEsc_(s.name) + '</b>' +
-        '<small>' + lcEsc_(s.published ? s.published.subject : 'Waiting for approval') + '</small></div></div>' +
+        '<small>' + lcEsc_((s.published ? s.published.subject : 'Waiting for approval') + (s.sender ? ' · from ' + (s.sender.name || s.sender.email) : '')) + '</small></div></div>' +
         '<div>' + status + '</div>' + m(sent, 0) + m(t.opened_est || 0, sent) + m(t.clicked || 0, sent) + m(t.replied || 0, sent) +
         '<span class="chev">' + LC_ICON.chev + '</span></button>';
     }).join('');
@@ -614,6 +614,7 @@ function lcStepTab_(D) {
     return (off ? '<div class="lc-wiz-warn">' + LC_ICON.alert + '<div><b>This email is turned off</b><small>Nobody gets it. The emails after it still go out on their usual days.</small></div></div>' : '') +
       '<div class="lc-sec"><h4 style="display:flex;align-items:center">Sends' + edit + '</h4><dl class="lc-kv"><dt>When</dt><dd>' + lcEsc_(lcTiming_(s.timing, seqSteps)) +
       ' <span style="color:var(--muted)">· ' + (lcImmediate_(s.timing) ? 'about a minute after approval' : 'at ' + lcEsc_(lcClock_(lcSendTime_(s.bucket)))) + '</span></dd>' +
+      '<dt>From</dt><dd>' + lcEsc_(lcStepFrom_(s)) + (lcCan_('edit_drafts') ? ' <button class="lc-link" data-act="step-sender" data-id="' + lcEsc_(s.step_id) + '">Change</button>' : '') + '</dd>' +
       '<dt>Type</dt><dd>' + (s.category === 'service' ? 'Service' : 'Marketing') + '</dd>' +
       '<dt>Audience</dt><dd>' + s.audience + ' in ' + lcEsc_(LC_SEQ[s.bucket]) + '</dd></dl></div>' +
       '<div class="lc-sec"><h4>Content</h4>' + (rev ? '<dl class="lc-kv"><dt>Subject</dt><dd>' + lcEsc_(rev.subject) + '</dd>' +
@@ -775,6 +776,68 @@ async function lcEditSender_() {
   lcToast_('Saved. New emails come from “' + r.display_name + '”.');
   lcRenderBody_();
 }
+
+// One email from another address (engine Admin.js → step_senders). The address must be
+// linked in Tony's Gmail (Settings → Accounts → Send mail as) before the email can be on;
+// until then it can be set up here and shows "Not linked yet". Replies always go to Tony.
+function lcStepFrom_(s) {
+  const e = LC.ov.engine;
+  return s.sender ? (s.sender.name || s.sender.email) + ' <' + s.sender.email + '>'
+    : (e.sender_display_name || ((e.sender_name || 'Tony') + ' | Mission Custom Pool Solutions')) + ' (Tony’s address)';
+}
+async function lcEditStepSender_(stepId) {
+  const s = LC.ov.steps.find(x => x.step_id === stepId) || (LC.drawer && LC.drawer.data && LC.drawer.data.step);
+  if (!s) return;
+  const e = LC.ov.engine, tonyName = e.sender_display_name || ((e.sender_name || 'Tony') + ' | Mission Custom Pool Solutions');
+  const cur = s.sender, other = !!cur;
+  const html = '<p>Who “' + lcEsc_(s.name) + '” comes from. Every other email keeps its own sender.</p>' +
+    '<label class="lc-radio"><input type="radio" name="lc-snd" value="tony"' + (other ? '' : ' checked') + '><span><b>Tony’s address</b><small>' + lcEsc_(tonyName) + '. The usual sender.</small></span></label>' +
+    '<label class="lc-radio"><input type="radio" name="lc-snd" value="other"' + (other ? ' checked' : '') + '><span><b>Another address</b><small>An address linked in Tony’s Gmail. Replies still go to Tony, so a reply stops the emails after it as usual.</small></span></label>' +
+    '<div data-snd-other' + (other ? '' : ' hidden') + ' style="margin-top:10px">' +
+    '<label class="lc-fld"><span>Address</span><input class="lc-input" data-snd="email" type="email" maxlength="120" placeholder="info@missioncustompools.com" value="' + lcEsc_(cur ? cur.email : '') + '"></label>' +
+    '<label class="lc-fld" style="margin-top:12px"><span>Name in their inbox</span><input class="lc-input" data-snd="name" maxlength="60" placeholder="Mission Custom Pools" value="' + lcEsc_(cur ? cur.name : '') + '"></label>' +
+    '<div class="lc-note" data-snd-status style="margin-top:12px">Checking Tony’s Gmail…</div>' +
+    '<button class="lc-btn sm" data-snd-test style="margin-top:8px;display:none">Send a test to me</button></div>';
+  const done = lcConfirm_({ title: 'Who this email is from', html, ok: 'Save',
+    run: layer => {
+      const pick = layer.querySelector('[name="lc-snd"]:checked').value;
+      return lcAdmin_('set_step_sender', pick === 'tony' ? { step_id: stepId, email: '' }
+        : { step_id: stepId, email: layer.querySelector('[data-snd="email"]').value, name: layer.querySelector('[data-snd="name"]').value });
+    } });
+  const layer = [...document.querySelectorAll('.lc-layer')].pop();
+  const box = layer.querySelector('[data-snd-other]'), status = layer.querySelector('[data-snd-status]'), test = layer.querySelector('[data-snd-test]');
+  const emailIn = layer.querySelector('[data-snd="email"]'), nameIn = layer.querySelector('[data-snd="name"]');
+  let linked = null;
+  const paint = () => {
+    const em = emailIn.value.trim().toLowerCase();
+    if (!linked) return;
+    if (!em) { status.textContent = 'Linked in Tony’s Gmail: ' + (linked.filter(a => a !== LC.senders_owner).join(', ') || 'none yet') + '.'; test.style.display = 'none'; return; }
+    const ok = linked.includes(em);
+    status.innerHTML = ok ? '<b style="color:var(--teal)">Linked in Tony’s Gmail.</b> Send a test to check how it looks.'
+      : '<b>Not linked yet.</b> You can save it now. The email stays off until ' + lcEsc_(em) + ' is linked in Tony’s Gmail (Settings → Accounts → Send mail as).';
+    test.style.display = ok ? '' : 'none';
+  };
+  layer.addEventListener('change', ev => { if (ev.target.name === 'lc-snd') box.hidden = ev.target.value !== 'other'; });
+  emailIn.addEventListener('input', paint);
+  test.addEventListener('click', async ev => {
+    ev.preventDefault(); lcBusyBtn_(test, true);
+    const r = await lcAdmin_('test_sender', { email: emailIn.value, name: nameIn.value }).catch(() => ({ ok: false, error: 'Network error' }));
+    lcBusyBtn_(test, false);
+    lcToast_(r.ok ? 'Test sent to ' + r.to + '.' : (r.error || 'The test didn’t send'), !r.ok);
+  });
+  lcAdmin_('list_senders', {}).then(r => {
+    if (!r || !r.ok) { status.textContent = 'Couldn’t check Tony’s Gmail right now.'; return; }
+    LC.senders_owner = r.owner; linked = r.linked || []; paint();
+  }).catch(() => { status.textContent = 'Couldn’t check Tony’s Gmail right now.'; });
+  const r = await done;
+  if (!r || !r.ok) return;
+  const step = LC.ov.steps.find(x => x.step_id === stepId);
+  const snd = r.sender ? { email: r.sender.email, name: r.sender.name } : null;
+  if (step) step.sender = snd;
+  if (LC.drawer && LC.drawer.data && LC.drawer.data.step && LC.drawer.data.step.step_id === stepId) { LC.drawer.data.step.sender = snd; lcRenderDrawer_(); }
+  lcToast_(!r.sender ? 'Saved. It comes from Tony’s address.' : r.sender.linked ? 'Saved. It comes from ' + r.sender.email + '.' : 'Saved. Link ' + r.sender.email + ' in Tony’s Gmail before turning it on.');
+  lcRenderBody_();
+}
 const lcRenderRun_ = () => { lcRenderHead_(); if (LC.tab === 'activity') lcRenderBody_(); };
 async function lcRunNow_() {
   const live = LC.ov && LC.ov.engine.mode === 'production';
@@ -902,6 +965,7 @@ function lcDispatch_(t) {
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
   if (act === 'sender') return lcEditSender_();
+  if (act === 'step-sender') return lcEditStepSender_(t.dataset.id);
   if (act === 'golive') return lcGoLive_();
   if (act === 'staff') return lcAddStaff_();
   if (act === 'cancelbatch') return lcCancelBatch_(t.dataset.id);

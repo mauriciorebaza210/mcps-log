@@ -255,7 +255,8 @@ function EE_createCore(env) {
     }
     var draftId;
     try {
-      draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token, attachments: msg.attachments || [] });
+      draftId = env.gmail.createDraft({ to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, token: row.token, attachments: msg.attachments || [],
+        from: msg.from || '', from_name: msg.from_name || '', reply_to: msg.reply_to || '' });
     } catch (e) {
       if (e && e.killed) throw e;
       // Gmail refused (permissions, quota, outage). The delivery stays `claimed`:

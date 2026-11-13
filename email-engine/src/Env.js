@@ -310,6 +310,8 @@ function EE_env(opts) {
       createDraft: function (msg) {
         var c = EE_config_(store);
         var opts = { htmlBody: msg.html, name: c.sender_display_name || 'Tony | Mission Custom Pool Solutions' };
+        // Another linked address (Admin.js → step_senders): from it, replies to Tony.
+        if (msg.from) { opts.from = msg.from; opts.name = msg.from_name || msg.from; if (msg.reply_to) opts.replyTo = msg.reply_to; }
         if (msg.attachments && msg.attachments.length) opts.attachments = msg.attachments;
         return GmailApp.createDraft(msg.to, msg.subject, msg.text, opts).getId();
       },
@@ -341,6 +343,7 @@ function EE_env(opts) {
         return out;
       },
       aliases: function () { return GmailApp.getAliases(); },
+      sendTest: function (m) { GmailApp.sendEmail(m.to, m.subject, m.text, { from: m.from, name: m.name, replyTo: m.reply_to }); },
       findDraftsByToken: function (token) {
         return GmailApp.getDrafts().filter(function (d) { return d.getMessage().getPlainBody().indexOf(token) !== -1; })
           .map(function (d) { return d.getId(); });
@@ -395,7 +398,15 @@ function EE_renderDelivery_(store, row) {
       links: { quote: c.link_quote }, testBanner: null }
   });
   if (!out.ok) throw new Error(out.errors.join('; '));
+  // Who it comes from: Tony, or an address linked in his Gmail. Never Tony in its place.
+  var snd = EE_senderFor_(store, row.step_id), sender = {};
+  if (snd) {
+    var linked = (GmailApp.getAliases() || []).map(function (a) { return String(a).toLowerCase(); });
+    if (linked.indexOf(snd.email) === -1) throw new Error('sends from ' + snd.email + ', which isn’t linked in Tony’s Gmail (Send mail as). Link it, then Resend.');
+    sender = { from: snd.email, from_name: snd.name || snd.email, reply_to: Session.getEffectiveUser().getEmail() };
+  }
   var att = EE_attachmentsFor_({ store: store }, rev, EE_attachSendFiles_(), EE_ATTACH_RUN_SNAP_);
   return { to: contact.email_norm, subject: out.subject, html: out.html, text: out.text,
+    from: sender.from || '', from_name: sender.from_name || '', reply_to: sender.reply_to || '',
     attachments: att.map(function (a) { return a.blob.setName(a.name); }), attachment_versions: att.map(function (a) { return a.version_id; }) };
 }

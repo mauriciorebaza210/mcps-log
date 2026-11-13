@@ -167,6 +167,8 @@ export function buildOverview(tables, caps, now, opts = {}) {
     if (!published[r.step_id] || published[r.step_id].rev_no < r.rev_no) published[r.step_id] = r;
   });
   const eng = engagementIndex(tables);
+  // Who each email comes from (engine Config step_senders); none = Tony. Linked status needs Gmail, so the page asks the engine (list_senders).
+  let senders = {}; try { const v = cfg.step_senders; senders = (typeof v === 'string' ? JSON.parse(v || '{}') : v) || {}; } catch (e) { senders = {}; }
   const steps = activeSteps(tables, cfg).map(s => {
     const mine = deliveries.filter(d => d.step_id === s.step_id);
     const count = pred => mine.filter(pred).length;
@@ -178,6 +180,7 @@ export function buildOverview(tables, caps, now, opts = {}) {
       timing: { anchor: s.anchor, offset: s.offset, repeat_every: s.repeat_every || 0, repeat_count: s.repeat_count || 0,
         requires: s.requires || '', window_days: s.window_days, max_hold_days: s.max_hold_days, deadline: s.hard_deadline || null, date: s.date || '' },
       stop_rules: (s.stop_rules || []).map(r => ({ signal: r.signal, min_confidence: r.min_confidence || '', stops: r.stops })),
+      sender: senders[s.step_id] && senders[s.step_id].email ? { email: String(senders[s.step_id].email), name: String(senders[s.step_id].name || '') } : null,
       audience_filter: s.audience_filter || null,
       audience: enrollments.filter(e => e.sequence_id === s.sequence_id && e.status === 'active').length,
       enrolled: enrollments.filter(e => e.sequence_id === s.sequence_id).length,
