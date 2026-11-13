@@ -789,16 +789,23 @@ function lcLinkGuide_(email, name, stepId) {
   let done = {}; try { done = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { done = {}; }
   const copy = (v, label) => '<span class="lc-gd-val"><code>' + lcEsc_(v) + '</code><button class="lc-link" data-gd-copy="' + lcEsc_(v) + '">Copy' + (label ? ' ' + lcEsc_(label) : '') + '</button></span>';
   const who = (txt, mine) => '<span class="lc-gd-who' + (mine ? ' mine' : '') + '">' + lcEsc_(txt) + '</span>';
+  const ownerDomain = owner.split('@')[1] || 'mcpoolsolutions.org';
   const steps = [
+    ['admin', 'An admin allows outside mail servers (once)', who('Admin of ' + ownerDomain, true),
+      '<p>Gmail blocks step 5 until this is on. Without it Tony sees “Functionality not enabled… contact your domain administrator”. An admin of ' + lcEsc_(ownerDomain) + ' does this once:</p><ol>' +
+      '<li>Open <a target="_blank" rel="noopener" href="https://admin.google.com">admin.google.com</a> and sign in as an admin of ' + lcEsc_(ownerDomain) + '.</li>' +
+      '<li>Go to <b>Apps</b> → <b>Google Workspace</b> → <b>Gmail</b> → <b>End User Access</b>.</li>' +
+      '<li>Find <b>Allow per-user outbound gateways</b> and tick “Allow users to send mail through an external SMTP server when configuring a “from” address hosted outside your email domains”.</li>' +
+      '<li>Click <b>Save</b>. Google says it can take up to 24 hours, usually much less.</li></ol>'],
     ['private', 'Open a private window for ' + email, who('No sign-in yet'),
-      '<p>Keeps Tony’s account and the MCP account apart. In Chrome press <kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on a Mac, or <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on Windows. A dark window opens. Steps 2, 3 and 5 happen in that window.</p>'],
+      '<p>Keeps Tony’s account and the MCP account apart. In Chrome press <kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on a Mac, or <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on Windows. A dark window opens. Steps 3, 4 and 6 happen in that window.</p>'],
     ['2sv', 'Turn on 2-Step Verification for ' + email, who('Private window · ' + email),
       '<p>Copy this link, paste it in the private window, and sign in as ' + lcEsc_(email) + '.</p>' + copy('https://myaccount.google.com/signinoptions/two-step-verification', 'link') +
-      '<p>Select <b>Turn on 2-Step Verification</b> and follow the on-screen steps. It asks for a phone number for codes. If it already says it’s on, go to step 3.</p>' +
+      '<p>Select <b>Turn on 2-Step Verification</b> and follow the on-screen steps. It asks for a phone number for codes. If it already says it’s on, go to step 4.</p>' +
       '<p class="lc-gd-stop">If Google says you can’t turn it on or to contact your administrator, stop here and tell Mau.</p>'],
     ['apppw', 'Make an app password', who('Private window · ' + email),
       '<p>In the same private window, open this link.</p>' + copy('https://myaccount.google.com/apppasswords', 'link') +
-      '<p>Type <b>MCPS Email</b> as the name and create it. Google shows a 16-character code. Copy it and keep this window open; you paste it in step 4.</p>' +
+      '<p>Type <b>MCPS Email</b> as the name and create it. Google shows a 16-character code. Copy it and keep this window open; you paste it in step 5.</p>' +
       '<p class="lc-gd-stop">If the page says app passwords aren’t available for this account, stop here and tell Mau. The MCP Google admin has them switched off.</p>'],
     ['gmail', 'Add the address in Tony’s Gmail', who('Normal window · ' + owner, true),
       '<p>Go back to the normal Chrome window (signed in as ' + lcEsc_(owner) + ') and open Gmail’s settings:</p>' +
@@ -807,10 +814,10 @@ function lcLinkGuide_(email, name, stepId) {
       '<li>In the <b>Send mail as</b> section, click <b>Add another email address</b>. A small window opens.</li>' +
       '<li>Name: ' + copy(name || 'Mission Custom Pools') + '</li><li>Email address: ' + copy(email) + '</li>' +
       '<li>Leave the checkbox under it as it is. Click <b>Next Step</b>.</li>' +
-      '<li>Gmail asks for the mail server. Fill in:<br>SMTP server ' + copy('smtp.gmail.com') + '<br>Port ' + copy('587') + '<br>Username ' + copy(email) + '<br>Password: the code from step 3</li>' +
+      '<li>Gmail asks for the mail server. Fill in:<br>SMTP server ' + copy('smtp.gmail.com') + '<br>Port ' + copy('587') + '<br>Username ' + copy(email) + '<br>Password: the code from step 4</li>' +
       '<li>Keep the TLS option selected (port 587 uses TLS). Click <b>Add Account</b>.</li></ol>' +
-      '<p class="lc-gd-stop">If Gmail doesn’t ask for a mail server and shows <b>Send verification</b> instead, click it and go to step 5.</p>' +
-      '<p class="lc-gd-stop">“Couldn’t reach server” or a password error: check the port is 587 and paste the step 3 code again. Still failing, tell Mau.</p>'],
+      '<p class="lc-gd-stop">If Gmail doesn’t ask for a mail server and shows <b>Send verification</b> instead, click it and go to step 6.</p>' +
+      '<p class="lc-gd-stop">“Couldn’t reach server” or a password error: check the port is 587 and paste the step 4 code again. “Functionality not enabled”: step 1 isn’t done yet (or hasn’t taken effect). Still failing, tell Mau.</p>'],
     ['confirm', 'Confirm from ' + email + '’s inbox', who('Private window · ' + email),
       '<p>In the private window open ' + copy('https://mail.google.com', 'link') + '</p>' +
       '<p>Find the email from <b>send-as-noreply@google.com</b> and click the link in it. Not there after a minute? Look in Spam.</p>'],
@@ -826,7 +833,7 @@ function lcLinkGuide_(email, name, stepId) {
       const r = await lcAdmin_('list_senders', {});
       if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'Couldn’t reach the engine. Try again.' };
       LC.senders_owner = r.owner;
-      if (!(r.linked || []).includes(email)) return { ok: false, error: 'Not linked yet. Gmail doesn’t list ' + email + '. Check step 5 (the link in the email) and try again.' };
+      if (!(r.linked || []).includes(email)) return { ok: false, error: 'Not linked yet. Gmail doesn’t list ' + email + '. Check step 6 (the link in the email) and try again.' };
       try { localStorage.removeItem(key); } catch (e) { /* fine */ }
       // Linked: this email now comes from it (no separate Save needed).
       let saved = null;

@@ -883,6 +883,7 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-gd-val{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lc-gd-val code{font-size:12.5px;background:var(--bg-2,#f1f4f3);border-radius:6px;padding:2px 7px;word-break:break-all}
 .lc-gd-b a.lc-btn{text-decoration:none}
+.lc-gd-b a:not(.lc-btn){color:var(--teal);font-weight:600}
 .lc-gd-stop{font-size:12.5px;color:var(--muted)}
 .lc-gd kbd{font:600 11.5px var(--f-body,inherit);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px}
 @media (max-width:600px){.lc-gd-b{padding-left:0}}
