@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Photo Recovery</title>
+<style>
+  :root { --teal:#0d4d44; --gold:#c8a84b; --bg:#f4f6f5; --card:#fff; --text:#1f2a28; --muted:#64748b; --line:#e2e8f0; --red:#b91c1c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { background:var(--teal); color:#fff; padding:18px 16px 14px; }
+  header h1 { margin:0; font-size:1.25rem; letter-spacing:.02em; }
+  header p { margin:6px 0 0; font-size:.85rem; opacity:.9; }
+  main { padding:12px 16px 40px; max-width:900px; margin:0 auto; }
+  .note { background:#fffbeb; border:1px solid #fcd34d; color:#92400e; border-radius:10px; padding:10px 12px; font-size:.85rem; margin-bottom:12px; }
+  .summary { font-size:.85rem; color:var(--muted); margin:4px 0 12px; }
+  .group { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:14px; }
+  .group.today { border:2px solid var(--gold); }
+  .g-title { font-weight:700; font-size:1rem; color:var(--teal); word-break:break-word; }
+  .g-meta { font-size:.78rem; color:var(--muted); margin-top:2px; word-break:break-all; }
+  .badge { display:inline-block; font-size:.7rem; font-weight:700; padding:2px 7px; border-radius:999px; background:#ecfdf5; color:var(--teal); margin-right:4px; }
+  .badge.gold { background:#fef3c7; color:#92400e; }
+  .photos { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin-top:10px; }
+  .ph { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fafafa; }
+  .ph img { display:block; width:100%; height:auto; -webkit-touch-callout:default; }
+  .ph .cap { padding:6px 8px; font-size:.75rem; }
+  .ph .cap b { display:block; font-size:.8rem; }
+  .btns { display:flex; gap:6px; padding:0 8px 8px; flex-wrap:wrap; }
+  button, .btn { font:inherit; font-size:.78rem; font-weight:600; border-radius:8px; padding:6px 10px; border:1px solid var(--teal); background:#fff; color:var(--teal); text-decoration:none; cursor:pointer; }
+  button.primary { background:var(--teal); color:#fff; }
+  .fields { font-size:.8rem; margin-top:8px; background:#f8fafc; border-radius:8px; padding:8px; }
+  .fields div { display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed var(--line); padding:2px 0; }
+  .fields div span:last-child { text-align:right; word-break:break-word; }
+  .err { color:var(--red); font-size:.85rem; }
+  h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin:18px 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <a href="/" style="color:#fff;font-size:.85rem;font-weight:600;text-decoration:underline;display:inline-block;margin-bottom:8px">← Back to portal</a>
+  <h1>Service Log Photo Recovery</h1>
+  <p>Read-only. Shows every photo and draft saved on this phone. Nothing here deletes or changes anything.</p>
+</header>
+<main>
+  <div class="note">To save a photo: <b>long-press it → Save to Photos</b>, or tap <b>Share</b>. Open this page in the same browser you use for the portal (Safari).</div>
+  <div id="summary" class="summary">Scanning this phone's storage…</div>
+  <div id="out"></div>
+</main>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// READ-ONLY by design. This page never calls setItem/removeItem/clear, never
+// writes to IndexedDB (no put/add/delete), and aborts any open that would
+// create a database. It only reads and displays.
+// ─────────────────────────────────────────────────────────────────────────────
+const SLOT_FILES = { before:'before-upon-arrival.jpg', after:'after-pool.jpg', equipment:'equipment.jpg', other:'other-extra.jpg' };
+const SLOT_ORDER = ['before','after','equipment','other'];
+const B64_HEAD = /^[A-Za-z0-9+/]{200,}/;
+
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtTime(ts){ if(!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleString(); }
+function isToday(ts){ if(!ts) return false; const d = new Date(ts), n = new Date(); return d.toDateString() === n.toDateString(); }
+
+// Turn a string into an image data URL if it looks like one.
+function asImage(s, mimeHint){
+  if (typeof s !== 'string' || s.length < 500) return null;
+  if (s.startsWith('data:image/')) return s;
+  if (!B64_HEAD.test(s.slice(0, 400))) return null;
+  if (s.startsWith('/9j/')) return 'data:image/jpeg;base64,' + s;
+  if (s.startsWith('iVBOR')) return 'data:image/png;base64,' + s;
+  if (s.startsWith('R0lGOD')) return 'data:image/gif;base64,' + s;
+  if (s.startsWith('UklGR')) return 'data:image/webp;base64,' + s;
+  if (mimeHint && /^image\//.test(mimeHint) && s.length > 2000) return 'data:' + mimeHint + ';base64,' + s;
+  return null;
+}
+
+// Recursively find every image inside any value. Returns [{path, dataUrl, name}].
+function findImages(val, path, out, depth){
+  out = out || []; path = path || ''; depth = depth || 0;
+  if (depth > 8 || val == null) return out;
+  if (typeof val === 'string') {
+    const img = asImage(val);
+    if (img) out.push({ path, dataUrl: img, name: '' });
+    else if (val.length > 2 && (val[0] === '{' || val[0] === '[')) { try { findImages(JSON.parse(val), path, out, depth + 1); } catch(_) {} }
+    return out;
+  }
+  if (Array.isArray(val)) { val.forEach((v, i) => findImages(v, path + '[' + i + ']', out, depth + 1)); return out; }
+  if (typeof val === 'object') {
+    if (typeof val.base64 === 'string') {
+      const img = asImage(val.base64, val.mimeType);
+      if (img) { out.push({ path, dataUrl: img, name: val.name || '' }); return out; }
+    }
+    Object.keys(val).forEach(k => findImages(val[k], path ? path + '.' + k : k, out, depth + 1));
+  }
+  return out;
+}
+
+function dataUrlToBlob(dataUrl){
+  const [head, b64] = dataUrl.split(',');
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// ── Customer lookup: search cached portal data for a visit id / pool id ───────
+let _lsCache = null;
+function lsEntries(){
+  if (_lsCache) return _lsCache;
+  _lsCache = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); _lsCache.push([k, localStorage.getItem(k)]); } } catch(_) {}
+  return _lsCache;
+}
+function findContext(needle){
+  if (!needle) return null;
+  for (const [, v] of lsEntries()) {
+    if (!v || v.indexOf(needle) === -1) continue;
+    let parsed; try { parsed = JSON.parse(v); } catch(_) { continue; }
+    const hit = walkFor(parsed, needle, 0);
+    if (hit) return hit;
+  }
+  return null;
+}
+function walkFor(o, needle, d){
+  if (!o || typeof o !== 'object' || d > 10) return null;
+  if (!Array.isArray(o)) {
+    const vals = Object.values(o);
+    if (vals.some(v => v === needle)) {
+      const name = o.customer_name || o.name || o.client_name || '';
+      const pool = o.pool_id || o.pool || '';
+      const addr = o.address || o.customer_address || '';
+      const type = o.visit_type || o.service_type || '';
+      const date = o.date || o.visit_date || '';
+      if (name || pool) return { name, pool, addr, type, date };
+    }
+  }
+  for (const v of (Array.isArray(o) ? o : Object.values(o))) { const r = walkFor(v, needle, d + 1); if (r) return r; }
+  return null;
+}
+
+function describeDraftKey(draftKey){
+  if (!draftKey) return { title: '(no key)', sub: '' };
+  if (draftKey.startsWith('visit:')) {
+    const id = draftKey.slice(6);
+    const ctx = findContext(id);
+    const title = ctx && (ctx.name || ctx.pool) ? (ctx.name || ctx.pool) : 'Scheduled visit';
+    const sub = ['Opened from schedule/job card', 'visit ' + id, ctx && ctx.pool, ctx && ctx.type, ctx && ctx.date, ctx && ctx.addr].filter(Boolean).join(' · ');
+    return { title, sub };
+  }
+  if (draftKey.startsWith('pool:')) {
+    const label = draftKey.slice(5);
+    return { title: label, sub: 'Opened from the pool dropdown' };
+  }
+  return { title: draftKey, sub: '' };
+}
+
+// ── IndexedDB: read every database without ever creating one ──────────────────
+function openExisting(name){
+  return new Promise(resolve => {
+    let req;
+    try { req = indexedDB.open(name); } catch(_) { resolve(null); return; }
+    // If this fires, the DB did not exist — abort so we don't create it.
+    req.onupgradeneeded = () => { try { req.transaction.abort(); } catch(_) {} };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+}
+function reqP(r){ return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+
+async function scanIndexedDB(){
+  const results = []; // {db, store, key, value}
+  if (!window.indexedDB) return { results, note: 'IndexedDB not available in this browser.' };
+  let names = [];
+  if (indexedDB.databases) { try { names = (await indexedDB.databases()).map(d => d.name).filter(Boolean); } catch(_) {} }
+  if (!names.includes('mcps_service_log_photo_drafts')) names.push('mcps_service_log_photo_drafts');
+  for (const name of names) {
+    const db = await openExisting(name);
+    if (!db) continue;
+    try {
+      for (const storeName of Array.from(db.objectStoreNames)) {
+        try {
+          const tx = db.transaction(storeName, 'readonly');
+          const st = tx.objectStore(storeName);
+          const [keys, vals] = await Promise.all([reqP(st.getAllKeys()), reqP(st.getAll())]);
+          vals.forEach((v, i) => results.push({ db: name, store: storeName, key: keys[i], value: v }));
+        } catch(e) { results.push({ db: name, store: storeName, error: String(e) }); }
+      }
+    } finally { try { db.close(); } catch(_) {} }
+  }
+  return { results, dbNames: names };
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+const out = document.getElementById('out');
+const blobUrls = [];
+let shareSets = {};
+
+function photoCard(p, setId){
+  const blob = dataUrlToBlob(p.dataUrl);
+  const url = URL.createObjectURL(blob); blobUrls.push(url);
+  const fname = p.fileName || 'photo.jpg';
+  const idx = (shareSets[setId] = shareSets[setId] || []).push({ blob, fname }) - 1;
+  return '<div class="ph">'
+    + '<img src="' + url + '" alt="' + esc(p.label) + '">'
+    + '<div class="cap"><b>' + esc(p.label) + '</b>' + esc(fname) + ' · ' + Math.round(blob.size / 1024) + ' KB' + (p.time ? '<br>' + esc(p.time) : '') + '</div>'
+    + '<div class="btns">'
+    + '<button class="primary" onclick="sharePhotos(\'' + setId + '\',' + idx + ')">Share</button>'
+    + '<a class="btn" href="' + url + '" download="' + esc(fname) + '">Download</a>'
+    + '</div></div>';
+}
+
+async function sharePhotos(setId, idx){
+  const set = shareSets[setId] || [];
+  const items = idx == null ? set : [set[idx]];
+  const files = items.map(it => new File([it.blob], it.fname, { type: it.blob.type || 'image/jpeg' }));
+  try {
+    if (navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files }); return; }
+  } catch(e) { if (e && e.name === 'AbortError') return; }
+  alert('Sharing is not available here — long-press the photo and choose "Save to Photos", or use Download.');
+}
+window.sharePhotos = sharePhotos;
+
+function fieldsHtml(obj){
+  const rows = Object.entries(obj || {}).filter(([k, v]) => v !== '' && v != null && !(Array.isArray(v) && !v.length) && !(typeof v === 'string' && v.length > 300));
+  if (!rows.length) return '';
+  return '<div class="fields">' + rows.map(([k, v]) => '<div><span>' + esc(k) + '</span><span>' + esc(Array.isArray(v) ? v.join(', ') : v) + '</span></div>').join('') + '</div>';
+}
+
+(async function run(){
+  let html = '', photoTotal = 0, groupN = 0;
+  try {
+    // 1) Service-log photo drafts (IndexedDB)
+    const { results } = await scanIndexedDB();
+    const groups = {}; // draftKey -> {records, latest}
+    const otherIdb = [];
+    results.forEach(r => {
+      if (r.error) { otherIdb.push(r); return; }
+      const v = r.value;
+      if (r.db === 'mcps_service_log_photo_drafts' && v && v.draftKey && v.photo) {
+        const g = groups[v.draftKey] = groups[v.draftKey] || { records: [], latest: 0 };
+        g.records.push(v); g.latest = Math.max(g.latest, v.updatedAt || 0);
+      } else {
+        const imgs = findImages(v);
+        if (imgs.length) otherIdb.push(Object.assign({ imgs }, r));
+      }
+    });
+
+    const keys = Object.keys(groups).sort((a, b) => groups[b].latest - groups[a].latest);
+    html += '<h2>Photo drafts (' + keys.length + ')</h2>';
+    if (!keys.length) html += '<div class="group">No saved photo drafts found on this phone.</div>';
+    keys.forEach(k => {
+      const g = groups[k]; const d = describeDraftKey(k); const setId = 'g' + (groupN++);
+      g.records.sort((a, b) => SLOT_ORDER.indexOf(a.slotId) - SLOT_ORDER.indexOf(b.slotId));
+      html += '<div class="group' + (isToday(g.latest) ? ' today' : '') + '">'
+        + (isToday(g.latest) ? '<span class="badge gold">Today</span>' : '')
+        + '<span class="badge">' + g.records.length + ' photo' + (g.records.length === 1 ? '' : 's') + '</span>'
+        + '<div class="g-title">' + esc(d.title) + '</div>'
+        + '<div class="g-meta">' + esc(d.sub) + '</div>'
+        + '<div class="g-meta">Last saved: ' + esc(fmtTime(g.latest)) + '</div>'
+        + '<div class="g-meta">Storage key: ' + esc(k) + '</div>'
+        + (g.records.length > 1 ? '<div style="margin-top:8px"><button class="primary" onclick="sharePhotos(\'' + setId + '\')">Share all ' + g.records.length + '</button></div>' : '')
+        + '<div class="photos">';
+      g.records.forEach(rec => {
+        const img = asImage(rec.photo.base64, rec.photo.mimeType);
+        if (!img) return;
+        photoTotal++;
+        html += photoCard({ dataUrl: img, label: rec.slotId, fileName: SLOT_FILES[rec.slotId] || rec.photo.name || (rec.slotId + '.jpg'), time: fmtTime(rec.updatedAt) }, setId);
+      });
+      html += '</div></div>';
+    });
+
+    // 2) Offline queue + any other localStorage value holding images
+    html += '<h2>Offline queue & other saved data</h2>';
+    let lsShown = 0;
+    lsEntries().forEach(([k, v]) => {
+      if (!v) return;
+      const isQueue = k === 'svc_queued_submit';
+      const imgs = findImages(v);
+      if (!isQueue && !imgs.length) return;
+      lsShown++;
+      let parsed = null; try { parsed = JSON.parse(v); } catch(_) {}
+      const payload = parsed && parsed.payload;
+      const poolKey = payload && Object.keys(payload).find(x => x.trim().toLowerCase() === 'pool_id');
+      const title = isQueue ? ('Unsent log' + (poolKey ? ': ' + payload[poolKey] : '')) : k;
+      const setId = 'g' + (groupN++);
+      html += '<div class="group' + (parsed && isToday(parsed.ts) ? ' today' : '') + '">'
+        + '<span class="badge">' + imgs.length + ' photo' + (imgs.length === 1 ? '' : 's') + '</span>'
+        + '<div class="g-title">' + esc(title) + '</div>'
+        + '<div class="g-meta">localStorage key: ' + esc(k) + (parsed && parsed.ts ? ' · ' + esc(fmtTime(parsed.ts)) : '') + '</div>'
+        + (isQueue && parsed && Array.isArray(parsed.photos) && !parsed.photos.length ? '<div class="err">This queued log has NO photos attached.</div>' : '')
+        + (payload ? fieldsHtml(Object.fromEntries(Object.entries(payload).filter(([x]) => x.charAt(0) !== '_'))) : '')
+        + '<div class="photos">';
+      imgs.forEach((im, i) => { photoTotal++; html += photoCard({ dataUrl: im.dataUrl, label: im.name || im.path || ('photo ' + (i + 1)), fileName: im.name || (k + '-' + (i + 1) + '.jpg') }, setId); });
+      html += '</div></div>';
+    });
+    otherIdb.forEach(r => {
+      if (r.error) { html += '<div class="group err">Could not read ' + esc(r.db) + '/' + esc(r.store) + ': ' + esc(r.error) + '</div>'; return; }
+      lsShown++;
+      const setId = 'g' + (groupN++);
+      html += '<div class="group"><div class="g-title">' + esc(r.db) + ' / ' + esc(r.store) + '</div><div class="g-meta">key: ' + esc(String(r.key)) + '</div><div class="photos">';
+      r.imgs.forEach((im, i) => { photoTotal++; html += photoCard({ dataUrl: im.dataUrl, label: im.name || im.path || ('photo ' + (i + 1)), fileName: im.name || ('photo-' + (i + 1) + '.jpg') }, setId); });
+      html += '</div></div>';
+    });
+    if (!lsShown) html += '<div class="group">No unsent logs or other saved photos found.</div>';
+
+    // 3) Saved readings drafts (no photos, but shows which forms never cleared)
+    const drafts = lsEntries().filter(([k]) => k.indexOf('svc_draft_') === 0);
+    html += '<h2>Saved readings drafts (' + drafts.length + ')</h2>';
+    drafts.forEach(([k, v]) => {
+      let p = null; try { p = JSON.parse(v); } catch(_) {}
+      html += '<div class="group"><div class="g-title">' + esc(k.slice(10)) + '</div><div class="g-meta">localStorage key: ' + esc(k) + '</div>' + (p ? fieldsHtml(p) : '') + '</div>';
+    });
+
+    let est = '';
+    try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); est = ' · storage used ≈ ' + Math.round((e.usage || 0) / 1048576 * 10) / 10 + ' MB'; } } catch(_) {}
+    document.getElementById('summary').textContent = 'Found ' + photoTotal + ' photo' + (photoTotal === 1 ? '' : 's') + ' in ' + keys.length + ' draft' + (keys.length === 1 ? '' : 's') + est + '. Scanned ' + new Date().toLocaleString() + '.';
+  } catch (e) {
+    html += '<div class="group err">Scan failed: ' + esc(e && e.message || e) + '</div>';
+    document.getElementById('summary').textContent = 'Scan failed.';
+  }
+  out.innerHTML = html;
+})();
+</script>
+</body>
+</html>

@@ -164,6 +164,7 @@ function renderSvcForm(meta, prefillPoolId){
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       BACK TO HUB
     </button>
+    <a href="/recover.html" style="margin-left:auto;color:var(--teal);font-size:0.8rem;font-weight:600;text-decoration:underline">Recover photos</a>
   `;
   root.appendChild(hdr);
 
