@@ -343,7 +343,7 @@ function EE_env(opts) {
         return out;
       },
       aliases: function () { return GmailApp.getAliases(); },
-      sendTest: function (m) { GmailApp.sendEmail(m.to, m.subject, m.text, { from: m.from, name: m.name, replyTo: m.reply_to }); },
+      sendTest: function (m) { GmailApp.createDraft(m.to, m.subject, m.text, { from: m.from, name: m.name, replyTo: m.reply_to }).send(); },
       findDraftsByToken: function (token) {
         return GmailApp.getDrafts().filter(function (d) { return d.getMessage().getPlainBody().indexOf(token) !== -1; })
           .map(function (d) { return d.getId(); });

@@ -107,3 +107,14 @@ test('The core hands the sender to Gmail’s draft unchanged (Env.js sets from, 
   assert.equal(seen[0].from_name, 'Mission Custom Pools');
   assert.equal(seen[0].reply_to, w.owner);
 });
+
+test('Listing senders is read-only (not in the ChangeLog) and says where a test goes', () => {
+  const w = engine();
+  const l = w.admin('list_senders', {});
+  assert.equal(l.ok, true);
+  assert.equal(l.test_to, 'mau@example.com');
+  assert.equal(l.owner, w.owner);
+  assert.equal(w.tables.ChangeLog.filter(c => c.action === 'list_senders').length, 0);
+  w.admin('set_step_sender', { step_id: 'b_intro', email: MCP, name: 'Mission Custom Pools' });
+  assert.equal(w.tables.ChangeLog.filter(c => c.action === 'set_step_sender').length, 1, 'changes are logged');
+});

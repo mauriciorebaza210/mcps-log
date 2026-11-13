@@ -7,7 +7,7 @@ const last = ['Lopez','Park','Garza','Miller','Hernandez','Reyes','Davis','Brown
 const T = { ChangeLog: [], Permissions: [], Config: [], Rulesets: [], Revisions: [], Contacts: [], Enrollments: [], Deliveries: [], Runs: [], Alerts: [], Engagement: [], Batches: [], Holds: [], Overrides: [] };
 const rows = (name, objs) => { const h = [...new Set(objs.flatMap(Object.keys))]; T[name] = [h, ...objs.map(o => h.map(k => o[k] === undefined ? '' : (typeof o[k] === 'object' ? JSON.stringify(o[k]) : String(o[k]))))]; };
 const todayCT = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
-const cfg = { engine_mode: 'test', rule_rev: 'bc-1', engine_enabled: 'true', daily_cap: '50', run_hour: '9', sender_name: 'Tony', paused_buckets: '', step_senders: JSON.stringify({ b_intro: { email: 'info@missioncustompools.com', name: 'Mission Custom Pools' } }),
+const cfg = { engine_mode: 'test', rule_rev: 'bc-1', engine_enabled: 'true', daily_cap: '50', run_hour: '9', sender_name: 'Tony', paused_buckets: '', 
   send_time_B: '09:00', send_time_C: '08:30', run_plan: JSON.stringify({ date: todayCT, times: ['08:30', '09:00', '10:30', '14:15', '16:00'], dropped: [] }) };
 rows('Config', Object.entries(cfg).map(([key, value]) => ({ key, value })));
 rows('Permissions', [{ username: 'mau', roles: 'editor,approver,operator', active: 'Y' }]);

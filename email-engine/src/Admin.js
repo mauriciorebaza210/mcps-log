@@ -50,6 +50,7 @@ function EE_adminRun_(env, core, req, deps) {
   // Looking at templates changes nothing, so it isn't logged (Templates.js).
   if ((action === 'list_templates' || action === 'open_template' || action === 'open_draft' || action === 'open_editor') && actor) return EE_templateAction_(env, core, action, p, actor, deps);
   if (action === 'list_attachments' && actor) return EE_attachmentAction_(env, core, action, p, actor, deps);
+  if (action === 'list_senders') return EE_listSenders_(env);   // read-only, not logged
   // The portal emailed every alert up to `upto` (an Alerts.at value). Bookkeeping only, so not in the ChangeLog.
   if (action === 'alerts_forwarded') {
     var upto = String(p.upto || '').slice(0, 40), was = String((env.store.get('Config', 'alert_forwarded_at') || {}).value || '');
@@ -712,7 +713,7 @@ function EE_senderLinked_(env, email) { return EE_linkedAliases_(env).indexOf(St
 function EE_listSenders_(env) {
   var linked = EE_linkedAliases_(env), map = EE_stepSenders_(env.store), steps = {};
   Object.keys(map).forEach(function (k) { if (map[k] && map[k].email) steps[k] = { email: String(map[k].email).toLowerCase(), name: map[k].name || '', linked: linked.indexOf(String(map[k].email).toLowerCase()) !== -1 }; });
-  return { ok: true, owner: String(env.config.ownerEmail() || '').toLowerCase(), linked: linked, steps: steps };
+  return { ok: true, owner: String(env.config.ownerEmail() || '').toLowerCase(), linked: linked, steps: steps, test_to: EE_testRecipient_(env) };
 }
 function EE_setStepSender_(env, p) {
   var stepId = String(p.step_id || ''), email = String(p.email || '').trim().toLowerCase();
@@ -730,13 +731,17 @@ function EE_setStepSender_(env, p) {
   var cur = map[stepId];
   return { ok: true, step_id: stepId, sender: cur ? { email: cur.email, name: cur.name, linked: EE_senderLinked_(env, cur.email) } : null };
 }
-// A short test from the address, to the first test recipient (Mau). Proves the
+function EE_testRecipient_(env) {
+  var row = env.store.get('Config', 'test_recipients');
+  return String(row && row.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+}
+// A short test from the address, to the first test recipient (Mau). It goes through
+// the same Gmail path as a real send (draft with from/name/replyTo, then send). Proves the
 // Gmail link works before any customer email depends on it.
 function EE_testSender_(env, p, actor) {
   var email = String(p.email || '').trim().toLowerCase(), name = String(p.name || '').replace(/[<>"\r\n]/g, '').trim();
   if (!EE_senderLinked_(env, email)) return { ok: false, error: email + ' isn’t linked in Tony’s Gmail yet.' };
-  var cfgRow = env.store.get('Config', 'test_recipients');
-  var to = String(cfgRow && cfgRow.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean)[0];
+  var to = EE_testRecipient_(env);
   if (!to) return { ok: false, error: 'No test recipient is set (Config test_recipients).' };
   var owner = String(env.config.ownerEmail() || '').toLowerCase();
   env.gmail.sendTest({ to: to, from: email, name: name || email, reply_to: owner,

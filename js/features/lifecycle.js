@@ -783,7 +783,7 @@ async function lcEditSender_() {
 // here is from Google's own help pages (Gmail 22370, Accounts 185833 / 185839, checked
 // 2026-11-12); where Google doesn't name a control, the step says what to type instead.
 // The last step asks the engine (list_senders) whether Gmail now lists the address.
-function lcLinkGuide_(email, name) {
+function lcLinkGuide_(email, name, stepId) {
   const owner = LC.senders_owner || 'antonio@mcpoolsolutions.org';
   const key = 'lc_link_guide_' + email;
   let done = {}; try { done = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { done = {}; }
@@ -809,12 +809,13 @@ function lcLinkGuide_(email, name) {
       '<li>Leave the checkbox under it as it is. Click <b>Next Step</b>.</li>' +
       '<li>Gmail asks for the mail server. Fill in:<br>SMTP server ' + copy('smtp.gmail.com') + '<br>Port ' + copy('587') + '<br>Username ' + copy(email) + '<br>Password: the code from step 3</li>' +
       '<li>Keep the TLS option selected (port 587 uses TLS). Click <b>Add Account</b>.</li></ol>' +
+      '<p class="lc-gd-stop">If Gmail doesn’t ask for a mail server and shows <b>Send verification</b> instead, click it and go to step 5.</p>' +
       '<p class="lc-gd-stop">“Couldn’t reach server” or a password error: check the port is 587 and paste the step 3 code again. Still failing, tell Mau.</p>'],
     ['confirm', 'Confirm from ' + email + '’s inbox', who('Private window · ' + email),
       '<p>In the private window open ' + copy('https://mail.google.com', 'link') + '</p>' +
       '<p>Find the email from <b>send-as-noreply@google.com</b> and click the link in it. Not there after a minute? Look in Spam.</p>'],
     ['check', 'Check it here', who('This page'),
-      '<p>Press <b>Check the link</b> below. The engine asks Tony’s Gmail whether ' + lcEsc_(email) + ' is linked. Then close the private window.</p>']
+      '<p>Press <b>Check the link</b> below. The engine asks Tony’s Gmail whether ' + lcEsc_(email) + ' is linked' + (stepId ? ' and, if it is, makes it this email’s sender' : '') + '. Then close the private window.</p>']
   ];
   const html = '<p>About 10 minutes. You need Tony’s login and ' + lcEsc_(email) + '’s login. Tick each step as you finish it; this page remembers where you are.</p>' +
     '<ol class="lc-gd">' + steps.map(([id, title, w, body], i) => '<li class="lc-gd-step' + (done[id] ? ' done' : '') + '" data-gd="' + id + '">' +
@@ -827,8 +828,15 @@ function lcLinkGuide_(email, name) {
       LC.senders_owner = r.owner;
       if (!(r.linked || []).includes(email)) return { ok: false, error: 'Not linked yet. Gmail doesn’t list ' + email + '. Check step 5 (the link in the email) and try again.' };
       try { localStorage.removeItem(key); } catch (e) { /* fine */ }
-      lcToast_(email + ' is linked. Send a test to check it.');
-      return { ok: true, linked: r.linked };
+      // Linked: this email now comes from it (no separate Save needed).
+      let saved = null;
+      if (stepId) {
+        const w = await lcAdmin_('set_step_sender', { step_id: stepId, email, name: name || email });
+        if (!w || !w.ok) return { ok: false, error: 'Linked, but saving it as this email’s sender failed: ' + ((w && w.error) || 'try Save') };
+        saved = w.sender;
+      }
+      lcToast_(email + ' is linked' + (saved ? ' and set as the sender' : '') + '. Send a test to check it.');
+      return { ok: true, linked: r.linked, sender: saved };
     } });
   const layer = [...document.querySelectorAll('.lc-layer')].pop();
   layer.addEventListener('change', ev => {
@@ -849,6 +857,13 @@ function lcLinkGuide_(email, name) {
 // One email from another address (engine Admin.js → step_senders). The address must be
 // linked in Tony's Gmail (Settings → Accounts → Send mail as) before the email can be on;
 // until then it can be set up here and shows "Not linked yet". Replies always go to Tony.
+function lcStepSenderSaved_(stepId, sender) {
+  const snd = sender ? { email: sender.email, name: sender.name } : null;
+  const step = LC.ov.steps.find(x => x.step_id === stepId);
+  if (step) step.sender = snd;
+  if (LC.drawer && LC.drawer.data && LC.drawer.data.step && LC.drawer.data.step.step_id === stepId) { LC.drawer.data.step.sender = snd; lcRenderDrawer_(); }
+  lcRenderBody_();
+}
 function lcStepFrom_(s) {
   const e = LC.ov.engine;
   return s.sender ? (s.sender.name || s.sender.email) + ' <' + s.sender.email + '>'
@@ -859,14 +874,16 @@ async function lcEditStepSender_(stepId) {
   if (!s) return;
   const e = LC.ov.engine, tonyName = e.sender_display_name || ((e.sender_name || 'Tony') + ' | Mission Custom Pool Solutions');
   const cur = s.sender, other = !!cur;
+  // MCP Legacy emails go to Mission Custom Pools clients: suggest that company's address.
+  const sug = s.bucket === 'B' ? { email: 'info@missioncustompools.com', name: 'Mission Custom Pools' } : { email: '', name: '' };
   const html = '<p>Who “' + lcEsc_(s.name) + '” comes from. Every other email keeps its own sender.</p>' +
     '<label class="lc-radio"><input type="radio" name="lc-snd" value="tony"' + (other ? '' : ' checked') + '><span><b>Tony’s address</b><small>' + lcEsc_(tonyName) + '. The usual sender.</small></span></label>' +
     '<label class="lc-radio"><input type="radio" name="lc-snd" value="other"' + (other ? ' checked' : '') + '><span><b>Another address</b><small>An address linked in Tony’s Gmail. Replies still go to Tony, so a reply stops the emails after it as usual.</small></span></label>' +
     '<div data-snd-other' + (other ? '' : ' hidden') + ' style="margin-top:10px">' +
-    '<label class="lc-fld"><span>Address</span><input class="lc-input" data-snd="email" type="email" maxlength="120" placeholder="info@missioncustompools.com" value="' + lcEsc_(cur ? cur.email : '') + '"></label>' +
-    '<label class="lc-fld" style="margin-top:12px"><span>Name in their inbox</span><input class="lc-input" data-snd="name" maxlength="60" placeholder="Mission Custom Pools" value="' + lcEsc_(cur ? cur.name : '') + '"></label>' +
+    '<label class="lc-fld"><span>Address</span><input class="lc-input" data-snd="email" type="email" maxlength="120" placeholder="info@missioncustompools.com" value="' + lcEsc_(cur ? cur.email : sug.email) + '"></label>' +
+    '<label class="lc-fld" style="margin-top:12px"><span>Name in their inbox</span><input class="lc-input" data-snd="name" maxlength="60" placeholder="Mission Custom Pools" value="' + lcEsc_(cur ? cur.name : sug.name) + '"></label>' +
     '<div class="lc-note" data-snd-status style="margin-top:12px">Checking Tony’s Gmail…</div>' +
-    '<button class="lc-btn sm" data-snd-test style="margin-top:8px;display:none">Send a test to me</button></div>';
+    '<button class="lc-btn sm" data-snd-test style="margin-top:8px;display:none">Send a test</button></div>';
   const done = lcConfirm_({ title: 'Who this email is from', html, ok: 'Save',
     run: layer => {
       const pick = layer.querySelector('[name="lc-snd"]:checked').value;
@@ -885,14 +902,15 @@ async function lcEditStepSender_(stepId) {
     status.innerHTML = ok ? '<b style="color:var(--teal)">Linked in Tony’s Gmail.</b> Send a test to check how it looks.'
       : '<b>Not linked yet.</b> You can save it now. The email stays off until ' + lcEsc_(em) + ' is linked in Tony’s Gmail. <button class="lc-link" data-snd-guide>How to link it, step by step</button>';
     test.style.display = ok ? '' : 'none';
+    if (ok && LC.senders_test_to) test.textContent = 'Send a test to ' + LC.senders_test_to;
   };
   layer.addEventListener('change', ev => { if (ev.target.name === 'lc-snd') box.hidden = ev.target.value !== 'other'; });
   emailIn.addEventListener('input', paint);
   status.addEventListener('click', async ev => {
     if (!ev.target.closest('[data-snd-guide]')) return;
     ev.preventDefault();
-    const r = await lcLinkGuide_(emailIn.value.trim().toLowerCase(), nameIn.value.trim());
-    if (r && r.ok) { linked = r.linked; paint(); }
+    const r = await lcLinkGuide_(emailIn.value.trim().toLowerCase(), nameIn.value.trim(), stepId);
+    if (r && r.ok) { linked = r.linked; paint(); lcStepSenderSaved_(stepId, r.sender); }
   });
   test.addEventListener('click', async ev => {
     ev.preventDefault(); lcBusyBtn_(test, true);
@@ -902,14 +920,11 @@ async function lcEditStepSender_(stepId) {
   });
   lcAdmin_('list_senders', {}).then(r => {
     if (!r || !r.ok) { status.textContent = 'Couldn’t check Tony’s Gmail right now.'; return; }
-    LC.senders_owner = r.owner; linked = r.linked || []; paint();
+    LC.senders_owner = r.owner; LC.senders_test_to = r.test_to || ''; linked = r.linked || []; paint();
   }).catch(() => { status.textContent = 'Couldn’t check Tony’s Gmail right now.'; });
   const r = await done;
   if (!r || !r.ok) return;
-  const step = LC.ov.steps.find(x => x.step_id === stepId);
-  const snd = r.sender ? { email: r.sender.email, name: r.sender.name } : null;
-  if (step) step.sender = snd;
-  if (LC.drawer && LC.drawer.data && LC.drawer.data.step && LC.drawer.data.step.step_id === stepId) { LC.drawer.data.step.sender = snd; lcRenderDrawer_(); }
+  lcStepSenderSaved_(stepId, r.sender);
   lcToast_(!r.sender ? 'Saved. It comes from Tony’s address.' : r.sender.linked ? 'Saved. It comes from ' + r.sender.email + '.' : 'Saved. Link ' + r.sender.email + ' in Tony’s Gmail before turning it on.');
   lcRenderBody_();
 }
