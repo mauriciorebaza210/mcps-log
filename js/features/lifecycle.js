@@ -72,9 +72,10 @@ function lcConfirm_(o) {
   return new Promise(resolve => {
     const layer = document.createElement('div');
     layer.className = 'lc-layer';
-    layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet" role="alertdialog" aria-modal="true">' +
+    layer.innerHTML = '<div class="lc-scrim lc-sheet-scrim" data-x="0"></div><div class="lc-sheet' + (o.wide ? ' wide' : '') + '" role="alertdialog" aria-modal="true">' +
       '<h3>' + lcEsc_(o.title) + '</h3>' + (o.html || '<p>' + lcEsc_(o.body || '') + '</p>') + '<p class="lc-note" data-err hidden style="color:var(--red)"></p><div class="row"><button class="lc-btn" data-x="0">Cancel</button>' +
       '<button class="lc-btn ' + (o.danger ? 'danger solid' : 'primary') + '" data-x="1">' + lcEsc_(o.ok || 'Confirm') + '</button></div></div>';
+    if (o.cancel) layer.querySelector('[data-x="0"].lc-btn').textContent = o.cancel;
     let running = false;
     const done = v => { layer.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
     const key = e => { if (e.key === 'Escape' && !running) { e.stopPropagation(); done(false); } };
@@ -90,6 +91,7 @@ function lcConfirm_(o) {
     document.addEventListener('keydown', key, true);
     document.body.appendChild(layer);
     layer.querySelector('.lc-btn.' + (o.danger ? 'danger' : 'primary')).focus();
+    if (o.wide) layer.querySelector('.lc-sheet').scrollTop = 0;   // a long sheet starts at its top, not at the focused button
   });
 }
 
@@ -777,6 +779,73 @@ async function lcEditSender_() {
   lcRenderBody_();
 }
 
+// Linking another address in Tony's Gmail, step by step (for Tony). Every label quoted
+// here is from Google's own help pages (Gmail 22370, Accounts 185833 / 185839, checked
+// 2026-11-12); where Google doesn't name a control, the step says what to type instead.
+// The last step asks the engine (list_senders) whether Gmail now lists the address.
+function lcLinkGuide_(email, name) {
+  const owner = LC.senders_owner || 'antonio@mcpoolsolutions.org';
+  const key = 'lc_link_guide_' + email;
+  let done = {}; try { done = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { done = {}; }
+  const copy = (v, label) => '<span class="lc-gd-val"><code>' + lcEsc_(v) + '</code><button class="lc-link" data-gd-copy="' + lcEsc_(v) + '">Copy' + (label ? ' ' + lcEsc_(label) : '') + '</button></span>';
+  const who = (txt, mine) => '<span class="lc-gd-who' + (mine ? ' mine' : '') + '">' + lcEsc_(txt) + '</span>';
+  const steps = [
+    ['private', 'Open a private window for ' + email, who('No sign-in yet'),
+      '<p>Keeps Tony’s account and the MCP account apart. In Chrome press <kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on a Mac, or <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on Windows. A dark window opens. Steps 2, 3 and 5 happen in that window.</p>'],
+    ['2sv', 'Turn on 2-Step Verification for ' + email, who('Private window · ' + email),
+      '<p>Copy this link, paste it in the private window, and sign in as ' + lcEsc_(email) + '.</p>' + copy('https://myaccount.google.com/signinoptions/two-step-verification', 'link') +
+      '<p>Select <b>Turn on 2-Step Verification</b> and follow the on-screen steps. It asks for a phone number for codes. If it already says it’s on, go to step 3.</p>' +
+      '<p class="lc-gd-stop">If Google says you can’t turn it on or to contact your administrator, stop here and tell Mau.</p>'],
+    ['apppw', 'Make an app password', who('Private window · ' + email),
+      '<p>In the same private window, open this link.</p>' + copy('https://myaccount.google.com/apppasswords', 'link') +
+      '<p>Type <b>MCPS Email</b> as the name and create it. Google shows a 16-character code. Copy it and keep this window open; you paste it in step 4.</p>' +
+      '<p class="lc-gd-stop">If the page says app passwords aren’t available for this account, stop here and tell Mau. The MCP Google admin has them switched off.</p>'],
+    ['gmail', 'Add the address in Tony’s Gmail', who('Normal window · ' + owner, true),
+      '<p>Go back to the normal Chrome window (signed in as ' + lcEsc_(owner) + ') and open Gmail’s settings:</p>' +
+      '<p><a class="lc-btn sm" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=' + encodeURIComponent(owner) + '#settings/accounts">Open Tony’s Gmail settings</a></p>' +
+      '<p>Check the picture in the top right is Tony’s. The tab is called <b>Accounts and import</b> (on some accounts just <b>Accounts</b>).</p><ol>' +
+      '<li>In the <b>Send mail as</b> section, click <b>Add another email address</b>. A small window opens.</li>' +
+      '<li>Name: ' + copy(name || 'Mission Custom Pools') + '</li><li>Email address: ' + copy(email) + '</li>' +
+      '<li>Leave the checkbox under it as it is. Click <b>Next Step</b>.</li>' +
+      '<li>Gmail asks for the mail server. Fill in:<br>SMTP server ' + copy('smtp.gmail.com') + '<br>Port ' + copy('587') + '<br>Username ' + copy(email) + '<br>Password: the code from step 3</li>' +
+      '<li>Keep the TLS option selected (port 587 uses TLS). Click <b>Add Account</b>.</li></ol>' +
+      '<p class="lc-gd-stop">“Couldn’t reach server” or a password error: check the port is 587 and paste the step 3 code again. Still failing, tell Mau.</p>'],
+    ['confirm', 'Confirm from ' + email + '’s inbox', who('Private window · ' + email),
+      '<p>In the private window open ' + copy('https://mail.google.com', 'link') + '</p>' +
+      '<p>Find the email from <b>send-as-noreply@google.com</b> and click the link in it. Not there after a minute? Look in Spam.</p>'],
+    ['check', 'Check it here', who('This page'),
+      '<p>Press <b>Check the link</b> below. The engine asks Tony’s Gmail whether ' + lcEsc_(email) + ' is linked. Then close the private window.</p>']
+  ];
+  const html = '<p>About 10 minutes. You need Tony’s login and ' + lcEsc_(email) + '’s login. Tick each step as you finish it; this page remembers where you are.</p>' +
+    '<ol class="lc-gd">' + steps.map(([id, title, w, body], i) => '<li class="lc-gd-step' + (done[id] ? ' done' : '') + '" data-gd="' + id + '">' +
+      '<label class="lc-gd-h"><input type="checkbox" data-gd-done="' + id + '"' + (done[id] ? ' checked' : '') + '><span class="n">' + (i + 1) + '</span><b>' + lcEsc_(title) + '</b></label>' +
+      '<div class="lc-gd-b">' + w + body + '</div></li>').join('') + '</ol>';
+  const p = lcConfirm_({ title: 'Link ' + email + ' in Tony’s Gmail', html, ok: 'Check the link', cancel: 'Close', wide: true,
+    run: async () => {
+      const r = await lcAdmin_('list_senders', {});
+      if (!r || !r.ok) return { ok: false, error: (r && r.error) || 'Couldn’t reach the engine. Try again.' };
+      LC.senders_owner = r.owner;
+      if (!(r.linked || []).includes(email)) return { ok: false, error: 'Not linked yet. Gmail doesn’t list ' + email + '. Check step 5 (the link in the email) and try again.' };
+      try { localStorage.removeItem(key); } catch (e) { /* fine */ }
+      lcToast_(email + ' is linked. Send a test to check it.');
+      return { ok: true, linked: r.linked };
+    } });
+  const layer = [...document.querySelectorAll('.lc-layer')].pop();
+  layer.addEventListener('change', ev => {
+    const id = ev.target.dataset.gdDone; if (!id) return;
+    done[id] = ev.target.checked; ev.target.closest('.lc-gd-step').classList.toggle('done', ev.target.checked);
+    try { localStorage.setItem(key, JSON.stringify(done)); } catch (e) { /* fine */ }
+  });
+  layer.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-gd-copy]'); if (!b) return;
+    ev.preventDefault();
+    const v = b.dataset.gdCopy, label = b.dataset.label || (b.dataset.label = b.textContent);
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = label; }, 1500); })
+      .catch(() => lcToast_('Couldn’t copy. Select the text and copy it.', true));
+  });
+  return p;
+}
+
 // One email from another address (engine Admin.js → step_senders). The address must be
 // linked in Tony's Gmail (Settings → Accounts → Send mail as) before the email can be on;
 // until then it can be set up here and shows "Not linked yet". Replies always go to Tony.
@@ -814,11 +883,17 @@ async function lcEditStepSender_(stepId) {
     if (!em) { status.textContent = 'Linked in Tony’s Gmail: ' + (linked.filter(a => a !== LC.senders_owner).join(', ') || 'none yet') + '.'; test.style.display = 'none'; return; }
     const ok = linked.includes(em);
     status.innerHTML = ok ? '<b style="color:var(--teal)">Linked in Tony’s Gmail.</b> Send a test to check how it looks.'
-      : '<b>Not linked yet.</b> You can save it now. The email stays off until ' + lcEsc_(em) + ' is linked in Tony’s Gmail (Settings → Accounts → Send mail as).';
+      : '<b>Not linked yet.</b> You can save it now. The email stays off until ' + lcEsc_(em) + ' is linked in Tony’s Gmail. <button class="lc-link" data-snd-guide>How to link it, step by step</button>';
     test.style.display = ok ? '' : 'none';
   };
   layer.addEventListener('change', ev => { if (ev.target.name === 'lc-snd') box.hidden = ev.target.value !== 'other'; });
   emailIn.addEventListener('input', paint);
+  status.addEventListener('click', async ev => {
+    if (!ev.target.closest('[data-snd-guide]')) return;
+    ev.preventDefault();
+    const r = await lcLinkGuide_(emailIn.value.trim().toLowerCase(), nameIn.value.trim());
+    if (r && r.ok) { linked = r.linked; paint(); }
+  });
   test.addEventListener('click', async ev => {
     ev.preventDefault(); lcBusyBtn_(test, true);
     const r = await lcAdmin_('test_sender', { email: emailIn.value, name: nameIn.value }).catch(() => ({ ok: false, error: 'Network error' }));
