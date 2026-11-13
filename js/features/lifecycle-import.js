@@ -186,7 +186,7 @@ function impStepImport_() {
   if (IMP.done) {
     const d = IMP.done;
     return '<div class="lc-ok big"><span class="dot">' + LC_ICON.check + '</span><div><b>' + d.added + ' added to Needs review</b><small>' +
-      [d.merged ? d.merged + ' existing contact' + (d.merged === 1 ? '' : 's') + ' updated' : '', d.skipped ? d.skipped + ' already there' : '', d.dnc ? d.dnc + ' added to the opt-out list' : '', d.failed ? d.failed + ' couldn’t be saved, try again' : ''].filter(Boolean).join(' · ') +
+      [d.merged ? d.merged + ' existing contact' + (d.merged === 1 ? '' : 's') + ' updated' : '', d.skipped ? d.skipped + ' already there' : '', d.dnc ? d.dnc + ' added to the opt-out list' : '', d.failed ? d.failed + ' couldn’t be saved: run the same import again (people already in are skipped)' : ''].filter(Boolean).join(' · ') +
       '</small></div></div>' +
       (d.waiting || d.flagged || d.batches ? '<ul class="lc-imp-after">' +
         (d.waiting ? '<li><b>' + d.waiting + '</b> already got the Intro: they wait for your approval and start at the Follow Up.</li>' : '') +
@@ -219,8 +219,11 @@ async function impImport_() {
   const rows = local.contacts.filter(c => allowed.has(c.row));
   IMP.step = 4; IMP.busy = true; IMP.progress = { sent: 0, total: rows.length }; impRender_();
   const done = { added: 0, skipped: 0, dnc: 0, failed: 0, merged: 0 };
-  for (let i = 0; i < rows.length; i += 100) {
-    const chunk = rows.slice(i, i + 100);
+  // 25 per call: each contact is a locked, journaled write in Apps Script, and a slow
+  // Google day can make 100 overrun Vercel's 5-minute limit (seen 2026-11-12).
+  const CHUNK = 25;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
     const res = {}, byRow = new Map(IMP.check.rows.map(r => [r.row, r]));
     chunk.forEach(c => { const r = byRow.get(c.row); if (r && IMP_CHOICES[r.status]) res[c.row] = impChoice_(r); });
     const r = await impPost_({ stage: 'save', group: IMP.group, source: IMP.source, contacts: chunk, resolutions: res }).catch(() => ({ ok: false }));
@@ -234,7 +237,8 @@ async function impImport_() {
   // Past dates get none; those people show as overdue on Activity and Contacts.
   done.waiting = rows.filter(c => c.intro_sent_on && !c.flag_reason).length;
   done.flagged = rows.filter(c => c.flag_reason).length;
-  if (rows.some(c => c.planned_start) && done.added) {
+  // Also on a re-run that only fills in what an earlier, interrupted import missed.
+  if (local.contacts.some(c => c.planned_start)) {
     const pb = await lcAdmin_('plan_import_batches', { group: IMP.group, name_prefix: IMP.source || 'Planned' }).catch(() => ({ ok: false }));
     done.batches = pb && pb.ok ? (pb.batches || []).filter(b => b.ok) : null;
   }
