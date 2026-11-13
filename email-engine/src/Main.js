@@ -157,6 +157,8 @@ function doGet(e) {
     // The data spreadsheet's id (not a secret: reading it needs Google sharing), for wiring up a new portal environment.
     data_ss_id: props.getProperty('EE_MAIN_SS_ID') || '' };
   out.schema = EE_SCHEMA;
+  // How many other addresses are linked in Tony's Gmail (Send mail as). A count only, never the addresses.
+  try { out.send_as_linked = GmailApp.getAliases().length; } catch (err) { out.send_as_linked = -1; }
   try { var env = EE_env(); out.applied_seq = Number(env.meta.get('applied_seq') || 0); out.journal_head = (env.journal.last() || { seq: 0 }).seq; out.data_schema = Number(env.meta.get('data_schema') || 0); }
   catch (err) { out.ok = false; out.error = String(err.message || err).slice(0, 200); }
   return EE_json_(out);
