@@ -781,7 +781,7 @@ async function lcEditSender_() {
 
 // Linking another address in Tony's Gmail, step by step (for Tony). Every label quoted
 // here is from Google's own help pages (Gmail 22370, Accounts 185833 / 185839, checked
-// 2026-11-12); where Google doesn't name a control, the step says what to type instead.
+// 2026-11-12) and from Mau's Admin console screen for step 1; where Google doesn't name a control, the step says what to type instead.
 // The last step asks the engine (list_senders) whether Gmail now lists the address.
 function lcLinkGuide_(email, name, stepId) {
   const owner = LC.senders_owner || 'antonio@mcpoolsolutions.org';
@@ -794,9 +794,9 @@ function lcLinkGuide_(email, name, stepId) {
     ['admin', 'An admin allows outside mail servers (once)', who('Admin of ' + ownerDomain, true),
       '<p>Gmail blocks step 5 until this is on. Without it Tony sees “Functionality not enabled… contact your domain administrator”. An admin of ' + lcEsc_(ownerDomain) + ' does this once:</p><ol>' +
       '<li>Open <a target="_blank" rel="noopener" href="https://admin.google.com">admin.google.com</a> and sign in as an admin of ' + lcEsc_(ownerDomain) + '.</li>' +
-      '<li>Go to <b>Apps</b> → <b>Google Workspace</b> → <b>Gmail</b> → <b>End User Access</b>.</li>' +
-      '<li>Find <b>Allow per-user outbound gateways</b> and tick “Allow users to send mail through an external SMTP server when configuring a “from” address hosted outside your email domains”.</li>' +
-      '<li>Click <b>Save</b>. Google says it can take up to 24 hours, usually much less.</li></ol>'],
+      '<li>Go to <b>Apps</b> → <b>Google Workspace</b> → <b>Settings for Gmail</b> → <b>End User Access</b> (or open <a target="_blank" rel="noopener" href="https://admin.google.com/ac/apps/gmail/enduseraccess">this page</a> directly). On the left, keep the top organization selected.</li>' +
+      '<li>Find <b>Allow per-user outbound gateways</b> and tick “Allow users to send mail through an external SMTP server when configuring a “from” address hosted outside your email domain” so it reads <b>ON</b>.</li>' +
+      '<li>Click <b>Save</b>. Google shows “Allow per-user outbound gateways settings updated”. It can take up to 24 hours to apply, usually much less.</li></ol>'],
     ['private', 'Open a private window for ' + email, who('No sign-in yet'),
       '<p>Keeps Tony’s account and the MCP account apart. In Chrome press <kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on a Mac, or <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> on Windows. A dark window opens. Steps 3, 4 and 6 happen in that window.</p>'],
     ['2sv', 'Turn on 2-Step Verification for ' + email, who('Private window · ' + email),
