@@ -16,7 +16,7 @@ _Handoff written 2026-11-12 ~12 AM for a fresh chat (`/email-engine`). Everythin
 - **Vercel env, Production:** EE_ENGINE_SS_ID, EE_ENGINE_WEBAPP_URL, EE_LINK_SECRET, EE_RELAY_SECRET, CRON_SECRET (fresh, generated locally, never printed), ANTHROPIC_API_KEY, SERVICE_REQUEST_NOTIFY_SECRET (alerts + Request a change emails go from Mau's Gmail). Preview (feat/email-engine): old EE_* keys (now stale) + EE_LINK_SECRET_NEXT / EE_RELAY_SECRET_NEXT (= production keys).
 
 ### First thing in the new chat
-1. **Tony's launch note** (single email "Lifecycle Email launch", Staff contact Tony, Thu Nov 12 8:00 AM, signed Mauricio Rebaza Figueroa / Financial Administrator, says it was sent by the engine). Mau was finishing: paste the HTML (scratchpad file from the last chat; the template is easy to rewrite) → Save as draft → Approve. Check with Mau that it went out at 8 AM (Activity → Today's runs / the card shows 1 sent).
+1. **Tony's launch note** (single email "Lifecycle Email launch", Staff contact Tony, Thu Nov 12 8:00 AM, signed Mauricio Rebaza Figueroa / Financial Administrator, says it was sent by the engine). Mau was finishing: paste `email-engine/templates/internal/tony-launch-note.html` in Edit HTML → Save as draft → Approve. Check with Mau that it went out at 8 AM (Activity → Today's runs / the card shows 1 sent).
 2. Week one: Activity daily; first real Welcome after an approval; one expected `security_property_changed` alert (key swap); no Unconfirmed sends left. Then `/email-engine checkpoint` for CP9 (exit criteria: PLAN.md Checkpoints row 9).
 
 ### Built this session (2026-11-11, all live)
