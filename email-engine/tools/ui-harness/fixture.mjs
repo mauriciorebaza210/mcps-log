@@ -52,7 +52,10 @@ C.forEach((c, i) => { if (c.bucket === 'B' && i % 3 === 1 && !c.contact_id.start
   bucket: 'C', review_status: 'confirmed', review_reason: 'startup from the portal', source: 'portal_startup', is_test: 'N', quote_id: 'Q-S' + k, pool_id: 'MCPS-01' + k,
   startup_date: new Date(now + (5 + k * 6) * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }), startup_source: 'schedule', address: '9 Oak Ln, Boerne' }));
 const day = n => new Date(now + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+// A planned batch from Tony's file: specific people who share a week tag.
+const tonyIds = C.filter(c => c.bucket === 'B' && c.review_status === 'needs_review').slice(0, 6).map(c => { c.tags = (c.tags ? c.tags + ',' : '') + 'mcp week 4'; return c.contact_id; });
 rows('Batches', [
+  { batch_id: 'bt', name: 'MCP Legacy (Tony) ' + day(2), group: 'B', count: tonyIds.length, order: 'random', pick: 'now', start_on: day(2), send_time: '', status: 'planned', filters_json: {}, contact_ids: tonyIds },
   { batch_id: 'b1', group: 'B', count: 20, order: 'random', pick: 'now', start_on: day(12), send_time: '14:15', status: 'planned', filters_json: { area: ['Boerne'] }, contact_ids: Array.from({ length: 20 }, (_, k) => 'w' + k) },
   { batch_id: 'b2', group: 'B', count: 20, order: 'random', pick: 'at_start', start_on: day(26), status: 'planned', filters_json: {}, contact_ids: [] },
   { batch_id: 'b0', group: 'B', count: 14, order: 'oldest', pick: 'now', start_on: day(-9), status: 'started', started_count: 14, started_at: new Date(now - 9 * 86400000).toISOString(), filters_json: {}, contact_ids: [] }]);

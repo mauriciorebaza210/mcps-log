@@ -180,17 +180,46 @@ function cmpBatches_(b) {
   if (!list.length) return '<div class="lc-empty">No batches yet.' + (lcCan_('edit_contacts') ? ' <button class="lc-link" data-act="cmp-batch" data-id="' + b + '">Start one</button>' : '') + '</div>';
   // A batch never starts people while the sequence's first email is off (engine EE_startBatch_).
   const firstOff = cmpFirstOff_(b);
+  const can = lcCan_('edit_contacts');
   return '<ol class="lc-btl">' + list.slice(0, 14).map(x => {
-    const f = x.filters || {}, what = [].concat(f.area || [], f.tags || [], f.source || []).join(', ');
     const planned = x.status === 'planned', d = planned ? x.start_on : cmpLocal_(x.started_at);
-    const dt = new Date(d + 'T12:00:00');
+    const dt = new Date(d + 'T12:00:00'), n = planned ? x.count : (x.started_count || x.count);
+    const tag = !planned ? lcTag_('Started', 'live') : firstOff ? '<span title="' + lcEsc_('Starts on its date once ' + firstOff + ' is turned on') + '">' + lcTag_('Waits for ' + firstOff, 'warn') + '</span>' : lcTag_('Planned', 'warn');
     return '<li class="' + (planned ? 'planned' : 'done') + '"><time><b>' + dt.getDate() + '</b><span>' + dt.toLocaleDateString('en-US', { month: 'short' }) + '</span></time>' +
-      '<div class="main"><b>' + (planned ? x.count : (x.started_count || x.count)) + ' people' + (what ? ' · ' + lcEsc_(what) : '') + '</b><small>' +
-      (planned ? 'Sends ' + lcEsc_(cmpAt_(x.start_on, x.send_time || lcSendTime_(b))) + ' · ' + (x.pick === 'at_start' ? 'picked that morning' : 'people chosen') + ' · ' + (x.order === 'oldest' ? 'oldest first' : 'random')
-        : 'Started ' + lcEsc_(lcStamp_(x.started_at))) + '</small></div>' +
-      (planned && firstOff ? '<span title="' + lcEsc_('Starts on its date once ' + firstOff + ' is turned on') + '">' + lcTag_('Waits for ' + firstOff, 'warn') + '</span>' + (lcCan_('edit_contacts') ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') : '') +
-      (planned && !firstOff ? lcTag_('Planned', 'warn') + (lcCan_('edit_contacts') ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') : '') + (planned ? '' : lcTag_('Started', 'live')) + '</li>';
+      '<div class="main"><b>' + lcEsc_(cmpBatchTitle_(x, n)) + '</b><small>' + (planned ? 'Starts ' + lcEsc_(cmpAt_(x.start_on, x.send_time || lcSendTime_(b))) : 'Started ' + lcEsc_(lcStamp_(x.started_at))) + '</small>' +
+      '<small>' + lcEsc_(cmpBatchHow_(x)) + '</small>' +
+      '<div class="lc-btl-acts">' + tag + (planned && can ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') + '</div>' +
+      cmpBatchWho_(x) + '</div></li>';
   }).join('') + '</ol>';
+}
+// What a batch is, in words: "14 people · MCP week 4" (a tag every one of them shares, or its filters).
+function cmpBatchTitle_(x, n) {
+  const f = x.filters || {}, what = [].concat(f.area || [], f.tags || [], f.source || []);
+  if (!what.length) {
+    const people = cmpBatchPeople_(x);
+    if (people.length) {
+      const common = (people[0].tags || []).filter(t => /week/i.test(t) && people.every(p => (p.tags || []).includes(t)));
+      if (common.length) what.push(common[0].replace(/^mcp week/i, 'MCP week'));
+    }
+  }
+  return n + (n === 1 ? ' person' : ' people') + (what.length ? ' · ' + what.join(', ') : '');
+}
+// How its people were chosen: specific people now, or picked by rule on the day.
+function cmpBatchHow_(x) {
+  if (x.pick === 'at_start') return 'Picked on the start day from Needs review · ' + (x.order === 'oldest' ? 'oldest first' : 'at random');
+  return 'These specific people, chosen ahead' + (/import|tony|planned/i.test(x.name || '') ? ' (from Tony’s plan)' : '');
+}
+function cmpBatchPeople_(x) {
+  const all = (LC.contacts && LC.contacts.contacts) || [], ids = new Set(x.contact_ids || []);
+  return all.filter(c => ids.has(c.contact_id));
+}
+// Who's in it (planned batches with chosen people).
+function cmpBatchWho_(x, dark) {
+  const people = cmpBatchPeople_(x);
+  if (!people.length) return '';
+  return '<details class="lc-btl-who' + (dark ? ' dark' : '') + '"><summary>See who (' + people.length + ')</summary><ul>' +
+    people.sort((a, c) => cmpName_(a).localeCompare(cmpName_(c))).map(c => '<li><b>' + lcEsc_(cmpName_(c)) + '</b><span>' + lcEsc_([c.email, c.area].filter(Boolean).join(' · ')) + '</span></li>').join('') +
+    '</ul></details>';
 }
 
 function cmpStageTable_(b, p) {
@@ -250,8 +279,8 @@ function cmpCalendar_(b) {
 
 function cmpDayPanel_(b, day, d) {
   const can = lcCan_('edit_contacts');
-  const batchHtml = x => '<div class="lc-day-batch"><div><b>' + x.count + ' people start</b><small>' +
-    (x.pick === 'at_start' ? 'Picked that morning' : 'People chosen') + ' · ' + (x.order === 'oldest' ? 'oldest first' : 'random') + '</small></div>' +
+  const batchHtml = x => '<div class="lc-day-batch"><div><b>' + lcEsc_(cmpBatchTitle_(x, x.count).replace(/^(\d+ (people|person))/, '$1 start')) + '</b><small>' +
+    lcEsc_(cmpBatchHow_(x)) + (cmpFirstOff_(x.group) ? ' · waits for ' + lcEsc_(cmpFirstOff_(x.group)) + ' to be turned on' : '') + '</small>' + cmpBatchWho_(x, true) + '</div>' +
     (can ? '<div class="acts"><label class="lc-move"><span>Move to</span><input class="lc-input" type="date" min="' + batToday_() + '" value="' + x.start_on + '" data-cmp-move="' + lcEsc_(x.batch_id) + '"></label>' +
       '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button></div>' : '') + '</div>';
   const sendHtml = e => '<details class="lc-day-send" open><summary><b>' + lcEsc_(e.step.name) + '</b><span>' + cmpSendCount_(e) + '</span></summary>' +
