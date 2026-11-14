@@ -143,6 +143,27 @@ function EE_table_(ss, name, idField) {
       var r = findRow(row[idField]);
       if (r) sh.getRange(r, 1, 1, h.length).setValues(values);
       else sh.getRange(sh.getLastRow() + 1, 1, 1, h.length).setValues(values);
+    },
+    // Many rows at once (EngineCore commitEntities): headers and the id column are read
+    // once, existing rows are written in place, new rows are appended in one call.
+    upsertMany: function (list) {
+      if (!list.length) return;
+      var h = headers(), extra = [];
+      list.forEach(function (row) { Object.keys(row).forEach(function (k) { if (h.indexOf(k) === -1 && extra.indexOf(k) === -1) extra.push(k); }); });
+      if (extra.length) {
+        sh.getRange(1, h.length + 1, 1, extra.length).setValues([extra]);
+        sh.getRange(1, h.length + 1, sh.getMaxRows(), extra.length).setNumberFormat('@');
+        h = h.concat(extra);
+      }
+      var last = sh.getLastRow(), col = h.indexOf(idField) + 1, at = {};
+      if (last >= 2) sh.getRange(2, col, last - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]) !== '') at[String(v[0])] = i + 2; });
+      var fresh = [];
+      list.forEach(function (row) {
+        var values = h.map(function (k) { return EE_encode_(row[k]); }), r = at[String(row[idField])];
+        if (r) sh.getRange(r, 1, 1, h.length).setValues([values]);
+        else { at[String(row[idField])] = -1; fresh.push(values); }
+      });
+      if (fresh.length) sh.getRange(sh.getLastRow() + 1, 1, fresh.length, h.length).setValues(fresh);
     }
   };
 }
@@ -173,6 +194,17 @@ function EE_journal_(ss) {
     append: function (r) {
       sh.getRange(sh.getLastRow() + 1, 1, 1, 8).setValues([[String(r.seq), r.op_id, r.type, r.entity_id,
         JSON.stringify(r.data), r.prev_hash, r.hash, r.at]]);
+    },
+    // Bulk (EngineCore commitEntities): one read of the op_id column, one append.
+    opIds: function () {
+      var lr = sh.getLastRow(), seen = {}; if (lr < 2) return seen;
+      sh.getRange(2, 2, lr - 1, 1).getValues().forEach(function (v) { seen[String(v[0])] = true; });
+      return seen;
+    },
+    appendMany: function (recs) {
+      if (!recs.length) return;
+      sh.getRange(sh.getLastRow() + 1, 1, recs.length, 8).setValues(recs.map(function (r) {
+        return [String(r.seq), r.op_id, r.type, r.entity_id, JSON.stringify(r.data), r.prev_hash, r.hash, r.at]; }));
     }
   };
 }
@@ -264,7 +296,7 @@ function EE_env(opts) {
   var tables = {};
   var table = function (name) { return tables[name] || (tables[name] = EE_table_(main, name, EE_ID_FIELD[name])); };
   var store = { rows: function (n) { return table(n).rows(); }, get: function (n, id) { return table(n).get(id); },
-    upsert: function (n, row) { table(n).upsert(row); } };
+    upsert: function (n, row) { table(n).upsert(row); }, upsertMany: function (n, list) { table(n).upsertMany(list); } };
   var optoutsApi = null;
   var optouts = function () { return optoutsApi || (optoutsApi = EE_optouts_(SpreadsheetApp.openById(opts.settingsId || props.getProperty('EE_SETTINGS_SS_ID')))); };
   var cache = CacheService.getScriptCache();

@@ -570,8 +570,51 @@ function EE_createCore(env) {
     return lease ? fenced(lease, body) : env.withLock(function () { ensureCaughtUp(); return body(); });
   }
 
+  // Many entity writes under one lock (imports, repairs): same journal-first rules as
+  // commitEntity, with one journal append and one write pass per table instead of one
+  // round of sheet calls per entity. items: [{ type, data, opId }]. An op_id already in
+  // the journal is skipped (a retried import never writes twice). Returns the merged data.
+  function commitEntities(items) {
+    items = (items || []).filter(function (it) { return it && TYPE_TABLE[it.type] && it.type !== 'delivery'; });
+    if (!items.length) return [];
+    return env.withLock(function () {
+      ensureCaughtUp();
+      var seen = env.journal.opIds ? env.journal.opIds() : null;
+      var last = lastRecord(), seq = last ? last.seq : 0, prev = last ? last.hash : C.GENESIS;
+      var current = {}, loaded = {}, recs = [], out = [];
+      items.forEach(function (it) {
+        var table = TYPE_TABLE[it.type], idf = ID_FIELD[table], id = it.data[idf];
+        if (seen ? seen[it.opId] : env.journal.findByOpId(it.opId)) return;
+        if (seen) seen[it.opId] = true;
+        var key = table + '\u0000' + id;
+        if (!loaded[table]) {                            // one read of the whole table, not one lookup per entity
+          loaded[table] = true;
+          env.store.rows(table).forEach(function (r) { current[table + '\u0000' + r[ID_FIELD[table]]] = r; });
+        }
+        if (!(key in current)) current[key] = null;
+        var data = merge(current[key], it.data);
+        var rec = { seq: ++seq, op_id: it.opId, type: it.type, entity_id: id, data: data, prev_hash: prev, at: iso(env.now()) };
+        rec.hash = hashOf(rec); prev = rec.hash;
+        recs.push(rec); current[key] = data; out.push(data);
+      });
+      if (!recs.length) return out;
+      if (env.journal.appendMany) env.journal.appendMany(recs); else recs.forEach(function (r) { env.journal.append(r); });
+      env.flush();
+      // Apply: one upsert pass per table, each row stamped with its own seq.
+      var byTable = {};
+      recs.forEach(function (r) { var t = TYPE_TABLE[r.type]; (byTable[t] = byTable[t] || {})[r.entity_id] = merge(r.data, { last_seq: r.seq }); });
+      Object.keys(byTable).forEach(function (t) {
+        var rows = Object.keys(byTable[t]).map(function (k) { return byTable[t][k]; });
+        if (env.store.upsertMany) env.store.upsertMany(t, rows); else rows.forEach(function (r) { env.store.upsert(t, r); });
+      });
+      env.meta.set('applied_seq', Math.max(Number(env.meta.get('applied_seq') || 0), seq));
+      env.flush();
+      return out;
+    });
+  }
+
   return {
-    run: run, ingest: ingest, resend: resend, markSent: markSent, abandon: abandon, commitEntity: commitEntity,
+    run: run, ingest: ingest, resend: resend, markSent: markSent, abandon: abandon, commitEntity: commitEntity, commitEntities: commitEntities,
     // Replay the Journal into the main sheet now, even with sending off (RUNBOOK.md → Restore).
     catchUp: function () { return env.withLock(function () { ensureCaughtUp(); return { applied_seq: Number(env.meta.get('applied_seq') || 0) }; }); },
     // Exposed for tests and for the stage-by-stage concurrency checks.

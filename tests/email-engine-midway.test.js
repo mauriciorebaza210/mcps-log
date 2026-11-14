@@ -146,3 +146,77 @@ test('Clearing a flag puts the person back in line (Needs review, or waiting for
   assert.equal(w.contact(f).flag_reason, '');
   assert.equal(w.admin('clear_flag', { contact_ids: [f] }).ok, false);
 });
+
+// ── Bulk writes and re-imports (2026-11-14) ──
+const { fakeWorld: fw2 } = require('./helpers/ee-fake-env.js');
+function withBulk(w) {
+  // The real sheet adapters' bulk calls (Env.js), on the fake world.
+  w.env.journal.opIds = () => { const s = {}; w.journal.forEach(r => { s[r.op_id] = true; }); return s; };
+  w.env.journal.appendMany = recs => recs.forEach(r => w.journal.push(JSON.parse(JSON.stringify(r))));
+  w.env.store.upsertMany = (name, rows) => rows.forEach(r => w.env.store.upsert(name, r));
+  return w;
+}
+function contactsRebuiltFromJournal(w) {
+  const fresh = fw2();
+  fresh.journal = w.journal.map(r => JSON.parse(JSON.stringify(r)));
+  fresh.core.catchUp();
+  const sort = t => [...t].sort((a, b) => a.contact_id < b.contact_id ? -1 : 1).map(r => JSON.parse(JSON.stringify(r)));
+  assert.deepEqual(sort(fresh.tables.Contacts), sort(w.tables.Contacts), 'Contacts rebuilt from the Journal match the sheet');
+}
+
+for (const bulk of [false, true]) {
+  test('Import writes every contact through the Journal' + (bulk ? ' (bulk adapters)' : ' (one at a time)') + '; a retried import writes nothing twice', () => {
+    const w = engine('2026-11-14');
+    if (bulk) withBulk(w);
+    const before = w.journal.length;
+    const rows = Array.from({ length: 30 }, (_, i) => row('p' + i + '@x.com', { planned_start: '2026-11-30' }));
+    assert.equal(w.admin('import_contacts', { group: 'B', contacts: rows }).added, 30);
+    assert.equal(w.journal.length - before, 30);
+    const seqs = w.journal.map(r => r.seq);
+    assert.deepEqual(seqs, seqs.map((_, i) => i + 1), 'seq has no gaps');
+    w.journal.forEach((r, i) => { if (i) assert.equal(r.prev_hash, w.journal[i - 1].hash, 'hash chain unbroken'); });
+    assert.equal(w.admin('import_contacts', { group: 'B', contacts: rows }).added, 0);
+    assert.equal(w.journal.length - before, 30, 'nothing appended on the retry');
+    contactsRebuiltFromJournal(w);
+  });
+}
+
+test('Re-import of people already here (incl. removed) brings their planned date, hand-sent Intro and flag; enrolled people keep their status', () => {
+  const w = withBulk(engine('2026-11-14'));
+  w.admin('import_contacts', { group: 'B', contacts: [row('a@x.com'), row('b@x.com'), row('c@x.com'), row('d@x.com'), row('e@x.com')] });
+  const id = e => w.byEmail(e).contact_id;
+  // a, b, c were removed by the go-live cleanup; e is already in a sequence.
+  w.core.commitEntities(['a@x.com', 'b@x.com', 'c@x.com'].map(e => ({ type: 'contact', data: { contact_id: id(e), review_status: 'removed' }, opId: 'test:remove:' + e })));
+  w.tables.Enrollments.push({ enrollment_id: 'en_e', contact_id: id('e@x.com'), sequence_id: 'B', status: 'active' });
+  const r = w.admin('apply_incoming_many', { items: [
+    { contact_id: id('a@x.com'), mode: 'replace', data: { email_norm: 'a@x.com', planned_start: '2026-11-30' } },
+    { contact_id: id('b@x.com'), mode: 'replace', data: { email_norm: 'b@x.com', intro_sent_on: '2026-10-26', planned_start: '2026-10-26' } },
+    { contact_id: id('c@x.com'), mode: 'replace', data: { email_norm: 'c@x.com', flag_reason: 'Intro bounced', intro_sent_on: '2026-11-02' } },
+    { contact_id: id('d@x.com'), mode: 'skip-me', data: {} },
+    { contact_id: id('e@x.com'), mode: 'replace', data: { email_norm: 'e@x.com', intro_sent_on: '2026-10-26' } },
+    { contact_id: 'ct_nobody', mode: 'replace', data: {} }] });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.missing, 1);
+  const a = w.byEmail('a@x.com'), b = w.byEmail('b@x.com'), c = w.byEmail('c@x.com'), e = w.byEmail('e@x.com');
+  assert.deepEqual([a.review_status, a.planned_start], ['needs_review', '2026-11-30']);
+  assert.deepEqual([b.review_status, b.sub_bucket, b.start_step, b.intro_sent_on], ['awaiting_approval', 'B2', 'b_followup', '2026-10-26']);
+  assert.deepEqual([c.review_status, c.flag_reason, c.start_step], ['flagged', 'Intro bounced', 'b_followup'], 'flag wins; clearing it later leads to awaiting approval');
+  assert.notEqual(e.review_status, 'awaiting_approval', 'someone already in a sequence is never re-staged by a file');
+  assert.equal(e.intro_sent_on || '', '');
+  contactsRebuiltFromJournal(w);
+  // Re-sending the same items changes nothing.
+  assert.equal(w.admin('apply_incoming_many', { items: [{ contact_id: a.contact_id, mode: 'replace', data: { email_norm: 'a@x.com', planned_start: '2026-11-30' } }] }).changed, 0);
+});
+
+test('Planned batches: people added later join the batch already planned for their day (one batch per date)', () => {
+  const w = withBulk(engine('2026-11-14'));
+  w.admin('import_contacts', { group: 'B', contacts: [row('a@x.com', { planned_start: '2026-11-30' })] });
+  w.admin('plan_import_batches', { group: 'B' });
+  w.admin('import_contacts', { group: 'B', contacts: [row('b@x.com', { planned_start: '2026-11-30' }), row('c@x.com', { planned_start: '2026-12-07' })] });
+  const r = w.admin('plan_import_batches', { group: 'B' });
+  assert.deepEqual(r.batches.map(b => [b.start_on, b.count, !!b.added_to]), [['2026-11-30', 1, true], ['2026-12-07', 1, false]]);
+  const nov30 = w.tables.Batches.filter(b => b.start_on === '2026-11-30');
+  assert.equal(nov30.length, 1);
+  assert.equal(nov30[0].count, 2);
+  assert.equal(nov30[0].contact_ids.length, 2);
+});

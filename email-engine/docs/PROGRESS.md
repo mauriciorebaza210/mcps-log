@@ -24,6 +24,9 @@ _Handoff written 2026-11-12 ~12 AM for a fresh chat (`/email-engine`). Everythin
 - **Next:** Tony runs the guide (Emails → MCP x MCPS Intro → Setup → From → Change → Another address → How to link it, step by step). Check the link saves info@ as the Intro's sender. Then Send a test (goes to Mau), check From + Reply-To on phone; turning the Intro on is Mau's call.
 - Note: bounces for mail sent from info@ go to the info@ inbox, not Tony's, so the engine won't see Intro bounces unless info@ forwards bounce mail to Tony. Decide when linking.
 
+### Tony's MCP Legacy list: IN (2026-11-14)
+- Engine **@53**. 129 Needs review (planned), 25 awaiting approval (Intro by hand Oct 26/Nov 2), 11 flagged, 0 removed; 9 planned batches Nov 16 (14) · Nov 23 (14) · Nov 30 (18) · Dec 7 (12) · Dec 14 (14) · Dec 21 (13) · Dec 28 (12) · Jan 4 (11) · Jan 11 (6); 14 with Nov 9 show as Start overdue. Intro still Off → batches wait. Root cause + fixes: Plan changes 2026-11-14.
+
 ### In progress (2026-11-12): Tony's MCP Legacy list
 - **LIVE 2026-11-12** (engine @50, portal e83b823): import columns Planned start / Intro already sent on / Hold for review, `start_step` in the rules, `approve_waiting`, `plan_import_batches`, `clear_flag`, first-email gate on batches, Waiting card on Activity + Contacts (`js/features/lifecycle-waiting.js`), "Waits for <Intro>" on planned batches. Plan changes 2026-11-12.
 - Clean file (local only, PII): `~/Downloads/MCP_Legacy_CRM_CSV_Exports/MCP Legacy - import into portal.csv` (171 rows → 165 after shared emails: 25 waiting, 11 flagged, 129 planned; Nov 9 = 15 overdue; 9 batches Nov 16–Jan 11). 12 with no usable email: `MCP Legacy - missing email (fix in Tony CRM).csv`.

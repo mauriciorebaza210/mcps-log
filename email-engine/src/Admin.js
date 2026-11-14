@@ -39,7 +39,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { apply_incoming_many: 1, approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -99,6 +99,7 @@ function EE_adminRun_(env, core, req, deps) {
   else if (action === 'update_contacts') out = EE_updateContacts_(env, core, p, actor);
   else if (action === 'resolve_duplicates') out = EE_resolveDuplicates_(env, core, p, actor);
   else if (action === 'apply_incoming') out = EE_applyIncoming_(env, core, p, actor);
+  else if (action === 'apply_incoming_many') out = EE_applyIncomingMany_(env, core, p, actor);
   else if (action === 'reset_mcp_legacy') out = EE_resetMcpLegacy_(env, core, actor);
   else if (action === 'go_live') out = EE_goLive_(env, core, p, actor, deps);
   else if (action === 'add_staff') out = EE_addStaff_(env, core, p, actor);
@@ -204,7 +205,7 @@ function EE_importContacts_(env, core, p, actor) {
   env.store.rows('Contacts').forEach(function (c) {
     [c.email_norm].concat(String(c.alt_emails || '').split(',')).forEach(function (e) { e = String(e || '').trim().toLowerCase(); if (e) existing[e] = c.contact_id; });
   });
-  var added = [], skipped = [], now = new Date(env.now()).toISOString();
+  var added = [], skipped = [], items = [], now = new Date(env.now()).toISOString();
   list.forEach(function (c) {
     var email = String(c.email_norm || '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { skipped.push({ email_norm: email, reason: 'bad_email' }); return; }
@@ -216,17 +217,12 @@ function EE_importContacts_(env, core, p, actor) {
     rec.contact_id = id; rec.email_norm = email; rec.bucket = group; rec.sub_bucket = group === 'B' ? 'B1' : '';
     // A possible duplicate (automatic MCP lead sync can't ask) waits for a person; batches never pick it.
     rec.review_status = rec.duplicate_of ? 'possible_duplicate' : 'needs_review'; rec.review_reason = rec.duplicate_of ? 'possible duplicate' : 'imported'; rec.is_test = 'N';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.planned_start)) rec.planned_start = '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.intro_sent_on) || group !== 'B') rec.intro_sent_on = '';
-    rec.flag_reason = rec.flag_reason.slice(0, 200);
-    // Flagged in the file (possible business, duplicate, bounced, excluded…): waits for a person; batches never pick it.
-    if (rec.flag_reason) { rec.review_status = 'flagged'; rec.review_reason = rec.flag_reason; }
-    // Got the Intro by hand before the engine: never gets it again; held until a person approves the Follow Up.
-    else if (rec.intro_sent_on) { rec.review_status = 'awaiting_approval'; rec.review_reason = 'Intro sent by hand on ' + rec.intro_sent_on; rec.sub_bucket = 'B2'; rec.start_step = 'b_followup'; }
+    EE_campaignFields_(rec, rec, group);
     rec.created_at = now; rec.imported_by = actor;
-    core.commitEntity('contact', rec, 'contact:' + id + ':import');
+    items.push({ type: 'contact', data: rec, opId: 'contact:' + id + ':import' });
     existing[email] = id; added.push(id);
   });
+  EE_commitMany_(core, items);
   // "Do not contact" in the file is a real person's wish: it goes to the real opt-out list.
   var dnc = (p.do_not_contact || []).map(function (e) { return String(e || '').trim().toLowerCase(); }).filter(Boolean);
   dnc.forEach(function (e) { core.ingest({ event_id: 'dnc_' + env.sha256(e).slice(0, 16), type: 'unsubscribe', mode: 'production', email_norm: e, scope: 'all' }); });
@@ -524,10 +520,58 @@ function EE_resolveDuplicates_(env, core, p, actor) {
 }
 // An incoming row (file import) that matches an engine contact: merge (fill blanks, its email
 // becomes an alternate) or replace (its values win; the old email becomes an alternate).
+// A campaign already under way (Plan changes 2026-11-12): the file's planned start, hand-sent
+// Intro and flag decide where the person waits. `src` holds the incoming values; `out` gets
+// the fields to write. Flag wins (held for a person), then a hand-sent Intro (held, starts at
+// the Follow Up), else plain Needs review. Returns true when the file carried any of them.
+function EE_campaignFields_(out, src, group) {
+  var ok = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); };
+  out.planned_start = ok(src.planned_start) ? String(src.planned_start) : '';
+  out.intro_sent_on = ok(src.intro_sent_on) && group === 'B' ? String(src.intro_sent_on) : '';
+  out.flag_reason = String(src.flag_reason == null ? '' : src.flag_reason).slice(0, 200);
+  out.start_step = ''; out.sub_bucket = group === 'B' ? 'B1' : (out.sub_bucket || '');
+  if (out.flag_reason) { out.review_status = 'flagged'; out.review_reason = out.flag_reason; }
+  if (out.intro_sent_on) {
+    out.sub_bucket = 'B2'; out.start_step = 'b_followup';
+    if (!out.flag_reason) { out.review_status = 'awaiting_approval'; out.review_reason = 'Intro sent by hand on ' + out.intro_sent_on; }
+  }
+  return !!(out.planned_start || out.intro_sent_on || out.flag_reason);
+}
+// Bulk when the core has it (one lock, one journal append); one at a time otherwise.
+function EE_commitMany_(core, items) {
+  if (!items.length) return;
+  if (core.commitEntities) { core.commitEntities(items); return; }
+  items.forEach(function (it) { core.commitEntity(it.type, it.data, it.opId); });
+}
 function EE_applyIncoming_(env, core, p, actor) {
-  var c = env.store.get('Contacts', String(p.contact_id || '')), inc = p.data || {}, mode = String(p.mode || '');
+  var c = env.store.get('Contacts', String(p.contact_id || ''));
   if (!c) return { ok: false, error: 'contact not found' };
-  if (mode !== 'merge' && mode !== 'replace') return { ok: false, error: 'mode must be merge or replace' };
+  var enrolled = env.store.rows('Enrollments').some(function (e) { return e.contact_id === c.contact_id; });
+  var r = EE_incomingData_(c, p.data || {}, String(p.mode || ''), enrolled, env.sha256);
+  if (r.error) return { ok: false, error: r.error };
+  if (!r.data) return { ok: true, changed: false };
+  core.commitEntity('contact', r.data, r.opId);
+  return { ok: true, changed: true };
+}
+// Many at once (the import's "already here" rows): p.items = [{ contact_id, mode, data }].
+function EE_applyIncomingMany_(env, core, p, actor) {
+  var list = Array.isArray(p.items) ? p.items : [];
+  if (!list.length || list.length > EE_IMPORT_MAX) return { ok: false, error: 'send 1 to ' + EE_IMPORT_MAX + ' items' };
+  var byId = {}, enrolled = {}, items = [], changed = 0, missing = 0;
+  env.store.rows('Contacts').forEach(function (c) { byId[c.contact_id] = c; });
+  env.store.rows('Enrollments').forEach(function (e) { enrolled[e.contact_id] = true; });
+  list.forEach(function (it) {
+    var c = byId[String(it && it.contact_id || '')];
+    if (!c) { missing++; return; }
+    var r = EE_incomingData_(c, it.data || {}, String(it.mode || ''), !!enrolled[c.contact_id], env.sha256);
+    if (r.data) { items.push({ type: 'contact', data: r.data, opId: r.opId }); changed++; }
+  });
+  EE_commitMany_(core, items);
+  return { ok: true, changed: changed, missing: missing };
+}
+// What an incoming row changes on an existing contact → { data, opId } | { data: null } | { error }.
+function EE_incomingData_(c, inc, mode, enrolled, sha256) {
+  if (mode !== 'merge' && mode !== 'replace') return { error: 'mode must be merge or replace' };
   var data = { contact_id: c.contact_id }, email = String(inc.email_norm || '').trim().toLowerCase();
   ['first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'pool_build_year', 'quote_id'].forEach(function (k) {
     var v = String(inc[k] == null ? '' : inc[k]).trim();
@@ -542,9 +586,18 @@ function EE_applyIncoming_(env, core, p, actor) {
   if (mode === 'replace' && src && src !== String(c.source || '')) data.source = src;
   // Someone removed earlier (e.g. a past MCP lead) who is on the new list comes back, for review.
   if (c.review_status === 'removed') { data.review_status = 'needs_review'; data.review_reason = 'imported again'; }
-  if (Object.keys(data).length === 1) return { ok: true, changed: false };
-  core.commitEntity('contact', data, 'contact:' + c.contact_id + ':' + mode + ':' + env.sha256(JSON.stringify(data)).slice(0, 12));
-  return { ok: true, changed: true };
+  // The file's campaign columns (planned start, hand-sent Intro, flag) apply to anyone who
+  // hasn't started a sequence and isn't already confirmed, merged or a test contact.
+  if (!enrolled && c.is_test !== 'Y' && /^(removed|needs_review|flagged|awaiting_approval|possible_duplicate)$/.test(String(c.review_status || ''))) {
+    var camp = { sub_bucket: c.sub_bucket };
+    if (EE_campaignFields_(camp, inc, c.bucket)) {
+      if (!camp.review_status) { camp.review_status = 'needs_review'; camp.review_reason = c.review_status === 'removed' ? 'imported again' : (c.review_reason || 'imported'); }
+      Object.keys(camp).forEach(function (k) { if (String(camp[k] == null ? '' : camp[k]) !== String(c[k] == null ? '' : c[k])) data[k] = camp[k]; });
+      if (!('review_status' in data) && c.review_status === 'removed') data.review_status = camp.review_status;
+    }
+  }
+  if (Object.keys(data).length === 1) return { data: null };
+  return { data: data, opId: 'contact:' + c.contact_id + ':' + mode + ':' + sha256(JSON.stringify(data)).slice(0, 12) };
 }
 // Staff (bucket Z, Mau 2026-11-11): MCPS people who can get single emails (e.g. the launch note to Tony).
 // Confirmed on creation, never test; no campaign has bucket Z, so no batch or sequence ever picks them.
@@ -820,8 +873,19 @@ function EE_planImportBatches_(env, core, p, actor) {
     if (c.bucket !== group || c.review_status !== 'needs_review' || !c.planned_start || c.planned_start < today || inBatch[c.contact_id]) return;
     (byDate[c.planned_start] = byDate[c.planned_start] || []).push(c.contact_id);
   });
-  var made = [];
+  var made = [], sameDay = {};
+  env.store.rows('Batches').forEach(function (b) {
+    if (b.status === 'planned' && b.group === group && b.pick === 'now' && !sameDay[b.start_on]) sameDay[b.start_on] = b;
+  });
   Object.keys(byDate).sort().forEach(function (d) {
+    var b = sameDay[d];
+    if (b) {                                             // one batch per day: add to the one already planned
+      var ids = (b.contact_ids || []).concat(byDate[d]);
+      if (ids.length > EE_BATCH_MAX) { made.push({ start_on: d, count: byDate[d].length, ok: false, error: 'batch would exceed ' + EE_BATCH_MAX }); return; }
+      env.store.upsert('Batches', EE_merge_(b, { contact_ids: ids, count: ids.length }));
+      made.push({ start_on: d, count: byDate[d].length, ok: true, batch_id: b.batch_id, added_to: true });
+      return;
+    }
     var r = EE_createBatch_(env, core, { group: group, pick: 'now', contact_ids: byDate[d], start_on: d,
       name: String(p.name_prefix || 'Planned') + ' ' + d }, actor);
     made.push({ start_on: d, count: byDate[d].length, ok: !!r.ok, batch_id: r.batch_id || '', error: r.error || '' });

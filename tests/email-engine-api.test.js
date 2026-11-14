@@ -310,8 +310,9 @@ test('Import save: the server re-checks; only new rows (and chosen same-person r
   const tampered = IMPORT_ROWS.map(r => ({ ...r, status: 'new', evil: '<script>' }));
   const { res, sent } = await importCall({ stage: 'save', group: 'B', source: 'MCP list', contacts: tampered, include_rows: [4] });
   assert.equal(res.statusCode, 200);
-  const fold = sent.filter(a => a.action === 'apply_incoming');
-  assert.deepEqual(fold.map(a => [a.params.mode, a.params.data.source]), [['replace', 'MCP list']], 'row 3 (same email) is replaced by default, no duplicate');
+  const fold = sent.filter(a => a.action === 'apply_incoming_many');
+  assert.equal(fold.length, 1, 'everyone already here goes in one engine call');
+  assert.deepEqual(fold[0].params.items.map(i => [i.mode, i.data.source]), [['replace', 'MCP list']], 'row 3 (same email) is replaced by default, no duplicate');
   const p = sent.find(a => a.action === 'import_contacts').params;
   assert.deepEqual(p.contacts.map(c => c.email_norm), ['new@example.com', 'maria.l@work.example', 'lead@example.com', 'back@example.com']);
   assert.deepEqual(p.do_not_contact, ['dnc@example.com']);
