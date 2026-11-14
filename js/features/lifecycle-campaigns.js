@@ -168,14 +168,18 @@ function cmpList_(b, p) {
 
 // MCP Startup's people join on their own from the portal's startups; batches are for lists (MCP Legacy).
 const cmpBatchable_ = b => b !== 'C';
+// The sequence's first email, if it's off: batches wait for it (engine EE_startBatch_).
+function cmpFirstOff_(b) {
+  const first = ((LC.ov && LC.ov.steps) || []).filter(s => s.bucket === b).sort((x, y) => x.order - y.order)[0];
+  return first && first.status === 'off' ? first.name : '';
+}
 function cmpBatches_(b) {
   if (!cmpBatchable_(b)) return '<div class="lc-empty">Startups join automatically when they’re approved in the portal.</div>';
   const list = ((LC.contacts && LC.contacts.batches) || []).filter(x => x.group === b && x.status !== 'cancelled')
     .sort((x, y) => (x.status === 'planned') === (y.status === 'planned') ? String(x.status === 'planned' ? x.start_on : y.start_on).localeCompare(x.status === 'planned' ? y.start_on : x.start_on) : x.status === 'planned' ? -1 : 1);
   if (!list.length) return '<div class="lc-empty">No batches yet.' + (lcCan_('edit_contacts') ? ' <button class="lc-link" data-act="cmp-batch" data-id="' + b + '">Start one</button>' : '') + '</div>';
   // A batch never starts people while the sequence's first email is off (engine EE_startBatch_).
-  const first = ((LC.ov && LC.ov.steps) || []).filter(s => s.bucket === b).sort((x, y) => x.order - y.order)[0];
-  const firstOff = first && first.status === 'off' ? first.name : '';
+  const firstOff = cmpFirstOff_(b);
   return '<ol class="lc-btl">' + list.slice(0, 14).map(x => {
     const f = x.filters || {}, what = [].concat(f.area || [], f.tags || [], f.source || []).join(', ');
     const planned = x.status === 'planned', d = planned ? x.start_on : cmpLocal_(x.started_at);
@@ -229,7 +233,7 @@ function cmpCalendar_(b) {
     const day = fc[d], past = d < today, other = dt.getMonth() !== m - 1;
     const chips = [];
     if (day) {
-      day.batches.forEach(x => chips.push('<span class="lc-cal-chip batch"' + (can && x.status === 'planned' ? ' draggable="true" data-drag="' + lcEsc_(x.batch_id) + '"' : '') + ' title="' + lcEsc_(x.count + ' start · ' + cmpAt_(d, x.time)) + '"><em>' + lcEsc_(lcClockShort_(x.time)) + '</em><b>' + x.count + '</b></span>'));
+      day.batches.forEach(x => chips.push('<span class="lc-cal-chip batch"' + (can && x.status === 'planned' ? ' draggable="true" data-drag="' + lcEsc_(x.batch_id) + '"' : '') + ' title="' + lcEsc_(x.count + ' start · ' + cmpAt_(d, x.time) + (cmpFirstOff_(x.group) ? ' · waits for ' + cmpFirstOff_(x.group) + ' to be turned on' : '')) + '"><em>' + lcEsc_(lcClockShort_(x.time)) + '</em><b>' + x.count + '</b></span>'));
       cmpSends_(day).forEach(e => chips.push('<span class="lc-cal-chip' + (e.step.published ? '' : ' draft') + '" title="' + lcEsc_(e.step.name + ' · ' + cmpAt_(d, e.time)) + '"><i>' + e.step.order + '</i><em>' + lcEsc_(lcClockShort_(e.time)) + '</em><b>' + cmpSendCount_(e) + '</b></span>'));
     }
     const more = chips.length > 3 ? '<span class="lc-cal-more">+' + (chips.length - 3) + ' more</span>' : '';

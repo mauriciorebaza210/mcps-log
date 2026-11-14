@@ -344,7 +344,11 @@ export function buildPlan(tables, caps, now, opts = {}) {
   const enrollments = (tables.Enrollments || []).filter(e => e.mode === mode && e.sequence_id === seq.sequence_id && e.status !== 'completed');
   // Planned batches, as if started on their day: picked people, or one weighted placeholder.
   const weight = {}, batchOf = {};
-  (tables.Batches || []).filter(b => b.group === bucket && b.status === 'planned').forEach(b => {
+  // A batch never starts people while the sequence's first email is off (engine EE_startBatch_),
+  // so nothing is forecast for planned batches until it's on (the batch day itself still shows).
+  const first = (rs.steps || []).filter(s => s.sequence_id === seq.sequence_id && s.status !== 'draft').sort((a, b) => a.order - b.order)[0];
+  const firstOff = !!first && first.status !== 'active';
+  (tables.Batches || []).filter(b => b.group === bucket && b.status === 'planned' && !firstOff).forEach(b => {
     const on = String(b.start_on) < today ? today : String(b.start_on);
     const ids = Array.isArray(b.contact_ids) && b.contact_ids.length ? b.contact_ids : null;
     const add = (cid, base) => {

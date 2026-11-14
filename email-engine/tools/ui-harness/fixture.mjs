@@ -17,6 +17,8 @@ ruleset.sequences = (ruleset.sequences || []).concat([{ sequence_id: 'S1A2B3C', 
 ruleset.steps = ruleset.steps.concat([
   { step_id: 's_1a2b3c', sequence_id: 'S1A2B3C', order: 1, name: 'Holiday hours 2026', category: 'marketing', status: 'active', anchor: 'date', date: dayAt(5), offset: 0, window_days: 3, max_hold_days: 2, stop_rules: [] },
   { step_id: 's_9f8e7d', sequence_id: 'S9F8E7D', order: 1, name: 'Fall cleanup offer', category: 'marketing', status: 'off', anchor: 'date', date: dayAt(-3), offset: 0, window_days: 3, max_hold_days: 2, stop_rules: [] }]);
+// INTRO_OFF=1: the MCP Legacy Intro turned off (batches show they're waiting for it).
+if (process.env.INTRO_OFF) ruleset.steps.find(s => s.step_id === 'b_intro').status = 'off';
 rows('Rulesets', [{ rule_rev: 'bc-1', json: ruleset }]);
 rows('Revisions', [
   { revision_id: 'rev_b_intro_1', step_id: 'b_intro', rev_no: 1, subject: 'An introduction from Mission Custom Pools', preheader: 'Meet Mission Custom Pool Solutions, the service side of the family that built your pool.', status: 'published', approver: 'antonio@mcpoolsolutions.org', approved_at: iso(8) },
