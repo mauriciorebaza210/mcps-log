@@ -39,7 +39,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { apply_incoming_many: 1, approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { set_batch_date: 1, apply_incoming_many: 1, approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -117,6 +117,7 @@ function EE_adminRun_(env, core, req, deps) {
   }
   else if (action === 'approve_waiting') out = EE_approveWaiting_(env, core, p, actor);
   else if (action === 'plan_import_batches') out = EE_planImportBatches_(env, core, p, actor);
+  else if (action === 'set_batch_date') out = EE_setBatchDate_(env, core, p, actor);
   else if (action === 'clear_flag') out = EE_clearFlag_(env, core, p, actor);
   else if (action === 'list_senders') out = EE_listSenders_(env);
   else if (action === 'set_step_sender') out = EE_setStepSender_(env, p);
@@ -903,4 +904,57 @@ function EE_clearFlag_(env, core, p, actor) {
     n++;
   });
   return { ok: n > 0, cleared: n, error: n ? '' : 'nobody flagged in that list' };
+}
+
+// Move people between planned batches (Mau 2026-11-14): p = { contact_ids, start_on: 'YYYY-MM-DD' | '' }.
+// Each person leaves the planned batch they're in; with a date they join the planned batch on
+// that day (made if there isn't one), with '' they go back to Needs review with no date. Only
+// people waiting in Needs review can move; a started batch is never touched; a batch left empty
+// is cancelled. The contact's planned_start follows, so overdue/planned labels stay true.
+function EE_setBatchDate_(env, core, p, actor) {
+  var ids = (p.contact_ids || []).map(String).filter(Boolean), to = String(p.start_on || ''), today = EE_today_(env);
+  if (!ids.length || ids.length > EE_BATCH_MAX) return { ok: false, error: 'pick 1 to ' + EE_BATCH_MAX + ' people' };
+  if (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) return { ok: false, error: 'date must be YYYY-MM-DD' };
+  if (to && to < today) return { ok: false, error: 'pick today or a later day' };
+  var byId = {}, moving = [], skipped = [];
+  env.store.rows('Contacts').forEach(function (c) { byId[c.contact_id] = c; });
+  ids.forEach(function (id) {
+    var c = byId[id];
+    if (!c) skipped.push({ contact_id: id, reason: 'not found' });
+    else if (c.review_status !== 'needs_review') skipped.push({ contact_id: id, reason: 'not waiting in Needs review (' + c.review_status + ')' });
+    else moving.push(c);
+  });
+  if (!moving.length) return { ok: false, error: skipped.length ? skipped[0].reason : 'nobody to move', skipped: skipped };
+  var group = moving[0].bucket;
+  if (moving.some(function (c) { return c.bucket !== group; })) return { ok: false, error: 'move people from one campaign at a time' };
+  var out = {}, now = new Date(env.now()).toISOString(), move = {};
+  moving.forEach(function (c) { move[c.contact_id] = true; });
+  var planned = env.store.rows('Batches').filter(function (b) { return b.status === 'planned' && b.group === group; });
+  // Leave the batch they're in now.
+  planned.forEach(function (b) {
+    var before = b.contact_ids || [], left = before.filter(function (id) { return !move[id]; });
+    if (left.length === before.length) return;
+    if (b.pick === 'now' && !left.length) env.store.upsert('Batches', EE_merge_(b, { contact_ids: [], count: 0, status: 'cancelled', cancelled_by: actor, cancelled_at: now }));
+    else env.store.upsert('Batches', EE_merge_(b, { contact_ids: left, count: b.pick === 'now' ? left.length : b.count }));
+    b.contact_ids = left;
+  });
+  // Join the batch on the new day.
+  if (to) {
+    var target = planned.filter(function (b) { return b.pick === 'now' && b.start_on === to && (b.contact_ids || []).length; })[0];
+    var add = moving.map(function (c) { return c.contact_id; });
+    if (target) {
+      var ids2 = target.contact_ids.concat(add.filter(function (id) { return target.contact_ids.indexOf(id) === -1; }));
+      if (ids2.length > EE_BATCH_MAX) return { ok: false, error: 'that day\'s batch would pass ' + EE_BATCH_MAX + ' people' };
+      env.store.upsert('Batches', EE_merge_(env.store.get('Batches', target.batch_id), { contact_ids: ids2, count: ids2.length }));
+      out.batch_id = target.batch_id;
+    } else {
+      var r = EE_createBatch_(env, core, { group: group, pick: 'now', contact_ids: add, start_on: to, name: 'Moved ' + to }, actor);
+      if (!r.ok) return r;
+      out.batch_id = r.batch_id; out.created = true;
+    }
+  }
+  EE_commitMany_(core, moving.filter(function (c) { return String(c.planned_start || '') !== to; })
+    .map(function (c) { return { type: 'contact', data: { contact_id: c.contact_id, planned_start: to }, opId: 'contact:' + c.contact_id + ':batch_date:' + (to || 'none') + ':' + env.now() }; }));
+  out.ok = true; out.moved = moving.length; out.skipped = skipped; out.start_on = to;
+  return out;
 }

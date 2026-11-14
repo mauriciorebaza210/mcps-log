@@ -220,3 +220,35 @@ test('Planned batches: people added later join the batch already planned for the
   assert.equal(nov30[0].count, 2);
   assert.equal(nov30[0].contact_ids.length, 2);
 });
+
+test('Move people between planned batches: later day, a new day, or out of the batches; started batches never change', () => {
+  const w = withBulk(engine('2026-11-14'));
+  w.admin('import_contacts', { group: 'B', contacts: [row('a@x.com', { planned_start: '2026-11-16' }), row('b@x.com', { planned_start: '2026-11-16' }), row('c@x.com', { planned_start: '2026-11-23' })] });
+  w.admin('plan_import_batches', { group: 'B' });
+  const id = e => w.byEmail(e).contact_id, on = d => { const b = w.tables.Batches.find(x => x.start_on === d && x.status === 'planned'); return b ? plain(b) : undefined; };
+  // a → Nov 23 (joins the batch there)
+  let r = w.admin('set_batch_date', { contact_ids: [id('a@x.com')], start_on: '2026-11-23' });
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(on('2026-11-16').contact_ids, [id('b@x.com')]);
+  assert.equal(on('2026-11-23').count, 2);
+  assert.equal(w.byEmail('a@x.com').planned_start, '2026-11-23');
+  // b → Dec 1 (no batch that day: one is made; Nov 16 is now empty → cancelled)
+  r = w.admin('set_batch_date', { contact_ids: [id('b@x.com')], start_on: '2026-12-01' });
+  assert.equal(r.created, true);
+  assert.equal(on('2026-11-16'), undefined);
+  assert.equal(w.tables.Batches.find(b => b.start_on === '2026-11-16').status, 'cancelled');
+  assert.equal(on('2026-12-01').count, 1);
+  // c out of the batches → back to Needs review, no date
+  r = w.admin('set_batch_date', { contact_ids: [id('c@x.com')], start_on: '' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(on('2026-11-23').contact_ids, [id('a@x.com')]);
+  assert.deepEqual([w.byEmail('c@x.com').review_status, w.byEmail('c@x.com').planned_start], ['needs_review', '']);
+  // Refusals: a past day, someone not in Needs review, a started batch stays as it was
+  assert.equal(w.admin('set_batch_date', { contact_ids: [id('a@x.com')], start_on: '2026-11-01' }).ok, false);
+  w.admin('import_contacts', { group: 'B', contacts: [row('f@x.com', { flag_reason: 'Check' })] });
+  assert.equal(w.admin('set_batch_date', { contact_ids: [id('f@x.com')], start_on: '2026-11-30' }).ok, false);
+  const started = { batch_id: 'bs', group: 'B', status: 'started', pick: 'now', start_on: '2026-11-10', contact_ids: [id('a@x.com')], count: 1 };
+  w.tables.Batches.push(started);
+  w.admin('set_batch_date', { contact_ids: [id('a@x.com')], start_on: '2026-11-30' });
+  assert.deepEqual(plain(w.tables.Batches.find(b => b.batch_id === 'bs').contact_ids), [id('a@x.com')], 'a started batch is history');
+});

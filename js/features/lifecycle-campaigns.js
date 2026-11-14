@@ -213,12 +213,45 @@ function cmpBatchPeople_(x) {
   const all = (LC.contacts && LC.contacts.contacts) || [], ids = new Set(x.contact_ids || []);
   return all.filter(c => ids.has(c.contact_id));
 }
+// Move one person out of a planned batch: to another planned day, a new day, or back to Needs review
+// (engine set_batch_date). Only people still waiting in Needs review can move.
+function cmpPersonMove_(x, c) {
+  if (x.status !== 'planned' || !lcCan_('edit_contacts') || c.review_status !== 'needs_review') return '';
+  const others = ((LC.contacts && LC.contacts.batches) || []).filter(y => y.status === 'planned' && y.group === x.group && y.batch_id !== x.batch_id && y.pick === 'now')
+    .sort((a, b) => String(a.start_on).localeCompare(b.start_on));
+  return '<select class="lc-input sm lc-pmove" data-cmp-pmove="' + lcEsc_(c.contact_id) + '" aria-label="Move ' + lcEsc_(cmpName_(c)) + '"><option value="">Move…</option>' +
+    others.map(y => '<option value="' + lcEsc_(y.start_on) + '">To ' + lcEsc_(batDayLabel_(y.start_on)) + ' (' + y.count + ')</option>').join('') +
+    '<option value="pick">To another day…</option><option value="out">Take out of batches</option></select>';
+}
+async function cmpMovePerson_(cid, value, sel) {
+  const c = ((LC.contacts && LC.contacts.contacts) || []).find(p => p.contact_id === cid);
+  if (!c || !value) return;
+  let to = value === 'out' ? '' : value;
+  const name = cmpName_(c);
+  if (value === 'pick') {
+    const r = await lcConfirm_({ title: 'Move ' + name + ' to another day', ok: 'Move',
+      html: '<p>Their first email goes out on the day you pick, with that day’s batch (one is made if there isn’t one).</p><label class="lc-fld"><span>Day</span><input class="lc-input" type="date" min="' + batToday_() + '" data-pmove-day></label>',
+      run: layer => { const d = layer.querySelector('[data-pmove-day]').value; return d ? lcAdmin_('set_batch_date', { contact_ids: [cid], start_on: d }) : { ok: false, error: 'Pick a day' }; } });
+    if (!r || !r.ok) { if (sel) sel.value = ''; return; }
+    lcToast_(name + ' now starts ' + batDayLabel_(r.start_on) + '.');
+    return cmpAfterPersonMove_();
+  }
+  const r = await lcConfirm_({ title: to ? 'Move ' + name + ' to ' + batDayLabel_(to) + '?' : 'Take ' + name + ' out of the batches?', ok: to ? 'Move' : 'Take out',
+    body: to ? 'Their first email goes out on ' + cmpLong_(to) + ' with that day’s batch.' : 'They go back to Needs review with no start day. Nobody is emailed by this; add them to a batch any time.',
+    run: () => lcAdmin_('set_batch_date', { contact_ids: [cid], start_on: to }) });
+  if (!r || !r.ok) { if (sel) sel.value = ''; return; }
+  lcToast_(to ? name + ' now starts ' + batDayLabel_(to) + '.' : name + ' is back in Needs review.');
+  cmpAfterPersonMove_();
+}
+function cmpAfterPersonMove_() { LC.contacts = null; lcLoadContacts_(true); cmpAfterChange_(); }
+
 // Who's in it (planned batches with chosen people).
 function cmpBatchWho_(x, dark) {
   const people = cmpBatchPeople_(x);
   if (!people.length) return '';
   return '<details class="lc-btl-who' + (dark ? ' dark' : '') + '"><summary>See who (' + people.length + ')</summary><ul>' +
-    people.sort((a, c) => cmpName_(a).localeCompare(cmpName_(c))).map(c => '<li><b>' + lcEsc_(cmpName_(c)) + '</b><span>' + lcEsc_([c.email, c.area].filter(Boolean).join(' · ')) + '</span></li>').join('') +
+    people.sort((a, c) => cmpName_(a).localeCompare(cmpName_(c))).map(c => '<li><div class="who"><b>' + lcEsc_(cmpName_(c)) + '</b><span>' + lcEsc_([c.email, c.area].filter(Boolean).join(' · ')) + '</span></div>' +
+      cmpPersonMove_(x, c) + '</li>').join('') +
     '</ul></details>';
 }
 
@@ -395,7 +428,10 @@ function cmpBind_(root) {
   root.addEventListener('dragover', e => { const d = e.target.closest('[data-drop]'); if (d && !d.disabled) { e.preventDefault(); d.classList.add('over'); } });
   root.addEventListener('dragleave', e => { const d = e.target.closest('[data-drop]'); if (d) d.classList.remove('over'); });
   root.addEventListener('drop', e => { const d = e.target.closest('[data-drop]'); if (!d || d.disabled) return; e.preventDefault(); d.classList.remove('over'); cmpMoveBatch_(e.dataTransfer.getData('text/plain'), d.dataset.drop); });
-  root.addEventListener('change', e => { if (e.target.matches('[data-cmp-move]')) cmpMoveBatch_(e.target.dataset.cmpMove, e.target.value); });
+  root.addEventListener('change', e => {
+    if (e.target.matches('[data-cmp-move]')) cmpMoveBatch_(e.target.dataset.cmpMove, e.target.value);
+    else if (e.target.matches('[data-cmp-pmove]')) cmpMovePerson_(e.target.dataset.cmpPmove, e.target.value, e.target);
+  });
 }
 
 // Quarter hours from 6:00 AM to 8:00 PM (the engine accepts the same; Schedule.js).
