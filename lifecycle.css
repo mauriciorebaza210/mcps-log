@@ -355,10 +355,10 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-cmp-title h2{font-family:var(--f-head);font-weight:700;font-size:20px;color:var(--teal);margin:0;white-space:nowrap}
 .lc-cmp-acts{display:flex;align-items:center;gap:10px}
 
-.lc-pipe{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin-bottom:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.lc-pipe{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:0;margin-bottom:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
 .lc-pipe button{position:relative;border:0;background:none;text-align:left;padding:14px 18px 14px 22px;border-left:1px solid var(--line);min-width:0}
 .lc-pipe button:first-child{border-left:0;padding-left:18px}
-.lc-pipe button:not(.end):not(:nth-child(3))::after{content:"";position:absolute;right:-7px;top:50%;width:12px;height:12px;border-top:1px solid var(--line);border-right:1px solid var(--line);background:inherit;transform:translateY(-50%) rotate(45deg);z-index:1;background:var(--card)}
+.lc-pipe button.flow::after{content:"";position:absolute;right:-7px;top:50%;width:12px;height:12px;border-top:1px solid var(--line);border-right:1px solid var(--line);background:inherit;transform:translateY(-50%) rotate(45deg);z-index:1;background:var(--card)}
 .lc-pipe button:hover{background:#FAFCFC}
 .lc-pipe button.on{background:var(--aqua-bg)}
 .lc-pipe button.on::after{background:var(--aqua-bg)!important}
@@ -367,6 +367,34 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-pipe span{display:block;font-weight:700;font-size:13px;color:var(--ink);margin-top:2px}
 .lc-pipe small{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lc-pipe button.end b{color:var(--ink-2)}
+
+/* The whole list in four numbers, over a bar of where everyone is (same colours as the stages). */
+.lc-sum{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));margin-bottom:12px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.lc-sum button{position:relative;border:0;border-left:1px solid var(--line);background:none;text-align:left;padding:16px 20px 18px;min-width:0}
+.lc-sum button:first-child{border-left:0}
+.lc-sum button:hover{background:#FAFCFC}
+.lc-sum button.on{background:var(--aqua-bg)}
+.lc-sum button.on::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--aqua)}
+.lc-sum b{display:block;font-family:var(--f-head);font-weight:700;font-size:30px;line-height:1;color:var(--teal);font-variant-numeric:tabular-nums}
+.lc-sum span{display:block;font-weight:700;font-size:13.5px;color:var(--ink);margin-top:6px}
+.lc-sum small{display:block;font-size:12px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-sum-bar{grid-column:1/-1;display:flex;height:6px;background:var(--gray)}
+.lc-sum-bar i{display:block;height:100%;min-width:3px}
+.lc-sum-bar i + i{box-shadow:inset 2px 0 0 var(--card)}
+.lc-sum-bar .s-waiting{background:#C9D3D4}.lc-sum-bar .s-lined{background:var(--aqua-2)}.lc-sum-bar .s-hold{background:#E3B25C}
+.lc-sum-bar .s-active{background:var(--aqua)}.lc-sum-bar .s-finished{background:var(--teal)}.lc-sum-bar .s-stopped{background:#D9837A}
+.lc-sum-acts{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+.lc-card-h:has(.lc-sum-acts){justify-content:flex-start}
+.lc-sofar{font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+.lc-sofar b{font-variant-numeric:tabular-nums;color:var(--ink)}
+/* Under the answer row, the pipeline is the breakdown: same stages, smaller type. */
+.lc-sum + .lc-pipe button{padding:10px 16px 10px 20px}
+.lc-sum + .lc-pipe button:first-child{padding-left:16px}
+.lc-sum + .lc-pipe b{font-size:18px}
+.lc-sum + .lc-pipe span{font-size:12.5px}
+.lc-sum + .lc-pipe small{font-size:11px}
+@media (max-width:600px){.lc-sum button{padding:12px 12px 14px}.lc-sum b{font-size:22px}.lc-sum span{font-size:12px;margin-top:4px}.lc-sum small{display:none}}
+@media (max-width:600px){.lc-sum button{padding:12px 14px 14px}.lc-sum b{font-size:24px}.lc-sum small{white-space:normal}}
 
 .lc-cmp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px;align-items:start}
 .lc-cmp-cols .lc-card + .lc-card{margin-top:0}
@@ -566,12 +594,11 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-crm-strip .main{flex:1;min-width:0;font-size:13.5px}
 .lc-crm-strip .main small{display:block;color:var(--muted);font-size:12px}
 .lc-wiz-stat span small,.lc-seg button small{opacity:.7;font-weight:600}
-.lc-pipe.four{grid-template-columns:repeat(4,minmax(0,1fr))}
 .lc-wiz-links{margin-left:auto;display:inline-flex;gap:14px}
 .lc-wiz-links .lc-link{font-size:13px}
 .lc-wiz-links .lc-link{margin-left:0}
 .lc-cmp-mini.four{grid-template-columns:repeat(4,minmax(0,1fr))}
-@media (max-width:600px){.lc-cmp-mini.four div:nth-child(n+4){display:none}.lc-pipe.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.lc-cmp-mini.four div:nth-child(n+4){display:none}}
 .lc-crm-auto{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--aqua-bg);border-radius:12px;padding:14px 16px}
 .lc-crm-auto .main{flex:1;min-width:220px}
 .lc-crm-auto b{display:block;font-family:var(--f-head);font-size:15px;color:var(--teal)}
@@ -914,3 +941,8 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-btl-who.dark .who span{color:#CFE7E7}
 .lc-pmove{height:28px;font-size:12px;padding:0 6px;max-width:170px;flex:none}
 
+
+.lc-older summary{cursor:pointer;padding:10px 18px;font-size:12.5px;font-weight:600;color:var(--muted);border-top:1px solid var(--line)}
+.lc-older summary:hover{color:var(--teal)}
+.lc-older .lc-list{opacity:.7}
+@media (max-width:900px){.lc-pipe[style*="--n:4"]{grid-template-columns:repeat(2,minmax(0,1fr))}.lc-pipe[style*="--n:4"] button:nth-child(3){border-left:0}.lc-pipe[style*="--n:4"] button:nth-child(4){border-left:1px solid var(--line)}}

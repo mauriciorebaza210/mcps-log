@@ -373,9 +373,11 @@ function lcActivity_() {
         '</td><td class="r num">' + r.sent + '</td><td class="r num hide-sm">' + r.skipped + '</td><td>' +
         (r.stopped_reason === 'done' ? lcTag_('Completed', 'live') : /^crashed/.test(r.stopped_reason) ? lcTag_('Crashed', 'bad') : lcTag_(LC_RESULT[r.stopped_reason] || r.stopped_reason, 'warn')) +
         '</td></tr>').join('') + '</tbody></table>' : '<div class="lc-empty">No runs yet.</div>';
-  const alerts = ov.alerts.length ? '<ul class="lc-list">' + ov.alerts.slice(0, 8).map(a => '<li><div class="main"><b>' + lcEsc_(LC_ALERT[a.kind] || a.kind) +
-      '</b>' + (a.detail ? '<small>' + lcEsc_(lcHumanize_(a.detail)) + '</small>' : '') + '</div>' + lcAgoT_(a.at) + '</li>').join('') + '</ul>'
-    : '<div class="lc-empty">No alerts.</div>';
+  // Alerts stay in the sheet for good; only the last 7 days are news (older ones fold away).
+  const weekAgo = Date.now() - 7 * 86400000, recent = ov.alerts.filter(a => Date.parse(String(a.at).slice(0, 24)) >= weekAgo), older = ov.alerts.length - recent.length;
+  const alertLi = a => '<li><div class="main"><b>' + lcEsc_(LC_ALERT[a.kind] || a.kind) + '</b>' + (a.detail ? '<small>' + lcEsc_(lcHumanize_(a.detail)) + '</small>' : '') + '</div>' + lcAgoT_(a.at) + '</li>';
+  const alerts = (recent.length ? '<ul class="lc-list">' + recent.slice(0, 8).map(alertLi).join('') + '</ul>' : '<div class="lc-empty">No alerts in the last 7 days.</div>') +
+    (older ? '<details class="lc-older"><summary>' + older + ' older ' + (older === 1 ? 'alert' : 'alerts') + '</summary><ul class="lc-list">' + ov.alerts.filter(a => !recent.includes(a)).slice(0, 8).map(alertLi).join('') + '</ul></details>' : '');
   return (typeof wtBanner_ === 'function' ? wtBanner_() : '') + '<div class="lc-grid"><div><div class="lc-card"><div class="lc-card-h"><h3>Health</h3></div>' + issues + ctrls + '</div>' +
     '<div class="lc-card"><div class="lc-card-h"><h3>Needs a decision</h3><small>' + ov.attention.length + '</small></div>' + att + '</div>' +
     (changes ? '<div class="lc-card"><div class="lc-card-h"><h3>Changes</h3></div>' + changes + '</div>' : '') + '</div>' +

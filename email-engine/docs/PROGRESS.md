@@ -22,6 +22,10 @@ _Handoff written 2026-11-14 for a fresh chat (`/email-engine`). Read this sectio
 ### MCP Intro sender
 - Intro **From: Mission Custom Pools <info@missioncustompools.com>**, replies to Tony. Linked in Tony's Gmail (Send mail as; Workspace admin setting "Allow per-user outbound gateways" turned ON by Mau 2026-11-12). Engine status `send_as_linked: 1`. **Mau hasn't confirmed the test email yet** (From + Reply-To on his phone).
 
+### 2026-11-16: Tony's change request (list count) + stale alert
+- **Reply scan is fine.** The "Reply scan failed · Threads missing" alert is from 2026-11-09 (before go-live); `Threads` was created on first use and every daily scan since succeeded (7 threads, no errors; checked from an xlsx export of the engine sheet). Activity → Alerts now shows the last 7 days and folds older ones away.
+- **Tony's ask (Request a change, Nov 14): "a total count of the CRM for MCP Legacy… how many are getting the messages and who is still in the campaign."** Cause: the campaign pipeline left out the 37 *awaiting approval* (emailed by hand) and the 13 *flagged*, and counted "picked on the day" batch seats as people, so stages never added up to his list. Built (portal only, no engine change): MCP Legacy page opens on an answer row (**On the list · Emailed so far · Still in the campaign**, over a stage-coloured bar), pipeline gains **Needs your OK** and folds flagged into **Out**, every stage counts people only (they add up to the list), table opens on **Everyone on the list** with *Where they are* + *Emails so far* (by hand + by the engine). Campaign card shows the same four numbers. Real data: 164 · 46 emailed (9 bounced) · 151 still in · 13 out. Not pushed to `main` yet (Mau's go).
+
 ### First thing in the new chat
 1. (Shipped 2026-11-16.) Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
 3. Then, when Mau decides: Intro test email check → turn on the Intro → batches start on their dates; approve the 14 overdue; turn on + approve Follow Up, then approve the 25.
