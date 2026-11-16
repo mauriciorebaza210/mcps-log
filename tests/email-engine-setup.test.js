@@ -151,3 +151,22 @@ test('Welcome at approval sends right away, at any hour (it replaces the portalâ
     enrollments: [Object.assign({}, en, { enrolled_on: '2026-10-28' })], deliveries: [], holds: {}, signals: [], suppressions: [], paused: {} }).deliveries.find(x => x.step_id === 'c_progress');
   assert.equal(p.reason, 'later_today');
 });
+
+test('New merge fields reach a live Fields tab by themselves: missing rows added, edited rows untouched, then a no-op', () => {
+  const ctx = { JSON, Object, Array, String };
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'email-engine', 'src', 'Seed.js'), 'utf8') + '\n' +
+    fs.readFileSync(path.join(__dirname, '..', 'email-engine', 'src', 'Setup.js'), 'utf8'), ctx);
+  const rows = [{ field: 'FirstName', source: 'contact', key: 'first_name', fallback: 'friend' }];
+  let writes = 0;
+  const store = { get: (t, id) => rows.find(r => r.field === id) || null, upsert: (t, r) => { writes++; rows.push(r); } };
+  const p = {}; const props = { getProperty: k => p[k] || null, setProperty: (k, v) => { p[k] = v; } };
+  const added = ctx.EE_seedMissingFields_(store, props);
+  assert.ok(added.includes('Technician'));
+  assert.ok(!added.includes('FirstName'));
+  assert.equal(rows.find(r => r.field === 'FirstName').fallback, 'friend', 'an edited row is never overwritten');
+  assert.equal(rows.find(r => r.field === 'Technician').fallback, 'our technician');
+  const before = writes;
+  assert.deepEqual(Array.from(ctx.EE_seedMissingFields_(store, props)), []);
+  assert.equal(writes, before, 'current: nothing written');
+});

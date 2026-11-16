@@ -186,6 +186,8 @@ function EE_requestsTrigger() {
   try {
     try { EE_publishDictionary_(); } catch (e) { stamp('EE_REQ_DICT_ERROR', String(e && e.message || e).slice(0, 200)); }
     var x = EE_core_();
+    // New merge fields and the ChatGPT instructions follow a deploy without a maintenance run (Setup.js).
+    try { EE_seedMissingFields_(x.env.store, props); EE_refreshGuide_(props); } catch (e) { stamp('EE_REQ_SEED_ERROR', String(e && e.message || e).slice(0, 200)); }
     var out = EE_processRequests_(x.env, x.core, EE_requestsSheet_(), { scheduleRun: EE_scheduleRunNow_, planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); } });
     stamp('EE_REQ_LAST_RESULT', 'ok ' + new Date().toISOString());
     return out;

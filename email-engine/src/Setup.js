@@ -239,7 +239,19 @@ function EE_exampleFullTemplate_() {
 
 // The ChatGPT instructions in Drive follow this file: when the text changes, bump the version and the next
 // Templates list (Templates.js) rewrites the Drive copy. No maintenance run needed.
-var EE_CHATGPT_GUIDE_VERSION = '2026-11-16';
+var EE_CHATGPT_GUIDE_VERSION = '2026-11-16b';
+
+// Merge fields added to seed/fields.json after setup reach the live Fields tab by themselves:
+// missing rows are added (existing ones are never changed). Keyed on the seed's fingerprint,
+// so once it's current this is one Script Property read. Called from the 15-minute requests pass.
+function EE_seedMissingFields_(store, props) {
+  var key = JSON.stringify(EE_SEED.fields);
+  if (props.getProperty('EE_FIELDS_SEED') === key) return [];
+  var added = [];
+  EE_SEED.fields.forEach(function (f) { if (!store.get('Fields', f.field)) { store.upsert('Fields', f); added.push(f.field); } });
+  props.setProperty('EE_FIELDS_SEED', key);
+  return added;
+}
 function EE_refreshGuide_(props) {
   if (typeof DriveApp === 'undefined' || props.getProperty('EE_GUIDE_VERSION') === EE_CHATGPT_GUIDE_VERSION) return false;
   var rootId = props.getProperty('EE_FOLDER_MARKETING'); if (!rootId) return false;
