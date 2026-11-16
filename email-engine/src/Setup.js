@@ -239,7 +239,7 @@ function EE_exampleFullTemplate_() {
 
 // The ChatGPT instructions in Drive follow this file: when the text changes, bump the version and the next
 // Templates list (Templates.js) rewrites the Drive copy. No maintenance run needed.
-var EE_CHATGPT_GUIDE_VERSION = '2026-11-11b';
+var EE_CHATGPT_GUIDE_VERSION = '2026-11-16';
 function EE_refreshGuide_(props) {
   if (typeof DriveApp === 'undefined' || props.getProperty('EE_GUIDE_VERSION') === EE_CHATGPT_GUIDE_VERSION) return false;
   var rootId = props.getProperty('EE_FOLDER_MARKETING'); if (!rootId) return false;
@@ -255,6 +255,8 @@ var EE_CHATGPT_GUIDE = [
   '  "Read START HERE - ChatGPT instructions in my MCPS Marketing folder and write the MCP Legacy follow-up email."',
   'ChatGPT follows the rules below and can use the Example file in Email Templates > MCP Legacy > 1 - MCP x MCPS Intro.',
   '(If it can\'t open Drive, attach this file and the example to the chat instead.)',
+  'This file is about writing email templates. For the engine\'s data (contacts, batches, who got which email, changes),',
+  'read "Email Engine Dictionary - ChatGPT" in this same folder.',
   '',
   'When an email is ready: download the .html file and drop it into that email\'s own folder, e.g.',
   'Email Templates > MCP Legacy > 2 - MCPS Follow Up. A folder can hold several versions; in the portal you pick',

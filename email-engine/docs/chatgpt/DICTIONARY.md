@@ -1,0 +1,879 @@
+# MCPS Email Engine — Dictionary for ChatGPT
+
+Version: 1 (2026-11-16)
+
+This is the reference for the Google Sheets behind the MCPS Lifecycle Email Engine: the system that sends Mission Custom Pool Solutions' automatic email series (the **MCP Legacy** and **MCP Startup** campaigns) from Tony's Gmail. It explains what every tab and column holds, how the engine decides who gets which email and when, and how to answer common questions from the data.
+
+---
+
+## For ChatGPT: read this first
+
+1. **Read this whole document before answering anything about the email engine.** Several answers need two or three tabs read together (for example, future emails are not stored anywhere as rows; they are worked out from the rules, see "When does X get the next email?").
+2. **Never type into the engine's sheets.** Every tab in the engine spreadsheet and the Journal spreadsheet is written by the engine, and every column below is marked 🚫. Direct edits can be overwritten or can make the engine pause itself (see "Where the data lives").
+3. **To change something, add a request to the `ChatGPT_Requests` tab** of the engine spreadsheet, as described in the next section. The engine checks it, applies it, and writes the result next to it.
+4. **Find columns by their header name, never by position.** Read row 1 first. New columns are added at the right end over time.
+5. **Times:** the engine works in Central time (America/Chicago). Columns ending in `_at` hold a UTC timestamp such as `2026-11-16T15:02:11.512Z`; convert it to Central time before telling Tony a date or time (subtract 6 hours in winter/CST, 5 hours in summer/CDT). Columns ending in `_on`, plus `start_on`, `startup_date`, `planned_start` and `date`, hold a Central calendar date `YYYY-MM-DD`. Send times are `HH:MM`, 24-hour, Central.
+6. **Lists inside a cell** are JSON (for example `["ct_1a2b…","ct_3c4d…"]` or `{"area":["Boerne"]}`) unless a column says "comma-separated".
+7. **Personal details:** `email_norm`, names, phones, addresses and reply snippets are customer data. Use them to answer Tony; don't paste whole tabs.
+8. **Some changes can only be made in the portal** (mcps-log.vercel.app → **Lifecycle Email**, which has four tabs: **Campaigns · Emails · Activity · Contacts**). Point Tony there for these:
+
+| To do this | Where in the portal |
+|---|---|
+| Turn an email On or Off, change its timing, or choose which signals stop it | Emails → click the email → **Setup** → Edit |
+| Change who an email comes from (e.g. info@) | Emails → click the email → **Setup** → From → Change |
+| Change the inbox name or the sign-off name used on all emails | Emails → **From** → Change |
+| Write or edit an email, approve or discard a draft template | Emails → click the email → **Templates** |
+| Add, approve or retire a PDF attachment | Emails → **Attachments** |
+| Approve people who are waiting (hand-sent Intro, overdue start) or clear a flag | The **Waiting for your approval** card (Activity and Contacts tabs) |
+| Start a batch, cancel a batch, move a batch, set a campaign's send time, skip or move one planned email | Campaigns → the campaign (list or calendar) |
+| Create, change or cancel a single email | Campaigns → Single emails → **New single email** |
+| Import contacts, edit a contact, tags, clean up names and duplicates | Contacts (Import, the person's drawer, Clean up) |
+| Turn all sending on/off, pause or resume one campaign, send due emails now | Activity → **Health** |
+| Decide what to do about an email whose send couldn't be confirmed | Activity → **Needs a decision** (Mark sent / Resend / Don't send) |
+| Lift someone's opt-out | The portal's Comms page (Opt-outs). Bounce opt-outs can't be lifted |
+
+Who may do what in the portal depends on the person's roles in the `Permissions` tab (see that tab).
+
+## Making changes: the ChatGPT_Requests tab
+
+This is the only tab in the engine spreadsheet to type into. Add one row per change. Within 15 minutes the engine applies each new row through the same actions the portal uses, then fills in `status`, `result` and `done_at` on that row. Every applied request is also written to the `ChangeLog` tab with the actor `chatgpt`.
+
+**How to add a request**
+1. Open the engine spreadsheet, tab `ChatGPT_Requests` (the engine creates it the first time it runs a requests pass).
+2. Add a new row at the bottom. Fill `action`, `contact`, and `field` / `value` when the action needs them. `note` and `added_at` are optional (a short reason and today's date help later).
+3. Leave `status`, `result` and `done_at` empty. A row whose `status` is filled is never run again.
+4. Come back after 15 minutes and read `status` and `result`. To retry a refused request, add a new row; don't edit the old one.
+
+Rules:
+- `contact` is the person's email address (main or alternate) or their `contact_id`. A merged contact is followed to the contact it was merged into.
+- One change per row. For several people, add several rows (up to 40 are applied per pass; the rest go on the next pass).
+- Dates are `YYYY-MM-DD`.
+- Never edit or delete rows the engine has already filled; they are the record of what was done.
+
+### ChatGPT_Requests
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `action` | What to do | One of the actions in the table below | ✅ |
+| `contact` | Who it is for | Email address or `contact_id` | ✅ |
+| `field` | Which detail to change (only for `update_contact`) | `first_name`, `last_name`, `phone`, `address`, `city`, `zip`, `area`, `email` | ✅ |
+| `value` | The new value, tags, reason or date (depends on the action) | Text | ✅ |
+| `note` | Why (for people reading later; the engine ignores it) | Text | ✅ |
+| `added_at` | When the request was added (optional; the engine ignores it) | `YYYY-MM-DD` or date-time | ✅ |
+| `status` | Filled by the engine | `done` (applied), `refused` (not applied; see result), `error` (something failed; add the row again later) | 🚫 |
+| `result` | Filled by the engine: what was done, or why not | Plain sentence | 🚫 |
+| `done_at` | Filled by the engine: when the row was handled | ISO date-time | 🚫 |
+
+**Actions**
+
+| `action` | `field` | `value` | What happens | Refused when |
+|---|---|---|---|---|
+| `update_contact` | `first_name`, `last_name`, `phone`, `address`, `city`, `zip`, `area` or `email` | The new value | The contact's detail is changed. Changing `email` keeps the old address in `alt_emails`. | The field isn't one of these; the value is the same; the new email is invalid or belongs to another contact |
+| `add_tags` | — | Tags, comma-separated (e.g. `vip, spa`) | Tags are added (lower case) | The contact already has all of them |
+| `remove_tags` | — | Tags, comma-separated | Those tags are removed | The contact has none of them |
+| `opt_out` | — | Blank or `all` (every email), or `marketing` (marketing emails only) | The address is added to the opt-out list (`Comms_Optouts`), the same as clicking Unsubscribe. It works for any address, even one that isn't a contact. | `contact` isn't an email address or a known contact |
+| `stop_emails` | — | — | The person's running sequence stops (`stop_reason` = `stopped_by_request`). They stay on the list. | Nothing is running for them (someone waiting can be held back with `flag` instead) |
+| `flag` | — | The reason (required) | A person who is waiting (`needs_review` or `awaiting_approval`) becomes `flagged` with that reason. If they were in a planned batch they are taken out of it. Flagged people are never started by a batch or an approval. | No reason; they are not waiting (already in a sequence, finished, merged…); already flagged |
+| `unflag` | — | — | The flag is cleared: they wait again in Needs review, or awaiting approval if their Intro was already sent by hand. | They are not flagged |
+| `move_to_batch` | — | The batch day, `YYYY-MM-DD` (today or later) | The person joins their campaign's planned batch on that day (a new batch is made if there is none). They leave the batch they were in; a batch left empty is cancelled. | They aren't waiting in Needs review (e.g. flagged or awaiting approval); the date is in the past; that day's batch would pass 500 people |
+| `remove_from_batch` | — | — | The person leaves their planned batch and waits in Needs review with no date. | They aren't waiting in Needs review |
+
+**Done only in the portal** (not by request): approving people who wait for approval, approving or changing email templates and attachments, turning emails on or off, send times, settings, starting or creating batches by filters, sending, and adding new contacts (Contacts → Import, which also checks for duplicates). When Tony asks for one of these, tell him where to do it in the portal instead of adding a request.
+
+---
+
+## Where the data lives
+
+| File | What it holds | Where |
+|---|---|---|
+| **Engine spreadsheet** ("MCPS Email Engine") | Every tab described in "Tabs and columns" below, except Journal, Comms_Optouts and Comms_Log. Owned by Tony. | https://docs.google.com/spreadsheets/d/1mR0Y0dlJLgqh3Zbyg9bQ45S9JtZXWx7pzOSoEh6sNSk/edit |
+| **Journal spreadsheet** ("MCPS Email Engine Journal") | One tab, `Journal`: the permanent, numbered record of every change to contacts, enrollments, deliveries, email versions and stop requests. | A separate file in Tony's Drive |
+| **Settings spreadsheet** ("Chem Log", the portal's main workbook) | `Comms_Optouts` (the shared opt-out list, used by the portal's own email campaigns too) and `Comms_Log` (the portal's campaign send log). The engine reads both and adds rows to `Comms_Optouts`. | https://docs.google.com/spreadsheets/d/1WdmY9qUqlvA7Xswmf8K8n0FYP02FKEBxM7Zd_V5Er_U/edit |
+
+**Drive folders (Tony's Drive):**
+- **MCPS Marketing** → **Email Templates** → **MCP Legacy** / **MCP Startup** (one folder per email, e.g. `MCP Legacy/2 - MCPS Follow Up`), plus **Shared blocks**. Template files (`.html`) dropped here show up in the portal under Emails → the email → Templates. Also in MCPS Marketing: **Email Attachments** (drop PDFs here for the Attachment Library) and **START HERE - ChatGPT instructions.txt** (rules for writing email templates).
+- **MCPS Email Engine** → **Drafts** (copies of templates being worked on), **Revisions** (frozen copies of approved emails; never edit these), **Attachments** (frozen copies of approved PDFs), **Backups** (a nightly copy of the engine spreadsheet and the Journal, newest 30 kept).
+
+**Why direct edits are unsafe.** The Journal is the authoritative record: every change to a contact, enrollment, delivery, email version or stop request is written there first, numbered and chained with a fingerprint, and the tabs in the engine spreadsheet are its saved copy. When the engine saves a record it rewrites the whole row from its own copy, so a value typed into a cell can be silently replaced on the next save. Typing into the Journal, or into the bookkeeping cells (`last_seq`, `Meta`), breaks that chain; the engine then switches on its safety pause and stops sending until someone repairs it. Other tabs (Batches, Config, Holds, Overrides, …) are also rewritten whole by the engine. That is why every change goes through `ChatGPT_Requests` or the portal.
+
+---
+
+## How the engine works
+
+### The two campaigns
+
+Only two campaigns are active: **MCP Legacy** (group/bucket `B`) and **MCP Startup** (group/bucket `C`). The engine also sends **single emails** (one email, one day, to a chosen list; see below). Each campaign is a sequence of emails ("steps"). The current timing and On/Off state of each email live in the `Rulesets` tab: the row whose `rule_rev` equals the `Config` value `rule_rev` holds the current rules as JSON (`steps` list: `step_id`, `name`, `status`, `anchor`, `offset`, …).
+
+An email only goes out when **both** (a) its step `status` is `active` (shown as **On** in the portal) and (b) it has an approved version: a row in `Revisions` with that `step_id` and `status` = `published`. An email that is On but has no published version is counted as "not approved" and sends nothing.
+
+**MCP Legacy (B)** — past customers of Mission Custom Pools (the builder) being introduced to MCPS. All three emails are marketing emails. People start when a **batch** starts them.
+
+| Email (name) | `step_id` | Who gets it | When (as first set up) | What stops it |
+|---|---|---|---|---|
+| MCP x MCPS Intro | `b_intro` | Contacts in sub-bucket `B1` (not yet introduced) | The day their batch starts (offset 0 from `enrolled_on`). Can be sent up to 7 days late (window), plus up to 2 extra days if held | A reply, a verified click, or a service-request form from any MCP Legacy email stops the person's whole MCP Legacy series |
+| MCPS Follow Up | `b_followup` | Sub-bucket `B2` | 4 days after the Intro was actually sent. Window 7 days, hold up to 2 | Same |
+| Personal Check-In | `b_checkin` | Sub-bucket `B2` | 9 days after the Follow Up was actually sent. Window 7 days, hold up to 2 | Same |
+
+When the Intro is sent, the engine moves the contact from `B1` to `B2`. "Previous" timing counts from the actual send date, so a late Intro moves the Follow Up and Check-In later too.
+
+**MCP Startup (C)** — owners of brand-new pools whose startup MCPS does. People join automatically from the portal: when a pool startup is approved and scheduled, the portal syncs it to the engine as a confirmed contact with its `startup_date` (and removes it again if the startup is cancelled or lost).
+
+| Email (name) | `step_id` | Type | When (as first set up) | What stops it |
+|---|---|---|---|---|
+| Welcome Email | `c_welcome` | service | Either **when the startup is approved** (anchor `enrollment`: sent on the first run after the person joins, at any hour, without waiting for the send time) or **N days before the startup** (first set up as 3 days before). Read its `anchor` in the current ruleset to know which. In both cases it must go out no later than 1 day before the startup (`hard_deadline`); after that it expires. Window 2 days, hold up to 1 | Nothing except opt-out-all / bounce |
+| Startup Progress (×4) | `c_progress` | service | 7, 14, 21 and 28 days after the startup (`repeat_every` 7, `repeat_count` 4). Each must go out before the next one is due. Window 3, hold up to 2 | Nothing except opt-out-all / bounce |
+| Maintenance Invitation | `c_maint` | marketing | 21 days after the startup. Window 5, hold up to 2 | A verified click or a service-request form stops the **marketing branch** (no more marketing C emails); service emails still go. A marketing-only opt-out blocks it |
+| Final Transition | `c_final` | service | 28 days after the startup. Window 5, hold up to 2 | Nothing except opt-out-all / bounce |
+
+A reply to an MCP Startup email stops nothing; it is recorded in `Engagement`. Because only one engine email goes to a person per day, Progress #3 and the Maintenance Invitation (both day 21) go on consecutive days (Progress first), and so do Progress #4 and Final Transition (day 28).
+
+The timings above are the original setup. Anyone with the right role can change timing, stop signals or On/Off from the portal (Emails → Setup); each change creates a new ruleset revision (`bc-2`, `bc-3`, …) and `Config` `rule_rev` points to it. Always read the current ruleset rather than assuming these numbers.
+
+**Single emails.** Created in Campaigns → Single emails: one marketing email on one day, at one send time, to a list of confirmed people. Each one adds a sequence with id `S` + 6 hex characters (e.g. `S3F9A1C`) and one step `s_` + the same 6 characters in lower case, with `anchor` `date` and its `date`. Its window grows with the list size so the daily cap can spread it over several days. Cancelling one turns its step Off and stops everyone still waiting (`stop_reason` `cancelled`). Staff contacts (bucket `Z`) exist only to receive single emails.
+
+### A contact's life cycle (`review_status`)
+
+Every person is one row in `Contacts`. `review_status` says where they stand; `review_reason` says why in plain words.
+
+| `review_status` | Meaning | How someone gets here | How they leave |
+|---|---|---|---|
+| `needs_review` | Waiting. Nobody is emailed while here | A file import, an MCP lead added from the Sales Hub, a duplicate marked "not a duplicate", a flag cleared (no hand-sent Intro), someone removed earlier who is imported again, a re-entry the rules don't allow (e.g. `already_completed_sequence`) | A batch starts them (→ `confirmed`), or a person approves them when their planned start date has passed (→ `confirmed`) |
+| `awaiting_approval` | Imported after getting the MCP Legacy Intro by hand (`intro_sent_on` filled). They never get the Intro; they start at `start_step` (the Follow Up, or the Check-In when `followup_sent_on` is also filled) | Import with a hand-sent Intro date | A person approves them (→ `confirmed`). Approval is refused while the email they would start at is Off |
+| `flagged` | Held out of batches and approvals, with a reason (`flag_reason`, e.g. bounced, do not contact) | Import with a hold reason, or a `flag` request in `ChatGPT_Requests` | A person clears the flag in the portal, or an `unflag` request (→ `needs_review`, or `awaiting_approval` if they had a hand-sent Intro) |
+| `possible_duplicate` | Might be the same person as another contact (`duplicate_of`). Never batched | Import or lead sync that matched someone similar | Resolved in Contacts → Clean up: "keep both" → `needs_review`; or removed / merged |
+| `confirmed` | Cleared to receive the campaign. The next run enrolls them (creates an `Enrollments` row) unless they already have a running one | A batch started them, a person approved them, a startup synced from the portal, a staff contact, or a restart from a batch | Stays `confirmed`; their progress is then in `Enrollments` |
+| `held` | An MCP Startup contact who joined before the engine went live (they had already received the portal's older approval email). Never enrolled | Go-live | — |
+| `removed` | No longer on the list (kept for history). A running series is stopped | Startup cancelled/lost (from the portal sync), duplicate removed, the one-time MCP Legacy reset | Imported again (→ `needs_review`), or the startup is back on the schedule (→ `confirmed`) |
+| `merged` | Folded into another contact (`merged_into`). Its emails became that contact's `alt_emails`; its running series stopped (`merged`) | Clean up → merge | — |
+
+Nobody receives an email without a person's explicit yes: imports and lead syncs only add people to `needs_review`; batches and approvals are what confirm them. **Test contacts** (`is_test` = `Y`) only receive emails while the engine is in test mode, and real contacts only in production mode.
+
+### Batches (MCP Legacy)
+
+A batch (`Batches` tab) starts a group of `needs_review` people on a date (`start_on`). Either the exact people are picked when the batch is made (`pick` = `now`, listed in `contact_ids`), or only a number is set and the engine picks that many on the day (`pick` = `at_start`; `order` `random` or `oldest`, optionally narrowed by `filters_json` area/tags/source). On its start date, at the start of the first run of the day, the engine confirms its people (`review_status` → `confirmed`, `send_time` copied from the batch) and the same run enrolls them; the Intro is then due that day at the batch's send time (or the campaign's default send time).
+
+Rules the engine applies:
+- **A batch waits while the campaign's first email is Off.** It stays `planned`, its `waiting` cell says `first_email_off:<email name>`, and it starts at the first run after that email is turned On (the same run, if its date has already passed).
+- Only people still in `needs_review` and in the batch's group are started. Anyone else is skipped and listed in `skipped_json` with the reason. People who already had a series are never started again unless the batch lists them in `restart_ids` (a deliberate restart).
+- A batch dated today starts immediately when it is created. A planned batch can be cancelled or moved to another day until it starts. People can be moved between planned batches; a batch left empty is cancelled.
+- `status`: `planned` (not started yet), `started`, `cancelled`.
+
+### Enrollments (one person's run through one campaign)
+
+When a confirmed contact is enrolled, the engine adds an `Enrollments` row: `enrollment_id` = `en_<contact_id>_<sequence_id>_<n>` (n = 1 for the first time, 2 for a restart), `enrolled_on` = that day. `status`:
+
+| `status` | Meaning |
+|---|---|
+| `active` | In the series; emails still to come |
+| `waiting_anchor` | MCP Startup without a startup date yet; nothing is planned until there is one |
+| `completed` | Every email in the series was sent, skipped, turned off, blocked or expired; nothing left to send |
+| `stopped` | Ended early; `stop_reason` says why and `stopped_on` when |
+
+`stop_reason` values: `replied`, `clicked` (verified click), `form_submitted` (service request), `suppressed_all` (opted out of everything or hard bounce), `prerequisite_expired` (an earlier email in the series expired, so the rest can't go; also flags `needs_review` on the enrollment), `startup_cancelled`, `merged`, `duplicate_removed`, `cancelled` (single email cancelled). A branch stop doesn't change `status`: `stopped_branches` = `["marketing"]` means no more marketing emails in that series.
+
+### Deliveries (one email to one person)
+
+A `Deliveries` row is created only when the engine actually starts sending an email; emails planned for the future are **not** rows yet. `delivery_id` (= `key`) is `<enrollment_id>:<step_id>:<occurrence>` (occurrence 1 to 4 for the weekly Progress emails, otherwise 1). Every email carries a reference `Ref dlv_…` (its `token`), which the engine uses to find it in Gmail.
+
+| `state` | Meaning |
+|---|---|
+| `claimed` | Picked to send; the token is saved before any Gmail draft exists |
+| `drafted` | A Gmail draft was created |
+| `sending` | Gmail was asked to send it |
+| `sent` | Gmail accepted it. `sent_at`, `message_id`, `thread_id` are filled. Final |
+| `reconcile` | The send call didn't return a clear answer; the engine is checking Tony's Sent folder (after 2 and 15 minutes) |
+| `unknown` | Not found in Sent after 15 minutes. Needs a person: Activity → Needs a decision (Mark sent / Resend / Don't send). Never re-sent automatically |
+| `failed` | The email couldn't be built (e.g. a required merge field was empty, the template or a PDF changed after approval, the sender address isn't linked in Gmail). `error` says why. An alert is raised; it is not retried by itself |
+| `cancelled` | The last safety check before sending said no (e.g. the person opted out or the series stopped in the meantime); the draft was deleted. `error` holds the reason. The engine plans it again if it is still due |
+| `released` | An earlier attempt was abandoned before it reached Gmail's send step (`error` `abandoned_claim`), or a person chose Resend on an `unknown` one (`resend_requested`). It is planned again |
+| `abandoned` | A person chose "Don't send" on an `unknown` one. Never sent |
+
+Anything that has reached `sending` is never sent again automatically. Each attempt increases `attempt`.
+
+### The daily schedule
+
+- **Send times.** Each campaign has a default send time: `Config` `send_time_B` / `send_time_C` (09:00 when empty). A batch can set its own time; its people keep it (`send_time` on the contact and enrollment). Times are on the quarter hour between 06:00 and 20:00 Central. A day's email waits until its time; the Welcome sent at approval doesn't wait.
+- **Runs.** Just after midnight Central the engine makes a nightly backup and plans the day's runs: one run per needed send time (campaign defaults, send times of running enrollments, and batches starting today), at most 12 a day. The plan is in `Config` `run_plan`. A run can also be started from the portal ("Send now"), and the engine queues one automatically right after a new startup syncs. Each run: (1) starts batches whose day has come, (2) scans Tony's mailbox for replies and bounces, (3) plans today's emails for everyone and sends what is due, in order. Each run is one row in `Runs`.
+- **Limits.** One engine email per person per day (others wait for the next day and are counted in `Holds`). A person who received a portal campaign email (Comms) today gets their engine email tomorrow instead. At most `Config` `daily_cap` engine emails per day in total (50 when empty). A run stops when Gmail's remaining daily send quota for the engine reaches `Config` `quota_reserve` (20 when empty), and after about 4.5 minutes of sending; the rest goes at the next run.
+- **Windows and expiry.** Each email may go out from its due day until its window closes (`window_days`, plus held days up to `max_hold_days`, and never after a `hard_deadline`). After that it is `expired` and never sent; in MCP Legacy, emails that depend on an expired one expire too.
+- **Test vs production.** `Config` `engine_mode` = `test` sends only to test contacts whose address is on the test allowlist; `production` sends only to real contacts.
+- **Pause switches.** `Config` `engine_enabled` = `false` stops all sending (Activity → Health → Sending). `Config` `paused_buckets` lists paused campaigns (e.g. `B`), each paused separately. The engine also has an automatic **safety pause** (shown in Activity → Health) that it switches on when its records look inconsistent; it then sends nothing until fixed. While sending is off, batches still start and the reply scan still runs.
+- **Per-send changes.** A person can skip one planned email, move it to another day inside its window, or send it at the next run (`Overrides` tab). A skipped or Off email lets the next one follow from the day it was due.
+
+### What stops emails
+
+| Event | Effect |
+|---|---|
+| **Unsubscribe link** (in every email) | The person is opted out of everything: a row is added to `Comms_Optouts` (scope `all`), every running series stops (`suppressed_all`), nothing more is sent |
+| **Hard bounce** (or a 3rd temporary failure on the same email) | Same as an unsubscribe (opt-out of everything) |
+| **Marketing-only opt-out** (`Comms_Optouts` scope `marketing_announcements`, e.g. from a portal campaign) | Marketing emails are blocked (all MCP Legacy emails, the Maintenance Invitation, single emails); service emails (Welcome, Progress, Final Transition) still go |
+| **Reply** to an MCP Legacy email (from the person, or from anyone else on that email thread) | Their MCP Legacy series stops (`replied`) |
+| **Verified click** on the email's main button (the service-request page confirms a real browser opened it) | MCP Legacy: series stops (`clicked`). Maintenance Invitation: marketing branch stops |
+| **Service-request form** submitted from an email link | MCP Legacy: series stops (`form_submitted`). Maintenance Invitation: marketing branch stops |
+| **Startup cancelled** in the portal | The MCP Startup contact is `removed` and its series stops (`startup_cancelled`) |
+| An email expires and later ones depend on it | Series stops (`prerequisite_expired`) |
+
+Opens never stop anything, and out-of-office/auto-replies never stop anything. Before every send the engine checks the opt-out list for the contact's main address (`email_norm`), the series status, the email's On/Off status and the pause switches; if any says no, the email is not sent.
+
+### Tracking (opens, clicks, replies)
+
+- **Opens** come from a tiny image in the email. Many are automatic (Apple Mail Privacy Protection, security scanners, very fast loads), so opens are graded `low` (probably automatic) or `medium`; an open is never certain. Treat opens as an estimate.
+- **Clicks** go through a tracked link. A click is `low` when it looks automatic (a scanner, no browser, several clicks within seconds, a click within 15 seconds of sending), otherwise `medium`. When the main button leads to the MCPS service-request page and that page confirms a real browser, the engine records a **verified click** (`high`, counted in `clicks_high`); only verified clicks stop a series.
+- **Replies and bounces** are found by a scan of Tony's mailbox at every run: threads of engine emails sent in the last 45 days, plus bounce notices from the last 7 days matched by the `Ref dlv_…` reference. Each new message is classed as `reply` (from the contact's address or one of their `alt_emails`), `reply_other` (someone else on the thread), `auto_reply`, or `bounce` (hard or soft). Messages from Tony or his linked addresses are ignored.
+- Raw observations are kept in the monthly `Events_YYYY_MM` tabs; the per-email summary is in `Engagement`.
+
+### Who sends
+
+Every email is sent through **Tony's Gmail** (the engine runs as Tony). The inbox name is `Config` `sender_display_name` and emails are signed with `Config` `sender_name`. An individual email can come from another address linked in Tony's Gmail ("Send mail as"); this is set per email in `Config` `step_senders` (for example, the MCP x MCPS Intro comes from info@missioncustompools.com as "Mission Custom Pools"). Replies to those emails still go to Tony. If that address isn't linked in Gmail at send time, the email fails with an alert instead of going out from Tony.
+
+### How ids are formed and how tabs link
+
+| Id | Format | Where it links |
+|---|---|---|
+| `contact_id` | `ct_` + the first 16 hex characters of a fingerprint of the email address (e.g. `ct_3f2a9c0b1d4e5f60`). Test/demo contacts use readable ids such as `test_mau_b` | Contacts ↔ Enrollments, Deliveries, Engagement, Events, Inbox, Batches (`contact_ids`) |
+| `enrollment_id` | `en_<contact_id>_<sequence_id>_<n>` | Enrollments ↔ Deliveries, Engagement, Events, Inbox, Overrides |
+| `delivery_id` / `key` | `<enrollment_id>:<step_id>:<occurrence>` | Deliveries ↔ Engagement, Events, Holds (`key`), Overrides (`key`) |
+| `step_id` | `b_intro`, `b_followup`, `b_checkin`, `c_welcome`, `c_progress`, `c_maint`, `c_final`, or `s_xxxxxx` for single emails | Rulesets JSON ↔ Revisions, Deliveries, Engagement, Overrides |
+| `sequence_id` | `B`, `C`, or `S` + 6 hex for single emails | Enrollments ↔ Rulesets JSON (`sequences`) |
+| `revision_id` | Approved: `rev_<step_id>_<n>`. Draft: `draft_<step_id>_<8 hex>` | Revisions ↔ Deliveries (which version was sent) |
+| `rule_rev` | `bc-1`, `bc-2`, … | Rulesets ↔ Enrollments, Config `rule_rev` |
+| `batch_id` | `bat_` + 12 hex | Batches ↔ Contacts (`restart_ok`, and `review_reason` "batch bat_…") |
+| `token` | `dlv_` + 32 hex | The `Ref dlv_…` printed in each email; Deliveries ↔ unsubscribe/bounce Inbox ids |
+| `run_id` | `run_` + a unique id (`crash_…` when a run failed) | Runs ↔ Deliveries |
+| `quote_id`, `pool_id` | The portal's ids (`pool_id` is `MCPS-####`) | Contacts ↔ the portal's CRM spreadsheet (`Quotes` and related tabs) |
+
+---
+
+## Tabs and columns
+
+All tabs below are in the engine spreadsheet unless stated otherwise. Every cell is plain text.
+
+### Contacts
+
+One row is one person (one email address). Written by the engine from imports, the portal's startup and lead syncs, contact edits in the portal, batches and approvals; every change is also recorded in the Journal. Links to everything else by `contact_id`, and to the portal's CRM by `quote_id` / `pool_id`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `contact_id` | The contact's id | `ct_` + 16 hex (see ids) | 🚫 |
+| `email_norm` | Main email address; emails go here and opt-outs are checked against it | lowercase email | 🚫 |
+| `alt_emails` | Other addresses for the same person (from merges, replaced emails, imports). Replies from these count as the person's | comma-separated lowercase emails | 🚫 |
+| `first_name` | First name used in greetings (`{{FirstName}}`; "there" when empty). For couples/families it holds the greeting form, e.g. "John and Mary", "Smith family" | text | 🚫 |
+| `last_name` | Last name | text | 🚫 |
+| `phone` | Phone | text, e.g. (210) 555-1234 | 🚫 |
+| `address` | Street address (startups: street and city) | text | 🚫 |
+| `city` | City | text | 🚫 |
+| `state` | State, from the import file | text | 🚫 |
+| `zip` | ZIP code | text | 🚫 |
+| `area` | Service area from the import or CRM; batches can filter on it (city is used when empty) | text | 🚫 |
+| `pool_build_year` | Year the pool was built, from the import or CRM | text, e.g. 2014 | 🚫 |
+| `language` | Not used at present | blank | 🚫 |
+| `bucket` | Which campaign/list the person belongs to | `B` MCP Legacy, `C` MCP Startup, `Z` staff (single emails only) | 🚫 |
+| `sub_bucket` | Stage inside MCP Legacy | `B1` not introduced yet, `B2` introduced (by the engine or by hand); blank for others | 🚫 |
+| `tags` | Free labels, used to filter batches and lists | comma-separated text | 🚫 |
+| `review_status` | Where the person stands (see "A contact's life cycle") | `needs_review`, `awaiting_approval`, `flagged`, `possible_duplicate`, `confirmed`, `held`, `removed`, `merged` | 🚫 |
+| `review_reason` | Why, in words | e.g. `imported`, `batch bat_…`, `approved by tony on 2026-11-16`, `startup from the portal`, `possible duplicate`, `already_completed_sequence` | 🚫 |
+| `is_test` | Test contact (receives emails only in test mode) | `Y` / `N` | 🚫 |
+| `pool_school` | MCP Startup: the customer asked for pool school; turns on the PoolSchool block in the Welcome | `Y` / `N` | 🚫 |
+| `pool_school_date` | Not used at present | blank | 🚫 |
+| `source` | Where the contact came from | the import's source name, `sales_hub` (MCP lead sync), `portal_startup`, `staff`, or test sources (`sandbox`, `demo`, `tracking_test`) | 🚫 |
+| `quote_id` | The portal quote/lead this person matches | portal id | 🚫 |
+| `pool_id` | MCP Startup: the pool's id in the portal | `MCPS-####` | 🚫 |
+| `startup_date` | MCP Startup: first startup day; C email dates count from it | `YYYY-MM-DD` | 🚫 |
+| `startup_source` | Where `startup_date` came from | `schedule` (the live schedule) or `quote` (the quote's startup date) | 🚫 |
+| `notes` | Notes from the import file | text | 🚫 |
+| `imported_by` | Portal user (or process) that added the contact | portal username | 🚫 |
+| `created_at` | When the contact was added | UTC timestamp | 🚫 |
+| `updated_at` | Last edit from the portal or sync | UTC timestamp | 🚫 |
+| `last_seq` | Journal record number of the last change (bookkeeping) | number | 🚫 |
+| `send_time` | Send time from the batch that started them (empty = campaign default) | `HH:MM` | 🚫 |
+| `restart_ok` | Set when a batch restarts someone who already finished or stopped; cleared once they are enrolled again | `bat_…` or blank | 🚫 |
+| `name_original` | The name exactly as first imported, kept when the name was tidied | text | 🚫 |
+| `name_kind` | What the name is | `person`, `couple`, `family`, `business` | 🚫 |
+| `duplicate_of` | The contact this one may duplicate | `contact_id` or blank | 🚫 |
+| `merged_into` | When `merged`: the contact it was folded into | `contact_id` | 🚫 |
+| `not_duplicate_of` | Contacts a person confirmed are different people | comma-separated `contact_id`s | 🚫 |
+| `planned_start` | Planned start date from the import file or a batch move; a batch on that date starts them. A past date with no batch shows as "start overdue" | `YYYY-MM-DD` or blank | 🚫 |
+| `intro_sent_on` | MCP Legacy: date the Intro was sent by hand before the import | `YYYY-MM-DD` or blank | 🚫 |
+| `followup_sent_on` | MCP Legacy: date the Follow Up was sent by hand before the import | `YYYY-MM-DD` or blank | 🚫 |
+| `flag_reason` | Reason from the import file for holding the person out of batches | text or blank | 🚫 |
+| `start_step` | The email an imported person starts at (earlier ones are never sent) | `b_followup`, `b_checkin`, or blank (start at the first email) | 🚫 |
+
+### Enrollments
+
+One row is one person's run through one campaign (or one single email). Written by the engine when it enrolls a confirmed contact and whenever the series' status changes; recorded in the Journal. Links to `Contacts` by `contact_id` and to `Deliveries` by `enrollment_id`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `enrollment_id` | The enrollment's id | `en_<contact_id>_<sequence_id>_<n>` | 🚫 |
+| `contact_id` | The person | `contact_id` | 🚫 |
+| `sequence_id` | The campaign | `B`, `C`, or `S…` (single email) | 🚫 |
+| `rule_rev` | The ruleset revision this series follows | `bc-1`, `bc-2`, … | 🚫 |
+| `mode` | Test or real | `test` / `production` | 🚫 |
+| `status` | Where the series stands | `active`, `waiting_anchor`, `completed`, `stopped` | 🚫 |
+| `enrolled_on` | Day the series started (anchor for "when they join" timing) | `YYYY-MM-DD` | 🚫 |
+| `anchor_snapshot` | The startup date when they were enrolled (used to notice a moved startup) | JSON, e.g. `{"startup_date":"2026-11-20"}` | 🚫 |
+| `stop_reason` | Why it stopped | see "Enrollments" above | 🚫 |
+| `stopped_on` | Day it stopped | `YYYY-MM-DD` | 🚫 |
+| `completed_on` | Day it completed | `YYYY-MM-DD` | 🚫 |
+| `stopped_branches` | Branches stopped without ending the series | JSON list, e.g. `["marketing"]` | 🚫 |
+| `stopped_steps` | Individual emails stopped | JSON list of `step_id`s | 🚫 |
+| `flags` | Things a person should look at | JSON list: `expired_steps` (an email expired), `needs_review` (stopped because an earlier email expired), `anchor_moved_after_send` (startup date changed after a C email went), `unknown_rule_rev` | 🚫 |
+| `last_seq` | Journal record number of the last change | number | 🚫 |
+| `send_time` | This series' send time (empty = campaign default) | `HH:MM` | 🚫 |
+
+### Deliveries
+
+One row is one email to one person (one attempt history). Created by the engine when it starts sending; never created for future emails. Recorded in the Journal. Links to `Enrollments`, `Contacts`, `Revisions`, `Engagement` and `Events`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `delivery_id` | The delivery's id | `<enrollment_id>:<step_id>:<occurrence>` | 🚫 |
+| `key` | Same as `delivery_id` (used by Holds and Overrides) | same | 🚫 |
+| `enrollment_id` | The series it belongs to | `enrollment_id` | 🚫 |
+| `contact_id` | The person | `contact_id` | 🚫 |
+| `step_id` | Which email | `step_id` | 🚫 |
+| `occurrence` | Which repeat (Progress 1–4) | number, usually 1 | 🚫 |
+| `mode` | Test or real | `test` / `production` | 🚫 |
+| `email_norm` | Address it was sent to | lowercase email | 🚫 |
+| `bucket` | The campaign (sequence) of the email | `B`, `C`, `S…` | 🚫 |
+| `category` | Kind of email | `marketing` / `service` | 🚫 |
+| `revision_id` | The approved version that was sent | `rev_<step_id>_<n>` | 🚫 |
+| `state` | Where the send stands | see "Deliveries" table above | 🚫 |
+| `attempt` | Attempt number | number | 🚫 |
+| `token` | The reference printed in the email (`Ref dlv_…`) | `dlv_` + 32 hex | 🚫 |
+| `run_id` | The run that handled it | `run_…` | 🚫 |
+| `gen` | Internal run-lease number (bookkeeping) | number | 🚫 |
+| `claimed_at` | When the send started | UTC timestamp | 🚫 |
+| `draft_id` | Gmail draft id | text | 🚫 |
+| `send_invoked_at` | When Gmail was asked to send | UTC timestamp | 🚫 |
+| `message_id` | Gmail message id once sent | text | 🚫 |
+| `thread_id` | Gmail thread id once sent (replies are found through it) | text | 🚫 |
+| `sent_at` | When it was sent | UTC timestamp | 🚫 |
+| `error` | Why it failed, was cancelled or released | text, e.g. `suppressed`, `enrollment_stopped`, `step_off`, `bucket_paused`, `kill_switch`, `abandoned_claim`, `resend_requested`, or a render/sender message | 🚫 |
+| `resolved_by` | How an unclear send was settled | `sent_search` (found in Sent), `bookkeeping`, `operator:<username>` | 🚫 |
+| `adopted_from_gen` | A later run took over a draft left by an interrupted run | number or blank | 🚫 |
+| `resend_requested_by` | Who chose Resend | portal username | 🚫 |
+| `last_seq` | Journal record number of the last change | number | 🚫 |
+| `attachment_versions` | PDF versions attached | JSON list of version ids, e.g. `["att_1a2b3c4d_v2"]` | 🚫 |
+
+### Inbox
+
+One row is one stop request: an unsubscribe, a hard bounce, or a signal (reply, verified click, form). Written by the engine when tracking or the reply scan records one; recorded in the Journal. The planner reads it to stop series. Links by `email_norm`, `contact_id`, `enrollment_id`, `step_id`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `inbox_id` | The request's id | `unsub_dlv_…` (unsubscribe link), `bounce_dlv_…` (hard bounce), `trk_…` (signal), `dnc_…` (do-not-contact from an import) | 🚫 |
+| `type` | Kind of request | `unsubscribe`, `bounce`, `signal` | 🚫 |
+| `mode` | Test or real | `test` / `production` | 🚫 |
+| `email_norm` | Address concerned | lowercase email | 🚫 |
+| `scope` | For unsubscribe/bounce: what is blocked | `all`; blank for signals | 🚫 |
+| `contact_id` | The person | `contact_id` or blank | 🚫 |
+| `enrollment_id` | The series (signals) | `enrollment_id` or blank | 🚫 |
+| `step_id` | The email it came from (signals) | `step_id` or blank | 🚫 |
+| `signal` | For signals: what happened | `reply`, `click`, `form` | 🚫 |
+| `confidence` | For signals | `high`; `medium` for a reply from someone other than the contact | 🚫 |
+| `received_at` | When the engine recorded it | UTC timestamp | 🚫 |
+| `secondary` | Follow-up work: copy the opt-out to Comms_Optouts | `comms_optouts` or blank | 🚫 |
+| `last_seq` | Journal record number | number | 🚫 |
+
+### Secondaries
+
+One row is one opt-out that must also be copied to the shared `Comms_Optouts` list. Written by the engine; `pending` rows are processed at the next chance.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `op_ref` | Reference of the Inbox request; also the `source` written to Comms_Optouts | `inbox:<inbox_id>` | 🚫 |
+| `kind` | What to do | `comms_optouts` | 🚫 |
+| `email_norm` | Address | lowercase email | 🚫 |
+| `scope` | Opt-out scope | `all` | 🚫 |
+| `status` | Done yet? | `pending` / `done` | 🚫 |
+| `last_seq` | Journal record number | number | 🚫 |
+
+### Suppressions_Test
+
+Opt-outs for test mode only (test contacts that unsubscribed or bounced). Real opt-outs are in `Comms_Optouts`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `email_norm` | Test address | lowercase email | 🚫 |
+| `scope` | What is blocked | `all` | 🚫 |
+
+### Holds
+
+One row per planned email that had to wait because of the one-email-per-day rule. Each held day extends that email's window (up to its `max_hold_days`).
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `key` | The delivery key | `<enrollment_id>:<step_id>:<occurrence>` | 🚫 |
+| `held_days` | Days held so far | number | 🚫 |
+| `last_held_on` | Last day it was held | `YYYY-MM-DD` | 🚫 |
+| `reason` | Why | `one_per_day` (another engine email that day), `already_emailed_today` (one already went today), `comms_same_day` (a portal campaign emailed them today) | 🚫 |
+
+### Revisions
+
+One row is one version of one email: drafts being reviewed and approved (published) versions. Written by the engine from the portal's Templates tab and editor; recorded in the Journal. Approved versions are frozen copies in Drive (MCPS Email Engine → Revisions) with a fingerprint; a changed file fails the send instead of going out. Links to Deliveries by `revision_id` and to emails by `step_id`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `revision_id` | Version id | `rev_<step_id>_<n>` (approved) or `draft_<step_id>_<8 hex>` (draft) | 🚫 |
+| `step_id` | Which email | `step_id` | 🚫 |
+| `rev_no` | Approved version number (0 for drafts) | number | 🚫 |
+| `subject` | Subject line (may contain merge fields) | text | 🚫 |
+| `preheader` | Preview text shown in the inbox | text | 🚫 |
+| `details_box` | Grey details box lines, separated by a vertical bar character inside the text | text, e.g. `Startup begins: {{StartupDate}}` | 🚫 |
+| `body_file_id` | Drive file of the email body | Drive file id | 🚫 |
+| `body_sha256` | Fingerprint of the body file | hex | 🚫 |
+| `blocks_json` | Optional blocks the email uses (e.g. PoolSchool) | JSON list of `{name, flag, file_id, sha256}` | 🚫 |
+| `fields_json` | Merge-field rules at approval time | JSON copy of the `Fields` tab | 🚫 |
+| `status` | Version status | `draft`, `published` (the live version), `superseded` (an older live version), `approved` (a draft that was approved; see `published_as`), `discarded` | 🚫 |
+| `editor` | Who made the draft | portal username | 🚫 |
+| `approver` | Who approved it | portal username (or Tony's Google account for the first versions) | 🚫 |
+| `approved_at` | When approved | UTC timestamp | 🚫 |
+| `content_hash` | Fingerprint of the whole approved version | hex | 🚫 |
+| `parent_revision_id` | The version this one replaced or started from | `revision_id` | 🚫 |
+| `last_seq` | Journal record number | number | 🚫 |
+| `format` | Template type | `body` (MCPS frame added around it) or `full` (complete file, e.g. from ChatGPT) | 🚫 |
+| `source_file_id` | Drive template file it was copied from | Drive file id | 🚫 |
+| `source_name` | Name of that file (or `the editor`) | text | 🚫 |
+| `source_modified` | That file's last change when copied | UTC timestamp | 🚫 |
+| `created_at` | When the draft was made | UTC timestamp | 🚫 |
+| `published_as` | For an `approved` draft: the live version it became | `rev_<step_id>_<n>` | 🚫 |
+| `attachment_items` | PDFs the email carries | JSON list of `item_id`s | 🚫 |
+| `replaced_by` | For a draft replaced by an edit: the newer draft | `draft_…` | 🚫 |
+
+### Rulesets
+
+One row is one published version of the campaign rules (timing, On/Off, stop signals, single emails). Never changed in place: each change from the portal adds a new row. The current one is the row whose `rule_rev` equals `Config` `rule_rev`; older ones stay because running series may still follow them.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `rule_rev` | Revision id | `bc-1`, `bc-2`, … | 🚫 |
+| `json` | The rules | JSON: `sequences` (each `sequence_id`, `bucket` or `kind: "single"`, `reentry`) and `steps` (each `step_id`, `sequence_id`, `order`, `name`, `category` marketing/service, `status` `active`/`off`, `anchor` `enrollment`/`previous`/`startup`/`date`, `offset` days, `requires`, `repeat_every`, `repeat_count`, `window_days`, `max_hold_days`, `hard_deadline`, `audience_filter`, `on_send_sub_bucket`, `stop_rules`) | 🚫 |
+| `published_at` | When published | UTC timestamp | 🚫 |
+| `published_by` | Who published it | portal username or Google account | 🚫 |
+
+### Fields
+
+The merge fields emails may use, and what happens when a value is missing.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `field` | Placeholder name used in templates as `{{Name}}` | `FirstName`, `LastName`, `Address`, `StartupDate`, `SenderName` | 🚫 |
+| `source` | Where the value comes from | `contact` (Contacts column) or `context` (engine settings) | 🚫 |
+| `key` | The column or setting read | e.g. `first_name`, `startup_date`, `sender_name` | 🚫 |
+| `fallback` | Used when the value is empty (a field with a fallback never blocks a send) | text, e.g. `there` for FirstName | 🚫 |
+| `required` | An empty value blocks the send (the delivery fails) | `true` or blank | 🚫 |
+| `format` | How the value is shown | `long_date` (e.g. November 20, 2026) or blank | 🚫 |
+
+### Config
+
+Engine settings, one row per setting. Changed by the portal (and by the engine for its own bookkeeping keys).
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `key` | Setting name | see the list below | 🚫 |
+| `value` | Setting value | text; some values are JSON | 🚫 |
+
+| Key | Meaning | Values |
+|---|---|---|
+| `engine_enabled` | Master sending switch | `true` / `false` |
+| `engine_mode` | Test or real sending | `test` / `production` |
+| `rule_rev` | The current ruleset revision | `bc-N` |
+| `paused_buckets` | Campaigns paused one by one | comma-separated, e.g. `B` or `B,C` (single emails by their `S…` id); empty = none |
+| `send_time_B` | MCP Legacy default send time | `HH:MM` (09:00 when empty) |
+| `send_time_C` | MCP Startup default send time | `HH:MM` (09:00 when empty) |
+| `run_plan` | Today's planned run times, made just after midnight | JSON `{date, times[], dropped[], made_at}` |
+| `run_hour` | Older setting from before send times; shown in the portal but no longer decides when runs happen | number |
+| `daily_cap` | Most engine emails per day | number (50 when empty) |
+| `quota_reserve` | Gmail send quota kept in reserve; a run stops when the remaining quota reaches it | number (20 when empty) |
+| `sender_display_name` | Inbox "From" name | text |
+| `sender_name` | Name emails are signed with (`{{SenderName}}`) | text |
+| `step_senders` | Emails that come from another linked address | JSON `{step_id: {email, name}}`; an email not listed comes from Tony |
+| `business_name` | Business name in the footer | text |
+| `business_address` | Business address in the footer | text |
+| `business_phone` | Business phone in the footer | text |
+| `business_website` | Website in the footer | URL |
+| `link_quote` | Where the main button (`{{QuoteLink}}`) goes: the MCPS service-request page | URL |
+| `track_base` | Site that handles tracked links, opens and unsubscribes | URL |
+| `test_recipients` | Addresses allowed to receive test-mode emails | comma-separated emails |
+| `alert_email` | Where the portal emails new engine alerts | email |
+| `alert_forwarded_at` | Last alert already emailed | the `at` value of an Alerts row |
+| `crm_lead_rule` | Which Sales Hub leads count as MCP leads | JSON `{statuses, lead_sources, year_built, areas, group}` |
+| `crm_lead_auto` | Add matching MCP leads to Needs review automatically | `true` = on; anything else = off |
+| `crm_sync_at` | Last startup sync from the portal | UTC timestamp |
+| `crm_sync_result` | Counts from that sync | JSON `{added, updated, removed, skipped}` |
+| `mcp_legacy_reset` | When MCP Legacy was reset to start from Tony's own list | UTC timestamp |
+| `went_live_at` | When the engine switched to production, and by whom | text |
+| `trigger_test` | Result of the portal's trigger-timing check | JSON |
+| `import_mapping:<name>` | A saved column mapping for an import file format | JSON `{mapping, source, saved_by, at}` |
+
+### Meta
+
+Engine bookkeeping, one row per key.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `key` | Bookkeeping name | see below | 🚫 |
+| `value` | Its value | text | 🚫 |
+
+| Key | Meaning | Values |
+|---|---|---|
+| `applied_seq` | The last Journal record copied into the tabs. Equal to the Journal's last `seq` when everything is up to date | number |
+| `data_schema` | Version of the data layout | number (1) |
+| `security_hashes` | Fingerprints of the engine's security settings, used to notice changes (no values) | JSON |
+
+### Runs
+
+One row is one engine run. Written by the engine at the end of each run.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `run_id` | Run id | `run_…`, or `crash_…` for a run that failed | 🚫 |
+| `trigger` | What started it | `scheduled` (a planned send time), `portal` (Send now, or after a startup sync), `manual` (started in Apps Script), `daily` (older daily trigger) | 🚫 |
+| `owner` | Google account it ran as (Tony) | email | 🚫 |
+| `started_at` | Start | UTC timestamp | 🚫 |
+| `finished_at` | End | UTC timestamp | 🚫 |
+| `sent` | Emails sent | number | 🚫 |
+| `skipped` | Emails due but not sent at the first check (e.g. opted out, series stopped, paused) | number | 🚫 |
+| `cancelled` | Emails stopped at the last check before sending | number | 🚫 |
+| `reconcile` | Sends left unclear for checking | number | 🚫 |
+| `adopted` | Drafts taken over from an interrupted run | number | 🚫 |
+| `failed` | Emails that couldn't be built | number | 🚫 |
+| `stopped_reason` | How the run ended | `done`, `daily_cap`, `quota_reserve`, `time_budget` (rest goes next run), `kill_switch` (sending off), `safety_pause`, `already_running`, `owner_guard`, `lease_lost`, `schema_incompatible`, `crashed: …`, or a Gmail error | 🚫 |
+| `plan_json` | The day's plan summary | JSON `{today, outcomes: {sent, due, upcoming, held, expired, excluded, stopped, …: counts}, not_approved}` | 🚫 |
+| `scan_json` | Reply/bounce scan summary | JSON `{threads, messages, replies, other, auto, bounces, skipped_threads, stopped, ms}` or `{error}` | 🚫 |
+| `planned_for` | The send-time slot this run was for | `HH:MM` or blank | 🚫 |
+
+### Alerts
+
+One row is one problem the engine noticed. The portal emails new ones to `Config` `alert_email` and shows the last 7 days in Activity → Alerts.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `at` | When (plus a short suffix to keep rows unique) | UTC timestamp + space + 4 characters | 🚫 |
+| `kind` | What happened | `delivery_failed`, `delivery_unknown`, `run_stopped`, `run_crashed`, `reply_scan_failed`, `batch_start_failed`, `too_many_send_times`, `backup_failed`, `journal_integrity`, `schema_incompatible`, `security_property_changed`, `trigger_test_done` | 🚫 |
+| `detail` | Details (often a `delivery_id` and a message) | text | 🚫 |
+
+### Permissions
+
+Who can do what on the portal's Lifecycle Email page. One row per portal user.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `username` | Portal username | text | 🚫 |
+| `roles` | Roles | comma-separated: `viewer` (see totals only), `editor` (see people; write email drafts and change senders; import and edit contacts; start, move and cancel batches; approve waiting people; single emails), `approver` (approve emails and PDFs), `operator` (send now, pause, resolve unclear sends, change settings: email Setup On/Off and timing, send times). A person has every right of every role listed | 🚫 |
+| `active` | Whether the row counts | `Y` / `N` | 🚫 |
+| `note` | Note | text | 🚫 |
+| `updated_at` | Last change | UTC timestamp | 🚫 |
+| `updated_by` | Who changed it | text | 🚫 |
+
+### Engagement
+
+One row per sent email: a summary of what happened after it was sent. Written by the engine from tracking events and the reply scan. Links by `delivery_id`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `delivery_id` | The email | `delivery_id` | 🚫 |
+| `contact_id` | The person | `contact_id` | 🚫 |
+| `enrollment_id` | The series | `enrollment_id` | 🚫 |
+| `step_id` | Which email | `step_id` | 🚫 |
+| `mode` | Test or real | `test` / `production` | 🚫 |
+| `classifier_version` | Version of the grading rules | e.g. `c1` | 🚫 |
+| `opens_total` | All recorded opens | number | 🚫 |
+| `opens_low` | Opens that look automatic | number | 🚫 |
+| `opens_medium` | Opens that look human | number | 🚫 |
+| `first_open_at` | First open | UTC timestamp | 🚫 |
+| `last_open_at` | Last open | UTC timestamp | 🚫 |
+| `clicks_total` | All recorded link clicks | number | 🚫 |
+| `clicks_low` | Clicks that look automatic | number | 🚫 |
+| `clicks_medium` | Clicks that look human | number | 🚫 |
+| `clicks_high` | Verified clicks (a real browser confirmed on the service-request page) | number | 🚫 |
+| `first_click_at` | First click | UTC timestamp | 🚫 |
+| `last_click_at` | Last click | UTC timestamp | 🚫 |
+| `first_verified_click_at` | First verified click | UTC timestamp | 🚫 |
+| `links_json` | Clicks per link | JSON `{link_id: count}`; `button1` = main button, `a1`, `a2`… = other links, `website` = footer link | 🚫 |
+| `recent_clicks` | Recent click times, used to spot bursts | JSON list of numbers | 🚫 |
+| `unsubscribed_at` | Unsubscribed through this email | UTC timestamp | 🚫 |
+| `form_submitted_at` | Service-request form sent from this email | UTC timestamp | 🚫 |
+| `replied_at` | First reply from the person | UTC timestamp | 🚫 |
+| `other_replied_at` | First reply from someone else on the thread | UTC timestamp | 🚫 |
+| `last_reply_snippet` | Start of the latest reply | text (up to 200 characters) | 🚫 |
+| `auto_replies` | Auto-replies received (out of office etc.) | number | 🚫 |
+| `soft_bounces` | Temporary delivery failures | number | 🚫 |
+| `bounced_at` | Hard bounce (address doesn't work) | UTC timestamp | 🚫 |
+| `bounce_kind` | Bounce type | `hard` or blank | 🚫 |
+| `updated_at` | Last update | UTC timestamp | 🚫 |
+
+### Threads
+
+The reply scan's place-keeper: one row per Gmail thread the engine checks, so each message is handled once.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `thread_id` | Gmail thread id | text | 🚫 |
+| `message_count` | Messages in the thread at the last scan | number | 🚫 |
+| `seen_json` | Message ids already handled | JSON list | 🚫 |
+| `last_scanned_at` | Last scan | UTC timestamp | 🚫 |
+
+### ChangeLog
+
+One row per action taken from the portal's Lifecycle Email page (allowed or refused), with the portal user. Written by the engine.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `id` | Entry id | `chg_…` | 🚫 |
+| `at` | When | UTC timestamp | 🚫 |
+| `actor` | Portal user (or `schedule`) | portal username | 🚫 |
+| `action` | What was done | e.g. `create_batch`, `cancel_batch`, `move_batch`, `set_batch_date`, `approve_waiting`, `clear_flag`, `import_contacts`, `update_contacts`, `resolve_duplicates`, `publish_rules` (email Setup change), `approve_draft`, `set_send_time`, `send_override`, `set_enabled`, `set_bucket_paused`, `run_now`, `mark_sent`, `resend`, `abandon`, `sync_startups`, `set_step_sender`, `create_single` | 🚫 |
+| `detail` | The action's details | JSON text (first 300 characters) | 🚫 |
+| `result` | Outcome | `ok`, or the reason it was refused | 🚫 |
+
+### Batches
+
+One row is one batch (see "Batches" above). Written by the engine from the portal (Campaigns → Start a batch, Move, Cancel) and when a batch starts.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `batch_id` | Batch id | `bat_` + 12 hex | 🚫 |
+| `name` | Name shown in the portal | text, e.g. `Planned 2026-11-23` | 🚫 |
+| `group` | Campaign | `B` (MCP Legacy) | 🚫 |
+| `filters_json` | Filters for "pick on the day" | JSON `{area: [...], tags: [...], source: [...]}` (each "any of"; together "and") | 🚫 |
+| `count` | How many people | number | 🚫 |
+| `order` | How people are chosen on the day | `random` / `oldest` | 🚫 |
+| `pick` | When people are chosen | `now` (listed in `contact_ids`) / `at_start` (chosen on the start date) | 🚫 |
+| `start_on` | Start date | `YYYY-MM-DD` | 🚫 |
+| `contact_ids` | The people (for `at_start`, filled when it starts) | JSON list of `contact_id`s | 🚫 |
+| `status` | Batch status | `planned`, `started`, `cancelled` | 🚫 |
+| `created_by` | Who made it | portal username | 🚫 |
+| `created_at` | When made | UTC timestamp | 🚫 |
+| `started_at` | When it started | UTC timestamp | 🚫 |
+| `started_count` | People actually started | number | 🚫 |
+| `skipped_json` | People not started and why | JSON list of `{contact_id, reason}` (e.g. `no longer waiting`, `already had a sequence`, `still_in_sequence`, `not found`) | 🚫 |
+| `cancelled_by` | Who cancelled it | portal username | 🚫 |
+| `cancelled_at` | When cancelled | UTC timestamp | 🚫 |
+| `send_time` | The batch's send time (empty = campaign default) | `HH:MM` | 🚫 |
+| `restart_ids` | People in the batch restarted on purpose after an earlier series | JSON list of `contact_id`s | 🚫 |
+| `waiting` | Why a planned batch hasn't started though its date came. Only meaningful while `status` is `planned` | `first_email_off:<email name>` or blank | 🚫 |
+
+### Overrides
+
+One row per planned email a person changed in the Campaigns calendar (latest change wins).
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `key` | The planned email | `<enrollment_id>:<step_id>:<occurrence>` | 🚫 |
+| `kind` | The change | `skip` (never send), `move` (send on `date`), `next_run` (send at the next run), `clear` (back to normal) | 🚫 |
+| `date` | New day for `move` | `YYYY-MM-DD` or blank | 🚫 |
+| `enrollment_id` | The series | `enrollment_id` | 🚫 |
+| `step_id` | Which email | `step_id` | 🚫 |
+| `by` | Who changed it | portal username | 🚫 |
+| `at` | When | UTC timestamp | 🚫 |
+
+### SecurityAudit
+
+One row each time the engine noticed a change to its protected settings. Names only, never values.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `id` | Entry id | `sec_…` | 🚫 |
+| `at` | When noticed | UTC timestamp | 🚫 |
+| `changed` | Which settings changed (names) | comma-separated names | 🚫 |
+| `effective_user` | Account the engine ran as | email | 🚫 |
+
+### Attachments
+
+The Attachment Library: one row per PDF item (e.g. "Safety Guidelines"). Versions are in `AttachmentVersions`. Emails list items in `Revisions.attachment_items`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `item_id` | Item id | `att_` + 8 hex | 🚫 |
+| `name` | Name (also the attached file's name) | text | 🚫 |
+| `status` | Whether emails still carry it | `active` / `retired` | 🚫 |
+| `created_by` | Who added it | portal username | 🚫 |
+| `created_at` | When added | UTC timestamp | 🚫 |
+| `retired_by` | Who retired it | portal username | 🚫 |
+| `retired_at` | When retired | UTC timestamp | 🚫 |
+
+### AttachmentVersions
+
+One row per version of a PDF. Only the `published` version of an item is attached to emails.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `version_id` | Version id | `<item_id>_v<n>` | 🚫 |
+| `item_id` | The item | `item_id` | 🚫 |
+| `v` | Version number | number | 🚫 |
+| `file_id` | Frozen copy in Drive (MCPS Email Engine → Attachments) | Drive file id | 🚫 |
+| `sha256` | Fingerprint of the file | hex | 🚫 |
+| `size` | Size in bytes (max 10 MB) | number | 🚫 |
+| `source_file_id` | The file dropped in Email Attachments | Drive file id | 🚫 |
+| `source_name` | That file's name | text | 🚫 |
+| `status` | Version status | `pending` (waiting for approval), `published`, `superseded`, `discarded` | 🚫 |
+| `uploaded_by` | Who added it | portal username | 🚫 |
+| `uploaded_at` | When added | UTC timestamp | 🚫 |
+| `approver` | Who approved it | portal username | 🚫 |
+| `approved_at` | When approved | UTC timestamp | 🚫 |
+| `restored_from` | For "use again": the older version copied | `version_id` or blank | 🚫 |
+
+### Events_YYYY_MM
+
+Raw tracking observations, one tab per month (e.g. `Events_2026_11`, by the Central-time month the event arrived). One row is one open, click, verified click, unsubscribe, form, reply, auto-reply or bounce. Never changed after writing. `Engagement` summarises these per email.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `event_id` | Event id (`msg_<Gmail id>` for mailbox events) | text | 🚫 |
+| `delivery_id` | The email | `delivery_id` | 🚫 |
+| `enrollment_id` | The series | `enrollment_id` | 🚫 |
+| `contact_id` | The person | `contact_id` | 🚫 |
+| `mode` | Test or real | `test` / `production` | 🚫 |
+| `type` | What happened | `open`, `click`, `beacon` (verified click), `unsubscribe`, `form`, `reply`, `reply_other`, `auto_reply`, `bounce` | 🚫 |
+| `link_id` | Which link (clicks) | `button1`, `a1`, `website`, … | 🚫 |
+| `received_at` | When it happened | UTC timestamp | 🚫 |
+| `seconds_since_send` | Seconds after the email was sent | number | 🚫 |
+| `method` | Web request type | `GET`, `HEAD`, `POST` | 🚫 |
+| `ua_raw` | The device/app description sent by the browser (kept short) | text | 🚫 |
+| `ua_family` | Device group | `browser`, `apple`, `android`, `gmail_proxy`, `apple_privacy_proxy`, `scanner`, `none`, `other` | 🚫 |
+| `ip_prefix_hash` | Scrambled network fingerprint (not an address) | hex | 🚫 |
+| `beacon_present` | A verified click | `Y` or blank | 🚫 |
+| `burst_count` | Clicks within 10 seconds, including this one | number | 🚫 |
+| `confidence` | How sure the engine is it was a person | `low`, `medium`, `high` | 🚫 |
+| `reasons` | Why it was graded down, or the bounce type | comma-separated: `very_early`, `prefetch_proxy`, `scanner_ua`, `head_request`, `no_ua`, `burst`, `automated`, `not_from_contact`, `hard`/`soft`/`unknown` + code | 🚫 |
+| `classifier_version` | Grading rules version | e.g. `c1` | 🚫 |
+| `source` | Where it came from | `vercel` (tracked link/open), `service_request` (form), `gmail` (mailbox scan) | 🚫 |
+| `gmail_message_id` | Gmail id of a reply or bounce | text | 🚫 |
+| `snippet` | Start of a reply | text (up to 200 characters) | 🚫 |
+
+### Journal
+
+In the separate **MCPS Email Engine Journal** spreadsheet, tab `Journal`. The permanent, numbered history: one row per change to a contact, enrollment, delivery, email version or stop request, each holding the full record as it was after the change. Never edited; rows are only added. Useful for history questions ("when did this person's status change?"): filter `entity_id`.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `seq` | Record number (row number minus 1) | number, 1, 2, 3, … | 🚫 |
+| `op_id` | Name of the change, unique | e.g. `contact:ct_…:import`, `contact:ct_…:batch:bat_…`, `enrollment:en_…:create`, `<delivery_id>:sent:1:4`, `revision:rev_b_intro_2:publish`, `inbox:unsub_dlv_…` | 🚫 |
+| `type` | Kind of record | `contact`, `enrollment`, `delivery`, `revision`, `inbox`, `secondary_applied` | 🚫 |
+| `entity_id` | The record's id | `contact_id`, `enrollment_id`, `delivery_id`, `revision_id`, `inbox_id`, or `op_ref` | 🚫 |
+| `data` | The whole record after the change | JSON | 🚫 |
+| `prev_hash` | Fingerprint of the previous record | hex (`genesis` for the first) | 🚫 |
+| `hash` | This record's fingerprint | hex | 🚫 |
+| `at` | When | UTC timestamp | 🚫 |
+
+### Comms_Optouts
+
+In the **Settings spreadsheet ("Chem Log")**. The shared opt-out list used by both the portal's campaigns and the engine. One row is one opt-out. The engine reads it before every send and adds rows when someone unsubscribes from an engine email, hard-bounces, or is marked "do not contact" in an import. To opt someone out, use a `ChatGPT_Requests` row with the `opt_out` request; never type rows in. Lifting an opt-out is done only in the portal (Comms › Opt-outs), and bounce opt-outs can't be lifted.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `email` | Opted-out address (matched against the contact's `email_norm`) | lowercase email | 🚫 |
+| `scope` | What is blocked | `all` (every email) or `marketing_announcements` (marketing only; engine service emails still go) | 🚫 |
+| `opted_out_at` | When | UTC timestamp | 🚫 |
+| `source` | Where it came from | Portal: `link`, `manual`, `bounce_hard`, `bounce_soft_repeated`. Engine: `inbox:unsub_dlv_…` (unsubscribe link), `inbox:bounce_dlv_…` (hard bounce), `inbox:dnc_…` (do-not-contact in an import), `fallback:inbox:…` (recorded while the Journal was unreachable) | 🚫 |
+| `recipient_id` | Portal campaign email that triggered it (blank for engine rows) | id | 🚫 |
+| `removed_at` | Filled when the opt-out was lifted; such a row no longer blocks anything | UTC timestamp or blank | 🚫 |
+| `removed_by` | Who lifted it | text | 🚫 |
+
+### Comms_Log
+
+In the **Settings spreadsheet ("Chem Log")**. The portal's own campaign send log (not engine emails). The engine reads only `email`, `status` and `sent_at`: anyone with a `sent` row today (Central time) gets their engine email tomorrow instead (`Holds` reason `comms_same_day`). Portal only; never edit or delete rows.
+
+| Column | Meaning | Values / format | Edit |
+|---|---|---|---|
+| `recipient_id` | Row id | id | 🚫 |
+| `unsubscribe_token` | Token in that email's unsubscribe link | text | 🚫 |
+| `campaign_id` | Portal campaign | id | 🚫 |
+| `email` | Recipient | email | 🚫 |
+| `name` | Recipient name | text | 🚫 |
+| `quote_id` | Related customer | id | 🚫 |
+| `pool_id` | Related pool | `MCPS-####` | 🚫 |
+| `recipient_json` | Recipient details used in the email | JSON | 🚫 |
+| `status` | Send status | `queued`, `sending`, `sent`, `failed`, `skipped_invalid`, `skipped_optout`, `cancelled`, `unknown` | 🚫 |
+| `error` | Error message | text | 🚫 |
+| `attempt_started_at` | Last attempt start | date-time | 🚫 |
+| `attempt_count` | Attempts | number | 🚫 |
+| `next_attempt_at` | Next retry | date-time | 🚫 |
+| `provider` | Mail service | text | 🚫 |
+| `provider_message_id` | Mail service message id | text | 🚫 |
+| `sent_at` | When sent | date-time | 🚫 |
+| `bounce_reason` | Bounce reason | text | 🚫 |
+| `complaint_at` | Spam complaint | date-time | 🚫 |
+| `opened_at` | Opened | date-time | 🚫 |
+| `clicked_at` | Clicked | date-time | 🚫 |
+| `sender_email` | Address that sent it | email | 🚫 |
+
+---
+
+## Common questions and how to answer them
+
+Throughout: ignore rows with `mode` = `test` and contacts with `is_test` = `Y` unless Tony asks about tests. Find a person in `Contacts` by `email_norm` (also check `alt_emails`) or by name, then use their `contact_id`. If someone has more than one `Enrollments` row for a campaign (a restart), use the one with the highest `_<n>`.
+
+**1. Who is still in the MCP Legacy campaign, and how many?**
+Contacts with `bucket` = `B`, `is_test` ≠ `Y`. For each, find their latest MCP Legacy enrollment (`Enrollments`, `sequence_id` = `B`). Place each person in the first stage that fits, in this order (this matches the portal's Campaigns → MCP Legacy page):
+1. **In sequence:** enrollment `status` `active` or `waiting_anchor`.
+2. **Out (held):** `review_status` = `flagged`.
+3. **Lined up:** their `contact_id` is in `contact_ids` of a `Batches` row with `group` `B` and `status` `planned` (note the `start_on` date).
+4. **Finished:** enrollment `completed`.
+5. **Stopped:** enrollment `stopped` (give `stop_reason`).
+6. **Needs your OK:** `review_status` = `awaiting_approval`.
+7. **Not started:** `review_status` = `needs_review` (not in a planned batch), or `confirmed` with no enrollment yet.
+People who are `removed`, `merged`, `possible_duplicate` or `held` are not counted as on the list. "Still in the campaign" = stages 1, 3, 6 and 7. Planned "pick on the day" batches (`pick` = `at_start`) hold a number of seats (`count`), not named people.
+
+**2. When does X get their next email?**
+Future emails are not rows; work them out:
+1. `Contacts`: X's `contact_id`, `review_status`, `sub_bucket`, `start_step`, `startup_date` (MCP Startup), `send_time`.
+2. If X has no running enrollment: MCP Legacy people in `needs_review` start when their planned batch starts (`Batches.start_on`; the Intro goes that day), but only once the first email is On (check the batch's `waiting`). `awaiting_approval` people start at the first run after a person approves them (their first email is then due that day). Otherwise nothing is planned.
+3. If X has an `active` enrollment: read the current ruleset JSON for that enrollment's `rule_rev` (`Rulesets`), take the steps of their `sequence_id` in `order`, and the `Deliveries` rows for that `enrollment_id` with `state` = `sent` (their `sent_at`, converted to a Central date). The next email is the first step not yet sent: its due date is `enrolled_on` + `offset` (anchor `enrollment`), the previous email's actual send date + `offset` (anchor `previous`), or `startup_date` + `offset` (anchor `startup`; Progress repeats every 7 days). For someone who started at `start_step`, that step is due on `enrolled_on`.
+4. Adjust: an `Overrides` row for that key (`skip`, `move` to `date`, `next_run`); a step with `status` `off` is skipped and the next one follows from the day it was due; a step with no `published` revision won't send; another engine email to X the same day pushes it a day (`Holds`).
+5. Time of day: X's enrollment `send_time`, else `Config` `send_time_B`/`send_time_C`, else 09:00 Central. The Welcome sent at approval goes at the next run.
+Tell Tony it is an estimate and that the portal's Campaigns calendar shows the exact plan.
+
+**3. Did X open, click or reply?**
+`Engagement` rows with X's `contact_id` (one per email sent). Opens: `opens_medium` > 0 suggests a real open; `opens_low` alone is probably automatic; say opens are estimates. Clicks: `clicks_high` > 0 = verified click; `clicks_medium` = probable click; `links_json` shows which link. Replies: `replied_at` (from X), `other_replied_at` (someone else on the thread), `last_reply_snippet`; `auto_replies` are out-of-office messages. For exact times, filter the `Events_YYYY_MM` tabs by `contact_id`.
+
+**4. Why didn't X get an email (or why did their series stop)?**
+Check in order:
+1. `Contacts.review_status` / `review_reason`: not `confirmed` means not cleared to receive (waiting in review, flagged, awaiting approval, duplicate, removed). `is_test` = `Y` means a test contact.
+2. `Comms_Optouts`: a row with `email` = X's `email_norm` and empty `removed_at` (`all` blocks everything; `marketing_announcements` blocks marketing emails).
+3. `Enrollments`: `status` `stopped` + `stop_reason`; `stopped_branches` contains `marketing`; `waiting_anchor` (no startup date).
+4. The email itself in the current ruleset: `status` `off`; and whether `Revisions` has a `published` row for that `step_id` (`Runs.plan_json.not_approved` counts emails held back for this).
+5. For MCP Legacy batches: `Batches.waiting` (first email Off) and `skipped_json` (why someone in the batch wasn't started).
+6. `Deliveries` for X: `state` `failed` / `cancelled` / `unknown` and its `error`.
+7. `Config`: `engine_enabled` = `false`, `paused_buckets` containing the campaign, `engine_mode` = `test`.
+8. `Runs` around the expected time: `stopped_reason` other than `done` (e.g. `daily_cap`, `kill_switch`); and `Alerts`.
+9. `Holds` for the key: held for the one-per-day rule or a same-day portal email. An email whose window passed is expired and never sent.
+
+**5. What went out today?**
+`Deliveries` with `state` = `sent`, `mode` = `production`, and `sent_at` falling on today's date in Central time. Group by `step_id` for counts; join `Contacts` by `contact_id` for names. `Runs` started today give per-run totals (`sent`, `stopped_reason`).
+
+**6. Who unsubscribed (or bounced)?**
+`Inbox` rows with `type` = `unsubscribe` (or `bounce`) and `mode` = `production`, with `received_at`; join `Contacts` by `email_norm`. The same people have rows in `Comms_Optouts` with `source` starting `inbox:unsub_` (or `inbox:bounce_`), and `Engagement.unsubscribed_at` / `bounced_at` on the email they used. For everyone opted out by any route, read `Comms_Optouts` rows with empty `removed_at`.
+
+**7. What's in the Nov 23 batch?**
+`Batches` with `start_on` = `2026-11-23` (and `group` `B`). `status` `planned` = not started yet; `waiting` filled = held because the first email is Off. For `pick` = `now`, `contact_ids` lists the people: look each up in `Contacts`. For `pick` = `at_start`, only `count`, `filters_json` and `order` are known until it starts. After it starts, `started_count` and `skipped_json` show what happened.
+
+**8. Which emails are On, and which are approved?**
+Current ruleset (`Rulesets` row where `rule_rev` = `Config` `rule_rev`): each step's `status` (`active` = On, `off` = Off). Approved: `Revisions` with `status` = `published` for that `step_id` (`rev_no`, `approved_at`, `approver`). Drafts waiting for approval: `status` = `draft`.
+
+**9. Who is waiting for approval?**
+`Contacts` with `review_status` = `awaiting_approval` (say whether they start at the Follow Up or Check-In from `start_step`, with `intro_sent_on` / `followup_sent_on`), plus `needs_review` contacts whose `planned_start` is before today and who are not in a planned batch ("start overdue"). Flagged people: `review_status` = `flagged` with `flag_reason`.
+
+**10. How did an email perform?**
+For one `step_id`: count `Deliveries` with `state` `sent`; from `Engagement` for that `step_id`, count rows with `opens_medium` > 0 (estimated opens), `clicks_high` > 0 (verified clicks), `clicks_medium` > 0, `replied_at` filled, `unsubscribed_at` filled, `bounced_at` filled.
+
+**11. Did the engine run today, and were there problems?**
+`Runs` with `started_at` today (Central): `stopped_reason` (`done` = normal), `sent`, `failed`. `Config` `run_plan` lists today's planned times. `Alerts` from the last few days. `Deliveries` in `state` `unknown`, `failed` or `reconcile` need a person (Activity → Needs a decision).
+
+**12. Who received the Welcome for a startup / which startups are in MCP Startup?**
+`Contacts` with `bucket` = `C`: `startup_date`, `pool_id`, `quote_id`, `review_status`. Their `Deliveries` with `step_id` = `c_welcome` and `state` = `sent` show when the Welcome went. `removed` with `review_reason` such as `quote_lost` or `visits_cancelled` = the startup was cancelled.
+
+**13. What changed recently, and who did it?**
+`ChangeLog` (portal actions with `actor`, `action`, `result`), newest `at` first. For one person's full history, filter the Journal by `entity_id` = their `contact_id` (and their `enrollment_id`s and `delivery_id`s); each row's `data` is the record after that change.
+
+**14. Which batch is a person in, and when do they start?**
+Search `Batches` with `status` `planned` for their `contact_id` in `contact_ids`; the `start_on` and `send_time` (or the campaign default) say when the Intro goes, provided the Intro is On. `Contacts.planned_start` holds the same date.
+
+---
+
+## What changed
+
+### Version 1 — 2026-11-16
+- First version.

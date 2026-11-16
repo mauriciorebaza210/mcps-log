@@ -7,9 +7,10 @@
 //   eeRunNow()           run the engine once, now
 //   eeInstall()          install the scheduler trigger and plan today's runs (run as Tony; Schedule.js)
 //   doGet / doPost       whoami + health (JSON), and the interim unsubscribe page
+//   EE_requestsTrigger   every 15 min: ChatGPT_Requests rows + the ChatGPT dictionary in Drive (Requests.js, Docs.js)
 // ══════════════════════════════════════════════════════════════════════════════
 
-var EE_VERSION = 'cp9-4';
+var EE_VERSION = 'cp9-5';
 // Data schema (PLAN.md → Security boundary & rollback). Additive changes (new columns, new
 // tabs) keep the number; a semantic change goes expand → migrate → contract and raises it.
 // A run refuses data outside read_min..read_max; the deploy script refuses code that can't
@@ -80,6 +81,9 @@ function EE_run_(trigger) {
   var x = EE_core_();
   var cfg = EE_config_(x.env.store);
   var started = new Date().toISOString(), summary, scan = null;
+  // ChatGPT's requests pass and dictionary (Requests.js, Docs.js): installed here if missing; never blocks the run.
+  try { EE_ensureRequestsTrigger_(); } catch (e) { /* the scheduler tries again tonight */ }
+  try { EE_publishDictionary_(); } catch (e) { /* the requests pass tries again */ }
   // The gate time: a scheduled run that fired a little early uses its slot (Schedule.js).
   var nowTime = MCPS_LIFECYCLE.localTime(new Date(), EE_TZ), plan = EE_runPlan_(cfg);
   var slot = trigger === 'scheduled' && plan && plan.date === EE_today_(x.env) ? EE_slotFor_(plan, nowTime) : { gate: nowTime, planned_for: '' };
@@ -161,6 +165,14 @@ function doGet(e) {
   try { out.send_as_linked = GmailApp.getAliases().length; } catch (err) { out.send_as_linked = -1; }
   try { var env = EE_env(); out.applied_seq = Number(env.meta.get('applied_seq') || 0); out.journal_head = (env.journal.last() || { seq: 0 }).seq; out.data_schema = Number(env.meta.get('data_schema') || 0); }
   catch (err) { out.ok = false; out.error = String(err.message || err).slice(0, 200); }
+  // Right after a deploy (the deploy script asks whoami): publish a new ChatGPT dictionary and make sure the
+  // requests pass is installed. Only does work once per new dictionary text; anyone else's GET is a property read.
+  try {
+    if (typeof EE_DICTIONARY !== 'undefined' && props.getProperty('EE_DICT_HASH') !== EE_DICTIONARY.hash) {
+      EE_ensureRequestsTrigger_(); EE_publishDictionary_();
+    }
+    out.dictionary = typeof EE_DICTIONARY !== 'undefined' ? EE_DICTIONARY.version : 0;
+  } catch (err) { /* the next run publishes it */ }
   return EE_json_(out);
 }
 function doPost(e) {

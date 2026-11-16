@@ -2,6 +2,12 @@
 //
 //   node scripts/ee-deploy.mjs "what changed"     sync, test, push, deploy as Tony, verify
 //   node scripts/ee-deploy.mjs --rollback 7       redeploy version 7 as Tony, verify
+//   … --dict-unchanged "what changed"             the change doesn't touch how the engine works (see below)
+//
+// ChatGPT dictionary (Plan changes 2026-11-16): a deploy refuses when engine code changed since
+// email-engine/docs/chatgpt/DICTIONARY.md was last committed, unless --dict-unchanged says this
+// change doesn't alter what the dictionary describes. Otherwise update the dictionary (Version +
+// What changed) first: the deployed engine then rewrites Tony's Drive copy and emails him.
 //
 // Spike 1 showed the web app runs as whoever deployed it LAST. So every deploy
 // here uses clasp's named login for Tony (one-time: `clasp --user tony login`,
@@ -55,8 +61,18 @@ function codeVersion() {
   return m ? m[1] : null;
 }
 
+// Engine source files (hand-written, not generated) changed since the dictionary's last commit,
+// committed or not. Generated copies (Lib_*, Seed.js, Dictionary.js) follow their sources.
+function dictionaryBehind() {
+  const dictCommit = run('git', ['log', '-1', '--format=%H', '--', 'email-engine/docs/chatgpt/DICTIONARY.md']).trim();
+  if (!dictCommit) return ['(the dictionary has never been committed)'];
+  const names = run('git', ['diff', '--name-only', dictCommit, '--', 'email-engine/src']).split('\n').filter(Boolean);
+  return names.filter(f => !/\/(Lib_[^/]+|Seed|Dictionary)\.js$/.test(f) && !/appsscript\.json$/.test(f));
+}
+
 async function main() {
-  const argv = process.argv.slice(2);
+  const argv0 = process.argv.slice(2), dictUnchanged = argv0.includes('--dict-unchanged');
+  const argv = argv0.filter(a => a !== '--dict-unchanged');
   const rollback = argv[0] === '--rollback' ? Number(argv[1]) : null;
   const desc = rollback ? 'rollback to @' + rollback : (argv.join(' ') || 'engine update');
 
@@ -74,6 +90,13 @@ async function main() {
   if (why) fail(why);
   console.log('✔ schema range and rollback floor checked (live data schema ' + ((liveBefore && liveBefore.data_schema) || 'not recorded yet') + (floor ? ', floor @' + floor : '') + ')');
 
+  if (!rollback && !dictUnchanged) {
+    const changed = dictionaryBehind();
+    if (changed.length) fail('engine code changed since the ChatGPT dictionary was last updated:\n  ' + changed.join('\n  ') +
+      '\nUpdate email-engine/docs/chatgpt/DICTIONARY.md (bump Version, add What changed bullets for Tony) and commit it,' +
+      '\nor re-run with --dict-unchanged if this change does not alter tabs, columns or how the engine behaves.');
+    console.log('✔ ChatGPT dictionary is current');
+  }
   if (!rollback) {
     run(process.execPath, ['scripts/ee-sync.mjs']);
     run(process.execPath, ['scripts/ee-sync.mjs', '--check']);

@@ -103,6 +103,7 @@ function EE_triggerDeps_() {
 function EE_scheduleTrigger() {
   // The nightly backup rides on this trigger (Backup.js); it never blocks planning the day.
   try { EE_backup_(); } catch (e) { try { EE_env().alert('backup_failed', String(e && e.message || e).slice(0, 300)); } catch (e2) { /* best effort */ } }
+  try { EE_ensureRequestsTrigger_(); } catch (e) { /* the next run tries again */ }
   return EE_planRuns_(EE_env(), EE_triggerDeps_());
 }
 function EE_timedRun() { return EE_run_('scheduled'); }
