@@ -134,12 +134,15 @@ function EE_runDay(core, env, readSnapshot, opts) {
   var summary = core.run({ trigger: opts.trigger || 'daily', dailyCap: opts.dailyCap, budgetMs: opts.budgetMs,
     sentToday: opts.sentToday, plan: function (lease) {
       var p = EE_planDay(readSnapshot());
-      p.enrollmentWrites.forEach(function (w) { core.commitEntity('enrollment', w.data, w.op_id, lease); });
-      p.contactWrites.forEach(function (w) { core.commitEntity('contact', w.data, w.op_id, lease); });
-      p.contactFlags.forEach(function (f) {
-        core.commitEntity('contact', { contact_id: f.contact_id, review_status: 'needs_review', review_reason: f.reason },
-          'contact:' + f.contact_id + ':needs_review:' + f.reason, lease);
-      });
+      // One fenced write for the whole plan (a batch enrolls everyone at once), in plan order.
+      var items = p.enrollmentWrites.map(function (w) { return { type: 'enrollment', data: w.data, opId: w.op_id }; })
+        .concat(p.contactWrites.map(function (w) { return { type: 'contact', data: w.data, opId: w.op_id }; }))
+        .concat(p.contactFlags.map(function (f) {
+          return { type: 'contact', data: { contact_id: f.contact_id, review_status: 'needs_review', review_reason: f.reason },
+            opId: 'contact:' + f.contact_id + ':needs_review:' + f.reason };
+        }));
+      if (core.commitEntities) core.commitEntities(items, lease);
+      else items.forEach(function (it) { core.commitEntity(it.type, it.data, it.opId, lease); });
       if (p.holdWrites.length) env.withLock(function () { p.holdWrites.forEach(function (h) { env.store.upsert('Holds', h); }); });
       lastPlan = p;
       return p.due;

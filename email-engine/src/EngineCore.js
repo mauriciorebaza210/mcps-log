@@ -574,11 +574,12 @@ function EE_createCore(env) {
   // commitEntity, with one journal append and one write pass per table instead of one
   // round of sheet calls per entity. items: [{ type, data, opId }]. An op_id already in
   // the journal is skipped (a retried import never writes twice). Returns the merged data.
-  function commitEntities(items) {
+  // With a lease (a run's plan), the writes are fenced like commitEntity's: a run that
+  // lost its lease writes nothing.
+  function commitEntities(items, lease) {
     items = (items || []).filter(function (it) { return it && TYPE_TABLE[it.type] && it.type !== 'delivery'; });
     if (!items.length) return [];
-    return env.withLock(function () {
-      ensureCaughtUp();
+    var body = function () {
       var seen = env.journal.opIds ? env.journal.opIds() : null;
       var last = lastRecord(), seq = last ? last.seq : 0, prev = last ? last.hash : C.GENESIS;
       var current = {}, loaded = {}, recs = [], out = [];
@@ -610,7 +611,8 @@ function EE_createCore(env) {
       env.meta.set('applied_seq', Math.max(Number(env.meta.get('applied_seq') || 0), seq));
       env.flush();
       return out;
-    });
+    };
+    return lease ? fenced(lease, body) : env.withLock(function () { ensureCaughtUp(); return body(); });
   }
 
   return {

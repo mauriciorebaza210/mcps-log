@@ -284,25 +284,27 @@ function EE_startBatch_(env, core, b, actor) {
   var filters = typeof b.filters_json === 'object' && b.filters_json ? b.filters_json : {};
   var ids = b.pick === 'now' ? (b.contact_ids || [])
     : MCPS_BATCHES.pick(contacts, { group: b.group, filters: filters, count: b.count, order: b.order }, Math.random).map(function (c) { return c.contact_id; });
-  var started = 0, skipped = [];
+  var started = 0, skipped = [], writes = [];
   ids.forEach(function (cid) {
     var c = byId[cid];
     // Restarts (row 64): only someone whose earlier sequence has ended.
     if (restart[cid] && c && c.bucket === b.group) {
       if (going[cid]) { skipped.push({ contact_id: cid, reason: 'still_in_sequence' }); return; }
-      core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'restart: batch ' + b.batch_id,
+      writes.push({ type: 'contact', data: { contact_id: cid, review_status: 'confirmed', review_reason: 'restart: batch ' + b.batch_id,
         restart_ok: b.batch_id, send_time: MCPS_LIFECYCLE.normTime(b.send_time),
         // From the first email again: MCP Legacy's Intro is for B1 (it moves them to B2).
-        sub_bucket: b.group === 'B' ? 'B1' : (c.sub_bucket || '') }, 'contact:' + cid + ':restart:' + b.batch_id);
+        sub_bucket: b.group === 'B' ? 'B1' : (c.sub_bucket || '') }, opId: 'contact:' + cid + ':restart:' + b.batch_id });
       started++;
       return;
     }
     if (!c || c.review_status !== 'needs_review' || c.bucket !== b.group) { skipped.push({ contact_id: cid, reason: c ? 'no longer waiting' : 'not found' }); return; }
     if (c.enrolled) { skipped.push({ contact_id: cid, reason: 'already had a sequence' }); return; }
-    core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id, send_time: MCPS_LIFECYCLE.normTime(b.send_time) },
-      'contact:' + cid + ':batch:' + b.batch_id);
+    writes.push({ type: 'contact', data: { contact_id: cid, review_status: 'confirmed', review_reason: 'batch ' + b.batch_id, send_time: MCPS_LIFECYCLE.normTime(b.send_time) },
+      opId: 'contact:' + cid + ':batch:' + b.batch_id });
     started++;
   });
+  // Everyone in one write (one lock, one journal append), so a batch starts in seconds, not minutes.
+  EE_commitMany_(core, writes);
   // A sheet write replaces the whole row: always merge into the stored batch.
   env.store.upsert('Batches', EE_merge_(env.store.get('Batches', b.batch_id) || b, { status: 'started', started_at: new Date(env.now()).toISOString(),
     started_count: started, skipped_json: skipped, contact_ids: b.pick === 'now' ? b.contact_ids : ids }));

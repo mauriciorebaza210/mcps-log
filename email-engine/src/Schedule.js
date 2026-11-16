@@ -89,6 +89,21 @@ function EE_slotFor_(plan, nowTime) {
 }
 // Sheet values that look like JSON come back already parsed (Env.js → EE_decode_); the tests' fake
 // store keeps strings. Accept both.
+// ── One run's time, and carrying on (Plan changes 2026-11-16) ─────────────────
+// Apps Script stops an execution at 6 minutes. A run's sending budget counts from
+// when the execution began (batch start and the reply scan included) and keeps
+// EE_RUN_MARGIN_MS for the send in flight and the Runs row.
+var EE_EXEC_LIMIT_MS = 360000, EE_RUN_MARGIN_MS = 75000, EE_RUN_MIN_BUDGET_MS = 15000;
+function EE_runBudgetMs_(execStartMs, nowMs) {
+  return Math.max(EE_RUN_MIN_BUDGET_MS, EE_EXEC_LIMIT_MS - EE_RUN_MARGIN_MS - Math.max(0, nowMs - execStartMs));
+}
+// A run that ran out of time with emails still due queues the next one right away,
+// so a whole batch goes out on one click (or one scheduled run). Only after progress,
+// so a run that can't send anything never loops.
+function EE_shouldContinue_(summary) {
+  if (!summary || summary.stopped_reason !== 'time_budget') return false;
+  return (summary.sent || 0) + (summary.failed || 0) + (summary.cancelled || 0) + (summary.skipped || 0) + (summary.reconcile || 0) > 0;
+}
 function EE_jsonOf_(v) { if (v == null || v === '') return null; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return null; } }
 function EE_runPlan_(cfg) { return EE_jsonOf_(cfg.run_plan); }
 
