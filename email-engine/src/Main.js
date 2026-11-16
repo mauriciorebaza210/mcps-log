@@ -183,6 +183,7 @@ function doGet(e) {
     out.triggers = {};
     ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); out.triggers[h] = (out.triggers[h] || 0) + 1; });
     if (p.check === 'requests') out.requests_installed_now = EE_ensureRequestsTrigger_();
+    out.requests_pass = { last_start: props.getProperty('EE_REQ_LAST_START') || '', last_result: props.getProperty('EE_REQ_LAST_RESULT') || '', dict_error: props.getProperty('EE_REQ_DICT_ERROR') || '' };
   } catch (err) { out.triggers_error = String(err && err.message || err).slice(0, 200); }
   return EE_json_(out);
 }

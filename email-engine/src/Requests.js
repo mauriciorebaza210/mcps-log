@@ -178,13 +178,20 @@ function EE_requestsSheet_() {
 }
 // Every 15 minutes (installed by EE_ensureRequestsTrigger_). Also refreshes the dictionary in Drive.
 function EE_requestsTrigger() {
+  var props = PropertiesService.getScriptProperties(), stamp = function (k, v) { try { props.setProperty(k, v); } catch (e) { /* best effort */ } };
+  stamp('EE_REQ_LAST_START', new Date().toISOString());
   var cache = CacheService.getScriptCache();
-  if (cache.get('ee_requests_busy')) return { busy: true };
+  if (cache.get('ee_requests_busy')) { stamp('EE_REQ_LAST_RESULT', 'busy'); return { busy: true }; }
   cache.put('ee_requests_busy', '1', 300);
   try {
-    try { EE_publishDictionary_(); } catch (e) { /* tried again next pass */ }
+    try { EE_publishDictionary_(); } catch (e) { stamp('EE_REQ_DICT_ERROR', String(e && e.message || e).slice(0, 200)); }
     var x = EE_core_();
-    return EE_processRequests_(x.env, x.core, EE_requestsSheet_(), { scheduleRun: EE_scheduleRunNow_, planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); } });
+    var out = EE_processRequests_(x.env, x.core, EE_requestsSheet_(), { scheduleRun: EE_scheduleRunNow_, planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); } });
+    stamp('EE_REQ_LAST_RESULT', 'ok ' + new Date().toISOString());
+    return out;
+  } catch (e) {
+    stamp('EE_REQ_LAST_RESULT', 'error ' + String(e && e.message || e).slice(0, 200));
+    throw e;
   } finally { cache.remove('ee_requests_busy'); }
 }
 function EE_ensureRequestsTrigger_() {
