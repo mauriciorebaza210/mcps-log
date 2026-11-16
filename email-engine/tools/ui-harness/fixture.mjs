@@ -71,7 +71,9 @@ const plusDays = n => { const x = new Date(todayCT + 'T12:00:00Z'); x.setUTCDate
  ['Teresa', 'Moreno', 'needs_review', { planned_start: plusDays(-4) }],
  ['Pool Pros', 'LLC', 'flagged', { flag_reason: 'Possible non-residential (vendor/builder)', review_reason: 'Possible non-residential (vendor/builder)' }],
  ['James', 'Ortiz', 'flagged', { flag_reason: 'Intro bounced', review_reason: 'Intro bounced' }],
- ['Sofia', 'Ramos', 'needs_review', { planned_start: plusDays(3) }]].forEach(([f, l, st, extra], i) => C.push(Object.assign({
+ ['Sofia', 'Ramos', 'needs_review', { planned_start: plusDays(3) }],
+ ['Maria', 'Lopez', 'confirmed', { intro_sent_on: plusDays(-6), sub_bucket: 'B2', start_step: 'b_followup', review_reason: 'approved by tony on ' + todayCT }],
+ ['Diego', 'Flores', 'confirmed', { intro_sent_on: plusDays(-6), sub_bucket: 'B2', start_step: 'b_followup', review_reason: 'approved by tony on ' + todayCT }]].forEach(([f, l, st, extra], i) => C.push(Object.assign({
   contact_id: 'ct_w' + i, email_norm: f.toLowerCase() + '.' + l.toLowerCase() + '@example.com', first_name: f, last_name: l, bucket: 'B', sub_bucket: 'B1',
   review_status: st, is_test: 'N', created_at: new Date().toISOString(), tags: 'mcp week ' + (i + 1) }, extra)));
 rows('Contacts', C); rows('Enrollments', E); rows('Deliveries', D); rows('Engagement', G);

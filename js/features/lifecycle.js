@@ -365,7 +365,8 @@ function lcActivity_() {
     ['B', 'C'].map(b => { const on = !e.paused_buckets.includes(b); return '<li><div><b>' + LC_SEQ[b] + '</b><small>' + (on ? 'Running' : 'Paused') + '</small></div>' +
       sw(on, 'pause', ' data-bucket="' + b + '"', LC_SEQ[b], 'pause' + b) + '</li>'; }).join('') +
     (lcCan_('run_now') ? '<li class="lc-ctrl-run"><div><b>Send due emails now</b><small>Emails go out by themselves at your send times. This sends anything that’s already due right away, e.g. just after you approve an email. Never early, never twice.</small></div>' +
-      '<button class="lc-btn sm' + (LC.runPending ? ' busy' : '') + '" data-act="run"' + (LC.runPending ? ' disabled' : '') + '>' + (LC.runPending ? LC_ICON.refresh + 'Sending…' : LC_ICON.play + 'Send now') + '</button></li>' : '') + '</ul>';
+      '<span class="lc-sum-acts"><button class="lc-btn sm' + (LC.runPending ? ' busy' : '') + '" data-act="run"' + (LC.runPending ? ' disabled' : '') + '>' + (LC.runPending ? LC_ICON.refresh + 'Sending…' : LC_ICON.play + 'Send now') + '</button>' +
+      (LC.runPending ? '<button class="lc-btn sm danger" data-act="run-cancel">Cancel</button>' : '') + '</span></li>' : '') + '</ul>';
   const changes = (ov.changes || []).length ? '<ul class="lc-list">' + ov.changes.slice(0, 8).map(c => '<li><div class="main"><b>' + lcEsc_(lcChangeText_(c)) +
       '</b>' + (c.result !== 'ok' ? '<small>Refused: ' + lcEsc_(c.result) + '</small>' : '') + '</div>' + lcAgoT_(c.at) + '</li>').join('') + '</ul>' : '';
   const runs = ov.runs.length ? '<table class="lc-table lc-runs"><thead><tr><th>Run</th><th class="hide-sm">Trigger</th><th class="r">Sent</th><th class="r hide-sm">Skipped</th><th>Result</th></tr></thead><tbody>' +
@@ -468,7 +469,7 @@ function lcResolveActs_(d) {
     b('resend', ready ? 'Resend' : 'Resend at ' + lcClockAt_(unlock), '', !ready,
       ready ? '' : 'An earlier attempt could still finish until then') + b('abandon', 'Abandon', 'danger') + '</div>';
 }
-const LC_CHANGE = { run_now: () => 'started a run', set_enabled: p => (p.enabled ? 'turned sending on' : 'turned sending off'),
+const LC_CHANGE = { run_now: () => 'started a run', cancel_run_now: () => 'cancelled Send now', unapprove_waiting: p => 'undid approval for ' + ((p.contact_ids || []).length) + ' people', mark_hand_sent: p => 'recorded ' + (p.step_id === 'b_intro' ? 'the Intro' : 'the Follow Up') + ' sent by hand for ' + ((p.contact_ids || []).length) + ' people', set_enabled: p => (p.enabled ? 'turned sending on' : 'turned sending off'),
   set_bucket_paused: p => (p.paused ? 'paused ' : 'resumed ') + (LC_SEQ[p.bucket] || p.bucket), mark_sent: () => 'marked a send as sent',
   abandon: () => 'abandoned an unconfirmed send', resend: () => 'asked to resend an email' };
 const lcChangeText_ = c => (c.actor || 'Someone') + ' ' + (LC_CHANGE[c.action] ? LC_CHANGE[c.action](c.params || {}) : c.action);
@@ -950,6 +951,15 @@ async function lcRunNow_() {
   lcToast_(r.status === 'already_queued' ? 'Already starting' : 'Sending starts within a minute');
   lcWatchRun_();
 }
+// Cancel Send now: removes the queued run if it hasn't started. One already sending keeps
+// going (the campaign's pause switch stops it), and the page says so.
+async function lcCancelRun_() {
+  const r = await lcAdmin_('cancel_run_now').catch(() => ({ ok: false, error: 'Network error' }));
+  if (!r.ok) return lcToast_(r.error || 'Couldn’t cancel', true);
+  if (r.cancelled) { LC.runPending = 0; lcRenderRun_(); return lcToast_('Cancelled · nothing was sent'); }
+  if (r.running) return lcToast_('Already sending. Pause the campaign to stop it.', true);
+  LC.runPending = 0; lcRenderRun_(); lcToast_('Nothing was waiting to start');
+}
 // Polls until a run newer than the click shows up, then reports it.
 function lcWatchRun_() {
   const since = LC.runPending - 5000;
@@ -1066,6 +1076,7 @@ function lcDispatch_(t) {
   if (act === 'trig-refresh') return lcTrigTest_(true);
   if (act === 'crm-sync') return crmSyncStartups_();
   if (act === 'run') return lcRunNow_();
+  if (act === 'run-cancel') return lcCancelRun_();
   if (act === 'sender') return lcEditSender_();
   if (act === 'step-sender') return lcEditStepSender_(t.dataset.id);
   if (act === 'golive') return lcGoLive_();

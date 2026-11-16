@@ -39,7 +39,7 @@
 
 var EE_MAINTENANCE_TASKS = { setup: 'eeSetup', setup_marketing_kit: 'eeSetupMarketingKit', diagnostics: 'eeDiagnostics', backup: 'eeBackupNow', catch_up: 'eeCatchUp' };
 var EE_TEMPLATE_ACTIONS = { list_templates: 1, open_template: 1, open_draft: 1, open_editor: 1, save_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1 };
-var EE_ADMIN_ACTIONS = { set_batch_date: 1, apply_incoming_many: 1, approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
+var EE_ADMIN_ACTIONS = { unapprove_waiting: 1, mark_hand_sent: 1, cancel_run_now: 1, set_batch_date: 1, apply_incoming_many: 1, approve_waiting: 1, plan_import_batches: 1, clear_flag: 1, list_senders: 1, set_step_sender: 1, test_sender: 1, add_staff: 1, go_live: 1, set_sender: 1, reset_mcp_legacy: 1, alerts_forwarded: 1, trigger_test: 1, list_attachments: 1, add_attachment: 1, approve_attachment: 1, discard_attachment: 1, rollback_attachment: 1, retire_attachment: 1, create_single: 1, update_single: 1, cancel_single: 1, open_editor: 1, save_draft: 1, publish_rules: 1, update_contacts: 1, resolve_duplicates: 1, apply_incoming: 1, sync_startups: 1, set_crm_rule: 1, list_templates: 1, open_template: 1, open_draft: 1, import_template: 1, approve_draft: 1, discard_draft: 1, move_batch: 1, send_override: 1, set_send_time: 1, create_batch: 1, cancel_batch: 1, import_contacts: 1, save_import_mapping: 1, maintenance: 1, ping: 1, run_now: 1, set_enabled: 1, set_bucket_paused: 1, mark_sent: 1, abandon: 1, resend: 1 };
 
 // deps: { scheduleRun() -> 'queued' | 'already_queued', planRuns() }  (Apps Script: triggers; tests: fakes)
 function EE_adminRun_(env, core, req, deps) {
@@ -116,6 +116,9 @@ function EE_adminRun_(env, core, req, deps) {
     }
   }
   else if (action === 'approve_waiting') out = EE_approveWaiting_(env, core, p, actor);
+  else if (action === 'unapprove_waiting') out = EE_unapproveWaiting_(env, core, p, actor);
+  else if (action === 'mark_hand_sent') out = EE_markHandSent_(env, core, p, actor);
+  else if (action === 'cancel_run_now') out = deps.cancelRun ? deps.cancelRun() : { ok: false, error: 'not available' };
   else if (action === 'plan_import_batches') out = EE_planImportBatches_(env, core, p, actor);
   else if (action === 'set_batch_date') out = EE_setBatchDate_(env, core, p, actor);
   else if (action === 'clear_flag') out = EE_clearFlag_(env, core, p, actor);
@@ -321,8 +324,7 @@ function EE_startDueBatches_(env, core) {
 // Apps Script entry for the relay.
 function EE_admin_(req) {
   var x = EE_core_();
-  try { if (typeof EE_repairFollowUpNov16_ === 'function') EE_repairFollowUpNov16_(x.env, x.core); } catch (e) { /* every run also tries it first (Main.js) */ }
-  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, drive: EE_driveDeps_(), files: EE_attachFilesDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
+  return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, cancelRun: EE_cancelRunNow_, drive: EE_driveDeps_(), files: EE_attachFilesDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
     runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; },
     installScheduler: function () { eeInstall(); return EE_runPlan_(EE_config_(x.env.store)); } });
 }
@@ -332,6 +334,16 @@ function EE_scheduleRunNow_() {
   if (pending.length) return 'already_queued';
   ScriptApp.newTrigger('EE_runNowTrigger').timeBased().after(1000).create();
   return 'queued';
+}
+// Cancel Send now: removes a queued run before it starts. A run already sending isn't stopped
+// (pause the campaign for that); its lease says so.
+function EE_cancelRunNow_() {
+  var pending = ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'EE_runNowTrigger'; });
+  pending.forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  var lease = null;
+  try { lease = JSON.parse(EE_props_().getProperty('EE_LEASE') || 'null'); } catch (e) { lease = null; }
+  var running = !!(lease && lease.expires > Date.now());
+  return { ok: true, cancelled: pending.length, running: running };
 }
 function EE_runNowTrigger() {
   ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'EE_runNowTrigger'; })
@@ -852,7 +864,7 @@ function EE_stepOff_(env, stepId) {
 function EE_approveWaiting_(env, core, p, actor) {
   var ids = (p.contact_ids || []).map(String).filter(Boolean);
   if (!ids.length || ids.length > EE_BATCH_MAX) return { ok: false, error: 'pick 1 to ' + EE_BATCH_MAX + ' people' };
-  var today = EE_today_(env), approved = 0, skipped = [], gateFor = {};
+  var today = EE_today_(env), approved = 0, skipped = [], gateFor = {}, items = [];
   ids.forEach(function (cid) {
     var c = env.store.get('Contacts', cid);
     if (!c) { skipped.push({ contact_id: cid, reason: 'not found' }); return; }
@@ -862,12 +874,70 @@ function EE_approveWaiting_(env, core, p, actor) {
     var gk = c.start_step || ('first:' + c.bucket);
     if (!(gk in gateFor)) gateFor[gk] = c.start_step ? EE_stepOff_(env, c.start_step) : EE_firstStepOff_(env, c.bucket);
     if (gateFor[gk]) { skipped.push({ contact_id: cid, reason: 'Turn on ' + gateFor[gk] + ' first' }); return; }
-    core.commitEntity('contact', { contact_id: cid, review_status: 'confirmed', review_reason: 'approved by ' + actor + ' on ' + today },
-      'contact:' + cid + ':approve:' + today);
+    items.push({ type: 'contact', data: { contact_id: cid, review_status: 'confirmed', review_reason: 'approved by ' + actor + ' on ' + today },
+      opId: 'contact:' + cid + ':approve:' + today + ':' + env.now() });
     approved++;
   });
+  EE_commitMany_(core, items);   // everyone in one write
   if (!approved && skipped.length) return { ok: false, error: skipped[0].reason, skipped: skipped };
   return { ok: true, approved: approved, skipped: skipped };
+}
+// Undo approval (Plan changes 2026-11-16): people approved but not started yet go back to
+// waiting: Waiting for approval if an email was sent by hand, else Needs review (their planned
+// start, if any, shows as overdue again). Anyone already in a sequence is left alone.
+function EE_unapproveWaiting_(env, core, p, actor) {
+  var ids = (p.contact_ids || []).map(String).filter(Boolean);
+  if (!ids.length || ids.length > EE_BATCH_MAX) return { ok: false, error: 'pick 1 to ' + EE_BATCH_MAX + ' people' };
+  var enrolled = {};
+  env.store.rows('Enrollments').forEach(function (e) { enrolled[e.contact_id] = true; });
+  var items = [], skipped = [], today = EE_today_(env);
+  ids.forEach(function (cid) {
+    var c = env.store.get('Contacts', cid);
+    if (!c) { skipped.push({ contact_id: cid, reason: 'not found' }); return; }
+    if (enrolled[cid]) { skipped.push({ contact_id: cid, reason: 'already getting emails (use Skip on the calendar)' }); return; }
+    if (c.review_status !== 'confirmed' || String(c.review_reason || '').indexOf('approved by') !== 0) { skipped.push({ contact_id: cid, reason: 'not approved' }); return; }
+    var hand = !!c.intro_sent_on;
+    items.push({ type: 'contact', opId: 'contact:' + cid + ':unapprove:' + env.now(), data: { contact_id: cid,
+      review_status: hand ? 'awaiting_approval' : 'needs_review',
+      review_reason: hand ? 'Intro sent by hand on ' + c.intro_sent_on + (c.followup_sent_on ? '; Follow Up on ' + c.followup_sent_on : '') : 'approval undone by ' + actor + ' on ' + today } });
+  });
+  EE_commitMany_(core, items);
+  if (!items.length && skipped.length) return { ok: false, error: skipped[0].reason, skipped: skipped };
+  return { ok: true, undone: items.length, skipped: skipped };
+}
+// Sent by hand (Plan changes 2026-11-16): someone sent a person's next MCP Legacy email
+// outside the engine. Recorded so the engine never sends it; they wait for approval at the
+// email after it. p = { contact_ids, step_id: 'b_intro' | 'b_followup', date: 'YYYY-MM-DD' }.
+// Only people not yet in a sequence (in a sequence: Skip on the calendar).
+function EE_markHandSent_(env, core, p, actor) {
+  var ids = (p.contact_ids || []).map(String).filter(Boolean), step = String(p.step_id || ''), date = String(p.date || ''), today = EE_today_(env);
+  if (!ids.length || ids.length > EE_BATCH_MAX) return { ok: false, error: 'pick 1 to ' + EE_BATCH_MAX + ' people' };
+  if (step !== 'b_intro' && step !== 'b_followup') return { ok: false, error: 'only the Intro or the Follow Up can be marked sent by hand' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) return { ok: false, error: 'a date on or before today' };
+  var enrolled = {};
+  env.store.rows('Enrollments').forEach(function (e) { enrolled[e.contact_id] = true; });
+  var items = [], skipped = [];
+  ids.forEach(function (cid) {
+    var c = env.store.get('Contacts', cid);
+    if (!c) { skipped.push({ contact_id: cid, reason: 'not found' }); return; }
+    if (c.bucket !== 'B') { skipped.push({ contact_id: cid, reason: 'not MCP Legacy' }); return; }
+    if (enrolled[cid]) { skipped.push({ contact_id: cid, reason: 'already getting emails (use Skip on the calendar)' }); return; }
+    if (!/^(needs_review|awaiting_approval|confirmed)$/.test(c.review_status)) { skipped.push({ contact_id: cid, reason: 'not waiting' }); return; }
+    var d = { contact_id: cid, review_status: 'awaiting_approval', sub_bucket: 'B2' };
+    if (step === 'b_intro') {
+      if (c.intro_sent_on) { skipped.push({ contact_id: cid, reason: 'Intro already recorded' }); return; }
+      d.intro_sent_on = date; d.start_step = 'b_followup'; d.review_reason = 'Intro sent by hand on ' + date;
+    } else {
+      if (!c.intro_sent_on) { skipped.push({ contact_id: cid, reason: 'mark the Intro first' }); return; }
+      if (c.followup_sent_on) { skipped.push({ contact_id: cid, reason: 'Follow Up already recorded' }); return; }
+      if (date < c.intro_sent_on) { skipped.push({ contact_id: cid, reason: 'before their Intro' }); return; }
+      d.followup_sent_on = date; d.start_step = 'b_checkin'; d.review_reason = 'Intro sent by hand on ' + c.intro_sent_on + '; Follow Up on ' + date;
+    }
+    items.push({ type: 'contact', data: d, opId: 'contact:' + cid + ':hand:' + step + ':' + date });
+  });
+  EE_commitMany_(core, items);
+  if (!items.length && skipped.length) return { ok: false, error: skipped[0].reason, skipped: skipped };
+  return { ok: true, marked: items.length, skipped: skipped };
 }
 // After an import with planned start dates: one batch per future date, with the
 // people waiting in Needs review for that date. Past dates get no batch: those

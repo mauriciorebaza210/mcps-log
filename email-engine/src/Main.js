@@ -88,8 +88,6 @@ function EE_run_(trigger) {
   // The gate time: a scheduled run that fired a little early uses its slot (Schedule.js).
   var nowTime = MCPS_LIFECYCLE.localTime(new Date(), EE_TZ), plan = EE_runPlan_(cfg);
   var slot = trigger === 'scheduled' && plan && plan.date === EE_today_(x.env) ? EE_slotFor_(plan, nowTime) : { gate: nowTime, planned_for: '' };
-  // One-time repair (Repair.js): before anything is planned, so this run can't send what Tony sent by hand.
-  if (typeof EE_repairFollowUpNov16_ === 'function') EE_repairFollowUpNov16_(x.env, x.core);
   // Batches whose start date has come confirm their people, so this plan starts them (Admin.js).
   var batches = null;
   try { batches = EE_startDueBatches_(x.env, x.core); }

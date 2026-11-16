@@ -173,7 +173,10 @@ function waitingView(tables, now) {
     .forEach(c => { late[c.planned_start] = (late[c.planned_start] || 0) + 1; });
   return { intro_done: intro.length, followup_due_since: due[0] || '', followup_done: followed.length, checkin_due_since: dueCheck[0] || '',
     late_starts: Object.keys(late).sort().map(d => ({ date: d, count: late[d] })),
-    flagged: live.filter(c => c.review_status === 'flagged').length };
+    flagged: live.filter(c => c.review_status === 'flagged').length,
+    // Approved but not started yet (the next run starts them): Undo approval is still possible.
+    approved: (() => { const inSeq = new Set((tables.Enrollments || []).map(e => e.contact_id));
+      return live.filter(c => c.review_status === 'confirmed' && /^approved by /.test(c.review_reason || '') && !inSeq.has(c.contact_id)).length; })() };
 }
 export function buildOverview(tables, caps, now, opts = {}) {
   const cfg = config(tables);
