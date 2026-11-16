@@ -46,7 +46,7 @@ function EE_templateCheck_(env, t) {
   var startup = MCPS_LIFECYCLE.addDays(EE_today_(env), 7);
   return MCPS_EMAIL_RENDER.render({ revision: { subject: t.subject || '', preheader: t.preheader || '', details_box: t.details_box || '', body_html: t.html, format: t.format },
     blocks: blocks, fields: fields,
-    contact: { first_name: 'Sample', last_name: 'Contact', address: '1 Sample St, Boerne, TX', startup_date: startup, pool_school: 'Y' },
+    contact: { first_name: 'Sample', last_name: 'Contact', address: '1 Sample St, Boerne, TX', startup_date: startup, pool_school: 'Y', technician: 'Sample Technician' },
     context: { sender_name: cfg.sender_name, unsubscribeUrl: 'https://example.invalid/unsubscribe', links: { quote: cfg.link_quote },
       business: { name: cfg.business_name, address: cfg.business_address, phone: cfg.business_phone, website: cfg.business_website } } });
 }

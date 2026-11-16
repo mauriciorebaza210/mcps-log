@@ -1,6 +1,6 @@
 # MCPS Welcome Email: placeholders and Drive upload (for ChatGPT)
 
-Version: 1 (2026-11-16). Applies to the **MCP Startup → Welcome Email** (`step_id` `c_welcome`).
+Version: 2 (2026-11-16): adds `{{Technician}}`. Applies to the **MCP Startup → Welcome Email** (`step_id` `c_welcome`).
 Read this together with `START HERE - ChatGPT instructions.txt` in the **MCPS Marketing** folder. Where the two differ for the Welcome Email, this file wins.
 
 Everything below was checked against the engine's code (`Lib_EmailRender.js` `renderFull()`, `Templates.js`, the `Fields` tab). Rules marked **(blocks)** are enforced: a template that breaks one is rejected when Tony opens it in the portal, and nothing is sent.
@@ -24,6 +24,7 @@ Write placeholders exactly as shown: double curly braces, exact capitalization, 
 | `{{Address}}` | Pool street address. For startups this **already includes the city** (e.g. `123 Oak Hill Dr, Boerne`) | **Send fails** (required) | `123 Oak Hill Dr, Boerne` |
 | `{{StartupDate}}` | The first startup day, formatted as weekday + month + day, **no year** | **Send fails** (required) | `Wednesday, November 18` |
 | `{{SenderName}}` | The sign-off name set in the portal (Emails → From) | **Send fails** (required) | `Tony` |
+| `{{Technician}}` | Name of the technician assigned to the startup in the portal's schedule: Day 1's technician; if Day 1 has none, the earliest startup day that has one. Full name as in the portal's user list | Becomes `our technician` (never blocks a send) | `Alex Rivera` / `our technician` |
 
 Two link placeholders also exist. They go **only** inside `href="…"`:
 
@@ -38,6 +39,10 @@ Two link placeholders also exist. They go **only** inside `href="…"`:
 - Startup date sentence: `Your pool startup begins on {{StartupDate}}.` Don't add a year, a weekday or "the" around it; the value already reads as `Wednesday, November 18`.
 - Address: `at {{Address}}`. Don't append a city, state or ZIP; the city is already in the value and the other two aren't available.
 - `{{LastName}}` is optional and can be empty, so never make a sentence depend on it ("Dear Mr. {{LastName}}" would read "Dear Mr. ," when it's empty).
+- Technician: the Welcome can go out before a technician is assigned, and then `{{Technician}}` reads `our technician` (lower case). So:
+  - Put it **mid-sentence**, never first: `On {{StartupDate}}, {{Technician}} will complete your startup following our standard procedures.` reads well both ways ("…, Alex Rivera will…" / "…, our technician will…").
+  - Never put words around it that only work with a real name: not `Your technician, {{Technician}},` ("Your technician, our technician,"), not `Technician: {{Technician}}`, not `{{Technician}} is excited to meet you` (starts a sentence in lower case).
+  - Don't add a photo, phone number or personal details for the technician; only the name is available.
 - Sign-off: `{{SenderName}}` followed by `Mission Custom Pool Solutions`.
 
 ### Where placeholders may go
@@ -58,11 +63,12 @@ Any other `{{Name}}` is rejected with `unknown field {{Name}}`, and any leftover
 
 | You might want | Status | Write instead |
 |---|---|---|
-| `{{Technician}}` / technician name | **Not available.** The portal does not send the assigned technician to the email engine today | "your MCPS technician" / "our technician will complete your startup following our standard procedures" |
 | `{{City}}`, `{{State}}`, `{{Zip}}` | Not available as placeholders | Nothing; `{{Address}}` already includes the city |
 | `{{Phone}}`, `{{Email}}` (the customer's) | Not available | Don't reference the customer's contact details |
 | `{{PoolId}}`, `{{QuoteId}}` | Not available | Don't reference them |
 | `{{details}}`, `{{block:PoolSchool}}`, `{{button:…}}` | Exist only in the portal's own editor, **not** in complete HTML files from ChatGPT (blocks) | Write the content directly in the HTML (see §5) |
+
+Also unavailable: `{{TechnicianFirstName}}`, `{{TechnicianPhone}}` or any other technician detail; only `{{Technician}}` (the name) exists.
 
 If Tony asks for one of these, tell him it needs a change in the engine first (Mau can add it), and use the "Write instead" wording until then. Never invent a placeholder or type a real customer's name, address or date into the template.
 
@@ -76,7 +82,7 @@ The file is a **complete HTML document** (the engine calls this format `full`). 
 4. No `<script>`, `<iframe>`, `<form>`, `<object>`, `<embed>`, and no `on…=` attributes (`onclick`, `onload`, …).
 5. `<link>` tags only for `https://fonts.googleapis.com/…`.
 6. Every `<img>` has an `https://` `src` and an `alt="…"` attribute. Logo: `https://mcps-email-assets.vercel.app/mcps-lockup-badge.png` (214 × 59).
-7. Only the placeholders in §2. No other `{{` or `}}` anywhere outside a `<style>` block.
+7. Only the placeholders in §2 (`FirstName`, `LastName`, `Address`, `StartupDate`, `SenderName`, `Technician`, `UnsubscribeLink`). No other `{{` or `}}` anywhere outside a `<style>` block.
 8. File under 200 KB.
 
 Also follow the design and voice rules in START HERE (600 px table layout, inline styles, brand colors, Montserrat/Open Sans with Arial fallback, short paragraphs, no emojis, no ALL CAPS, never list service tasks). The engine adds the open-tracking pixel and a small reference line before `</body>` by itself; don't add your own tracking.
@@ -91,7 +97,7 @@ Suggested structure:
 4. A light-gray details panel (`#F3F5F6`), written in HTML:
    - **Startup begins:** `{{StartupDate}}`
    - **Pool address:** `{{Address}}`
-5. What to expect: a technician will complete the startup following our standard procedures over the first days, and they'll get a short update every week during the first month. Don't list chemicals, steps or tasks.
+5. What to expect: `{{Technician}}` will complete the startup following our standard procedures over the first days (mid-sentence, see §2), and they'll get a short update every week during the first month. Don't list chemicals, steps or tasks.
 6. Pool School: the portal version shows a Pool School section only to customers who asked for it. A ChatGPT file can't do that conditionally, so either leave Pool School out, or mention it in neutral terms that make sense to everyone (e.g. "Ask us about a short Pool School session when your technician visits").
 7. Questions: "Just reply to this email, or call us at (210) 559-2073." Phone link: `<a href="tel:+12105592073">(210) 559-2073</a>` (tel: links are not tracked or rewritten).
 8. Sign-off: `{{SenderName}}`, Mission Custom Pool Solutions.
@@ -105,7 +111,7 @@ No `{{QuoteLink}}` button, no prices, no promotions.
 2. Outside the file, in the chat: the **subject line** (under 50 characters, no placeholders) and the **preview text** (under 90 characters, may use `{{FirstName}}` but better without). Tony pastes these into the portal.
 3. A one-line list of the placeholders the file uses.
 
-Before handing it back, check the file yourself against §3 and §4: search it for `{{` and confirm every hit is one of `FirstName`, `LastName`, `Address`, `StartupDate`, `SenderName`, `UnsubscribeLink`; confirm the exact footer address; confirm every `<img>` has `https://` and `alt`.
+Before handing it back, check the file yourself against §3 and §4: search it for `{{` and confirm every hit is one of `FirstName`, `LastName`, `Address`, `StartupDate`, `SenderName`, `Technician`, `UnsubscribeLink`; read every sentence with `{{Technician}}` replaced by `our technician` and confirm it still reads correctly; confirm the exact footer address; confirm every `<img>` has `https://` and `alt`.
 
 ## 7. Putting the file in Google Drive
 
@@ -140,10 +146,16 @@ Common errors and what they mean:
 
 | Error shown in the portal | Fix |
 |---|---|
-| `unknown field {{Technician}}` (or any name) | Remove that placeholder (see §3) |
+| `unknown field {{Name}}` | Remove that placeholder (see §3). `{{Technician}}` is valid; if it shows as unknown, the engine update hasn't reached Tony's account yet, tell Mau |
 | `unresolved {{ }} left in the email` | A stray `{{` or `}}`, or a placeholder in an HTML comment |
 | `the template must show the business address (…) in its footer` | Use the exact address text from §4 |
 | `the template needs an unsubscribe link` | Add `<a href="{{UnsubscribeLink}}">Unsubscribe</a>` |
 | `every image must load from an https:// URL` / `needs alt text` | Fix that `<img>` |
 | `a complete file needs <body> … </body>` | Return the full document, not a fragment |
 | `missing required Address` / `StartupDate` (at send time, not in the preview) | That customer's record is missing the value in the portal; fix the startup in the portal, not the template |
+
+## 9. Technician: when the name appears
+
+- The name comes from the portal's schedule (the startup's Scheduled Visits). Assigning or changing the technician in the portal reaches the email engine on the next daily sync (9:00 AM Central), or right away when someone presses sync on the portal's Lifecycle Email page.
+- If the Welcome is sent before anyone is assigned, that customer's Welcome says "our technician". Later emails use the name once it's assigned.
+- Only Welcome versions approved after 2026-11-16 can use `{{Technician}}`. An approved version keeps the field list from the day it was approved, so a new `{{Technician}}` template must go through **Make draft → Approve**.

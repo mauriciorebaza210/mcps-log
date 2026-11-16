@@ -43,7 +43,7 @@ function eeApprove(stepId, editor) {
   var cfg = EE_config_(env.store);
   var dry = MCPS_EMAIL_RENDER.render({ revision: { subject: content.subject, preheader: content.preheader,
     details_box: content.details_box, body_html: bodyHtml }, blocks: sampleBlocks, fields: fields,
-    contact: { first_name: 'Sample', last_name: 'Contact', address: '1 Sample St', startup_date: '2026-01-01', pool_school: 'Y' },
+    contact: { first_name: 'Sample', last_name: 'Contact', address: '1 Sample St', startup_date: '2026-01-01', pool_school: 'Y', technician: 'Sample Technician' },
     context: { sender_name: cfg.sender_name, unsubscribeUrl: 'https://example.invalid/u', links: { quote: cfg.link_quote },
       business: { name: cfg.business_name, address: cfg.business_address, phone: cfg.business_phone, website: cfg.business_website } } });
   if (!dry.ok) throw new Error('Not approved, the draft has problems: ' + dry.errors.join('; '));

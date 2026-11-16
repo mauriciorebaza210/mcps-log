@@ -85,17 +85,26 @@ const addDays = (d, n) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t
 const OFFSET = { startup_day_1: 0, startup_day_2: -1, startup_day_3: -2 };
 const GONE = new Set(['cancelled', 'removed', 'skipped']);
 
+// A technician name as the schedule stores it (Users.name), or '' for none / a placeholder.
+const techOf = v => { const t = norm(v.assigned_technician).replace(/\s+/g, ' '); return /^(unassigned|tbd|none|n\/a|-)?$/i.test(t) ? '' : t; };
+
 // Live startup date per pool from the schedule: day 1, worked back from any startup day still on it.
+// technician: who does the startup. Day 1's technician; when day 1 has none, the earliest
+// startup day that has one. Cancelled/removed/skipped days don't count.
 export function startupDates(visits) {
   const out = {};
   (visits || []).forEach(v => {
     const off = OFFSET[norm(v.visit_type)], pool = norm(v.pool_id), d = norm(v.scheduled_date).slice(0, 10);
     if (off === undefined || !pool || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
-    const rec = out[pool] = out[pool] || { day1: '', live: 0, gone: 0 };
+    const rec = out[pool] = out[pool] || { day1: '', live: 0, gone: 0, technician: '', techRank: '' };
     if (GONE.has(low(v.status))) { rec.gone++; return; }
     rec.live++;
     const day1 = addDays(d, off);
     if (!rec.day1 || day1 < rec.day1) rec.day1 = day1;
+    const tech = techOf(v);
+    if (!tech) return;
+    const rank = (off === 0 ? '0' : '1') + d;                  // day 1 first, then by date
+    if (!rec.techRank || rank < rec.techRank) { rec.technician = tech; rec.techRank = rank; }
   });
   return out;
 }
@@ -117,7 +126,8 @@ export function startupContacts(quotes, visits, today) {
     if (!EMAIL.test(email)) { skipped.push({ quote_id: qid, reason: 'no_email' }); return; }
     contacts.push({ quote_id: qid, pool_id: pool, email_norm: email, ...nameOf(q), phone: norm(q.phone),
       address: [norm(q.address), norm(q.city)].filter(Boolean).join(', '), city: norm(q.city), zip: norm(q.zip_code), area: norm(q.area),
-      startup_date: startup, startup_source: fromSchedule ? 'schedule' : 'quote', pool_school: yes(q.startup_pool_school) ? 'Y' : 'N' });
+      startup_date: startup, startup_source: fromSchedule ? 'schedule' : 'quote', pool_school: yes(q.startup_pool_school) ? 'Y' : 'N',
+      technician: (sched && sched.technician) || '' });
   });
   return { contacts, removed, skipped };
 }

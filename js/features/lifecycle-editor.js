@@ -24,8 +24,8 @@ function edSamples_() {
   const t = new Date(Date.now() + 7 * 86400000), startup = t.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   const base = { last_name: 'Lopez', address: '118 Cypress Bend, Boerne, TX 78006', startup_date: startup };
   return {
-    school: { label: 'Maria (with Pool School)', contact: Object.assign({ first_name: 'Maria', pool_school: 'Y' }, base) },
-    noschool: { label: 'Tom (no Pool School)', contact: Object.assign({ first_name: 'Tom', pool_school: 'N' }, base, { last_name: 'Reyes' }) },
+    school: { label: 'Maria (with Pool School, technician assigned)', contact: Object.assign({ first_name: 'Maria', pool_school: 'Y', technician: 'Alex Rivera' }, base) },
+    noschool: { label: 'Tom (no Pool School, no technician yet)', contact: Object.assign({ first_name: 'Tom', pool_school: 'N' }, base, { last_name: 'Reyes' }) },
     noname: { label: 'No first name on file', contact: Object.assign({ first_name: '', pool_school: 'Y' }, base) }
   };
 }

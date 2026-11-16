@@ -399,7 +399,7 @@ function EE_sendOverride_(env, p, actor) {
 // api/email.js reads Quotes + the schedule and sends the startups it found; here
 // they become confirmed MCP Startup contacts (only changed fields are written),
 // and cancelled ones are removed with their sequence stopped.
-var EE_STARTUP_FIELDS = ['quote_id', 'pool_id', 'first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'startup_date', 'startup_source', 'pool_school'];
+var EE_STARTUP_FIELDS = ['quote_id', 'pool_id', 'first_name', 'last_name', 'phone', 'address', 'city', 'zip', 'area', 'startup_date', 'startup_source', 'pool_school', 'technician'];
 function EE_syncStartups_(env, core, p, actor) {
   var list = Array.isArray(p.contacts) ? p.contacts : [], removed = Array.isArray(p.removed) ? p.removed : [];
   if (list.length > 400) return { ok: false, error: 'send at most 400 startups per call' };

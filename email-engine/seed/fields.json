@@ -5,6 +5,7 @@
     { "field": "LastName",    "source": "contact", "key": "last_name",    "fallback": "" },
     { "field": "Address",     "source": "contact", "key": "address",      "required": true },
     { "field": "StartupDate", "source": "contact", "key": "startup_date", "required": true, "format": "long_date" },
-    { "field": "SenderName",  "source": "context", "key": "sender_name",  "required": true }
+    { "field": "SenderName",  "source": "context", "key": "sender_name",  "required": true },
+    { "field": "Technician",  "source": "contact", "key": "technician",   "fallback": "our technician" }
   ]
 }

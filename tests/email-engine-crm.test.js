@@ -86,6 +86,21 @@ test('Startups: live date from the schedule (reschedules), fallback to the quote
   assert.ok(!by['Q-S6'], 'no pool yet (not activated)');
 });
 
+test('Startups: the technician is day 1\'s; else the earliest startup day with one; cancelled days and UNASSIGNED never count', async () => {
+  const { startupContacts } = await mod();
+  const q = (id, pool) => ({ quote_id: id, status: 'ACTIVE_CUSTOMER', service_key: 'pool_startup', pool_id: pool, first_name: 'X', email: id.toLowerCase() + '@example.com', startup_start_date: '2026-11-20' });
+  const quotes = [q('Q-T1', 'P1'), q('Q-T2', 'P2'), q('Q-T3', 'P3'), q('Q-T4', 'P4'), q('Q-T5', 'P5')];
+  const v = (pool, day, date, tech, status = 'scheduled') => ({ pool_id: pool, visit_type: 'startup_day_' + day, scheduled_date: date, status, assigned_technician: tech });
+  const visits = [
+    v('P1', 2, '2026-11-21', 'Bea Cruz'), v('P1', 1, '2026-11-20', '  Alex   Rivera '),          // day 1 wins even listed second; spaces tidied
+    v('P2', 1, '2026-11-20', 'UNASSIGNED'), v('P2', 3, '2026-11-22', 'Cy Lee'), v('P2', 2, '2026-11-21', 'Bea Cruz'),  // no day-1 tech: earliest day
+    v('P3', 1, '2026-11-20', 'Alex Rivera', 'cancelled'), v('P3', 2, '2026-11-21', 'Bea Cruz'),   // a cancelled day 1 doesn't count
+    v('P4', 1, '2026-11-20', '')                                                               // nobody yet
+  ];
+  const by = Object.fromEntries(startupContacts(quotes, visits, '2026-11-15').contacts.map(c => [c.quote_id, c.technician]));
+  assert.deepEqual(by, { 'Q-T1': 'Alex Rivera', 'Q-T2': 'Bea Cruz', 'Q-T3': 'Bea Cruz', 'Q-T4': '', 'Q-T5': '' }, 'Q-T5 has no schedule rows: no technician');
+});
+
 // ── API route with fake sheets ──
 async function api(sheets, over = {}) {
   process.env.EE_ENGINE_SS_ID = 'engine-sheet';
@@ -176,6 +191,15 @@ test('Engine: new startups become confirmed MCP Startup contacts; a date change 
   assert.equal(w.journal.length, journal, 'nothing changed: no writes');
   assert.equal(w.sync({ contacts: [{ ...S1, startup_date: '2026-11-27' }] }).updated, 1);
   assert.equal(w.contact('Q-S1').startup_date, '2026-11-27');
+});
+
+test('Engine: the startup technician is stored on the contact and follows reassignments', () => {
+  const w = engine();
+  w.sync({ contacts: [{ ...S1, technician: 'Alex Rivera' }] });
+  assert.equal(w.contact('Q-S1').technician, 'Alex Rivera');
+  assert.equal(w.sync({ contacts: [{ ...S1, technician: 'Bea Cruz' }] }).updated, 1);
+  assert.equal(w.contact('Q-S1').technician, 'Bea Cruz');
+  assert.equal(w.sync({ contacts: [{ ...S1, technician: 'Bea Cruz' }] }).updated, 0, 'unchanged: no write');
 });
 
 test('Engine: a cancelled startup is removed and its sequence stopped; someone in MCP Legacy is left alone', () => {

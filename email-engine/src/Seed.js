@@ -226,6 +226,12 @@ var EE_SEED = {
       "source": "context",
       "key": "sender_name",
       "required": true
+    },
+    {
+      "field": "Technician",
+      "source": "contact",
+      "key": "technician",
+      "fallback": "our technician"
     }
   ],
   "config": {

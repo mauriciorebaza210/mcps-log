@@ -1,6 +1,6 @@
 # MCPS Email Engine — Dictionary for ChatGPT
 
-Version: 3 (2026-11-16)
+Version: 4 (2026-11-16)
 
 This is the reference for the Google Sheets behind the MCPS Lifecycle Email Engine: the system that sends Mission Custom Pool Solutions' automatic email series (the **MCP Legacy** and **MCP Startup** campaigns) from Tony's Gmail. It explains what every tab and column holds, how the engine decides who gets which email and when, and how to answer common questions from the data.
 
@@ -297,6 +297,7 @@ One row is one person (one email address). Written by the engine from imports, t
 | `followup_sent_on` | MCP Legacy: date the Follow Up was sent by hand (from the import, or recorded with Sent by hand in the portal) | `YYYY-MM-DD` or blank | 🚫 |
 | `flag_reason` | Reason from the import file for holding the person out of batches | text or blank | 🚫 |
 | `start_step` | The email an imported person starts at (earlier ones are never sent) | `b_followup`, `b_checkin`, or blank (start at the first email) | 🚫 |
+| `technician` | MCP Startup: the technician assigned to the startup, from the portal's schedule (`{{Technician}}`). Day 1's technician; when day 1 has none, the earliest startup day that has one. Updated by the daily sync when the assignment changes | the technician's name as in the portal's Users list, or blank (not assigned yet) | 🚫 |
 
 ### Enrollments
 
@@ -458,12 +459,12 @@ The merge fields emails may use, and what happens when a value is missing.
 
 | Column | Meaning | Values / format | Edit |
 |---|---|---|---|
-| `field` | Placeholder name used in templates as `{{Name}}` | `FirstName`, `LastName`, `Address`, `StartupDate`, `SenderName` | 🚫 |
+| `field` | Placeholder name used in templates as `{{Name}}` | `FirstName`, `LastName`, `Address`, `StartupDate`, `SenderName`, `Technician` | 🚫 |
 | `source` | Where the value comes from | `contact` (Contacts column) or `context` (engine settings) | 🚫 |
 | `key` | The column or setting read | e.g. `first_name`, `startup_date`, `sender_name` | 🚫 |
-| `fallback` | Used when the value is empty (a field with a fallback never blocks a send) | text, e.g. `there` for FirstName | 🚫 |
+| `fallback` | Used when the value is empty (a field with a fallback never blocks a send) | text, e.g. `there` for FirstName, `our technician` for Technician | 🚫 |
 | `required` | An empty value blocks the send (the delivery fails) | `true` or blank | 🚫 |
-| `format` | How the value is shown | `long_date` (e.g. November 20, 2026) or blank | 🚫 |
+| `format` | How the value is shown | `long_date` (weekday, month and day, no year, e.g. Friday, November 20) or blank | 🚫 |
 
 ### Config
 
@@ -874,6 +875,12 @@ Search `Batches` with `status` `planned` for their `contact_id` in `contact_ids`
 ---
 
 ## What changed
+
+### Version 4 — 2026-11-16
+- New merge field **`{{Technician}}`**: the name of the technician assigned to the startup (MCP Startup emails). It uses Day 1's technician; when Day 1 has none, the earliest startup day that has one. When nobody is assigned yet it reads "our technician", so it never stops an email.
+- New `Contacts` column `technician` (MCP Startup contacts), filled by the portal's daily startup sync.
+- An email can use `{{Technician}}` only in versions approved from now on; the Welcome Email needs a new approved version to use it.
+- Corrected: `{{StartupDate}}` shows as weekday, month and day without the year (e.g. Friday, November 20).
 
 ### Version 3 — 2026-11-16
 - New in the portal: **Undo approval** (people approved but not sent anything yet go back to waiting), **Sent by hand** (record an Intro or Follow Up someone sent outside the engine, so the engine never sends it again; they wait for approval at the next email), and **Cancel** next to Send now.

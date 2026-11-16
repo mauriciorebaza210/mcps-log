@@ -83,6 +83,14 @@ test('A missing first name falls back to "there" and still sends', () => {
   assert.equal(r.ok, true); assert.match(r.html, /Hi there,/);
 });
 
+test('{{Technician}}: the startup technician\'s name; "our technician" until one is assigned (never blocks a send)', () => {
+  const rev = simple('<p>On {{StartupDate}}, {{Technician}} will complete your startup.</p>');
+  const withTech = run(rev, Object.assign({}, MARIA, { technician: 'Alex Rivera' }));
+  assert.equal(withTech.ok, true); assert.match(withTech.html, /Wednesday, October 28, Alex Rivera will complete/);
+  const none = run(rev, MARIA);
+  assert.equal(none.ok, true); assert.match(none.html, /, our technician will complete/);
+});
+
 // ── Template rules (PLAN.md → Templates) ─────────────────────────────────────
 
 test('Unknown merge fields and leftover braces block the send', () => {
