@@ -321,6 +321,7 @@ function EE_startDueBatches_(env, core) {
 // Apps Script entry for the relay.
 function EE_admin_(req) {
   var x = EE_core_();
+  try { if (typeof EE_repairFollowUpNov16_ === 'function') EE_repairFollowUpNov16_(x.env, x.core); } catch (e) { /* every run also tries it first (Main.js) */ }
   return EE_adminRun_(x.env, x.core, req, { scheduleRun: EE_scheduleRunNow_, drive: EE_driveDeps_(), files: EE_attachFilesDeps_(), planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); },
     runTask: function (name) { return typeof globalThis[name] === 'function' ? globalThis[name]() : { error: 'missing ' + name }; },
     installScheduler: function () { eeInstall(); return EE_runPlan_(EE_config_(x.env.store)); } });

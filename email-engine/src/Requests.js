@@ -184,7 +184,6 @@ function EE_requestsTrigger() {
   try {
     try { EE_publishDictionary_(); } catch (e) { /* tried again next pass */ }
     var x = EE_core_();
-    try { if (typeof EE_repairFollowUpNov16_ === 'function') EE_repairFollowUpNov16_(x.env, x.core); } catch (e) { try { x.env.alert('repair_failed', String(e && e.message || e).slice(0, 200)); } catch (e2) { /* best effort */ } }
     return EE_processRequests_(x.env, x.core, EE_requestsSheet_(), { scheduleRun: EE_scheduleRunNow_, planRuns: function () { return EE_planRuns_(x.env, EE_triggerDeps_()); } });
   } finally { cache.remove('ee_requests_busy'); }
 }
