@@ -32,9 +32,9 @@ _Handoff written 2026-11-14 for a fresh chat (`/email-engine`). Read this sectio
 - Its 10 images are on mcps-email-assets.vercel.app as `fu-*` (deploy dpl_6TEhRnEgMP8u7eYBZk3n3mScesSd; all 27 older files re-uploaded and verified byte-identical).
 - Next (Mau): portal → Campaigns → MCP Legacy → Follow Up → import it as a draft, set the subject, approve. Still Off until he turns it on.
 
-### 2026-11-16: ChatGPT dictionary + ChatGPT_Requests (built, tested, NOT deployed)
+### 2026-11-16: ChatGPT dictionary + ChatGPT_Requests (LIVE)
 - `email-engine/docs/chatgpt/DICTIONARY.md` v1 (every tab/column, mechanics, 14 recipes) + `ChatGPT_Requests` tab (9 actions through the portal's own actions) + Docs.js (Drive copy `MCPS Marketing/Email Engine Dictionary - ChatGPT.txt`, email to Tony once per version) + deploy guard (`--dict-unchanged`). Engine cp9-5. Tests 292. Plan changes 2026-11-16.
-- **Waiting on Mau's go:** `npm run ee:deploy "ChatGPT dictionary + requests"`. Right after it, the engine's whoami publishes the file, installs the 15-minute requests trigger and emails Tony the v1 how-to (from his own Gmail, name "MCPS Email Engine").
+- **LIVE 2026-11-16** (first published by @56 at 12:33 PM, redeployed @57): Drive file `Email Engine Dictionary - ChatGPT.txt` (v2) is in MCPS Marketing; the first-version email to Tony goes out with the first publish (not checked in Gmail). ChatGPT_Requests tab appears on the first 15-minute pass.
 
 ### First thing in the new chat
 1. (Shipped 2026-11-16.) Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
