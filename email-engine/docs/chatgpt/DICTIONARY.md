@@ -1,6 +1,6 @@
 # MCPS Email Engine — Dictionary for ChatGPT
 
-Version: 1 (2026-11-16)
+Version: 2 (2026-11-16)
 
 This is the reference for the Google Sheets behind the MCPS Lifecycle Email Engine: the system that sends Mission Custom Pool Solutions' automatic email series (the **MCP Legacy** and **MCP Startup** campaigns) from Tony's Gmail. It explains what every tab and column holds, how the engine decides who gets which email and when, and how to answer common questions from the data.
 
@@ -194,7 +194,7 @@ Anything that has reached `sending` is never sent again automatically. Each atte
 
 - **Send times.** Each campaign has a default send time: `Config` `send_time_B` / `send_time_C` (09:00 when empty). A batch can set its own time; its people keep it (`send_time` on the contact and enrollment). Times are on the quarter hour between 06:00 and 20:00 Central. A day's email waits until its time; the Welcome sent at approval doesn't wait.
 - **Runs.** Just after midnight Central the engine makes a nightly backup and plans the day's runs: one run per needed send time (campaign defaults, send times of running enrollments, and batches starting today), at most 12 a day. The plan is in `Config` `run_plan`. A run can also be started from the portal ("Send now"), and the engine queues one automatically right after a new startup syncs. Each run: (1) starts batches whose day has come, (2) scans Tony's mailbox for replies and bounces, (3) plans today's emails for everyone and sends what is due, in order. Each run is one row in `Runs`.
-- **Limits.** One engine email per person per day (others wait for the next day and are counted in `Holds`). A person who received a portal campaign email (Comms) today gets their engine email tomorrow instead. At most `Config` `daily_cap` engine emails per day in total (50 when empty). A run stops when Gmail's remaining daily send quota for the engine reaches `Config` `quota_reserve` (20 when empty), and after about 4.5 minutes of sending; the rest goes at the next run.
+- **Limits.** One engine email per person per day (others wait for the next day and are counted in `Holds`). A person who received a portal campaign email (Comms) today gets their engine email tomorrow instead. At most `Config` `daily_cap` engine emails per day in total (50 when empty). A run stops when Gmail's remaining daily send quota for the engine reaches `Config` `quota_reserve` (20 when empty), and when its time runs out (Google allows 6 minutes per run); when it ran out of time with emails still due, the next run starts right away by itself (`trigger` = `portal`), so a whole batch goes out without anyone clicking again.
 - **Windows and expiry.** Each email may go out from its due day until its window closes (`window_days`, plus held days up to `max_hold_days`, and never after a `hard_deadline`). After that it is `expired` and never sent; in MCP Legacy, emails that depend on an expired one expire too.
 - **Test vs production.** `Config` `engine_mode` = `test` sends only to test contacts whose address is on the test allowlist; `production` sends only to real contacts.
 - **Pause switches.** `Config` `engine_enabled` = `false` stops all sending (Activity → Health → Sending). `Config` `paused_buckets` lists paused campaigns (e.g. `B`), each paused separately. The engine also has an automatic **safety pause** (shown in Activity → Health) that it switches on when its records look inconsistent; it then sends nothing until fixed. While sending is off, batches still start and the reply scan still runs.
@@ -539,7 +539,7 @@ One row is one engine run. Written by the engine at the end of each run.
 | `reconcile` | Sends left unclear for checking | number | 🚫 |
 | `adopted` | Drafts taken over from an interrupted run | number | 🚫 |
 | `failed` | Emails that couldn't be built | number | 🚫 |
-| `stopped_reason` | How the run ended | `done`, `daily_cap`, `quota_reserve`, `time_budget` (rest goes next run), `kill_switch` (sending off), `safety_pause`, `already_running`, `owner_guard`, `lease_lost`, `schema_incompatible`, `crashed: …`, or a Gmail error | 🚫 |
+| `stopped_reason` | How the run ended | `done`, `daily_cap`, `quota_reserve`, `time_budget` (out of time; the next run started right away for the rest), `kill_switch` (sending off), `safety_pause`, `already_running`, `owner_guard`, `lease_lost`, `schema_incompatible`, `crashed: …`, or a Gmail error | 🚫 |
 | `plan_json` | The day's plan summary | JSON `{today, outcomes: {sent, due, upcoming, held, expired, excluded, stopped, …: counts}, not_approved}` | 🚫 |
 | `scan_json` | Reply/bounce scan summary | JSON `{threads, messages, replies, other, auto, bounces, skipped_threads, stopped, ms}` or `{error}` | 🚫 |
 | `planned_for` | The send-time slot this run was for | `HH:MM` or blank | 🚫 |
@@ -874,6 +874,9 @@ Search `Batches` with `status` `planned` for their `contact_id` in `contact_ids`
 ---
 
 ## What changed
+
+### Version 2 — 2026-11-16
+- A batch now goes out in one go: starting a batch and enrolling its people is one quick write, and a run that runs out of time with emails still due starts the next run right away. Several `Runs` rows a few minutes apart (the first ending `time_budget`) are one batch going out.
 
 ### Version 1 — 2026-11-16
 - First version.
