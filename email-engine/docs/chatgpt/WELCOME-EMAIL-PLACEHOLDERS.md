@@ -1,6 +1,28 @@
 # MCPS Welcome Email: placeholders and Drive upload (for ChatGPT)
 
 Version: 2 (2026-11-16): adds `{{Technician}}`. Applies to the **MCP Startup → Welcome Email** (`step_id` `c_welcome`).
+## For Tony: how to use it
+
+Placeholders are words in double curly braces that the system swaps for each customer's real details when the email goes out. The Welcome Email can use:
+
+- `{{FirstName}}`: the customer's first name ("there" if we don't have one)
+- `{{Address}}`: the pool address
+- `{{StartupDate}}`: the startup day, e.g. "Wednesday, November 18"
+- `{{Technician}}`: **new.** The name of the technician assigned to the startup in the portal (Day 1's technician). Until someone is assigned it reads "our technician", so the email still goes out.
+- `{{SenderName}}`: your sign-off name
+
+To make a Welcome Email with ChatGPT:
+
+1. In ChatGPT (with Google Drive connected), say: *"Read 'Welcome Email - placeholders and Drive upload (for ChatGPT).md' in my MCPS Marketing folder and write the MCP Startup Welcome Email. Include the technician's name."* Add anything else you want it to say.
+2. ChatGPT gives you an `.html` file, a subject line and preview text. Download the file and drop it into **MCPS Marketing › Email Templates › MCP Startup › 1 - Welcome Email**. If Drive asks to convert it, say no.
+3. In the portal: **Lifecycle Email → Emails → Welcome Email → Templates**. Open the file, check the preview, click **Make draft**, paste the subject and preview text, then **Approve**.
+
+The technician's name only shows in a Welcome Email approved this way; the version live today doesn't include it. A technician assigned or changed in the portal reaches the email system by the next morning.
+
+The rest of this file is written for ChatGPT.
+
+---
+
 Read this together with `START HERE - ChatGPT instructions.txt` in the **MCPS Marketing** folder. Where the two differ for the Welcome Email, this file wins.
 
 Everything below was checked against the engine's code (`Lib_EmailRender.js` `renderFull()`, `Templates.js`, the `Fields` tab). Rules marked **(blocks)** are enforced: a template that breaks one is rejected when Tony opens it in the portal, and nothing is sent.
