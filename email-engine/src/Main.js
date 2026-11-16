@@ -177,7 +177,13 @@ function doGet(e) {
       EE_ensureRequestsTrigger_(); EE_publishDictionary_();
     }
     out.dictionary = typeof EE_DICTIONARY !== 'undefined' ? EE_DICTIONARY.version : 0;
-  } catch (err) { /* the next run publishes it */ }
+  } catch (err) { out.dictionary_error = String(err && err.message || err).slice(0, 200); }
+  // Which timers are installed (handler names and counts only), and the requests pass's own install attempt.
+  try {
+    out.triggers = {};
+    ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); out.triggers[h] = (out.triggers[h] || 0) + 1; });
+    if (p.check === 'requests') out.requests_installed_now = EE_ensureRequestsTrigger_();
+  } catch (err) { out.triggers_error = String(err && err.message || err).slice(0, 200); }
   return EE_json_(out);
 }
 function doPost(e) {
