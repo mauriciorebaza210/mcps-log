@@ -30,7 +30,7 @@
     { key: 'notes', label: 'Notes' }, { key: 'do_not_contact', label: 'Do not contact (yes/no)' },
     { key: 'current_customer', label: 'Already an MCPS customer (yes/no)' },
     // A campaign already under way (Plan changes 2026-11-12).
-    { key: 'planned_start', label: 'Planned start date' }, { key: 'intro_sent_on', label: 'Intro already sent on (date)' },
+    { key: 'planned_start', label: 'Planned start date' }, { key: 'intro_sent_on', label: 'Intro already sent on (date)' }, { key: 'followup_sent_on', label: 'Follow Up already sent on (date)' },
     { key: 'flag_reason', label: 'Hold for review (reason)' }, { key: '', label: 'Ignore this column' }
   ];
   // Header words → field. Checked against the header with punctuation and case removed.
@@ -52,6 +52,7 @@
     ['current_customer', /(current|existing|active).*(mcps|customer|client)|^(mcps customer|is customer|customer\?)$/],
     ['planned_start', /^(planned start|planned start date|start date|batch start|batch date|day 1 planned)$/],
     ['intro_sent_on', /^(intro sent|intro sent on|intro already sent on|introduction sent|day 1 sent)$/],
+    ['followup_sent_on', /^(follow ?up sent|follow ?up sent on|follow ?up already sent on|day 5 sent)$/],
     ['flag_reason', /^(flag|flag reason|hold for review|review flag|hold reason)$/]
   ];
   var EMAIL_RE = /[A-Za-z0-9._%+'\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
@@ -186,7 +187,7 @@
         pool_build_year: year(get(r, 'pool_build_year')),
         tags: get(r, 'tags').split(/[,;|]+/).map(clean).filter(Boolean).map(function (t) { return t.toLowerCase(); }),
         notes: get(r, 'notes').slice(0, 500), do_not_contact: yes(get(r, 'do_not_contact')), current_customer: yes(get(r, 'current_customer')),
-        planned_start: isoDate(get(r, 'planned_start')), intro_sent_on: isoDate(get(r, 'intro_sent_on')), flag_reason: get(r, 'flag_reason').slice(0, 200),
+        planned_start: isoDate(get(r, 'planned_start')), intro_sent_on: isoDate(get(r, 'intro_sent_on')), followup_sent_on: isoDate(get(r, 'followup_sent_on')), flag_reason: get(r, 'flag_reason').slice(0, 200),
         source: clean(opts.source || '')
       });
     }

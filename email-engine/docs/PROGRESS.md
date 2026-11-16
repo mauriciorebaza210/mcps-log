@@ -9,23 +9,21 @@ _Handoff written 2026-11-14 for a fresh chat (`/email-engine`). Read this sectio
 ### Where things stand
 - **LIVE since 2026-11-11.** CP9 `bc-live` closes after a clean first week (no unresolved Unconfirmed sends). Last tag `ee/cp7-bc-scheduled`.
 - **Emails On:** only **MCP Startup Welcome**. MCP Legacy Intro / Follow Up / Check-In are **Off** (Follow Up + Check-In also "Not approved"). Turning any on = Mau's call.
-- **Engine:** Tony's Apps Script **@53** live (cp9-4). **Not yet deployed: `set_batch_date`** (commit 0474406 — move people between planned batches). Portal `main` = 39dc3c5; 0474406 is committed on `feat/email-engine`, **not pushed** (Mau's go needed; the auto-mode classifier blocked the deploy without it).
+- **Engine:** Tony's Apps Script **@55** live (cp9-4), incl. `set_batch_date` and hand-sent Follow Up support (Plan changes 2026-11-16). Portal `main` = `feat/email-engine`.
 - **Tests:** `npm run test:ee` → **280 pass**.
 
 ### Tony's MCP Legacy list (imported 2026-11-12…14)
-- In the engine: **129** Needs review with a planned date, **25** awaiting approval (Intro sent by hand Oct 26 / Nov 2 → start at the Follow Up), **11** flagged (reason from Tony's file), 0 removed.
+- In the engine (after the Nov 10 repair, 2026-11-16): **25 awaiting approval, Check-In next** (Intro Oct 26 / Nov 2 + Follow Up Nov 10 by hand), **12 awaiting approval, Follow Up next** (the Nov 9 group: Intro from info@ Nov 10), **13** flagged (11 from the file + 2 Nov 10 bounces), the rest Needs review in the 9 batches. The Nov 9 opt-out was never imported (on Comms_Optouts).
 - **9 planned batches** (one per date, specific people): Nov 16 (14) · Nov 23 (14) · Nov 30 (18) · Dec 7 (12) · Dec 14 (14) · Dec 21 (13) · Dec 28 (12) · Jan 4 (11) · Jan 11 (6). All show **"Waits for MCP x MCPS Intro"**: a batch never starts people while the first email is off; it starts at the first run after it's turned on (if its date has passed by then, that run).
-- **14 "Start overdue"** (planned Nov 9, no batch): approve from Activity/Contacts → Waiting card (needs the Intro On).
-- **25 waiting**: approve from the Waiting card; needs the **Follow Up On** (approval is refused otherwise, so the Check-In can't go out alone).
+- **25 Check-In next**: approve from the Waiting card; needs the **Personal Check-In On** (approved template). **12 Follow Up next**: needs the **Follow Up On**. Approval is refused while the email they'd start at is off.
 - Files (local only, PII): `~/Downloads/MCP_Legacy_CRM_CSV_Exports/MCP Legacy - import into portal.csv` (clean import file) and `… - missing email (fix in Tony CRM).csv` (12 people).
-- Never seen: the engine-sheet tab Mau linked (gid 202611100, "more info of last batch"). Ask before anyone approves the Nov 9 group (was week 3 partly sent by hand?). Drive connector in Claude Code kept failing ("session expired"); ask Mau for a CSV download or screenshot.
+- Tony's Nov 10 tracking sheet (pasted by Mau 2026-11-16) is applied; the clean CSV now has a *Follow Up sent on* column.
 
 ### MCP Intro sender
 - Intro **From: Mission Custom Pools <info@missioncustompools.com>**, replies to Tony. Linked in Tony's Gmail (Send mail as; Workspace admin setting "Allow per-user outbound gateways" turned ON by Mau 2026-11-12). Engine status `send_as_linked: 1`. **Mau hasn't confirmed the test email yet** (From + Reply-To on his phone).
 
 ### First thing in the new chat
-1. **Ship `set_batch_date`** with Mau's go: `npm run ee:deploy "set_batch_date"` (own command; Tony login may need `clasp --user tony login`), then `git push origin feat/email-engine` and `git push origin feat/email-engine:main` (merge origin/main first if it moved), check `lifecycle-campaigns.js?v=11` is live.
-2. Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
+1. (Shipped 2026-11-16.) Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
 3. Then, when Mau decides: Intro test email check → turn on the Intro → batches start on their dates; approve the 14 overdue; turn on + approve Follow Up, then approve the 25.
 4. Week-one watch for CP9; `/email-engine checkpoint` when clean.
 

@@ -18,7 +18,7 @@ var EE_TABLES = {
     // Cleanup and duplicates (Admin.js → update_contacts / merge_contacts / resolve_duplicates).
     'name_original', 'name_kind', 'duplicate_of', 'merged_into', 'not_duplicate_of',
     // Imported from a campaign already under way (Admin.js → import, approve_waiting, plan_import_batches).
-    'planned_start', 'intro_sent_on', 'flag_reason', 'start_step'],
+    'planned_start', 'intro_sent_on', 'followup_sent_on', 'flag_reason', 'start_step'],
   Enrollments: ['enrollment_id', 'contact_id', 'sequence_id', 'rule_rev', 'mode', 'status', 'enrolled_on', 'anchor_snapshot',
     'stop_reason', 'stopped_on', 'completed_on', 'stopped_branches', 'stopped_steps', 'flags', 'last_seq', 'send_time'],
   Deliveries: ['delivery_id', 'key', 'enrollment_id', 'contact_id', 'step_id', 'occurrence', 'mode', 'email_norm', 'bucket',

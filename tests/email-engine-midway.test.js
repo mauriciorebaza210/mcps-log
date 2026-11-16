@@ -252,3 +252,23 @@ test('Move people between planned batches: later day, a new day, or out of the b
   w.admin('set_batch_date', { contact_ids: [id('a@x.com')], start_on: '2026-11-30' });
   assert.deepEqual(plain(w.tables.Batches.find(b => b.batch_id === 'bs').contact_ids), [id('a@x.com')], 'a started batch is history');
 });
+
+test('Intro and Follow Up both sent by hand → waits for approval at the Check-In; the rules never send the first two', () => {
+  const w = withBulk(engine('2026-11-16'));
+  w.admin('import_contacts', { group: 'B', contacts: [row('a@x.com', { intro_sent_on: '2026-10-26', followup_sent_on: '2026-11-10' }), row('b@x.com', { followup_sent_on: '2026-11-10' })] });
+  const a = w.byEmail('a@x.com'), b = w.byEmail('b@x.com');
+  assert.deepEqual([a.review_status, a.start_step, a.followup_sent_on], ['awaiting_approval', 'b_checkin', '2026-11-10']);
+  assert.match(a.review_reason, /Follow Up on 2026-11-10/);
+  assert.deepEqual([b.review_status, b.followup_sent_on], ['needs_review', ''], 'a Follow Up date without an Intro date means nothing');
+  const contact = Object.assign({}, a, { review_status: 'confirmed' });
+  const en = { enrollment_id: 'e1', contact_id: a.contact_id, sequence_id: 'B', rule_rev: 'bc-1', mode: 'production', status: 'active', enrolled_on: '2026-11-16', stopped_branches: [] };
+  const d = L.decide({ today: '2026-11-16', rulesets: { 'bc-1': BC }, contacts: [contact], enrollments: [en], deliveries: [], holds: {}, signals: [], suppressions: [], paused: {} }).deliveries;
+  const by = id => d.find(x => x.step_id === id);
+  assert.deepEqual([by('b_intro').reason, by('b_followup').reason], ['sent_before_import', 'sent_before_import']);
+  assert.deepEqual([by('b_checkin').due, by('b_checkin').outcome], ['2026-11-16', 'due']);
+  // Approval needs the Check-In on.
+  assert.equal(w.admin('publish_rules', { edits: [{ step_id: 'b_checkin', status: 'off' }], scope: 'new' }).ok, true);
+  const refused = w.admin('approve_waiting', { contact_ids: [a.contact_id] });
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /Turn on/);
+});

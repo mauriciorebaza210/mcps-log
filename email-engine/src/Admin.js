@@ -212,7 +212,7 @@ function EE_importContacts_(env, core, p, actor) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { skipped.push({ email_norm: email, reason: 'bad_email' }); return; }
     if (existing[email]) { skipped.push({ email_norm: email, reason: 'existing', contact_id: existing[email] }); return; }
     var id = 'ct_' + env.sha256(email).slice(0, 16), rec = {};
-    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id', 'name_original', 'name_kind', 'duplicate_of', 'planned_start', 'intro_sent_on', 'flag_reason']
+    ['first_name', 'last_name', 'phone', 'address', 'city', 'state', 'zip', 'area', 'pool_build_year', 'notes', 'tags', 'source', 'quote_id', 'name_original', 'name_kind', 'duplicate_of', 'planned_start', 'intro_sent_on', 'followup_sent_on', 'flag_reason']
       .forEach(function (k) { rec[k] = String(c[k] == null ? '' : c[k]); });
     if (!rec.source) rec.source = String(p.source || '').slice(0, 80);       // the import's source, when rows don't carry one
     rec.contact_id = id; rec.email_norm = email; rec.bucket = group; rec.sub_bucket = group === 'B' ? 'B1' : '';
@@ -529,12 +529,17 @@ function EE_campaignFields_(out, src, group) {
   var ok = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); };
   out.planned_start = ok(src.planned_start) ? String(src.planned_start) : '';
   out.intro_sent_on = ok(src.intro_sent_on) && group === 'B' ? String(src.intro_sent_on) : '';
+  // The Follow Up sent by hand too (only after an Intro): they start at the Check-In.
+  out.followup_sent_on = out.intro_sent_on && ok(src.followup_sent_on) ? String(src.followup_sent_on) : '';
   out.flag_reason = String(src.flag_reason == null ? '' : src.flag_reason).slice(0, 200);
   out.start_step = ''; out.sub_bucket = group === 'B' ? 'B1' : (out.sub_bucket || '');
   if (out.flag_reason) { out.review_status = 'flagged'; out.review_reason = out.flag_reason; }
   if (out.intro_sent_on) {
-    out.sub_bucket = 'B2'; out.start_step = 'b_followup';
-    if (!out.flag_reason) { out.review_status = 'awaiting_approval'; out.review_reason = 'Intro sent by hand on ' + out.intro_sent_on; }
+    out.sub_bucket = 'B2'; out.start_step = out.followup_sent_on ? 'b_checkin' : 'b_followup';
+    if (!out.flag_reason) {
+      out.review_status = 'awaiting_approval';
+      out.review_reason = 'Intro sent by hand on ' + out.intro_sent_on + (out.followup_sent_on ? '; Follow Up on ' + out.followup_sent_on : '');
+    }
   }
   return !!(out.planned_start || out.intro_sent_on || out.flag_reason);
 }

@@ -93,7 +93,7 @@ function contactView(c, caps) {
     startup_date: c.startup_date || '', send_time: c.send_time || '', source: c.source || '', created_at: c.created_at || '',
     area: c.area || c.city || '', city: c.city || '', tags: String(c.tags || '').split(',').map(t => t.trim()).filter(Boolean),
     // Imported part-way or flagged (Admin.js → import; Plan changes 2026-11-12).
-    review_reason: c.review_reason || '', planned_start: c.planned_start || '', intro_sent_on: c.intro_sent_on || '',
+    review_reason: c.review_reason || '', planned_start: c.planned_start || '', intro_sent_on: c.intro_sent_on || '', followup_sent_on: c.followup_sent_on || '',
     flag_reason: c.flag_reason || '', start_step: c.start_step || ''
   };
 }
@@ -163,12 +163,15 @@ function waitingView(tables, now) {
   const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   const plus = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
   const live = (tables.Contacts || []).filter(c => c.is_test !== 'Y');
-  const intro = live.filter(c => c.review_status === 'awaiting_approval');
+  const waiting = live.filter(c => c.review_status === 'awaiting_approval');
+  // Next email: the Follow Up (4 days after the Intro) or, after a hand-sent Follow Up, the Check-In (9 days after it).
+  const intro = waiting.filter(c => !c.followup_sent_on), followed = waiting.filter(c => c.followup_sent_on);
   const due = intro.map(c => c.intro_sent_on ? plus(c.intro_sent_on, 4) : '').filter(Boolean).sort();
+  const dueCheck = followed.map(c => plus(c.followup_sent_on, 9)).sort();
   const late = {};
   live.filter(c => c.review_status === 'needs_review' && c.planned_start && c.planned_start < today)
     .forEach(c => { late[c.planned_start] = (late[c.planned_start] || 0) + 1; });
-  return { intro_done: intro.length, followup_due_since: due[0] || '',
+  return { intro_done: intro.length, followup_due_since: due[0] || '', followup_done: followed.length, checkin_due_since: dueCheck[0] || '',
     late_starts: Object.keys(late).sort().map(d => ({ date: d, count: late[d] })),
     flagged: live.filter(c => c.review_status === 'flagged').length };
 }
