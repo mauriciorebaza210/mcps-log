@@ -37,6 +37,11 @@ _Handoff written 2026-11-14 for a fresh chat (`/email-engine`). Read this sectio
 - `email-engine/docs/chatgpt/DICTIONARY.md` v1 (every tab/column, mechanics, 14 recipes) + `ChatGPT_Requests` tab (9 actions through the portal's own actions) + Docs.js (Drive copy `MCPS Marketing/Email Engine Dictionary - ChatGPT.txt`, email to Tony once per version) + deploy guard (`--dict-unchanged`). Engine cp9-5. Tests 292. Plan changes 2026-11-16.
 - **LIVE 2026-11-16** (first published by @56 at 12:33 PM, redeployed @57): Drive file `Email Engine Dictionary - ChatGPT.txt` (v2) is in MCPS Marketing; the first-version email to Tony goes out with the first publish (not checked in Gmail). ChatGPT_Requests tab appears on the first 15-minute pass.
 
+### 2026-11-16 evening: {{Technician}} merge field (built, NOT deployed)
+- Commit dbc4d20: portal sync sends `technician` per startup (Day 1's tech, else earliest startup day with one; cancelled days / UNASSIGNED ignored), engine stores it on Contacts, Fields row `Technician` (fallback "our technician", never blocks). Previews have a sample tech. Dictionary v4. Tests 307 pass.
+- Welcome guide for ChatGPT: `docs/chatgpt/WELCOME-EMAIL-PLACEHOLDERS.md`. v1 (no Technician) is in Tony's Drive (MCPS Marketing, file 1aTJLt1Q8f5PDD-9QyPOloxZ_orGetUme, shared with Tony); v2 (with Technician) replaces it only after the deploy.
+- To ship (Mau's go): `npm run ee:deploy "…"` → `node scripts/ee-task.mjs setup` (adds Contacts.technician + Fields row) → `node scripts/ee-task.mjs setup_marketing_kit` (START HERE line) → push feat/email-engine + `feat/email-engine:main` (main is behind by docs only) → re-upload the Welcome guide v2 to Drive → sync startups from Lifecycle Email. Only Welcome versions approved after the deploy can use {{Technician}}.
+
 ### First thing in the new chat
 1. (Shipped 2026-11-16.) Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
 3. Then, when Mau decides: Intro test email check → turn on the Intro → batches start on their dates; approve the 14 overdue; turn on + approve Follow Up, then approve the 25.
