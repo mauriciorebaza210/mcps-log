@@ -1,6 +1,6 @@
 # MCPS Email Engine — Dictionary for ChatGPT
 
-Version: 2 (2026-11-16)
+Version: 3 (2026-11-16)
 
 This is the reference for the Google Sheets behind the MCPS Lifecycle Email Engine: the system that sends Mission Custom Pool Solutions' automatic email series (the **MCP Legacy** and **MCP Startup** campaigns) from Tony's Gmail. It explains what every tab and column holds, how the engine decides who gets which email and when, and how to answer common questions from the data.
 
@@ -78,7 +78,7 @@ Rules:
 | `move_to_batch` | — | The batch day, `YYYY-MM-DD` (today or later) | The person joins their campaign's planned batch on that day (a new batch is made if there is none). They leave the batch they were in; a batch left empty is cancelled. | They aren't waiting in Needs review (e.g. flagged or awaiting approval); the date is in the past; that day's batch would pass 500 people |
 | `remove_from_batch` | — | — | The person leaves their planned batch and waits in Needs review with no date. | They aren't waiting in Needs review |
 
-**Done only in the portal** (not by request): approving people who wait for approval, approving or changing email templates and attachments, turning emails on or off, send times, settings, starting or creating batches by filters, sending, and adding new contacts (Contacts → Import, which also checks for duplicates). When Tony asks for one of these, tell him where to do it in the portal instead of adding a request.
+**Done only in the portal** (not by request): approving people who wait for approval, undoing an approval before anything was sent, recording an Intro or Follow Up that was sent by hand, cancelling a Send now that hasn't started, approving or changing email templates and attachments, turning emails on or off, send times, settings, starting or creating batches by filters, sending, and adding new contacts (Contacts → Import, which also checks for duplicates). When Tony asks for one of these, tell him where to do it in the portal instead of adding a request.
 
 ---
 
@@ -138,10 +138,10 @@ Every person is one row in `Contacts`. `review_status` says where they stand; `r
 | `review_status` | Meaning | How someone gets here | How they leave |
 |---|---|---|---|
 | `needs_review` | Waiting. Nobody is emailed while here | A file import, an MCP lead added from the Sales Hub, a duplicate marked "not a duplicate", a flag cleared (no hand-sent Intro), someone removed earlier who is imported again, a re-entry the rules don't allow (e.g. `already_completed_sequence`) | A batch starts them (→ `confirmed`), or a person approves them when their planned start date has passed (→ `confirmed`) |
-| `awaiting_approval` | Imported after getting the MCP Legacy Intro by hand (`intro_sent_on` filled). They never get the Intro; they start at `start_step` (the Follow Up, or the Check-In when `followup_sent_on` is also filled) | Import with a hand-sent Intro date | A person approves them (→ `confirmed`). Approval is refused while the email they would start at is Off |
+| `awaiting_approval` | Got the MCP Legacy Intro by hand (`intro_sent_on` filled). They never get the Intro; they start at `start_step` (the Follow Up, or the Check-In when `followup_sent_on` is also filled) | Import with a hand-sent Intro date; **Sent by hand** in the portal (Intro or Follow Up); **Undo approval** of someone with a hand-sent Intro | A person approves them (→ `confirmed`). Approval is refused while the email they would start at is Off |
 | `flagged` | Held out of batches and approvals, with a reason (`flag_reason`, e.g. bounced, do not contact) | Import with a hold reason, or a `flag` request in `ChatGPT_Requests` | A person clears the flag in the portal, or an `unflag` request (→ `needs_review`, or `awaiting_approval` if they had a hand-sent Intro) |
 | `possible_duplicate` | Might be the same person as another contact (`duplicate_of`). Never batched | Import or lead sync that matched someone similar | Resolved in Contacts → Clean up: "keep both" → `needs_review`; or removed / merged |
-| `confirmed` | Cleared to receive the campaign. The next run enrolls them (creates an `Enrollments` row) unless they already have a running one | A batch started them, a person approved them, a startup synced from the portal, a staff contact, or a restart from a batch | Stays `confirmed`; their progress is then in `Enrollments` |
+| `confirmed` | Cleared to receive the campaign. The next run enrolls them (creates an `Enrollments` row) unless they already have a running one. Approved but with no `Enrollments` row yet (`review_reason` starts with `approved by`) = **approved, nothing sent yet**: the portal can still undo it | A batch started them, a person approved them, a startup synced from the portal, a staff contact, or a restart from a batch | Stays `confirmed`; their progress is then in `Enrollments`. Before the next run: **Undo approval** (→ `awaiting_approval` if an email was sent by hand, else `needs_review`) or **Sent by hand** (→ `awaiting_approval` at the email after it) |
 | `held` | An MCP Startup contact who joined before the engine went live (they had already received the portal's older approval email). Never enrolled | Go-live | — |
 | `removed` | No longer on the list (kept for history). A running series is stopped | Startup cancelled/lost (from the portal sync), duplicate removed, the one-time MCP Legacy reset | Imported again (→ `needs_review`), or the startup is back on the schedule (→ `confirmed`) |
 | `merged` | Folded into another contact (`merged_into`). Its emails became that contact's `alt_emails`; its running series stopped (`merged`) | Clean up → merge | — |
@@ -293,8 +293,8 @@ One row is one person (one email address). Written by the engine from imports, t
 | `merged_into` | When `merged`: the contact it was folded into | `contact_id` | 🚫 |
 | `not_duplicate_of` | Contacts a person confirmed are different people | comma-separated `contact_id`s | 🚫 |
 | `planned_start` | Planned start date from the import file or a batch move; a batch on that date starts them. A past date with no batch shows as "start overdue" | `YYYY-MM-DD` or blank | 🚫 |
-| `intro_sent_on` | MCP Legacy: date the Intro was sent by hand before the import | `YYYY-MM-DD` or blank | 🚫 |
-| `followup_sent_on` | MCP Legacy: date the Follow Up was sent by hand before the import | `YYYY-MM-DD` or blank | 🚫 |
+| `intro_sent_on` | MCP Legacy: date the Intro was sent by hand (from the import, or recorded with Sent by hand in the portal) | `YYYY-MM-DD` or blank | 🚫 |
+| `followup_sent_on` | MCP Legacy: date the Follow Up was sent by hand (from the import, or recorded with Sent by hand in the portal) | `YYYY-MM-DD` or blank | 🚫 |
 | `flag_reason` | Reason from the import file for holding the person out of batches | text or blank | 🚫 |
 | `start_step` | The email an imported person starts at (earlier ones are never sent) | `b_followup`, `b_checkin`, or blank (start at the first email) | 🚫 |
 
@@ -854,7 +854,7 @@ Check in order:
 Current ruleset (`Rulesets` row where `rule_rev` = `Config` `rule_rev`): each step's `status` (`active` = On, `off` = Off). Approved: `Revisions` with `status` = `published` for that `step_id` (`rev_no`, `approved_at`, `approver`). Drafts waiting for approval: `status` = `draft`.
 
 **9. Who is waiting for approval?**
-`Contacts` with `review_status` = `awaiting_approval` (say whether they start at the Follow Up or Check-In from `start_step`, with `intro_sent_on` / `followup_sent_on`), plus `needs_review` contacts whose `planned_start` is before today and who are not in a planned batch ("start overdue"). Flagged people: `review_status` = `flagged` with `flag_reason`.
+`Contacts` with `review_status` = `awaiting_approval` (say whether they start at the Follow Up or Check-In from `start_step`, with `intro_sent_on` / `followup_sent_on`), plus `needs_review` contacts whose `planned_start` is before today and who are not in a planned batch ("start overdue"). Flagged people: `review_status` = `flagged` with `flag_reason`. Approved but nothing sent yet: `review_status` = `confirmed`, `review_reason` starting with `approved by`, and no `Enrollments` row.
 
 **10. How did an email perform?**
 For one `step_id`: count `Deliveries` with `state` `sent`; from `Engagement` for that `step_id`, count rows with `opens_medium` > 0 (estimated opens), `clicks_high` > 0 (verified clicks), `clicks_medium` > 0, `replied_at` filled, `unsubscribed_at` filled, `bounced_at` filled.
@@ -874,6 +874,10 @@ Search `Batches` with `status` `planned` for their `contact_id` in `contact_ids`
 ---
 
 ## What changed
+
+### Version 3 — 2026-11-16
+- New in the portal: **Undo approval** (people approved but not sent anything yet go back to waiting), **Sent by hand** (record an Intro or Follow Up someone sent outside the engine, so the engine never sends it again; they wait for approval at the next email), and **Cancel** next to Send now.
+- Approved people who haven't been sent anything yet are listed as "approved, nothing sent yet" (`confirmed`, `review_reason` = `approved by …`, no `Enrollments` row).
 
 ### Version 2 — 2026-11-16
 - A batch now goes out in one go: starting a batch and enrolling its people is one quick write, and a run that runs out of time with emails still due starts the next run right away. Several `Runs` rows a few minutes apart (the first ending `time_budget`) are one batch going out.
