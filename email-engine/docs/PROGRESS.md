@@ -9,8 +9,9 @@ _Handoff written 2026-11-14 for a fresh chat (`/email-engine`). Read this sectio
 ### Where things stand
 - **LIVE since 2026-11-11.** CP9 `bc-live` closes after a clean first week (no unresolved Unconfirmed sends). Last tag `ee/cp7-bc-scheduled`.
 - **Emails On:** only **MCP Startup Welcome**. MCP Legacy Intro / Follow Up / Check-In are **Off** (Follow Up + Check-In also "Not approved"). Turning any on = Mau's call.
-- **Engine:** Tony's Apps Script **@55** live (cp9-4), incl. `set_batch_date` and hand-sent Follow Up support (Plan changes 2026-11-16). Portal `main` = `feat/email-engine`.
-- **Tests:** `npm run test:ee` → **280 pass**.
+- **Engine:** Tony's Apps Script **@56** live (cp9-5): a batch goes out in one go (bulk batch start, budget from execution start, runs chain on `time_budget`; Plan changes 2026-11-16). Portal `main` = `feat/email-engine` up to 5590768 (engine-only commits since; no portal change).
+- **2026-11-16 first batch:** Tony turned the Intro on (new approved revision `rev_b_intro_2`), set MCP Legacy send time to **8:30**, clicked Send now at 12:18 CST: 14 started, 5 sent, run stopped `time_budget` (cause of the fix). 9 enrolled and due.
+- **Tests:** `npm run test:ee` → **298 pass**.
 
 ### Tony's MCP Legacy list (imported 2026-11-12…14)
 - In the engine (after the Nov 10 repair, 2026-11-16): **25 awaiting approval, Check-In next** (Intro Oct 26 / Nov 2 + Follow Up Nov 10 by hand), **12 awaiting approval, Follow Up next** (the Nov 9 group: Intro from info@ Nov 10), **13** flagged (11 from the file + 2 Nov 10 bounces), the rest Needs review in the 9 batches. The Nov 9 opt-out was never imported (on Comms_Optouts).
