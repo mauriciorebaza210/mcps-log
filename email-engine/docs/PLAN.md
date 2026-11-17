@@ -827,6 +827,8 @@ Any resend (automatic or human) first passes the full pre-send gate:
 5. **Mandatory performance budgets pass.** This is a launch gate; aspirational targets are reported separately.
 
 ## Plan changes
+
+- 2026-11-16 (late): The dictionary is no longer emailed to Tony. The engine only rewrites the Drive copy when the text changes (Docs.js). Why: Mau doesn't want Tony emailed about every change; the Drive file is enough.
 Every change to this plan gets a dated line here (use `/email-engine tweak "<change>"`).
 - 2026-10-29: Plan approved (third review, 9.3/10: approved to build through the sandbox B/C slice). Priority set to MCP Legacy (B) + MCP Startup (C); resume protocol and checkpoints CP0–CP10 added.
 - 2026-10-29: **C startup visit emails added** (Mau): Welcome gets Safety Guidelines + Startup Guide attachments; each startup day sends On the Way + a customer Startup Day Log; the last startup day sends a Startup Summary (summary report + pool school scheduling). Added: *Event-triggered emails* and *Attachments* sections, 3 C event steps in the matrix, failure rows 47–55, and CP7 split into `bc-scheduled` → `startup-events` → `bc-live` (CP11+ for other buckets). Event-triggered sending pulled forward from Phase 4. Welcome's PoolSchool block no longer needs a date. Sandbox slice (CP4–CP6) unchanged. Open: what the "3-1 report" is and what else the summary contains; who the startup emails come from.

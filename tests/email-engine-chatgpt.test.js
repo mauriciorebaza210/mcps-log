@@ -1,5 +1,5 @@
 // ChatGPT access (Plan changes 2026-11-16): the dictionary covers every tab and column in
-// code, stays in sync with the deployed copy, is published to Drive and emailed to Tony
+// code, stays in sync with the deployed copy, is published to Drive (nobody is emailed)
 // once per version; and ChatGPT_Requests rows go through the portal's own actions.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -60,50 +60,30 @@ test('Dictionary parser: version line, newest-first changes, bullets required', 
   assert.ok(parseDictionary('# D\n## What changed\n').errors.length);
 });
 
-// ── Publishing to Drive + emailing Tony ──
+// ── Publishing to Drive (no email to anyone) ──
 function publisher() {
   const ctx = load(['email-engine/src/Docs.js']);
-  const s = { props: {}, files: [], mails: [], quota: true };
+  const s = { props: {}, files: [] };
   const deps = { props: { get: k => s.props[k] || null, set: (k, v) => { s.props[k] = v; } },
-    writeFile: (n, t) => { s.files.push([n, t]); return 'https://drive/file1'; }, recipient: () => 'tony@x.com',
-    quotaOk: () => s.quota, sendMail: (to, sub, body) => s.mails.push({ to, sub, body }) };
+    writeFile: (n, t) => { s.files.push([n, t]); return 'https://drive/file1'; } };
   s.publish = dict => plain(ctx.EE_publishDictionaryWith_(dict, deps));
+  s.src = fs.readFileSync(path.join(__dirname, '..', 'email-engine', 'src', 'Docs.js'), 'utf8');
   return s;
 }
-const dict = (version, hash, changes) => ({ version, hash, text: 'text ' + hash, changes });
-const V1 = [{ version: 1, date: '2026-11-16', items: ['First version.'] }];
-const V2 = [{ version: 2, date: '2026-11-20', items: ['Batches can be moved by ChatGPT.'] }].concat(V1);
+const dict = (version, hash) => ({ version, hash, text: 'text ' + hash, changes: [] });
 
-test('Publish: first time writes the file and sends Tony the how-to; nothing again until the text changes', () => {
+test('Publish: new text rewrites the Drive file once; same text writes nothing', () => {
   const s = publisher();
-  assert.deepEqual(s.publish(dict(1, 'h1', V1)), { wrote: true, emailed: true });
+  assert.deepEqual(s.publish(dict(1, 'h1')), { wrote: true });
   assert.equal(s.files[0][0], 'Email Engine Dictionary - ChatGPT.txt');
-  assert.equal(s.mails[0].to, 'tony@x.com');
-  assert.match(s.mails[0].body, /ChatGPT_Requests/);
-  assert.match(s.mails[0].body, /https:\/\/drive\/file1/);
-  assert.deepEqual(s.publish(dict(1, 'h1', V1)), { wrote: false, emailed: false });
-  assert.equal(s.mails.length, 1);
+  assert.deepEqual(s.publish(dict(1, 'h1')), { wrote: false });
+  assert.deepEqual(s.publish(dict(2, 'h2')), { wrote: true });
+  assert.equal(s.files.length, 2);
 });
 
-test('Publish: a wording fix (same version) only rewrites the file; a new version emails just its changes, once', () => {
+test('Publish: nobody is emailed about dictionary changes (Mau, 2026-11-16)', () => {
   const s = publisher();
-  s.publish(dict(1, 'h1', V1));
-  assert.deepEqual(s.publish(dict(1, 'h1b', V1)), { wrote: true, emailed: false });
-  assert.deepEqual(s.publish(dict(2, 'h2', V2)), { wrote: true, emailed: true });
-  const m = s.mails[1];
-  assert.match(m.sub, /version 2/);
-  assert.match(m.body, /Batches can be moved by ChatGPT\./);
-  assert.doesNotMatch(m.body, /First version/);
-  assert.deepEqual(s.publish(dict(2, 'h2', V2)), { wrote: false, emailed: false });
-});
-
-test('Publish: low mail quota holds the email (sends stay protected) and sends it on a later pass', () => {
-  const s = publisher();
-  s.quota = false;
-  assert.deepEqual(s.publish(dict(1, 'h1', V1)), { wrote: true, emailed: false });
-  s.quota = true;
-  assert.deepEqual(s.publish(dict(1, 'h1', V1)), { wrote: false, emailed: true });
-  assert.equal(s.mails.length, 1);
+  assert.doesNotMatch(s.src, /GmailApp|MailApp|sendMail|sendEmail/);
 });
 
 // ── ChatGPT_Requests ──
