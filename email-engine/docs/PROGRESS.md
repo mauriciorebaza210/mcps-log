@@ -48,7 +48,7 @@ From Mau's "TO DO: Email Engine Edits" note. Portal only (no engine change, no d
 2. **Campaign stats hierarchy.** Inside a campaign the page-wide 4 cards hide; the answer row (On the list · Emailed · Still in) leads; the 6 stages are a thin pill strip with stage-coloured dots (same colours as the bar). Tour text updated.
 3. **Batch list.** One line per batch (date · people · tag · time · status); click to open: how it was picked, the people as name + email rows with Move…, **Copy emails**, Cancel batch.
 4. **Contacts tags.** The long pill row is now one **Tags ▾** dropdown (search, tick several, counts); ticked tags show as removable chips; shows anyone with any ticked tag.
-To ship (Mau's go): `git push origin feat/email-engine` then `git push origin feat/email-engine:main`.
+**SHIPPED 2026-11-22** (Mau: "ship it all, don't notify Tony"): main a0263d1 (live, lifecycle.css v32). Engine **@67** (was @66): {{Technician}} + dictionary Drive-only (no email) + fields seed themselves; deployed with `--dict-unchanged` (nothing the dictionary describes changed). No setup task needed: the store adds `Contacts.technician` on first write and the 15-min requests pass seeds the Technician field + refreshes START HERE. **Left for Mau:** replace the Welcome guide in Tony's Drive (file 1aTJLt1Q8f5PDD-9QyPOloxZ_orGetUme) with `docs/chatgpt/WELCOME-EMAIL-PLACEHOLDERS.md` v2 via Drive → Manage versions (the Drive connector can't replace file content); Lifecycle Email → sync startups so technicians fill in.
 
 ### First thing in the new chat
 1. (Shipped 2026-11-16.) Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
