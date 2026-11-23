@@ -42,6 +42,14 @@ _Handoff written 2026-11-14 for a fresh chat (`/email-engine`). Read this sectio
 - Welcome guide for ChatGPT: `docs/chatgpt/WELCOME-EMAIL-PLACEHOLDERS.md`. v1 (no Technician) is in Tony's Drive (MCPS Marketing, file 1aTJLt1Q8f5PDD-9QyPOloxZ_orGetUme, shared with Tony); v2 (with Technician) replaces it only after the deploy.
 - To ship (Mau's go): `npm run ee:deploy "…"` → `node scripts/ee-task.mjs setup` (adds Contacts.technician + Fields row) → `node scripts/ee-task.mjs setup_marketing_kit` (START HERE line) → push feat/email-engine + `feat/email-engine:main` (main is behind by docs only) → re-upload the Welcome guide v2 to Drive → sync startups from Lifecycle Email. Only Welcome versions approved after the deploy can use {{Technician}}.
 
+### 2026-11-22: Mau's Nov 16 page edits (built, NOT pushed)
+From Mau's "TO DO: Email Engine Edits" note. Portal only (no engine change, no dictionary change). Tests 307 pass; checked with harness screenshots.
+1. **Start a batch → batches by tag, own sizes.** Who step: *Make batches* = From everyone / **One per tag** (pick tags in order; each tag = its own batch, someone with two picked tags goes in the first). When step: every batch row has its own size box (even mode too). Each batch saves with its own filters (`tags: [tag]`) through the same `create_batch`.
+2. **Campaign stats hierarchy.** Inside a campaign the page-wide 4 cards hide; the answer row (On the list · Emailed · Still in) leads; the 6 stages are a thin pill strip with stage-coloured dots (same colours as the bar). Tour text updated.
+3. **Batch list.** One line per batch (date · people · tag · time · status); click to open: how it was picked, the people as name + email rows with Move…, **Copy emails**, Cancel batch.
+4. **Contacts tags.** The long pill row is now one **Tags ▾** dropdown (search, tick several, counts); ticked tags show as removable chips; shows anyone with any ticked tag.
+To ship (Mau's go): `git push origin feat/email-engine` then `git push origin feat/email-engine:main`.
+
 ### First thing in the new chat
 1. (Shipped 2026-11-16.) Mau tries it: Campaigns → MCP Legacy → a batch → **See who** → **Move…** (another planned day / another day… / take out of batches).
 3. Then, when Mau decides: Intro test email check → turn on the Intro → batches start on their dates; approve the 14 overdue; turn on + approve Follow Up, then approve the 25.

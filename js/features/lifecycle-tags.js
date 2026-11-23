@@ -8,7 +8,7 @@
 // Shares helpers with js/features/lifecycle.js and lifecycle-cleanup.js (clnApi_).
 // ══════════════════════════════════════════════════════════════════════════════
 
-const TAGS = { sel: new Set(), filter: '' };
+const TAGS = { sel: new Set(), filters: new Set(), ddOpen: false, ddq: '' };
 const tagNorm_ = t => String(t || '').toLowerCase().replace(/[,|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
 const tagContacts_ = () => (LC.contacts && LC.contacts.contacts) || [];
 // Every tag in use, most used first.
@@ -57,13 +57,24 @@ async function tagRemoveOne_(id, t) {
 }
 
 // ── The Contacts list ─────────────────────────────────────────────────────────
+// One "Tags" dropdown (tick any; a person shows if they have any ticked tag), with the
+// ticked tags as removable chips beside it.
 function tagFilterBar_() {
   const all = tagAll_();
   if (!all.length) return '';
-  return '<div class="lc-tagfilter"><span>Tags</span>' + all.slice(0, 30).map(([t, n]) => '<button class="lc-chip' + (TAGS.filter === t ? ' on' : '') + '" data-act="tag-filter" data-key="' + lcEsc_(t) + '">' +
-    lcEsc_(t) + ' <small>' + n + '</small></button>').join('') + '</div>';
+  const on = TAGS.filters, picked = [...on].filter(t => all.some(([x]) => x === t));
+  const q = TAGS.ddq.toLowerCase(), shown = all.filter(([t]) => !q || t.includes(q));
+  return '<div class="lc-tagfilter"><details class="lc-tagdd"' + (TAGS.ddOpen ? ' open' : '') + '><summary class="lc-chip' + (picked.length ? ' on' : '') + '">' + LC_ICON.tag +
+      'Tags' + (picked.length ? ' <small>' + picked.length + '</small>' : '') + '<svg class="cv" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>' +
+    '<div class="lc-tagdd-p" role="listbox" aria-multiselectable="true" aria-label="Filter by tag">' +
+      (all.length > 8 ? '<input class="lc-input sm" type="search" placeholder="Find a tag" value="' + lcEsc_(TAGS.ddq) + '" data-tag-q aria-label="Find a tag">' : '') +
+      '<div class="lc-tagdd-l">' + (shown.length ? shown.map(([t, n]) => '<button role="option" aria-selected="' + on.has(t) + '" class="' + (on.has(t) ? 'on' : '') + '" data-act="tag-filter" data-key="' + lcEsc_(t) + '">' +
+        '<i>' + LC_ICON.check + '</i><span>' + lcEsc_(t) + '</span><small>' + n + '</small></button>').join('') : '<p class="lc-dim">No tag matches</p>') + '</div>' +
+      (picked.length ? '<button class="lc-link" data-act="tag-fclear">Clear</button>' : '') + '</div></details>' +
+    picked.map(t => '<span class="lc-tagchip">' + lcEsc_(t) + '<button data-act="tag-filter" data-key="' + lcEsc_(t) + '" aria-label="Stop filtering by ' + lcEsc_(t) + '">' + LC_ICON.x + '</button></span>').join('') +
+    (picked.length > 1 ? '<span class="lc-dim sm">Anyone with one of these</span>' : '') + '</div>';
 }
-const tagMatches_ = c => !TAGS.filter || (c.tags || []).includes(TAGS.filter);
+const tagMatches_ = c => !TAGS.filters.size || (c.tags || []).some(t => TAGS.filters.has(t));
 function tagBulkBar_(rows) {
   if (!lcCan_('edit_contacts') || !TAGS.sel.size) return '';
   const n = TAGS.sel.size, visible = rows.filter(c => TAGS.sel.has(c.contact_id)).length;
@@ -90,7 +101,8 @@ async function tagBulk_(raw, how) {
 function tagAct_(t) {
   const a = t.dataset.act;
   if (a === 'tag-rm') return tagRemoveOne_(t.dataset.id, t.dataset.key);
-  if (a === 'tag-filter') { TAGS.filter = TAGS.filter === t.dataset.key ? '' : t.dataset.key; return lcRenderBody_(); }
+  if (a === 'tag-filter') { const k = t.dataset.key; if (TAGS.filters.has(k)) TAGS.filters.delete(k); else TAGS.filters.add(k); return lcRenderBody_(); }
+  if (a === 'tag-fclear') { TAGS.filters.clear(); return lcRenderBody_(); }
   if (a === 'tag-clear') { TAGS.sel.clear(); return lcRenderBody_(); }
   if (a === 'tag-sel') { const id = t.dataset.id; if (TAGS.sel.has(id)) TAGS.sel.delete(id); else TAGS.sel.add(id); return lcRenderBody_(); }
   if (a === 'tag-selall') {
@@ -108,4 +120,17 @@ document.addEventListener('submit', e => {
   const btn = e.submitter || f.querySelector('button');
   const key = 'tag-form:' + (f.dataset.tagAdd || 'bulk');
   lcGuard_(key, btn, () => (f.matches('[data-tag-add]') ? tagAddOne_(f.dataset.tagAdd, input.value) : tagBulk_(input.value, how)));
+});
+
+// The Tags dropdown stays open across re-renders, closes on a click outside it or Escape.
+document.addEventListener('toggle', e => { if (e.target.matches && e.target.matches('.lc-tagdd')) TAGS.ddOpen = e.target.open; }, true);
+document.addEventListener('click', e => {
+  if (!TAGS.ddOpen || e.target.closest('.lc-tagdd') || e.target.closest('[data-act="tag-filter"]')) return;
+  TAGS.ddOpen = false; const d = document.querySelector('.lc-tagdd'); if (d) d.open = false;
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && TAGS.ddOpen) { TAGS.ddOpen = false; const d = document.querySelector('.lc-tagdd'); if (d) d.open = false; } });
+document.addEventListener('input', e => {
+  if (!e.target.matches || !e.target.matches('[data-tag-q]')) return;
+  TAGS.ddq = e.target.value; const pos = e.target.selectionStart; lcRenderBody_();
+  const f = document.querySelector('[data-tag-q]'); if (f) { f.focus(); f.setSelectionRange(pos, pos); }
 });

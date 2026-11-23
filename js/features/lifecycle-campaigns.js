@@ -122,6 +122,8 @@ function cmpSummary_(b, p) {
 // The page never works out dates itself (PLAN.md → Planned sends on the page).
 // Rows: [date, time, step_id, contact_id, key, weight, batch_id, flag, last_send_day, original_due]
 CMP.plans = {};
+CMP.openB = new Set();   // batches opened in the list (kept across re-renders)
+document.addEventListener('toggle', e => { const d = e.target; if (d.matches && d.matches('details[data-bid]')) { if (d.open) CMP.openB.add(d.dataset.bid); else CMP.openB.delete(d.dataset.bid); } }, true);
 function cmpLoadPlan_(b, fresh) {
   return lcLoad_('plan', { bucket: b, mode: LC.mode || '', fresh: fresh ? '1' : '' }, data => {
     CMP.plans[b] = data;
@@ -203,8 +205,8 @@ function cmpPage_(b) {
     (lcCan_('edit_contacts') && cmpBatchable_(b) ? '<button class="lc-btn primary" data-act="cmp-batch" data-id="' + b + '">' + CMP_ICON.plus + 'Start a batch</button>' : '') + '</div></div>';
   const stages = cmpStages_(b);
   const pipe = '<div class="lc-pipe" style="--n:' + stages.length + '" role="tablist" aria-label="Where people are">' + stages.map(([k, l, hint]) =>
-    '<button role="tab" aria-selected="' + (CMP.stage === k) + '" data-act="cmp-stage" data-stage="' + k + '" class="' + (CMP.stage === k ? 'on' : '') + (CMP_FLOW[k] ? ' flow' : ' end') + '">' +
-    '<b>' + cmpCount_(p, k) + '</b><span>' + l + '</span><small>' + (k === 'lined' && p.later ? '+' + p.later + ' picked on the day' : hint) + '</small></button>').join('') + '</div>';
+    '<button role="tab" title="' + lcEsc_(k === 'lined' && p.later ? '+' + p.later + ' picked on the day' : hint) + '" aria-selected="' + (CMP.stage === k) + '" data-act="cmp-stage" data-stage="' + k + '" class="' + (CMP.stage === k ? 'on' : '') + (CMP_FLOW[k] ? ' flow' : ' end') + '">' +
+    '<i class="dot s-' + k + '"></i><b>' + cmpCount_(p, k) + '</b><span>' + l + '</span><small>' + (k === 'lined' && p.later ? '+' + p.later + ' picked on the day' : hint) + '</small></button>').join('') + '</div>';
   return head + (cmpBatchable_(b) ? cmpSummary_(b, p) : '') + pipe + (b === 'C' && typeof crmStartupStrip_ === 'function' ? crmStartupStrip_() : '') + (CMP.view === 'calendar' ? cmpCalendar_(b) : cmpList_(b, p));
 }
 
@@ -239,16 +241,26 @@ function cmpBatches_(b) {
   // A batch never starts people while the sequence's first email is off (engine EE_startBatch_).
   const firstOff = cmpFirstOff_(b);
   const can = lcCan_('edit_contacts');
-  return '<ol class="lc-btl">' + list.slice(0, 14).map(x => {
+  return '<ol class="lc-btl rows">' + list.map(x => {
     const planned = x.status === 'planned', d = planned ? x.start_on : cmpLocal_(x.started_at);
     const dt = new Date(d + 'T12:00:00'), n = planned ? x.count : (x.started_count || x.count);
-    const tag = !planned ? lcTag_('Started', 'live') : firstOff ? '<span title="' + lcEsc_('Starts on its date once ' + firstOff + ' is turned on') + '">' + lcTag_('Waits for ' + firstOff, 'warn') + '</span>' : lcTag_('Planned', 'warn');
-    return '<li class="' + (planned ? 'planned' : 'done') + '"><time><b>' + dt.getDate() + '</b><span>' + dt.toLocaleDateString('en-US', { month: 'short' }) + '</span></time>' +
-      '<div class="main"><b>' + lcEsc_(cmpBatchTitle_(x, n)) + '</b><small>' + (planned ? 'Starts ' + lcEsc_(cmpAt_(x.start_on, x.send_time || lcSendTime_(b))) : 'Started ' + lcEsc_(lcStamp_(x.started_at))) + '</small>' +
-      '<small>' + lcEsc_(cmpBatchHow_(x)) + '</small>' +
-      '<div class="lc-btl-acts">' + tag + (planned && can ? '<button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel</button>' : '') + '</div>' +
-      cmpBatchWho_(x) + '</div></li>';
+    const tag = !planned ? lcTag_('Started', 'live') : firstOff ? '<span title="' + lcEsc_('Starts on its date once ' + firstOff + ' is turned on') + '">' + lcTag_('Waiting', 'warn') + '</span>' : lcTag_('Planned', 'warn');
+    return '<li class="' + (planned ? 'planned' : 'done') + '"><details data-bid="' + lcEsc_(x.batch_id) + '"' + (CMP.openB.has(x.batch_id) ? ' open' : '') + '><summary>' +
+      '<time><b>' + dt.getDate() + '</b><span>' + dt.toLocaleDateString('en-US', { month: 'short' }) + '</span></time>' +
+      '<div class="main"><b>' + lcEsc_(cmpBatchTitle_(x, n)) + '</b><small>' + (planned ? lcEsc_(lcClock_(x.send_time || lcSendTime_(b))) : 'Started ' + lcEsc_(lcStamp_(x.started_at))) + '</small></div>' +
+      tag + '<svg class="cv" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></summary>' +
+      '<div class="lc-btl-body"><p>' + lcEsc_(cmpBatchHow_(x)) + (planned && firstOff ? ' · starts once ' + lcEsc_(firstOff) + ' is turned on' : '') + '</p>' +
+      cmpBatchList_(x) +
+      (planned && can ? '<div class="lc-btl-acts"><button class="lc-btn sm danger" data-act="cancelbatch" data-id="' + lcEsc_(x.batch_id) + '">Cancel batch</button></div>' : '') +
+      '</div></details></li>';
   }).join('') + '</ol>';
+}
+// The people in a batch, name and email side by side, with Copy emails.
+function cmpBatchList_(x) {
+  const people = cmpBatchPeople_(x).sort((a, c) => cmpName_(a).localeCompare(cmpName_(c)));
+  if (!people.length) return '<p class="lc-dim">' + (x.pick === 'at_start' ? 'The engine picks who on the start day; names show here once it starts.' : 'No one left in this batch.') + '</p>';
+  return '<div class="lc-btl-ph"><span>' + people.length + (people.length === 1 ? ' person' : ' people') + '</span><button class="lc-link" data-act="cmp-copy" data-id="' + lcEsc_(x.batch_id) + '">Copy emails</button></div>' +
+    '<ul class="lc-btl-ppl">' + people.map(c => '<li><b>' + lcEsc_(cmpName_(c)) + '</b><span>' + lcEsc_(c.email || '–') + '</span>' + cmpPersonMove_(x, c) + '</li>').join('') + '</ul>';
 }
 // What a batch is, in words: "14 people · MCP week 4" (a tag every one of them shares, or its filters).
 function cmpBatchTitle_(x, n) {
@@ -445,6 +457,11 @@ function cmpOnClick_(t) {
   else if (a === 'cmp-time') cmpEditTime_(t.dataset.id);
   else if (a === 'cmp-more') t.closest('li').classList.toggle('open');
   else if (a === 'cmp-send') return cmpSendChange_(t.dataset);
+  else if (a === 'cmp-copy') {
+    const x = ((LC.contacts && LC.contacts.batches) || []).find(y => y.batch_id === t.dataset.id);
+    const list = x ? cmpBatchPeople_(x).map(c => c.email).filter(Boolean) : [];
+    navigator.clipboard.writeText(list.join(', ')).then(() => lcToast_(list.length + ' emails copied'), () => lcToast_('Couldn’t copy', true));
+  }
 }
 async function cmpMoveBatch_(id, to) {
   const x = ((LC.contacts && LC.contacts.batches) || []).find(y => y.batch_id === id);

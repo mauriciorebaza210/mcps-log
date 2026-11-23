@@ -13,6 +13,7 @@ const LC = { tab: 'campaigns', mode: null, ov: null, contacts: null, q: '', buck
 const LC_QUIESCENCE_MS = 36 * 60 * 1000;     // EngineCore: a Resend waits until any earlier attempt has surely finished
 const LC_SEQ = { B: 'MCP Legacy', C: 'MCP Startup', Z: 'Staff' };
 const LC_ICON = {
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
   clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l8-8"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   // AI marker: a four-point sparkle with a small companion star.
@@ -292,6 +293,7 @@ function lcRenderTabs_() {
 
 function lcRenderBody_() {
   const el = lcSlot_('body'); if (!el) return;
+  const kp = lcSlot_('kpis'); if (kp) kp.hidden = LC.tab === 'campaigns' && typeof CMP !== 'undefined' && !!CMP.id;
   if (LC.error && !LC.ov) { el.innerHTML = lcErrorView_(LC.error); return; }
   if (!LC.ov) { el.innerHTML = '<div class="lc-sk" style="height:260px;margin-bottom:16px"></div><div class="lc-sk" style="height:320px"></div>'; return; }
   if (LC.tab === 'activity') el.innerHTML = lcActivity_();

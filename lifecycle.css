@@ -388,11 +388,21 @@ select.lc-input.set{border-color:var(--aqua);background:var(--aqua-bg)}
 .lc-sofar{font-size:12.5px;color:var(--ink-2);white-space:nowrap}
 .lc-sofar b{font-variant-numeric:tabular-nums;color:var(--ink)}
 /* Under the answer row, the pipeline is the breakdown: same stages, smaller type. */
-.lc-sum + .lc-pipe button{padding:10px 16px 10px 20px}
-.lc-sum + .lc-pipe button:first-child{padding-left:16px}
-.lc-sum + .lc-pipe b{font-size:18px}
-.lc-sum + .lc-pipe span{font-size:12.5px}
-.lc-sum + .lc-pipe small{font-size:11px}
+/* Under the answer row, the stages are a thin strip of pills: the totals lead (Nov 16 note). */
+.lc-sum + .lc-pipe{display:flex;flex-wrap:wrap;gap:6px;background:none;border:0;box-shadow:none;overflow:visible;margin:-2px 0 18px}
+.lc-sum + .lc-pipe button,.lc-sum + .lc-pipe button:first-child{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:30px;border:1px solid var(--line);border-radius:999px;background:var(--card)}
+.lc-sum + .lc-pipe button::after,.lc-sum + .lc-pipe button::before{display:none}
+.lc-sum + .lc-pipe button:hover{border-color:var(--aqua)}
+.lc-sum + .lc-pipe button.on{background:var(--teal);border-color:var(--teal)}
+.lc-sum + .lc-pipe button.on b,.lc-sum + .lc-pipe button.on span{color:#fff}
+.lc-sum + .lc-pipe b{display:inline;font-size:13.5px;line-height:1;color:var(--ink)}
+.lc-sum + .lc-pipe span{display:inline;font-size:12.5px;font-weight:600;color:var(--ink-2);margin:0}
+.lc-sum + .lc-pipe small{display:none}
+.lc-pipe .dot{display:none}
+.lc-sum + .lc-pipe .dot{display:block;width:8px;height:8px;border-radius:50%;flex:none}
+.lc-pipe .dot.s-waiting{background:#C9D3D4}.lc-pipe .dot.s-lined{background:var(--aqua-2)}.lc-pipe .dot.s-hold{background:#E3B25C}
+.lc-pipe .dot.s-active{background:var(--aqua)}.lc-pipe .dot.s-finished{background:var(--teal)}.lc-pipe .dot.s-stopped{background:#D9837A}
+.lc-sum + .lc-pipe button.on .dot{box-shadow:0 0 0 2px #fff}
 @media (max-width:600px){.lc-sum button{padding:12px 12px 14px}.lc-sum b{font-size:22px}.lc-sum span{font-size:12px;margin-top:4px}.lc-sum small{display:none}}
 @media (max-width:600px){.lc-sum button{padding:12px 14px 14px}.lc-sum b{font-size:24px}.lc-sum small{white-space:normal}}
 
@@ -946,3 +956,64 @@ button.lc-rq-file:hover{border-color:var(--aqua)}
 .lc-older summary:hover{color:var(--teal)}
 .lc-older .lc-list{opacity:.7}
 @media (max-width:900px){.lc-pipe[style*="--n:4"]{grid-template-columns:repeat(2,minmax(0,1fr))}.lc-pipe[style*="--n:4"] button:nth-child(3){border-left:0}.lc-pipe[style*="--n:4"] button:nth-child(4){border-left:1px solid var(--line)}}
+
+/* ── Batch list: one line per batch, opens to its people (Nov 16 note) ── */
+.lc-btl.rows li{display:block;padding:0}
+.lc-btl.rows summary{display:flex;align-items:center;gap:12px;padding:10px 18px;cursor:pointer;list-style:none}
+.lc-btl.rows summary::-webkit-details-marker{display:none}
+.lc-btl.rows summary:hover{background:#FAFCFC}
+.lc-btl.rows time{width:40px;padding:3px 0}
+.lc-btl.rows time b{font-size:15px}
+.lc-btl.rows .main b{white-space:nowrap}
+.lc-btl.rows .main small{line-height:1.3}
+.lc-btl.rows .cv{width:16px;height:16px;flex:none;fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.lc-btl.rows details[open] .cv{transform:rotate(90deg)}
+.lc-btl.rows details[open] summary{background:#FAFCFC}
+.lc-btl-body{padding:4px 18px 14px 70px}
+.lc-btl-body > p{margin:0 0 8px;font-size:12px;color:var(--muted)}
+.lc-btl-ph{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.lc-btl-ph .lc-link{text-transform:none;letter-spacing:0;font-size:12.5px}
+.lc-btl-ppl{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:10px;max-height:320px;overflow:auto}
+.lc-btl-ppl li{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;align-items:center;gap:10px;padding:7px 12px!important;border-top:1px solid var(--line);font-size:12.5px}
+.lc-btl-ppl li:first-child{border-top:0}
+.lc-btl-ppl b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-btl-ppl span{color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-btl-ppl .lc-pmove{height:26px;font-size:12px}
+.lc-btl.rows .lc-btl-acts{margin-top:10px}
+@media (max-width:600px){.lc-btl-body{padding-left:18px}.lc-btl-ppl li{grid-template-columns:minmax(0,1fr) auto}.lc-btl-ppl li span{grid-column:1;grid-row:2;margin-top:-6px}}
+
+/* ── Contacts: Tags dropdown filter (Nov 16 note) ── */
+.lc-tagfilter{flex-wrap:wrap;margin:-4px 0 14px}
+.lc-tagdd{position:relative}
+.lc-tagdd > summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;list-style:none}
+.lc-tagdd > summary::-webkit-details-marker{display:none}
+.lc-tagdd > summary svg{width:14px;height:14px}
+.lc-tagdd > summary .cv{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.lc-tagdd[open] > summary .cv{transform:rotate(180deg)}
+.lc-tagdd-p{position:absolute;z-index:20;top:36px;left:0;width:260px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
+.lc-tagdd-p .lc-input.sm{width:100%;height:30px;margin-bottom:6px}
+.lc-tagdd-l{max-height:280px;overflow:auto}
+.lc-tagdd-l button{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;padding:7px 8px;border-radius:8px;text-align:left;font-size:13px;color:var(--ink)}
+.lc-tagdd-l button:hover{background:#F2F6F6}
+.lc-tagdd-l i{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid #B8C4C5;border-radius:4px;flex:none}
+.lc-tagdd-l i svg{width:12px;height:12px;opacity:0}
+.lc-tagdd-l button.on i{background:var(--teal);border-color:var(--teal);color:#fff}
+.lc-tagdd-l button.on i svg{opacity:1}
+.lc-tagdd-l span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-tagdd-l small{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.lc-tagdd-p > .lc-link{display:block;margin:6px 8px 2px;font-size:12.5px}
+.lc-tagfilter .lc-tagchip{height:28px}
+.lc-tagfilter .lc-dim.sm{font-size:12px}
+
+/* ── Start a batch: size per batch, tag order (Nov 16 note) ── */
+.lc-wiz-size{display:inline-flex;align-items:center;gap:8px;margin-left:auto;color:var(--muted);font-size:13px}
+.lc-wiz-size .lc-input.sm{width:72px;height:30px;text-align:right}
+.lc-wiz-dates b .lc-tagchip{margin-left:6px;height:20px;font-size:11.5px}
+.lc-chip-n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin:0 6px 0 -4px;border-radius:50%;background:#fff;color:var(--teal);font-size:11px}
+.lc-tagfilter > .lc-tagchip,.lc-tagfilter > .lc-dim{text-transform:none;letter-spacing:0;font-weight:600;margin:0}
+.lc-tagfilter > .lc-tagchip{font-size:12.5px;color:var(--ink-2)}
+.lc-tagfilter > .lc-dim{font-weight:400;font-size:12px;color:var(--muted)}
+.lc-wiz-dates li > .lc-wiz-size{order:2}
+.lc-wiz-dates li > .lc-tag,.lc-wiz-dates li > span:has(.lc-tag){order:1}
+.lc-btl-ppl li{grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) auto}
+.lc-btl-ppl .lc-pmove{width:104px}

@@ -42,7 +42,7 @@ const HLP_CHAPTERS = [
   ] },
   { id: 'campaigns', title: 'Campaigns and batches', start: 'campaigns', steps: [
     { el: '.lc [data-act="cmp-open"][data-id="B"]', title: 'Open a campaign', text: 'Each card is one series of emails.', click: 'the MCP Legacy card', next: '.lc .lc-pipe' },
-    { el: '.lc .lc-pipe', title: 'Where everyone is', text: '<b>Waiting</b>: imported, not started. <b>Lined up</b>: in a planned batch. <b>In sequence</b>: getting the emails. <b>Finished</b>, or <b>Stopped</b> because they replied, clicked or unsubscribed. Click a stage to see the people in it.' },
+    { el: '.lc .lc-sum, .lc .lc-pipe', title: 'Where everyone is', text: 'The big numbers answer the whole list: who is on it, who has been emailed, who is still in. The small pills under them are the stages: <b>Not started</b>, <b>Lined up</b> (in a planned batch), <b>Needs your OK</b>, <b>Getting emails</b>, <b>Finished</b>, <b>Out</b>. Click any of them to see those people.' },
     { el: '.lc [data-act="cmp-view"][data-view="calendar"]', title: 'The calendar', text: 'Every planned email, by day.', click: 'Calendar', next: '.lc [data-act="cmp-day"]' },
     { el: '.lc .lc-cal, .lc [data-act="cmp-day"]', title: 'Plan by day', text: 'Click a day to see who gets what. There you can <b>Skip</b> one person, <b>Move</b> them to another day, or <b>Send in the next run</b>. Drag a batch to another day to move all of it.' },
     { el: '.lc [data-lc="body"] [data-act="cmp-batch"]', title: 'Start a batch', text: 'This is how people get the series.', click: 'Start a batch', next: '.lc-wiz .lc-steps' },
