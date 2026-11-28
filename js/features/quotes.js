@@ -1454,7 +1454,9 @@ function qRenderSavedCard() {
           ${proposalReady ? `<a class="q-btn-outline" href="${_qS.proposal_url}" target="_blank" rel="noopener">View Packet</a>` : ''}
           ${proposalReady ? `<a class="q-btn-outline" href="/agreement.html?preview=1&quote=${encodeURIComponent(_qS.saved_id)}" target="_blank" rel="noopener">Preview Agreement</a>` : ''}
           ${proposalReady ? `<button class="q-btn-primary" onclick="qSendProposalApproval()" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>${proposalSendLabel}</button>` : ''}
+          ${proposalReady && !_qS.proposal_approval_url ? `<button class="q-btn-outline" title="Creates the signing link without emailing the customer. Reminder emails stay off." onclick="qSendProposalApproval(true)" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>Create Signing Link (no email)</button>` : ''}
           ${_qS.proposal_approval_url ? `<a class="q-btn-outline" href="${_qS.proposal_approval_url}" target="_blank" rel="noopener">Signing Link</a>` : ''}
+          ${_qS.proposal_approval_url ? `<button class="q-btn-outline" onclick="qCopySigningLink(this)">Copy Signing Link</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -1682,13 +1684,25 @@ async function qGenerateProposal() {
   qRenderSavedCard();
 }
 
-async function qSendProposalApproval() {
+async function qCopySigningLink(btn) {
+  const url = _qS.proposal_approval_url || '';
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    if (btn) { btn.textContent = 'Copied ✓'; setTimeout(() => { btn.textContent = 'Copy Signing Link'; }, 2000); }
+  } catch (e) {
+    window.prompt('Copy the signing link:', url);
+  }
+}
+
+// skipEmail = true creates the signing link without emailing the customer.
+async function qSendProposalApproval(skipEmail) {
   if (!_qS.saved_id || !_qS.proposal_url || _qS.proposal_send_status === 'sending') return;
   _qS.proposal_send_status = 'sending';
   _qS.proposal_error = '';
   qRenderSavedCard();
   try {
-    const res = await api({ action: 'send_proposal_for_approval', token: _s ? _s.token : '', quote_id: _qS.saved_id });
+    const res = await api({ action: 'send_proposal_for_approval', token: _s ? _s.token : '', quote_id: _qS.saved_id, skip_email: skipEmail === true });
     if (res.ok) {
       _qS.proposal_send_status = 'sent';
       _qS.proposal_sent_at = res.sent_at || new Date().toISOString();

@@ -856,8 +856,12 @@ function handleSendProposalForApproval_(payload) {
     if (!proposal) return { ok: false, error: 'Proposal not found for quote ' + quoteId };
     const pdfUrl = value_(proposal, 'proposal_pdf_url') || value_(q, 'proposal_pdf_url');
     if (!pdfUrl) return { ok: false, error: 'Generate proposal PDF first.' };
+    // skip_email: create (or reopen) the signing link WITHOUT emailing the
+    // customer, so staff can copy the link and send it themselves. Automatic
+    // reminder emails are switched off on that link for the same reason.
+    const skipEmail = payload.skip_email === true || String(payload.skip_email || '').toLowerCase() === 'true';
     const email = value_(q, 'email');
-    if (!email) return { ok: false, error: 'Customer email is required to send proposal approval.' };
+    if (!email && !skipEmail) return { ok: false, error: 'Customer email is required to send proposal approval.' };
 
     // The agreement link is now emailed by the portal itself (see below) rather
     // than relayed through Zapier, so there is no ZAPIER_PROPOSAL_WEBHOOK guard
@@ -912,6 +916,21 @@ function handleSendProposalForApproval_(payload) {
     }
 
     const approvalUrl = proposalApprovalUrl_(token, '');
+
+    if (skipEmail) {
+      // No reminders on a link staff are delivering by hand.
+      ensureColumn_(approvals, 'followup_enabled');
+      ensureColumn_(approvals, 'followup_updated_at');
+      softSetCell_(approvals, approval._rowNum, 'followup_enabled', 'FALSE');
+      softSetCell_(approvals, approval._rowNum, 'followup_updated_at', now);
+      softSetCell_(result.proposals, proposal._rowNum, 'status', 'SENT');
+      softSetCell_(result.proposals, proposal._rowNum, 'sent_at', now);
+      softSetCell_(result.proposals, proposal._rowNum, 'updated_at', now);
+      softSetCell_(hit.sheet, hit.rowNum, 'proposal_sent_at', now);
+      softSetCell_(hit.sheet, hit.rowNum, 'proposal_approval_url', approvalUrl);
+      softSetCell_(hit.sheet, hit.rowNum, 'proposal_number', proposal.proposal_number);
+      return { ok: true, sent_at: now, approval_url: approvalUrl, proposal_id: proposal.proposal_id, proposal_number: proposal.proposal_number, sent_to: '', email_skipped: true };
+    }
 
     // Send the agreement link natively.
     // ⚠️ commsSendViaGmail_ deliberately, NOT sendCommsEmail_: the generic helper
