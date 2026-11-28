@@ -1454,7 +1454,7 @@ function qRenderSavedCard() {
           ${proposalReady ? `<a class="q-btn-outline" href="${_qS.proposal_url}" target="_blank" rel="noopener">View Packet</a>` : ''}
           ${proposalReady ? `<a class="q-btn-outline" href="/agreement.html?preview=1&quote=${encodeURIComponent(_qS.saved_id)}" target="_blank" rel="noopener">Preview Agreement</a>` : ''}
           ${proposalReady ? `<button class="q-btn-primary" onclick="qSendProposalApproval()" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>${proposalSendLabel}</button>` : ''}
-          ${proposalReady && !_qS.proposal_approval_url ? `<button class="q-btn-outline" title="Creates the signing link without emailing the customer. Reminder emails stay off." onclick="qSendProposalApproval(true)" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>Create Signing Link (no email)</button>` : ''}
+          ${proposalReady && !_qS.proposal_approval_url ? `<button class="q-btn-outline" title="Gets the signing link without emailing the customer. A new link has reminder emails off; a link that already exists keeps its reminder settings." onclick="qSendProposalApproval(true)" ${_qS.proposal_send_status === 'sending' ? 'disabled' : ''}>Create Signing Link (no email)</button>` : ''}
           ${_qS.proposal_approval_url ? `<a class="q-btn-outline" href="${_qS.proposal_approval_url}" target="_blank" rel="noopener">Signing Link</a>` : ''}
           ${_qS.proposal_approval_url ? `<button class="q-btn-outline" onclick="qCopySigningLink(this)">Copy Signing Link</button>` : ''}
         </div>

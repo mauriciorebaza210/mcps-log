@@ -873,6 +873,7 @@ function handleSendProposalForApproval_(payload) {
     const expires = new Date();
     expires.setDate(expires.getDate() + 30);
     let approval = findActiveProposalApproval_(proposal.proposal_id);
+    const approvalExisted = !!approval;
     let token = approval && approval.token ? String(approval.token) : '';
     let approvalId = approval && approval.approval_id ? String(approval.approval_id) : '';
     if (!approval) {
@@ -918,11 +919,16 @@ function handleSendProposalForApproval_(payload) {
     const approvalUrl = proposalApprovalUrl_(token, '');
 
     if (skipEmail) {
-      // No reminders on a link staff are delivering by hand.
-      ensureColumn_(approvals, 'followup_enabled');
-      ensureColumn_(approvals, 'followup_updated_at');
-      softSetCell_(approvals, approval._rowNum, 'followup_enabled', 'FALSE');
-      softSetCell_(approvals, approval._rowNum, 'followup_updated_at', now);
+      // No reminders on a link staff are delivering by hand. Only for a link
+      // created here: an existing approval may already have been emailed (the
+      // Quote Tool does not restore the link when a quote is reopened), and its
+      // reminders must not be silently switched off.
+      if (!approvalExisted) {
+        ensureColumn_(approvals, 'followup_enabled');
+        ensureColumn_(approvals, 'followup_updated_at');
+        softSetCell_(approvals, approval._rowNum, 'followup_enabled', 'FALSE');
+        softSetCell_(approvals, approval._rowNum, 'followup_updated_at', now);
+      }
       softSetCell_(result.proposals, proposal._rowNum, 'status', 'SENT');
       softSetCell_(result.proposals, proposal._rowNum, 'sent_at', now);
       softSetCell_(result.proposals, proposal._rowNum, 'updated_at', now);
